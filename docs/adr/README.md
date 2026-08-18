@@ -22,3 +22,4 @@ intact.
 | [0005](0005-five-result-states.md) | Five result states, with UNKNOWN first-class | accepted |
 | [0006](0006-no-auto-remediation.md) | Plumbline never applies a change | accepted |
 | [0007](0007-json-schema-is-the-api.md) | The JSON schema is the public API, not a Go package | accepted |
+| [0008](0008-zstd-bundle-compression.md) | zstd for bundle compression; the first and only dependency | accepted |
