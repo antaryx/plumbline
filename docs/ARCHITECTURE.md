@@ -275,7 +275,7 @@ Checks are pure and fast, so parallelism is trivial and bounded by `GOMAXPROCS`.
 
 ## 5. Scoring
 
-Full detail in `SCORING.md`. The architectural commitments:
+The architectural commitments, which are also the implementation:
 
 ```
 Evaluated  = PASS + FAIL                       // the only states that score

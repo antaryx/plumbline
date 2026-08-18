@@ -96,16 +96,16 @@
           }
         },
         "posture": {
-          "type": "number",
+          "type": ["number", "null"],
           "minimum": 0,
           "maximum": 100,
-          "description": "Weighted percentage of scoring checks that passed. Computed over PASS+FAIL only. MUST NOT be displayed without coverage."
+          "description": "Weighted percentage of scoring checks that passed. Computed over PASS+FAIL only. MUST NOT be displayed without coverage. null means undefined -- nothing was evaluated, or nothing evaluated carried weight -- which is NOT the same as 0. A consumer that renders null as 0 reports a host in perfect failure when in fact nobody looked at it. See docs/adr/0010-nullable-posture-schema.md."
         },
         "coverage": {
-          "type": "number",
+          "type": ["number", "null"],
           "minimum": 0,
           "maximum": 100,
-          "description": "Percentage of applicable checks that were actually evaluated. SKIPPED and UNKNOWN reduce this. A high posture at low coverage means little."
+          "description": "Percentage of applicable checks that were actually evaluated. SKIPPED and UNKNOWN reduce this. A high posture at low coverage means little. null means undefined -- no check applied to this host at all, so the figure is a division by zero rather than a zero. See docs/adr/0010-nullable-posture-schema.md."
         },
         "degraded": {
           "type": "boolean",
