@@ -2,11 +2,13 @@ package cli
 
 import (
 	"github.com/antaryx/plumbline/internal/catalog"
+	kernelchecks "github.com/antaryx/plumbline/internal/catalog/checks/kernel"
 	sshdchecks "github.com/antaryx/plumbline/internal/catalog/checks/sshd"
 
 	// Collectors register themselves at init. Importing them here, in the
 	// composition root, is what puts them in the default registry; nothing
 	// deeper in the tree reaches for a collector by name.
+	_ "github.com/antaryx/plumbline/internal/collect/collectors/kernel"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/sshd"
 )
 
@@ -18,6 +20,14 @@ import (
 // not run" should be answerable by reading one function.
 func buildCatalog() *catalog.Catalog {
 	return catalog.MustNew(
+		kernelchecks.Check0001,
+		kernelchecks.Check0002,
+		kernelchecks.Check0003,
+		kernelchecks.Check0004,
+		kernelchecks.Check0005,
+		kernelchecks.Check0006,
+		kernelchecks.Check0007,
+		kernelchecks.Check0008,
 		sshdchecks.Check0002,
 	)
 }

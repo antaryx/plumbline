@@ -12,6 +12,15 @@ explanation in this file is a defect.
 ## [Unreleased]
 
 ### Added
+- **KERNEL module (WP-16), catalog version 2.** Eight checks over kernel
+  runtime parameters: ASLR (KERNEL-0001), `kptr_restrict` (0002), Yama
+  `ptrace_scope` (0003), `dmesg_restrict` (0004), `suid_dumpable` (0005),
+  unprivileged BPF (0006), running-versus-configured drift (0007), and
+  per-interface reverse-path filtering (0008)
+- `kernel.sysctl` fact — running values from `/proc/sys` **and** configured
+  values from `/etc/sysctl.conf` and the `sysctl.d` directories, kept as
+  separate observations. A host whose file says hardened and whose kernel says
+  otherwise is the finding KERNEL-0007 exists to make
 - Shared filesystem walker (`internal/collect/walker`) and the `fswalk`
   collector: one traversal per scan, no matter how many modules ask about the
   filesystem. Consumers register interest predicates up front and the walk
@@ -24,6 +33,10 @@ explanation in this file is a defect.
   binary are expressible without root (ADR-0013)
 
 ### Changed
+- The check-purity gate matches the net **import** forms (`"net"`, `"net/`)
+  rather than any string beginning with `net`. A sysctl key is called
+  `net.ipv4.conf.all.rp_filter`; the old pattern reported it as an impure
+  import, and a gate that cries wolf is a gate someone eventually silences
 - `fake`'s `modes` override is translated rather than cast: `"4755"` now
   produces a setuid file instead of silently producing `0755`. A fixture that
   asked for SUID and quietly did not get it now gets it, which may turn a

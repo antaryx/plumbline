@@ -1,0 +1,1 @@
+{ "description": "The file was hardened and the host was never rebooted: ASLR and kptr_restrict are configured but not running" }

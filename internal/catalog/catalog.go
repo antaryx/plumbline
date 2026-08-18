@@ -19,7 +19,9 @@ import (
 // monotonic integer, bumped by any change to the set of checks or their
 // metadata. Scores are comparable only within one catalog version
 // (05-VERSIONING.md §3).
-const Version = 1
+//
+// 2 adds the KERNEL module (WP-16).
+const Version = 2
 
 // Outcome is what a check's Eval returns. The runner converts it into a
 // finding, filling in identity and fingerprint so a check cannot get those

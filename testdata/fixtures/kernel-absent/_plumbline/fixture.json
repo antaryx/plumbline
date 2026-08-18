@@ -1,0 +1,4 @@
+{
+  "description": "A kernel built without the Yama LSM and without BPF: the parameters do not exist, which is NOT_APPLICABLE and not a failure",
+  "missing": ["/proc/sys/kernel/unprivileged_bpf_disabled"]
+}

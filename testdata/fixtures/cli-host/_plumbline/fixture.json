@@ -1,1 +1,1 @@
-{"description":"Host with an identity and a hardened sshd; used by the CLI tests for --redact and meta"}
+{"description":"Host with an identity, a hardened sshd and a hardened kernel whose configuration matches what is running; used by the CLI tests for --redact, meta and the coverage gate"}

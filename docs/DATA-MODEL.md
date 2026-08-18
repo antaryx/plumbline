@@ -132,8 +132,46 @@ gets produced.
 |---|---|---|---|
 | `sshd.config` | 1 | `collect/collectors/sshd` | `Installed`, `Files`, `Directives[]`, `UnresolvedIncludes[]`, `Digests{}` |
 | `fs.<interest>` | 1 | `collect/walker` (`fswalk`) | `Interest`, `Roots[]`, `Rows[]`, `Truncated`, `TruncationReasons[]`, `Overflow`, `InodesVisited` |
+| `kernel.sysctl` | 1 | `collect/collectors/kernel` | `Running{}`, `Configured{}`, `Files[]`, `Digests{}`, `UnreadableFiles[]` |
 
 Every fact added later is listed here with its version history.
+
+#### `kernel.sysctl` — running and configured kernel parameters
+
+The fact carries two separate maps, and the separation is the point.
+`Running` is what `/proc/sys` reports now. `Configured` is what
+`/etc/sysctl.conf` and the `sysctl.d` directories will apply at the next boot.
+A host with a hardened file and an unhardened kernel is a real and common
+finding, and a fact that merged the two would hide it. KERNEL-0007 exists to
+compare them.
+
+`Running` holds one entry per parameter the collector **probed**, including
+the ones it could not read, each with a `SysctlState`:
+
+| State | Meaning | A check should return |
+|---|---|---|
+| `observed` | the value was read | a verdict on the value |
+| `absent` | this kernel has no such parameter | `NOT_APPLICABLE` |
+| `denied` | the parameter exists and we were refused | `UNKNOWN(insufficient_privileges)` |
+| `error` | the read failed some other way | `UNKNOWN(ambiguous_system_state)` |
+
+Keeping `absent` and `denied` apart is what stops an unprivileged scan from
+reading as a clean bill of health. A key **missing from the map entirely**
+means the collector never probed it, which is a wiring bug in this repository
+and not an observation about the host; no check may read it as a value.
+
+`Configured` retains **every** occurrence of a parameter across all files, in
+application order, not just the winning one — a finding that reports drift has
+to be able to name the file the operator should edit.
+`Sysctl.ConfiguredConflict` reports when two files set one parameter to
+different values, which is the case where the application order of the drop-in
+directories differs between `systemd-sysctl` and procps `sysctl --system`. A
+check meeting a conflict returns `UNKNOWN` rather than picking a winner; see
+`docs/checks/KERNEL-0007.md` §4.
+
+`UnreadableFiles` carries the reason a configuration file could not be read, so
+a check can map the gap to the right `UNKNOWN` code rather than guessing at
+one.
 
 #### `fs.<interest>` — the shared filesystem walk
 

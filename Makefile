@@ -74,9 +74,15 @@ check-system-seam:
 .PHONY: check-check-purity
 ## A check may not import system, context, time, net or math/rand. Purity is
 ## what makes findings deterministic.
+##
+## The net pattern matches the import forms -- "net" and "net/..." -- rather
+## than any string starting with net. A sysctl key is called
+## net.ipv4.conf.all.rp_filter and a tag is called "network"; matching those
+## made the gate report a violation that was not one, and a gate that cries
+## wolf is a gate someone eventually silences.
 check-check-purity:
 	@bad=$$(grep -rn --include='*.go' \
-		-e '"context"' -e '"time"' -e '"net' -e '"math/rand"' \
+		-e '"context"' -e '"time"' -e '"net"' -e '"net/' -e '"math/rand"' \
 		-e 'internal/system' \
 		internal/catalog/checks/ 2>/dev/null | grep -v '_test\.go:' || true); \
 	if [ -n "$$bad" ]; then \

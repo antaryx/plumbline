@@ -109,10 +109,26 @@ func TestScanSucceedsWithNoNetwork(t *testing.T) {
 	if doc.Summary.Coverage == nil || *doc.Summary.Coverage != 100 {
 		t.Errorf("coverage = %v, want 100: an offline scan of a readable host must be complete", doc.Summary.Coverage)
 	}
-	// The verdict is the same one the same fixture produces with a network,
-	// which is the real claim: offline is not a degraded mode.
-	if len(doc.Findings) != 1 || doc.Findings[0].CheckID != "SSHD-0002" || doc.Findings[0].Result != "PASS" {
-		t.Errorf("findings = %+v", doc.Findings)
+	// The verdicts are the ones the same fixture produces with a network,
+	// which is the real claim: offline is not a degraded mode. Asserted as a
+	// property of every finding rather than as a fixed list, because the
+	// catalog grows and a test that pins its size fails on every module work
+	// package for a reason that has nothing to do with networking.
+	if len(doc.Findings) == 0 {
+		t.Fatal("the offline scan produced no findings")
+	}
+	var sawSSHD bool
+	for _, f := range doc.Findings {
+		if f.Result != "PASS" {
+			t.Errorf("%s = %s offline; the fixture is hardened and every check must reach the same verdict it does with a network",
+				f.CheckID, f.Result)
+		}
+		if f.CheckID == "SSHD-0002" {
+			sawSSHD = true
+		}
+	}
+	if !sawSSHD {
+		t.Error("SSHD-0002 did not run; the offline scan did not evaluate the catalog it was given")
 	}
 }
 

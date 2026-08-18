@@ -236,6 +236,16 @@ type decoder struct {
 }
 
 var registry = map[fact.ID]decoder{
+	fact.SysctlID: {
+		version: fact.Sysctl{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Sysctl
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
 	fact.SSHDConfigID: {
 		version: fact.SSHDConfig{}.FactVersion(),
 		decode: func(raw json.RawMessage) (fact.Fact, error) {

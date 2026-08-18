@@ -1,0 +1,1 @@
+{ "description": "A network namespace with only a loopback interface: there is no path on which a spoofed source address could arrive" }

@@ -147,10 +147,26 @@ sshd-absent                subject not installed → NOT_APPLICABLE
 sshd-unreadable            permission denied → UNKNOWN
 sshd-unresolved-include    ambiguous state → UNKNOWN
 sshd-bad-value             unparseable → UNKNOWN
+
+kernel-hardened            the good case; running and configured agree
+kernel-weak                every parameter at its insecure value
+kernel-partial             the middling values: neither best nor worst
+kernel-absent              parameter not in this kernel → NOT_APPLICABLE
+kernel-denied              exists, permission denied → UNKNOWN
+kernel-drift               file hardened, host never rebooted
+kernel-conflict            two drop-ins disagree → UNKNOWN
+kernel-unparseable         value is not the documented integer → UNKNOWN
+kernel-loopback-only       no non-loopback interface → NOT_APPLICABLE
 ```
 
 Name the *scenario*, never the expected result. `sshd-pass` becomes a lie the
 moment a check's threshold changes.
+
+`kernel-partial` earns its place: a module whose fixtures only cover the best
+and worst values never tests the middle, and the middle is where a check
+returns a plausible verdict with the wrong severity. `fs.suid_dumpable` at 2 is
+a real exposure and a smaller one than at 1, and only a fixture holding 2
+proves the check says so.
 
 ---
 

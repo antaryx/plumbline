@@ -1,0 +1,1 @@
+{ "description": "Partial hardening: ASLR at 1, suid_dumpable at 2, ptrace_scope at 3, rp_filter in loose mode -- the values that are neither the best nor the worst case" }
