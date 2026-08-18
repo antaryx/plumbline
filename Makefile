@@ -87,7 +87,7 @@ check-check-purity:
 ## Every check needs at least one PASS and one FAIL fixture case. This gate
 ## exists from check #1 so that complying with it is never expensive.
 check-fixture-coverage:
-	@go run ./tools/fixturegate 2>/dev/null || echo "note: tools/fixturegate not yet built (v0.1 WP-06)"
+	@go run ./tools/fixturegate
 
 .PHONY: docs
 docs:
