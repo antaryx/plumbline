@@ -96,8 +96,11 @@ func infoFor(clean string, st os.FileInfo) system.FileInfo {
 		IsRegular: st.Mode().IsRegular(),
 		IsSymlink: st.Mode()&fs.ModeSymlink != 0,
 	}
+	// The one place in the codebase that may know syscall.Stat_t exists.
+	// Everything downstream sees plain integers (ADR-0012).
 	if sys, ok := st.Sys().(*syscall.Stat_t); ok {
 		fi.UID, fi.GID = sys.Uid, sys.Gid
+		fi.Dev, fi.Ino = sys.Dev, sys.Ino
 	}
 	return fi
 }
@@ -152,24 +155,43 @@ func (s *System) ReadFile(p string, maxBytes int64) (system.ReadResult, error) {
 	return res, nil
 }
 
-func (s *System) ReadDir(p string) ([]system.FileInfo, error) {
+func (s *System) ReadDir(p string, maxEntries int) (system.DirResult, error) {
 	clean, real, err := s.resolve(p)
 	if err != nil {
-		return nil, err
+		return system.DirResult{}, err
 	}
+	if maxEntries <= 0 {
+		maxEntries = system.DefaultMaxDirEntries
+	}
+
 	entries, err := os.ReadDir(real)
 	if err != nil {
-		return nil, translate(err)
+		return system.DirResult{}, translate(err)
 	}
-	out := make([]system.FileInfo, 0, len(entries))
+
+	res := system.DirResult{Path: clean}
+	// os.ReadDir has already materialised the slice, so the cap here bounds
+	// what is retained rather than what is read. Bounding the read itself
+	// requires the streaming form, and if the walker turns out to need it, this
+	// is the function that grows a sibling — not the interface that grows a
+	// second way to list a directory.
+	if len(entries) > maxEntries {
+		entries = entries[:maxEntries]
+		res.Truncated = true
+	}
+
+	res.Entries = make([]system.FileInfo, 0, len(entries))
 	for _, e := range entries {
 		st, err := e.Info()
 		if err != nil {
+			// The entry exists but we cannot describe it. Dropping it silently
+			// would let a caller conclude the file is not there.
+			res.Truncated = true
 			continue
 		}
-		out = append(out, infoFor(path.Join(clean, e.Name()), st))
+		res.Entries = append(res.Entries, infoFor(path.Join(clean, e.Name()), st))
 	}
-	return out, nil
+	return res, nil
 }
 
 func (s *System) Glob(pattern string) ([]string, error) {

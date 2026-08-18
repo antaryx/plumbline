@@ -56,6 +56,57 @@ type Fact interface {
   not read" are different observations, and conflating them produces false
   assurance.
 
+### 2.1.1 `system.FileInfo`, the shared file descriptor
+
+Facts that describe files embed `system.FileInfo`. It is a flattened, JSON-safe
+stat result — deliberately not an `fs.FileInfo`, because everything a fact
+carries must survive a round trip through a bundle.
+
+| Field | Meaning |
+|---|---|
+| `path` | Absolute, as the scan saw it — beneath `--root`, not the real path |
+| `mode` | Permission bits and type bits |
+| `uid`, `gid` | Numeric owner; names are resolved by checks, not collectors |
+| `size`, `mod_time` | As reported by the kernel |
+| `is_dir`, `is_regular`, `is_symlink` | The type questions checks actually ask |
+| `link_target` | Where a symlink points; the link is never followed |
+| `dev`, `ino` | The inode's identity |
+
+`dev` and `ino` exist so that the shared filesystem walker can detect
+bind-mount and hardlink cycles: a tree that contains itself is infinite, and a
+depth limit terminates such a walk without being able to tell it apart from a
+legitimately deep one. They are integers rather than a `syscall.Stat_t` so that
+no syscall type reaches a fact or a check; extraction happens inside
+`internal/system`, which is the only package permitted to know that `syscall`
+exists. Zero means not recorded — inode 0 is not a valid inode and device 0 is
+not a real device for a file. See `docs/adr/0012-fileinfo-inode-seam.md`.
+
+### 2.1.2 Reading a directory is bounded
+
+`System.ReadDir(path, maxEntries)` returns a `DirResult`, not a slice, and the
+difference matters:
+
+```go
+type DirResult struct {
+    Path      string
+    Entries   []FileInfo
+    Truncated bool
+}
+```
+
+`Truncated` means the listing is not the complete contents of the directory —
+either the entry cap was reached, or an entry could not be stat'ed and was
+omitted. Both have one consequence, which is why they share one flag:
+
+> **Nothing may conclude that a file is absent from a truncated listing.**
+
+A directory with ten million entries is a denial of service against a scanner
+that materialises all of them, so the cap is not optional. But a bounded
+listing that did not admit being bounded would be worse than no cap at all: a
+check would report "no world-writable file here" about a directory it saw a
+tenth of. That is the same false assurance as reporting `PASS` for something
+never examined, arriving by a different route.
+
 ### 2.2 Fact versioning
 
 `FactVersion` is bumped when the shape changes such that an old check reading a

@@ -19,6 +19,17 @@ import (
 // exhaust memory in a root-privileged process.
 const DefaultMaxRead int64 = 8 << 20 // 8 MiB
 
+// DefaultMaxDirEntries is the entry cap applied to a single ReadDir when the
+// caller does not specify one.
+//
+// It is a policy number, like DefaultMaxRead. The largest legitimate system
+// directory on a fat distribution holds a few thousand entries; a mail spool, a
+// session directory or an attacker's scratch space holds millions. 100,000 is
+// generous enough that no honest directory reaches it and small enough that the
+// slice it bounds stays in tens of megabytes — which matters because the
+// process reading it may be root and the directory may not be honest.
+const DefaultMaxDirEntries = 100_000
+
 // Sentinel errors. Callers compare with errors.Is; collectors translate these
 // into typed fact errors so that dependent checks resolve to UNKNOWN rather
 // than to a wrong verdict.
@@ -44,6 +55,20 @@ type FileInfo struct {
 	IsRegular  bool        `json:"is_regular"`
 	IsSymlink  bool        `json:"is_symlink"`
 	LinkTarget string      `json:"link_target,omitempty"`
+
+	// Dev and Ino identify the inode. Together they are what lets the shared
+	// walker detect a bind-mount or hardlink cycle: a tree that contains itself
+	// is infinite, and a depth limit terminates such a walk without being able
+	// to tell it apart from a legitimately deep one (ADR-0012).
+	//
+	// They are flattened integers rather than a syscall.Stat_t on purpose.
+	// Everything a fact carries must survive a round trip through JSON in a
+	// bundle, and no syscall type may reach a check.
+	//
+	// Zero means not recorded. Inode 0 is not a valid inode and device 0 is not
+	// a real device for a file, so the zero value is unambiguous.
+	Dev uint64 `json:"dev,omitempty"`
+	Ino uint64 `json:"ino,omitempty"`
 }
 
 // ReadResult carries file contents plus the provenance a Finding needs to cite
@@ -54,6 +79,18 @@ type ReadResult struct {
 	Size      int64  `json:"size"`
 	Truncated bool   `json:"truncated"`
 	SHA256    string `json:"sha256"`
+}
+
+// DirResult is a directory listing plus whether it is the whole directory.
+type DirResult struct {
+	Path    string     `json:"path"`
+	Entries []FileInfo `json:"entries"`
+	// Truncated means this listing is not the complete contents of the
+	// directory, for either of two reasons: the entry cap was reached, or an
+	// entry could not be stat'ed and was therefore omitted. Both have the same
+	// consequence for a caller, which is why they share one flag — nothing may
+	// conclude that a file is absent from a truncated listing.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // ExecResult is the outcome of running an external command. Argv is retained so
@@ -82,8 +119,16 @@ type System interface {
 	// from blocking forever on an unprivileged user's FIFO.
 	ReadFile(path string, maxBytes int64) (ReadResult, error)
 
-	// ReadDir returns entries without following symlinks.
-	ReadDir(path string) ([]FileInfo, error)
+	// ReadDir lists a directory without following symlinks, reading at most
+	// maxEntries of them (DefaultMaxDirEntries when <= 0).
+	//
+	// The cap is why this returns a DirResult rather than a slice. A bounded
+	// read that returned the first N entries and nothing else would let a
+	// caller conclude a file is absent from a directory it only partly saw,
+	// which is the same false assurance as reporting PASS for something never
+	// examined. DirResult.Truncated is the caller's warning not to conclude
+	// absence.
+	ReadDir(path string, maxEntries int) (DirResult, error)
 
 	// Glob expands a shell-style pattern against the scan root. Used by
 	// sshd_config Include resolution. It never matches outside the root.

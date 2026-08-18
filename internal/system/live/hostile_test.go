@@ -332,12 +332,15 @@ func TestHostileFilenames(t *testing.T) {
 
 	sys := live.New(root)
 
-	entries, err := sys.ReadDir("/etc/ssh/sshd_config.d")
+	listing, err := sys.ReadDir("/etc/ssh/sshd_config.d", 0)
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
-	if len(entries) != len(names) {
-		t.Errorf("ReadDir returned %d entries, want %d", len(entries), len(names))
+	if len(listing.Entries) != len(names) {
+		t.Errorf("ReadDir returned %d entries, want %d", len(listing.Entries), len(names))
+	}
+	if listing.Truncated {
+		t.Error("a complete listing was reported as truncated")
 	}
 
 	matches, err := sys.Glob("/etc/ssh/sshd_config.d/*.conf")
@@ -409,6 +412,124 @@ func TestEscapingTheRootIsRefused(t *testing.T) {
 		}
 		if res.Path == "/etc/shadow" && len(res.Data) > 0 {
 			t.Errorf("ReadFile(%q) escaped the root", p)
+		}
+	}
+}
+
+// TestReadDirIsBoundedAndSaysSo covers the cap added for the shared walker. A
+// bounded listing that did not admit it were bounded would let a caller
+// conclude a file is absent from a directory it only partly saw — the same
+// false assurance as reporting PASS for something never examined.
+func TestReadDirIsBoundedAndSaysSo(t *testing.T) {
+	root := hostileRoot(t)
+	dir := filepath.Join(root, "etc", "ssh", "sshd_config.d")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const total = 50
+	for i := 0; i < total; i++ {
+		name := filepath.Join(dir, fmt.Sprintf("%03d.conf", i))
+		if err := os.WriteFile(name, []byte("Port 22\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sys := live.New(root)
+
+	// Under the cap: complete, and it says so.
+	full, err := sys.ReadDir("/etc/ssh/sshd_config.d", total)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(full.Entries) != total || full.Truncated {
+		t.Errorf("entries=%d truncated=%v, want %d and false", len(full.Entries), full.Truncated, total)
+	}
+	if full.Path != "/etc/ssh/sshd_config.d" {
+		t.Errorf("Path = %q, want the simulated path", full.Path)
+	}
+
+	// Over the cap: bounded, and it says so.
+	part, err := sys.ReadDir("/etc/ssh/sshd_config.d", 10)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(part.Entries) != 10 {
+		t.Errorf("entries = %d, want the cap of 10", len(part.Entries))
+	}
+	if !part.Truncated {
+		t.Fatal("a bounded listing did not report itself truncated; a caller would conclude the rest of the directory does not exist")
+	}
+
+	// A cap of zero means the default, not "return nothing".
+	def, err := sys.ReadDir("/etc/ssh/sshd_config.d", 0)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(def.Entries) != total || def.Truncated {
+		t.Errorf("with maxEntries=0: entries=%d truncated=%v", len(def.Entries), def.Truncated)
+	}
+}
+
+// TestFileInfoCarriesDeviceAndInode covers what the walker needs for cycle
+// detection (ADR-0012). Without it a bind mount pointing at an ancestor makes
+// the tree infinite, and a depth limit cannot tell that apart from a
+// legitimately deep one.
+func TestFileInfoCarriesDeviceAndInode(t *testing.T) {
+	root := hostileRoot(t)
+	dir := filepath.Join(root, "etc", "ssh")
+	a := filepath.Join(dir, "sshd_config")
+	b := filepath.Join(dir, "other.conf")
+	for _, p := range []string{a, b} {
+		if err := os.WriteFile(p, []byte("Port 22\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sys := live.New(root)
+
+	fiA, err := sys.Stat("/etc/ssh/sshd_config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fiA.Ino == 0 {
+		t.Error("Ino is zero; cycle detection has nothing to work with")
+	}
+	if fiA.Dev == 0 {
+		t.Error("Dev is zero; a walk could not tell one filesystem from another")
+	}
+
+	// Distinct files are distinct identities...
+	fiB, err := sys.Stat("/etc/ssh/other.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fiA.Ino == fiB.Ino {
+		t.Errorf("two files share inode %d", fiA.Ino)
+	}
+
+	// ...and a hard link is the same identity, which is exactly the case the
+	// walker must recognise rather than visit twice.
+	link := filepath.Join(dir, "hardlink.conf")
+	if err := os.Link(a, link); err != nil {
+		t.Skipf("this filesystem will not hard link: %v", err)
+	}
+	fiLink, err := sys.Stat("/etc/ssh/hardlink.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fiLink.Dev != fiA.Dev || fiLink.Ino != fiA.Ino {
+		t.Errorf("a hard link reported a different identity: %d/%d vs %d/%d",
+			fiLink.Dev, fiLink.Ino, fiA.Dev, fiA.Ino)
+	}
+
+	// The listing carries them too, since that is where the walker gets them.
+	listed, err := sys.ReadDir("/etc/ssh", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range listed.Entries {
+		if e.Ino == 0 {
+			t.Errorf("ReadDir entry %s has no inode", e.Path)
 		}
 	}
 }

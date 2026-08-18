@@ -18,6 +18,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/antaryx/plumbline/internal/system"
@@ -180,6 +181,12 @@ func (s *System) infoFor(clean string, st os.FileInfo) system.FileInfo {
 		IsRegular: st.Mode().IsRegular(),
 		IsSymlink: st.Mode()&fs.ModeSymlink != 0,
 	}
+	// Real device and inode from the fixture tree's own files, so two fixture
+	// paths are genuinely distinct and a cycle-detection test is testing the
+	// set rather than testing this fake (ADR-0012).
+	if sys, ok := st.Sys().(*syscall.Stat_t); ok {
+		fi.Dev, fi.Ino = sys.Dev, sys.Ino
+	}
 	// Fixture overrides win: git cannot carry modes or ownership faithfully.
 	if m, ok := s.modes[clean]; ok {
 		fi.Mode = (fi.Mode &^ fs.ModePerm) | (m & fs.ModePerm)
@@ -228,33 +235,47 @@ func (s *System) ReadFile(p string, maxBytes int64) (system.ReadResult, error) {
 	return res, nil
 }
 
-func (s *System) ReadDir(p string) ([]system.FileInfo, error) {
+func (s *System) ReadDir(p string, maxEntries int) (system.DirResult, error) {
 	clean, real, err := s.resolve(p)
 	if err != nil {
-		return nil, err
+		return system.DirResult{}, err
 	}
 	if s.deny[clean] {
-		return nil, system.ErrPermission
+		return system.DirResult{}, system.ErrPermission
 	}
+	if maxEntries <= 0 {
+		maxEntries = system.DefaultMaxDirEntries
+	}
+
 	entries, err := os.ReadDir(real)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, system.ErrNotExist
+			return system.DirResult{}, system.ErrNotExist
 		}
-		return nil, err
+		return system.DirResult{}, err
 	}
-	out := make([]system.FileInfo, 0, len(entries))
+
+	res := system.DirResult{Path: clean}
+	kept := 0
 	for _, e := range entries {
 		if clean == "/" && e.Name() == "_plumbline" {
-			continue // the manifest is not part of the simulated system
+			// The manifest is not part of the simulated system. Its absence is
+			// by design, so it must not mark the listing truncated.
+			continue
+		}
+		if kept >= maxEntries {
+			res.Truncated = true
+			break
 		}
 		st, err := e.Info()
 		if err != nil {
+			res.Truncated = true
 			continue
 		}
-		out = append(out, s.infoFor(path.Join(clean, e.Name()), st))
+		res.Entries = append(res.Entries, s.infoFor(path.Join(clean, e.Name()), st))
+		kept++
 	}
-	return out, nil
+	return res, nil
 }
 
 func (s *System) Glob(pattern string) ([]string, error) {
