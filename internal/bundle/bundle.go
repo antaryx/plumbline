@@ -124,8 +124,13 @@ type Manifest struct {
 	Tool           Tool      `json:"tool"`
 	CatalogVersion int       `json:"catalog_version"`
 	Created        time.Time `json:"created"`
-	MetaMember     string    `json:"meta_member,omitempty"`
-	Scan           Scan      `json:"scan"`
+	// Redacted records that --redact was used, so a reader can tell a bundle
+	// with no hostname from a bundle whose host had no name. Redaction happens
+	// at collection time, which is what makes a redacted bundle safe to attach
+	// to a bug report.
+	Redacted   bool   `json:"redacted,omitempty"`
+	MetaMember string `json:"meta_member,omitempty"`
+	Scan       Scan   `json:"scan"`
 	// Facts indexes the facts/ members. Write derives it from the fact set;
 	// anything a caller puts here is replaced, because the index describes the
 	// archive rather than the caller's intent.

@@ -7,11 +7,12 @@ COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    ?= $(shell git log -1 --format=%cI 2>/dev/null || echo unknown)
 CATALOG ?= $(shell grep -oP 'Version = \K[0-9]+' internal/catalog/catalog.go)
 
+## The catalog version is deliberately not stamped: it is compiled in, and
+## asking the catalog is the only answer that cannot drift from what runs.
 LDFLAGS := -s -w \
-	-X main.version=$(VERSION) \
+	-X main.buildVersion=$(VERSION) \
 	-X main.commit=$(COMMIT) \
-	-X main.date=$(DATE) \
-	-X main.catalog=$(CATALOG)
+	-X main.date=$(DATE)
 
 .PHONY: verify
 ## verify: the gate. Claude Code must run this and report the output before

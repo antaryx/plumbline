@@ -263,7 +263,7 @@ v1 does the minimum honest thing: the catalog ships a `BaseSeverity`, and the *s
 |---|---|
 | Service listening on a non-loopback address and no host firewall present | +1 for network-exposed checks |
 | Host has no interactive login accounts besides root | −1 for interactive-session checks |
-| `--exposure internal\|internet\|airgapped` supplied by the operator | ±1 per category, table in `SCORING.md` |
+| `--exposure internal\|internet\|airgapped` supplied by the operator | ±1 per category; the scoring formulas it feeds are in §5 |
 
 Both severities are always reported. No hidden adjustment.
 

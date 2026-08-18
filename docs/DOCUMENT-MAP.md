@@ -50,7 +50,6 @@ The files a visitor and a contributor hit first. All are v1-gating and most are 
 | `schema/bundle-v1.schema.json` | v1 | Bundle format. Read-compatibility is forever. |
 | `CHECK-AUTHORING.md` | v1 | How to add a check end to end: pick an ID, declare fact dependencies, write `Applies`/`Eval`, write PASS and FAIL fixtures, write the remediation, map to a public-domain control, review checklist. The single highest-leverage contributor document. |
 | `COLLECTORS.md` | v1 | Every collector: facts produced, dependencies, privilege required, cost class, timeout, failure modes, distro variations handled. |
-| `SCORING.md` | v1 | Posture and coverage formulas with worked examples, severity weights, the context-adjustment table, what is deliberately *not* scored, and why there is no risk score and no compliance percentage. |
 | `CLI-SPEC.md` | v1 | Every command and flag, defaults, mutual exclusions, precedence rules, exit codes with the precedence ladder, environment variables, stdout/stderr discipline. |
 | `CONFIG-REFERENCE.md` | v1 | Every key, type, default, precedence chain, deprecations, worked examples. |
 | `OUTPUT-FORMATS.md` | v1 | Per format: intended consumer, guarantees, stability level, examples. SARIF rule-ID and fingerprint mapping in detail. |
@@ -125,7 +124,7 @@ The last one before check #1 because the first check that maps to a framework is
 `THREAT-MODEL`
 
 **During v0.2–v0.3, incrementally**
-`SCORING` · `CLI-SPEC` · `CONFIG-REFERENCE` · `OUTPUT-FORMATS` · `COLLECTORS` · `DESIGN` · `REQUIREMENTS`
+`CLI-SPEC` · `CONFIG-REFERENCE` · `OUTPUT-FORMATS` · `COLLECTORS` · `DESIGN` · `REQUIREMENTS`
 
 **Release-hardening, before v1.0.0**
 `VERSIONING` (done) · `DEPLOYMENT` (done) · `RELEASE-PROCESS` · `SUPPLY-CHAIN` · `SECURITY` · `PRIVACY` · `SUPPORT-POLICY` · `PLATFORM-SUPPORT` · `PERFORMANCE` · all Tier 5 · generated references · `CI-CD` · runbooks
