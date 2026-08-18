@@ -125,6 +125,24 @@ SSHD-0002 corpus:
 | **CRLF line endings** | Configs edited on Windows. One line of parser code, one class of bug. |
 | **Comment on the value line** | `Port 22 # default` — is the value `22` or `22 # default`? |
 
+### 4.2 What is *not* a committed fixture
+
+Two kinds of test input deliberately do not live in `testdata/fixtures/`.
+
+**Hostile input is generated at test time.** A FIFO, a 40-deep symlink chain, a
+symlink to `/etc/shadow` and a 100 MB file are not file contents, and git cannot
+carry them. They are built in a temporary directory by
+`internal/system/live/hostile_test.go` and
+`internal/collect/collectors/sshd/hostile_test.go`, which has the side benefit
+that the tests exercise a real filesystem rather than a recording of one. The
+CRLF, zero-byte and cyclic-include cases live there too, because they test the
+parser against a generated tree rather than a scenario worth naming.
+
+**`cli-host` is a fixture for the CLI, not for a check.** It carries
+`/etc/hostname` and `/etc/os-release` so that `--redact` has an identity to
+remove and so the container matrix has a scan target whose verdict is identical
+on every distribution. No check reads it.
+
 ---
 
 ## 5. Recording a fixture from a real host

@@ -69,18 +69,36 @@ code compiles and the tests pass.
 ## 3. Where things live
 
 ```
+cmd/plumbline/            main; ~20 lines, everything testable is in cli/
 internal/system/          the only OS seam
   system.go               the interface
   live/                   real host, with --root prefixing
   fake/                   fixture-backed, used by every test
+  localfile.go            operator-named files (the bundle); NOT on the
+                          interface, so --root can never apply — ADR-0011
 internal/fact/            typed facts + FactSet + fact errors
-internal/collect/         collectors (the only System consumers)
+internal/collect/         Collector, registry (DAG), runner (budgets, isolation)
+internal/collect/collectors/  one package per collector
 internal/catalog/         Check type, catalog registry, evaluation runner
 internal/catalog/checks/  one package per module: sshd, auth, kernel, ...
 internal/finding/         Finding, Result, Severity, Evidence — the schema
+internal/sanitize/        control-character neutralisation (T-03); a security
+                          control, not formatting
+internal/bundle/          .plb read/write, integrity, evidence store
+internal/score/           posture and coverage; both can be undefined
+internal/render/json/     findings/v1 — the public API
+internal/cli/             cobra commands, flag precedence, the exit ladder
+internal/version/         tool, catalog and schema versions
+schema/                   findings-v1 and bundle-v1; findings-v1 IS the API
 testdata/fixtures/        one directory per fixture
+tools/fixturegate/        the PASS+FAIL fixture gate (rule 5, mechanised)
 docs/                     specifications; read before implementing
+docs/adr/                 decisions that would be expensive to reverse
 ```
+
+Hostile-input fixtures are **generated at test time**, not committed: a FIFO, a
+40-deep symlink chain and a 100 MB file are not file contents. See
+`internal/system/live/hostile_test.go`.
 
 **Reference implementation:** `internal/catalog/checks/sshd/sshd0002.go` plus
 `internal/collect/collectors/sshd/sshd.go` and their tests. When anything is

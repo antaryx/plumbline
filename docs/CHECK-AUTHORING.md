@@ -133,12 +133,28 @@ Every `FAIL` and every `UNKNOWN` carries evidence. A finding without it is a
 rumour, and an auditor cannot use it.
 
 ```go
-Evidence: []finding.Evidence{{
-    Source:  d.File,
-    Line:    d.Line,
-    Excerpt: fmt.Sprintf("%s %s", d.Keyword, d.Value),
-}}
+Evidence: []finding.Evidence{finding.NewEvidence(
+    d.File, d.Line,
+    fmt.Sprintf("%s %s", d.Keyword, d.Value),
+    cfg.Digests[d.File])}
 ```
+
+Use `finding.NewEvidence`, not an `Evidence` literal. It does two things a
+literal does not:
+
+- **Neutralises the untrusted strings.** A filename may contain ESC, and
+  `\x1b[2J\x1b[H  All checks passed` in an excerpt clears the operator's
+  terminal and forges a verdict (`THREAT-MODEL.md` T-03). The catalog runner
+  sanitises again on the way out, so a literal is not *unsafe* — but it is the
+  wrong habit to copy.
+- **Attaches the digest of the file the line came from.** The bytes are stored
+  in the bundle at `evidence/<sha256>.blob`, so an auditor who disputes an
+  excerpt can re-read the source. Evidence with no digest cannot be verified
+  against anything, which makes it an assertion rather than evidence.
+
+The digest comes from the fact (`cfg.Digests`), because a check is pure and
+cannot hash a file itself (ADR-0009). If the fact you are reading does not carry
+digests yet, that is a collector work package, not something to work around.
 
 Add evidence that explains a *surprising* verdict. `SSHD-0002` attaches
 Match-scoped occurrences when it fails, so an operator who can plainly see
@@ -221,7 +237,8 @@ Checklist before you call it done:
 - [ ] The daemon's real default is encoded and cited
 - [ ] Every `UNKNOWN` path has a reason code
 - [ ] Detail states observed values with file and line
-- [ ] Evidence on every `FAIL` and `UNKNOWN`
+- [ ] Evidence on every `FAIL` and `UNKNOWN`, built with `finding.NewEvidence`
+- [ ] Evidence carries a digest where the fact provides one
 - [ ] `Caution` present if the fix can lock someone out
 - [ ] PASS and FAIL fixtures exist; NOT_APPLICABLE and UNKNOWN where reachable
 - [ ] `make verify` output pasted
