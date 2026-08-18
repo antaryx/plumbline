@@ -1,0 +1,16 @@
+# Default: normalise line endings in source.
+* text=auto eol=lf
+
+# Fixtures are byte-exact simulations of real systems. Git must not touch
+# them: the CRLF fixture exists precisely to test CRLF handling, and
+# normalising it would silently delete the test.
+testdata/fixtures/** -text
+testdata/bundles/**  binary
+
+# Binary artifacts
+*.plb binary
+*.zst binary
+
+# Generated docs — exclude from language stats and diff noise
+docs/CHECK-REFERENCE.md linguist-generated=true
+docs/MODULE-CATALOG.md  linguist-generated=true

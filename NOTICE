@@ -1,0 +1,21 @@
+Plumbline
+Copyright 2026 The Plumbline Authors
+
+This product includes software developed by the Plumbline Authors
+(https://github.com/antaryx/plumbline).
+
+Third-party content:
+
+- Control identifiers referenced in check mappings are drawn from
+  NIST SP 800-53 Rev. 5 and DISA Security Technical Implementation Guides,
+  both works of the United States Government and not subject to copyright
+  protection in the United States. Only bare control identifiers are used;
+  no control text is reproduced. See docs/COMPLIANCE-DATA-POLICY.md.
+
+- No content from CIS Benchmarks, PCI-DSS, ISO/IEC 27001, SOC 2 Trust
+  Services Criteria, or any other licensed standard is included in this
+  repository or in any released artifact.
+
+- CODE_OF_CONDUCT.md is adapted from the Contributor Covenant v2.1,
+  available at https://www.contributor-covenant.org/version/2/1/code_of_conduct.html
+  and licensed under CC BY 4.0.

@@ -1,0 +1,51 @@
+name: Bug report
+description: Plumbline crashed, hung, or behaved incorrectly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a check that reports the *wrong verdict* about your system, use the
+        **False positive / wrong verdict** template instead — those need
+        different information.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, what you got.
+    validations: { required: true }
+
+  - type: textarea
+    id: version
+    attributes:
+      label: Version
+      description: Output of `plumbline version --json`
+      render: json
+    validations: { required: true }
+
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      placeholder: "Ubuntu 24.04, amd64, kernel 6.8.0, running as root"
+    validations: { required: true }
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Run again with `--debug` and paste stderr.
+      render: shell
+
+  - type: checkboxes
+    id: bundle
+    attributes:
+      label: Bundle
+      description: |
+        A bundle makes this reproducible without access to your machine.
+        `plumbline collect --redact -o bug.plb` removes hostname and
+        non-loopback addresses at collection time. **Read the file before
+        attaching it** — it still contains a package inventory and file paths.
+      options:
+        - label: I have attached a redacted bundle, or explained why I cannot

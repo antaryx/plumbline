@@ -1,0 +1,3 @@
+# Stock configuration
+#PermitRootLogin prohibit-password
+Port 22

@@ -1,0 +1,11 @@
+* @antaryx
+
+# Changing any of these alters a published contract or a security control.
+# They are called out so a review is never accidental.
+/schema/                         @antaryx
+/docs/DATA-MODEL.md              @antaryx
+/docs/VERSIONING.md              @antaryx
+/docs/THREAT-MODEL.md            @antaryx
+/docs/COMPLIANCE-DATA-POLICY.md  @antaryx
+/internal/system/                @antaryx
+/internal/finding/               @antaryx

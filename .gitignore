@@ -1,0 +1,27 @@
+# Build output
+/dist/
+/plumbline
+coverage.out
+coverage.html
+
+# Go
+*.test
+*.out
+vendor/
+
+# Bundles and reports — these contain host inventory and must never be
+# committed by accident. Fixtures live under testdata/ and are exempt.
+*.plb
+*.plb.sig
+plumbline-report-*.json
+plumbline-report-*.sarif
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Local
+.env
+*.local.yaml

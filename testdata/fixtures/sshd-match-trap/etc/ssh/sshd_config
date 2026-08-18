@@ -1,0 +1,5 @@
+Port 22
+PermitRootLogin yes
+
+Match Address 10.0.0.0/8
+    PermitRootLogin no

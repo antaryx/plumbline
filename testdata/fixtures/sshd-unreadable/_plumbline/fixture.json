@@ -1,0 +1,1 @@
+{"description":"Unprivileged run: config exists but is unreadable","euid":1000,"unreadable":["/etc/ssh/sshd_config"]}

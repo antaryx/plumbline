@@ -1,0 +1,5 @@
+# Managed by configuration management. Do not edit by hand.
+Port 22
+PermitRootLogin no
+PasswordAuthentication no
+MaxAuthTries 3

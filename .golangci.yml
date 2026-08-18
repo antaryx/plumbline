@@ -1,0 +1,43 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - errorlint
+    - gosec
+    - misspell
+    - nilerr
+    - revive
+    - unconvert
+    - wastedassign
+
+linters-settings:
+  gosec:
+    excludes:
+      # G304: file inclusion via variable. Reading variable paths IS the job.
+      # The safety controls are in internal/system/live (O_NOFOLLOW, regular-file
+      # verification after open, size caps) and are covered by the hostile-input
+      # corpus, not by avoiding the pattern. See docs/THREAT-MODEL.md T-01, T-02.
+      - G304
+  errcheck:
+    check-type-assertions: true
+  revive:
+    rules:
+      - name: exported
+        disabled: false
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters: [gosec, errcheck]
+  max-issues-per-linter: 0
+  max-same-issues: 0

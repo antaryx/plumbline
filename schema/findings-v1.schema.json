@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/antaryx/plumbline/schema/findings-v1.schema.json",
+  "title": "Plumbline findings document v1",
+  "description": "The public API of Plumbline. Consumers MUST ignore unknown object properties and MUST tolerate unknown values in fields documented as open. Fields documented as closed (result) will never gain values within schema major v1; adding one is a breaking change requiring findings/v2.",
+  "type": "object",
+  "required": ["schema", "tool", "catalog_version", "scan", "summary", "findings"],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema": {
+      "const": "findings/v1",
+      "description": "Always the first key. Consumers should branch on this before parsing anything else."
+    },
+
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "const": "plumbline" },
+        "version": { "type": "string", "examples": ["1.0.0"] },
+        "commit": { "type": "string" },
+        "built": { "type": "string", "format": "date-time" }
+      }
+    },
+
+    "catalog_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Scores are comparable only within one catalog version. Consumers comparing posture across documents MUST check this field first."
+    },
+
+    "scan": {
+      "type": "object",
+      "required": ["started", "finished", "root", "euid"],
+      "additionalProperties": false,
+      "properties": {
+        "started": { "type": "string", "format": "date-time" },
+        "finished": { "type": "string", "format": "date-time" },
+        "root": {
+          "type": "string",
+          "description": "Scan root. Empty string or '/' for a live host scan; otherwise the --root prefix.",
+          "examples": ["", "/mnt/host"]
+        },
+        "euid": { "type": "integer", "minimum": 0 },
+        "profile": { "type": "string" },
+        "bundle_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Identifies the fact bundle these findings were derived from, so a report can be traced back to its evidence."
+        },
+        "host": {
+          "type": "object",
+          "description": "Absent or partially populated when --redact was used.",
+          "additionalProperties": false,
+          "properties": {
+            "hostname": { "type": "string" },
+            "os_id": { "type": "string", "examples": ["ubuntu", "debian", "alpine"] },
+            "os_version": { "type": "string" },
+            "kernel": { "type": "string" },
+            "arch": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "summary": {
+      "type": "object",
+      "required": ["counts", "posture", "coverage"],
+      "additionalProperties": false,
+      "properties": {
+        "counts": {
+          "type": "object",
+          "required": ["pass", "fail", "not_applicable", "skipped", "unknown", "total"],
+          "additionalProperties": false,
+          "properties": {
+            "pass": { "type": "integer", "minimum": 0 },
+            "fail": { "type": "integer", "minimum": 0 },
+            "not_applicable": { "type": "integer", "minimum": 0 },
+            "skipped": { "type": "integer", "minimum": 0 },
+            "unknown": { "type": "integer", "minimum": 0 },
+            "total": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "by_severity": {
+          "type": "object",
+          "description": "Counts of FAIL findings by effective severity.",
+          "additionalProperties": false,
+          "properties": {
+            "CRITICAL": { "type": "integer", "minimum": 0 },
+            "HIGH": { "type": "integer", "minimum": 0 },
+            "MEDIUM": { "type": "integer", "minimum": 0 },
+            "LOW": { "type": "integer", "minimum": 0 },
+            "INFO": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "posture": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Weighted percentage of scoring checks that passed. Computed over PASS+FAIL only. MUST NOT be displayed without coverage."
+        },
+        "coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of applicable checks that were actually evaluated. SKIPPED and UNKNOWN reduce this. A high posture at low coverage means little."
+        },
+        "degraded": {
+          "type": "boolean",
+          "description": "True when one or more collectors failed. Corresponds to exit code 4."
+        }
+      }
+    },
+
+    "findings": {
+      "type": "array",
+      "description": "Sorted by check_id for determinism. Two evaluations of one bundle produce byte-identical arrays.",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+
+    "fact_errors": {
+      "type": "array",
+      "description": "Collection failures, retained so a gap can be explained later.",
+      "items": {
+        "type": "object",
+        "required": ["fact", "kind", "message"],
+        "additionalProperties": false,
+        "properties": {
+          "fact": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "description": "Open set; new kinds may be added in a minor release.",
+            "examples": ["not_collected", "permission", "timeout", "parse", "truncated", "unsupported", "internal"]
+          },
+          "message": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"],
+      "description": "Closed set within schema major v1."
+    },
+
+    "finding": {
+      "type": "object",
+      "required": ["check_id", "module", "title", "result", "severity", "base_severity", "detail", "fingerprint"],
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9]*-[0-9]{4}$",
+          "description": "Permanent identifier. Never renumbered, never reused after retirement.",
+          "examples": ["SSHD-0002"]
+        },
+        "module": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*$" },
+        "title": { "type": "string" },
+
+        "result": {
+          "type": "string",
+          "enum": ["PASS", "FAIL", "NOT_APPLICABLE", "SKIPPED", "UNKNOWN"],
+          "description": "CLOSED set. Consumers may switch exhaustively. A sixth value requires findings/v2."
+        },
+
+        "unknown_reason": {
+          "type": "string",
+          "description": "Required when result is UNKNOWN. Open set.",
+          "examples": [
+            "fact_not_collected",
+            "insufficient_privileges",
+            "unparseable_source",
+            "source_truncated",
+            "fact_version_mismatch",
+            "ambiguous_system_state",
+            "internal_error"
+          ]
+        },
+
+        "severity": { "$ref": "#/$defs/severity" },
+        "base_severity": {
+          "$ref": "#/$defs/severity",
+          "description": "The catalog default before any per-outcome or context adjustment. Always reported so adjustment is never hidden."
+        },
+
+        "detail": {
+          "type": "string",
+          "description": "What was actually observed, with real values substituted. Not a generic description of the check."
+        },
+
+        "subject": {
+          "type": "string",
+          "description": "The specific thing this finding concerns (path, account, port). Empty for host-wide checks. Feeds the fingerprint."
+        },
+
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$",
+          "description": "sha256(check_id \\0 subject), truncated to 128 bits. Stable across runs AND across verdict changes, so suppressions and SARIF baselines survive. Changing this derivation is a breaking change."
+        },
+
+        "evidence": {
+          "type": "array",
+          "description": "Required in practice for FAIL and UNKNOWN. Excerpts are sanitised of terminal control sequences and length-capped.",
+          "items": {
+            "type": "object",
+            "required": ["source", "excerpt"],
+            "additionalProperties": false,
+            "properties": {
+              "source": { "type": "string", "examples": ["/etc/ssh/sshd_config", "exec: sshd -T"] },
+              "line": { "type": "integer", "minimum": 0, "description": "1-based; 0 when not line-oriented." },
+              "excerpt": { "type": "string" },
+              "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            }
+          }
+        },
+
+        "remediation": {
+          "type": "object",
+          "description": "Present only when result is FAIL. Plumbline never executes any of this.",
+          "required": ["summary", "effort"],
+          "additionalProperties": false,
+          "properties": {
+            "summary": { "type": "string" },
+            "effort": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+            "steps": { "type": "array", "items": { "type": "string" } },
+            "commands": { "type": "array", "items": { "type": "string" } },
+            "caution": {
+              "type": "string",
+              "description": "Present on every remediation that can lock an operator out of the host."
+            }
+          }
+        },
+
+        "mappings": {
+          "type": "array",
+          "description": "Bare control identifiers only. Control text is never reproduced; see COMPLIANCE-DATA-POLICY.md.",
+          "items": {
+            "type": "object",
+            "required": ["framework", "control"],
+            "additionalProperties": false,
+            "properties": {
+              "framework": { "type": "string", "examples": ["nist-800-53-r5", "disa-stig-rhel9"] },
+              "control": { "type": "string", "examples": ["AC-6(2)"] }
+            }
+          }
+        },
+
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["title", "url"],
+            "additionalProperties": false,
+            "properties": {
+              "title": { "type": "string" },
+              "url": { "type": "string", "format": "uri" }
+            }
+          }
+        }
+      },
+
+      "allOf": [
+        {
+          "if": { "properties": { "result": { "const": "UNKNOWN" } }, "required": ["result"] },
+          "then": { "required": ["unknown_reason"] }
+        },
+        {
+          "if": { "properties": { "result": { "const": "FAIL" } }, "required": ["result"] },
+          "then": { "required": ["remediation", "evidence"] }
+        },
+        {
+          "if": {
+            "properties": { "result": { "enum": ["PASS", "NOT_APPLICABLE", "SKIPPED", "UNKNOWN"] } },
+            "required": ["result"]
+          },
+          "then": { "not": { "required": ["remediation"] } }
+        }
+      ]
+    }
+  }
+}

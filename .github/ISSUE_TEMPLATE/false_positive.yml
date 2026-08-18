@@ -1,0 +1,57 @@
+name: False positive / wrong verdict
+description: A check reported the wrong thing about your system
+labels: ["false-positive", "check"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        These are the most valuable reports this project receives. A wrong
+        verdict is worse than a crash: a crash is visible, a wrong PASS is not.
+
+        Every accepted report of this kind becomes a permanent fixture in the
+        test corpus, so it can never regress.
+
+  - type: input
+    id: check
+    attributes:
+      label: Check ID
+      placeholder: SSHD-0002
+    validations: { required: true }
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of wrong
+      options:
+        - Reported FAIL, but my system is correctly configured
+        - Reported PASS, but my system is NOT correctly configured
+        - Reported UNKNOWN, but the answer was determinable
+        - Reported NOT_APPLICABLE, but the subject is present
+        - The verdict is right but the explanation is misleading
+    validations: { required: true }
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual system state
+      description: |
+        The relevant configuration, and how you know it is correct — the
+        running daemon's own view where possible (`sshd -T`, `sysctl name`),
+        not just the file contents. Redact anything sensitive.
+      render: shell
+    validations: { required: true }
+
+  - type: textarea
+    id: reported
+    attributes:
+      label: What Plumbline reported
+      description: The finding, including its `detail` and `evidence`.
+      render: json
+    validations: { required: true }
+
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution and version
+      placeholder: "Debian 13, package openssh-server 1:9.9p1-3"
+    validations: { required: true }

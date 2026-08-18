@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/antaryx/plumbline/schema/bundle-v1.schema.json",
+  "title": "Plumbline fact bundle v1 — manifest",
+  "description": "A bundle is a zstd-compressed tar. This schema describes manifest.json, its index member; the layout it indexes is specified in docs/DATA-MODEL.md section 6. Read support for every historical bundle schema is permanent: a bundle is an archival artifact, and if an old bundle cannot be re-evaluated the core promise of the product is broken. Write support is current-version only.",
+  "type": "object",
+  "required": ["schema", "bundle_id", "tool", "catalog_version", "created", "scan", "facts", "integrity"],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema": {
+      "const": "bundle/v1",
+      "description": "Always the first key."
+    },
+
+    "bundle_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$",
+      "description": "Random 128-bit identifier assigned at collection. Not derived from host identity, so it leaks nothing under --redact."
+    },
+
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "const": "plumbline" },
+        "version": { "type": "string" },
+        "commit": { "type": "string" }
+      }
+    },
+
+    "catalog_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Catalog present at collection time. Informational only: a bundle may be evaluated against any later catalog, which is the entire point of bundles."
+    },
+
+    "created": { "type": "string", "format": "date-time" },
+
+    "redacted": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when --redact was used. Redaction happens at collection time, so a redacted bundle is safe to attach to a bug report."
+    },
+
+    "meta_member": {
+      "const": "meta.json",
+      "description": "Host descriptors: os-release, kernel, arch, hostname. Partially populated or absent when redacted."
+    },
+
+    "scan": {
+      "type": "object",
+      "required": ["root", "euid", "started", "finished", "profile"],
+      "additionalProperties": false,
+      "properties": {
+        "root": { "type": "string", "examples": ["", "/mnt/host"] },
+        "euid": { "type": "integer", "minimum": 0 },
+        "started": { "type": "string", "format": "date-time" },
+        "finished": { "type": "string", "format": "date-time" },
+        "profile": { "type": "string" },
+        "capabilities": {
+          "type": "array",
+          "description": "Privileges actually held during collection. Explains why a collector was skipped.",
+          "items": { "type": "string", "examples": ["root", "cap_dac_read_search"] }
+        },
+        "network_used": {
+          "type": "boolean",
+          "default": false,
+          "description": "False for every v1 scan. Set only by explicitly opted-in collectors such as CLOUD in v2, so a reader can tell whether the offline invariant held for this bundle."
+        }
+      }
+    },
+
+    "facts": {
+      "type": "array",
+      "description": "Index of facts/<id>.json members. A reader that does not recognise a fact ID preserves it opaquely rather than failing to open the bundle.",
+      "items": {
+        "type": "object",
+        "required": ["id", "fact_version", "member", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "examples": ["sshd.config"] },
+          "fact_version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A check that does not understand this version resolves to UNKNOWN(fact_version_mismatch). It never attempts a best-effort read: a best-effort read of a misunderstood structure is exactly how a false PASS is produced."
+          },
+          "member": { "type": "string", "examples": ["facts/sshd.config.json"] },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "collector": { "type": "string" },
+          "collected_at": { "type": "string", "format": "date-time" },
+          "duration_ms": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+
+    "evidence": {
+      "type": "object",
+      "description": "Content-addressed raw sources under evidence/<sha256>.blob, deduplicated across all citing checks.",
+      "additionalProperties": false,
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "total_bytes": { "type": "integer", "minimum": 0 },
+        "truncated_sources": {
+          "type": "array",
+          "description": "Sources that exceeded the read cap. Findings citing these are annotated rather than silently treated as complete.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "errors_member": {
+      "const": "errors.json",
+      "description": "Every fact error, retained so a gap can be explained months later."
+    },
+
+    "integrity": {
+      "type": "object",
+      "required": ["member", "algorithm"],
+      "additionalProperties": false,
+      "properties": {
+        "member": { "const": "integrity.json" },
+        "algorithm": { "const": "sha256" },
+        "signed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether a detached signature accompanies this bundle. Integrity is NOT authenticity: integrity.json proves the archive is internally consistent, not that it came from anyone in particular. Only a detached signature proves origin, and renderers must state the difference. Conflating the two was audit finding A-14."
+        }
+      }
+    }
+  }
+}
