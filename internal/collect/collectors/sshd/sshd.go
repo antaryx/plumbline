@@ -22,6 +22,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/antaryx/plumbline/internal/collect"
 	"github.com/antaryx/plumbline/internal/fact"
@@ -50,6 +51,11 @@ func init() { collect.Register(New()) }
 // "sshd", the fact it writes is "sshd.config".
 func (Collector) ID() string { return ID }
 
+// Produces names the fact this collector is responsible for, so that a
+// failure it never got to report — a timeout, a panic — is filed against
+// sshd.config, which is what SSHD checks require and look up.
+func (Collector) Produces() []fact.ID { return []fact.ID{fact.SSHDConfigID} }
+
 // DependsOn is nil. Reading a configuration file needs nothing else observed
 // first, and inventing an ordering constraint would cost concurrency for
 // nothing.
@@ -70,6 +76,12 @@ func (Collector) Requires() collect.Capability { return collect.CapNone }
 // Cost is Cheap: one file plus whatever its Include directives resolve to,
 // bounded by maxIncludeDepth. No walk, no exec.
 func (Collector) Cost() collect.Cost { return collect.Cheap }
+
+// Timeout is five seconds. Reading a configuration tree that is bounded in
+// both depth and file size cannot legitimately take longer; if it does, the
+// path is on a filesystem that is not answering, and an audit that hangs on
+// one config file is worse than one that records why it stopped.
+func (Collector) Timeout() time.Duration { return 5 * time.Second }
 
 // Collect observes the sshd configuration and records it in fs.
 //
@@ -126,6 +138,7 @@ func collectConfig(ctx context.Context, s system.System) (fact.SSHDConfig, *fact
 	}
 
 	cfg.Installed = true
+	cfg.Digests = map[string]string{DefaultConfigPath: res.SHA256}
 	p := &parser{sys: s, cfg: &cfg, seen: map[string]bool{}}
 	p.parseFile(ctx, DefaultConfigPath, res.Data, 0)
 	return cfg, nil
@@ -226,6 +239,9 @@ func (p *parser) expandInclude(ctx context.Context, patterns string, depth int) 
 				p.cfg.UnresolvedIncludes = append(p.cfg.UnresolvedIncludes, m)
 				continue
 			}
+			// The digest comes from the seam, which computed it over the bytes
+			// actually read. Hashing them again here could only disagree.
+			p.cfg.Digests[m] = res.SHA256
 			p.parseFile(ctx, m, res.Data, depth+1)
 		}
 	}

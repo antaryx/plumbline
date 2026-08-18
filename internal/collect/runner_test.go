@@ -8,9 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/antaryx/plumbline/internal/bundle"
+	"github.com/antaryx/plumbline/internal/catalog"
+	checks "github.com/antaryx/plumbline/internal/catalog/checks/sshd"
 	"github.com/antaryx/plumbline/internal/collect"
 	sshdcollector "github.com/antaryx/plumbline/internal/collect/collectors/sshd"
 	"github.com/antaryx/plumbline/internal/fact"
+	"github.com/antaryx/plumbline/internal/finding"
 	"github.com/antaryx/plumbline/internal/system"
 	"github.com/antaryx/plumbline/internal/system/fake"
 )
@@ -419,5 +423,179 @@ func TestCancelledScanRecordsEveryCollector(t *testing.T) {
 		if _, ok := fs.Err(fact.ID(id)); !ok {
 			t.Errorf("collector %q left no account of itself; errors are %+v", id, fs.Errors())
 		}
+	}
+}
+
+// --- WP-09: error attribution and evidence ---------------------------------
+
+// TestRunnerErrorsAreAttributedToProducedFacts is the interface-gap fix. A
+// check looks up the fact it requires, never the collector that was supposed
+// to produce it, so an error filed under the collector's name is an error no
+// check ever sees. Before Produces() existed, a timeout on the sshd collector
+// reached SSHD-0002 as "sshd.config was never collected" — still UNKNOWN, but
+// UNKNOWN for the wrong reason, which sends an operator hunting a bug instead
+// of raising a budget.
+func TestRunnerErrorsAreAttributedToProducedFacts(t *testing.T) {
+	const produced = fact.ID("kernel.params")
+
+	cases := []struct {
+		name    string
+		fixture string
+		want    fact.ErrorKind
+		stub    stub
+	}{
+		{
+			name:    "timeout",
+			fixture: "sshd-hardened",
+			want:    fact.ErrTimeout,
+			stub: stub{
+				id: "kernel", produces: []fact.ID{produced}, timeout: 30 * time.Millisecond,
+				run: func(ctx context.Context, _ system.System, _ *fact.Set) error {
+					<-ctx.Done()
+					return ctx.Err()
+				},
+			},
+		},
+		{
+			name:    "panic",
+			fixture: "sshd-hardened",
+			want:    fact.ErrInternal,
+			stub: stub{
+				id: "kernel", produces: []fact.ID{produced},
+				run: func(context.Context, system.System, *fact.Set) error {
+					panic("collector bug")
+				},
+			},
+		},
+		{
+			name:    "capability shortfall",
+			fixture: "sshd-unreadable", // euid 1000
+			want:    fact.ErrPermission,
+			stub: stub{
+				id: "kernel", produces: []fact.ID{produced}, requires: collect.CapRoot,
+				run: func(context.Context, system.System, *fact.Set) error { return nil },
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := collect.NewRegistry()
+			r.Register(tc.stub)
+
+			fs := run(t, collect.Runner{Registry: r, Timeout: time.Second}, sys(t, tc.fixture))
+
+			wantError(t, fs, string(produced), tc.want, "")
+			if _, filed := fs.Err(fact.ID("kernel")); filed {
+				t.Error("the error was also filed under the collector ID, where no check looks")
+			}
+		})
+	}
+}
+
+// TestAttributionReachesTheCheck is what the attribution is for. A collector
+// that timed out must reach a check as "could not determine", with the reason
+// the operator needs, rather than as "never collected".
+func TestAttributionReachesTheCheck(t *testing.T) {
+	r := collect.NewRegistry()
+	r.Register(stub{
+		id:       "sshd",
+		produces: []fact.ID{fact.SSHDConfigID},
+		timeout:  30 * time.Millisecond,
+		run: func(ctx context.Context, _ system.System, _ *fact.Set) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	})
+
+	fs := run(t, collect.Runner{Registry: r, Timeout: time.Second}, sys(t, "sshd-hardened"))
+
+	got := catalog.MustNew(checks.Check0002).Evaluate(fs)[0]
+	if got.Result != finding.Unknown {
+		t.Fatalf("result = %s, want UNKNOWN", got.Result)
+	}
+	if got.UnknownReason == finding.ReasonFactMissing {
+		t.Error("a timeout still reaches the check as 'never collected'")
+	}
+	if got.UnknownReason != finding.ReasonAmbiguousState {
+		t.Errorf("unknown reason = %q, want %q", got.UnknownReason, finding.ReasonAmbiguousState)
+	}
+}
+
+// TestCollectorDeclaredTimeoutWins: ARCHITECTURE.md says each collector
+// declares its own budget, because what is pathological for a config-file read
+// is normal for a filesystem walk.
+func TestCollectorDeclaredTimeoutWins(t *testing.T) {
+	r := collect.NewRegistry()
+	r.Register(stub{
+		id:      "impatient",
+		timeout: 30 * time.Millisecond,
+		run: func(ctx context.Context, _ system.System, _ *fact.Set) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	})
+
+	start := time.Now()
+	// The runner's fallback is generous; the collector's own budget is not.
+	fs := run(t, collect.Runner{Registry: r, Timeout: 30 * time.Second}, sys(t, "sshd-hardened"))
+	elapsed := time.Since(start)
+
+	wantError(t, fs, "impatient", fact.ErrTimeout, "budget")
+	if elapsed > 5*time.Second {
+		t.Errorf("the collector's own 30ms budget was ignored; the run took %s", elapsed)
+	}
+}
+
+// TestReadsAreRecordedAsEvidence closes the loop the evidence store exists
+// for: the collector reads a file, the runner records the bytes, the check
+// cites their digest, and the digest resolves in the bundle. Any break in that
+// chain leaves findings citing evidence nobody kept.
+func TestReadsAreRecordedAsEvidence(t *testing.T) {
+	store := bundle.NewEvidenceStore()
+	r := collect.NewRegistry()
+	r.Register(sshdcollector.New())
+
+	fs := fact.NewSet()
+	runner := collect.Runner{Registry: r, Timeout: 5 * time.Second, Evidence: store}
+	if err := runner.Run(context.Background(), sys(t, "sshd-include"), fs); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// sshd-include is two files: the main config and the drop-in it includes.
+	if got := store.Len(); got != 2 {
+		t.Errorf("evidence store holds %d blobs, want 2", got)
+	}
+
+	cfg, _, ok := fact.Get[fact.SSHDConfig](fs, fact.SSHDConfigID)
+	if !ok {
+		t.Fatal("sshd.config was not collected")
+	}
+	for _, f := range cfg.Files {
+		sum, recorded := cfg.Digests[f]
+		if !recorded {
+			t.Errorf("no digest recorded for %s", f)
+			continue
+		}
+		if _, stored := store.Get(sum); !stored {
+			t.Errorf("the fact cites digest %s for %s, which the evidence store does not hold", sum, f)
+		}
+	}
+
+	// And the finding cites a digest that resolves to the bytes it quotes.
+	got := catalog.MustNew(checks.Check0002).Evaluate(fs)[0]
+	if len(got.Evidence) == 0 {
+		t.Fatal("the finding cites no evidence")
+	}
+	ev := got.Evidence[0]
+	if ev.SHA256 == "" {
+		t.Fatal("the finding cites evidence with no digest")
+	}
+	blob, stored := store.Get(ev.SHA256)
+	if !stored {
+		t.Fatalf("the finding cites digest %s, which is not in the evidence store", ev.SHA256)
+	}
+	if !strings.Contains(string(blob), ev.Excerpt) {
+		t.Errorf("the excerpt %q is not present in the source it cites", ev.Excerpt)
 	}
 }

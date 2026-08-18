@@ -67,10 +67,10 @@ keyword is absent is prohibit-password: key-based root login remains possible.`,
 						"PermitRootLogin is not set in any readable file, but %d Include directive(s) could not be resolved (%s); the effective value cannot be determined.",
 						len(cfg.UnresolvedIncludes),
 						strings.Join(cfg.UnresolvedIncludes, ", ")),
-					Evidence: []finding.Evidence{{
-						Source:  cfg.Files[0],
-						Excerpt: "unresolved Include: " + strings.Join(cfg.UnresolvedIncludes, ", "),
-					}},
+					Evidence: []finding.Evidence{finding.NewEvidence(
+						cfg.Files[0], 0,
+						"unresolved Include: "+strings.Join(cfg.UnresolvedIncludes, ", "),
+						cfg.Digests[cfg.Files[0]])},
 				}
 			}
 			return catalog.Outcome{
@@ -79,18 +79,21 @@ keyword is absent is prohibit-password: key-based root login remains possible.`,
 				Detail: fmt.Sprintf(
 					"PermitRootLogin is not configured; sshd applies its built-in default of %q, which permits root login with a key.",
 					openSSHDefaultPermitRootLogin),
-				Evidence: []finding.Evidence{{
-					Source:  cfg.Files[0],
-					Excerpt: "PermitRootLogin not present in any parsed file",
-				}},
+				Evidence: []finding.Evidence{finding.NewEvidence(
+					cfg.Files[0], 0,
+					"PermitRootLogin not present in any parsed file",
+					cfg.Digests[cfg.Files[0]])},
 			}
 		}
 
-		ev := []finding.Evidence{{
-			Source:  d.File,
-			Line:    d.Line,
-			Excerpt: fmt.Sprintf("%s %s", d.Keyword, d.Value),
-		}}
+		// NewEvidence is the constructor THREAT-MODEL.md T-03 names: it
+		// neutralises the untrusted strings a directive carries, and it
+		// attaches the digest of the file the line came from so an auditor can
+		// re-read the source in the bundle rather than trusting this excerpt.
+		ev := []finding.Evidence{finding.NewEvidence(
+			d.File, d.Line,
+			fmt.Sprintf("%s %s", d.Keyword, d.Value),
+			cfg.Digests[d.File])}
 
 		// If the operator has a Match-scoped override, name it. Otherwise the
 		// report contradicts what they can plainly see in the file, and they
@@ -178,12 +181,11 @@ func matchScoped(cfg fact.SSHDConfig) []finding.Evidence {
 		if !d.InMatch {
 			continue
 		}
-		out = append(out, finding.Evidence{
-			Source: d.File,
-			Line:   d.Line,
-			Excerpt: fmt.Sprintf("%s %s  (inside 'Match %s'; conditional, does not set the global value)",
+		out = append(out, finding.NewEvidence(
+			d.File, d.Line,
+			fmt.Sprintf("%s %s  (inside 'Match %s'; conditional, does not set the global value)",
 				d.Keyword, d.Value, d.MatchCriteria),
-		})
+			cfg.Digests[d.File]))
 	}
 	return out
 }

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/system"
@@ -102,14 +103,37 @@ type Collector interface {
 	// ID is stable and unique within a registry. It names the collector, not
 	// the facts it produces.
 	ID() string
+
+	// Produces lists the fact IDs this collector is responsible for.
+	//
+	// It exists so that a failure the collector never got to report — a
+	// timeout, a panic, a privilege it did not have — can be recorded against
+	// the facts a check will actually look for. Without it the runner can only
+	// blame the collector by name, and a check requiring sshd.config resolves
+	// to "never collected" when the truth is "timed out": still UNKNOWN, but
+	// UNKNOWN for the wrong reason, which is the difference between an
+	// operator raising a budget and an operator hunting a bug that is not
+	// there.
+	Produces() []fact.ID
+
 	// DependsOn lists collector IDs that must complete first. It expresses
 	// ordering only: a dependency that failed does not cancel its dependents,
 	// which run and record their own account of what was missing.
 	DependsOn() []string
+
 	// Requires is the privilege needed to observe truthfully.
 	Requires() Capability
+
 	// Cost is the scheduling class.
 	Cost() Cost
+
+	// Timeout is this collector's own budget, measured from the moment it
+	// starts rather than from when it was queued. ARCHITECTURE.md §"Collectors
+	// are budgeted": each collector declares its own, because what is
+	// pathological for a config-file read is normal for a filesystem walk.
+	// Zero defers to the runner's default.
+	Timeout() time.Duration
+
 	// Collect observes the system and records what it found in fs.
 	Collect(ctx context.Context, s system.System, fs *fact.Set) error
 }

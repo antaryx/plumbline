@@ -79,9 +79,16 @@ gets produced.
 
 | Fact ID | Version | Produced by | Shape |
 |---|---|---|---|
-| `sshd.config` | 1 | `collect/collectors/sshd` | `Installed`, `Files`, `Directives[]`, `UnresolvedIncludes[]` |
+| `sshd.config` | 1 | `collect/collectors/sshd` | `Installed`, `Files`, `Directives[]`, `UnresolvedIncludes[]`, `Digests{}` |
 
 Every fact added later is listed here with its version history.
+
+`Digests` maps each entry of `Files` to the sha256 of the bytes read from it.
+It was added after `sshd.config` v1 shipped and did **not** bump the version:
+per §2.2 it is an optional field that no check is required to consider, and a
+check reading a bundle written before it existed emits evidence without a
+digest, which is what it did then and what the findings schema permits. See
+`docs/adr/0009-evidence-digest-tracking.md`.
 
 ---
 

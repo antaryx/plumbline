@@ -5,6 +5,7 @@
 //	manifest.json          the index; schema, tool, catalog version, fact list
 //	meta.json              host descriptors
 //	facts/<id>.json        one member per fact, each carrying its fact_version
+//	evidence/<sha>.blob    content-addressed raw sources, deduplicated
 //	errors.json            every fact error
 //	integrity.json         sha256 of every other member; written last
 //
@@ -59,6 +60,8 @@ const (
 	integrityMember = "integrity.json"
 	factsPrefix     = "facts/"
 	factsSuffix     = ".json"
+	evidencePrefix  = "evidence/"
+	evidenceSuffix  = ".blob"
 )
 
 // maxDecompressedBytes caps the decompressed archive. A bundle is untrusted
@@ -104,6 +107,10 @@ type Bundle struct {
 	Manifest Manifest
 	Meta     Meta
 	Facts    *fact.Set
+	// Evidence holds the raw sources findings cite by digest. Nil means this
+	// scan kept no evidence, which is different from a scan whose evidence was
+	// lost: an empty store still writes an evidence summary saying so.
+	Evidence *EvidenceStore
 }
 
 // Manifest is manifest.json. Fields and their requiredness come from
@@ -122,9 +129,12 @@ type Manifest struct {
 	// Facts indexes the facts/ members. Write derives it from the fact set;
 	// anything a caller puts here is replaced, because the index describes the
 	// archive rather than the caller's intent.
-	Facts        []FactRef `json:"facts"`
-	ErrorsMember string    `json:"errors_member,omitempty"`
-	Integrity    Integrity `json:"integrity"`
+	Facts []FactRef `json:"facts"`
+	// Evidence summarises the evidence/ members. Like Facts, Write derives it
+	// from the store rather than trusting the caller.
+	Evidence     *EvidenceIndex `json:"evidence,omitempty"`
+	ErrorsMember string         `json:"errors_member,omitempty"`
+	Integrity    Integrity      `json:"integrity"`
 }
 
 // Tool identifies the binary that wrote the bundle.
@@ -269,6 +279,10 @@ func Write(w io.Writer, b Bundle) error {
 	m.MetaMember = metaMember
 	m.ErrorsMember = errorsMember
 	m.Facts = index
+	m.Evidence = nil
+	if b.Evidence != nil {
+		m.Evidence = b.Evidence.index()
+	}
 	m.Integrity = Integrity{Member: integrityMember, Algorithm: hashAlgorithm}
 
 	manifestJSON, err := marshal(m)
@@ -292,6 +306,7 @@ func Write(w io.Writer, b Bundle) error {
 
 	members := []member{{manifestMember, manifestJSON}, {metaMember, metaJSON}}
 	members = append(members, factMembers...)
+	members = append(members, evidenceMembers(b.Evidence)...)
 	members = append(members, member{errorsMember, errorsJSON})
 
 	digests := make(map[string]string, len(members))
@@ -383,6 +398,25 @@ func factMembers(s *fact.Set) ([]member, []FactRef, error) {
 	return members, index, nil
 }
 
+// evidenceMembers emits one member per stored blob, named for its own digest.
+// Deduplication has already happened: the store is keyed by content, so two
+// checks citing one file were one entry before they got here.
+func evidenceMembers(store *EvidenceStore) []member {
+	if store == nil {
+		return nil
+	}
+	digests := store.Digests()
+	out := make([]member, 0, len(digests))
+	for _, sum := range digests {
+		data, ok := store.Get(sum)
+		if !ok {
+			continue // unreachable: Digests lists exactly what is stored
+		}
+		out = append(out, member{evidencePrefix + sum + evidenceSuffix, data})
+	}
+	return out
+}
+
 // Read parses and verifies a bundle. Every member is digested and checked
 // against integrity.json before anything is interpreted: unverified bytes are
 // not parsed, so a crafted bundle cannot reach the decoders by failing the
@@ -415,6 +449,10 @@ func Read(r io.Reader) (Bundle, error) {
 
 	b.Facts = fact.NewSet()
 	if err := readFacts(&b, members); err != nil {
+		return b, err
+	}
+
+	if err := readEvidence(&b, members); err != nil {
 		return b, err
 	}
 
@@ -583,6 +621,67 @@ func readFacts(b *Bundle, members map[string][]byte) error {
 		}
 	}
 	return nil
+}
+
+// readEvidence rebuilds the evidence store from the evidence/ members.
+//
+// Every blob is checked against the digest it is named for. integrity.json has
+// already confirmed the archive is internally consistent; this confirms
+// something integrity.json cannot, which is that a blob is the bytes a finding
+// citing that digest expects. Without it, an archive could be internally
+// consistent about the wrong content.
+func readEvidence(b *Bundle, members map[string][]byte) error {
+	var store *EvidenceStore
+
+	for _, name := range sortedNames(members) {
+		if !strings.HasPrefix(name, evidencePrefix) {
+			continue
+		}
+		sum, ok := strings.CutSuffix(strings.TrimPrefix(name, evidencePrefix), evidenceSuffix)
+		if !ok || !isSHA256(sum) {
+			return fmt.Errorf("%w: evidence member %q is not named for a sha256", ErrMalformed, name)
+		}
+		if got := digest(members[name]); got != sum {
+			return &IntegrityError{Member: name, Want: sum, Got: got}
+		}
+		if store == nil {
+			store = NewEvidenceStore()
+		}
+		store.Add(members[name])
+	}
+
+	if idx := b.Manifest.Evidence; idx != nil {
+		if store == nil {
+			store = NewEvidenceStore()
+		}
+		for _, src := range idx.TruncatedSources {
+			store.MarkTruncated(src)
+		}
+		// The manifest and the archive have to agree about what is in it. A
+		// disagreement means one of the two was edited, and guessing which is
+		// not a reader's job.
+		if idx.Count != store.Len() || idx.TotalBytes != store.TotalBytes() {
+			return fmt.Errorf("%w: manifest claims %d evidence blob(s) totalling %d bytes, archive holds %d totalling %d",
+				ErrMalformed, idx.Count, idx.TotalBytes, store.Len(), store.TotalBytes())
+		}
+	}
+
+	b.Evidence = store
+	return nil
+}
+
+// isSHA256 reports whether s is a lowercase hex sha256, which is what an
+// evidence member must be named.
+func isSHA256(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // marshal encodes without HTML escaping, so paths and values in facts survive

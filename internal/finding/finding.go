@@ -8,6 +8,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
+
+	"github.com/antaryx/plumbline/internal/sanitize"
 )
 
 // Result is the outcome of evaluating a check. The set is closed: adding a
@@ -81,6 +83,26 @@ type Evidence struct {
 	Line    int    `json:"line,omitempty"`   // 1-based, 0 when not line-oriented
 	Excerpt string `json:"excerpt"`          // sanitised, length-capped
 	SHA256  string `json:"sha256,omitempty"` // over the full source, for the bundle
+}
+
+// NewEvidence builds a piece of evidence with every untrusted string already
+// neutralised.
+//
+// THREAT-MODEL.md T-03 puts sanitisation here, in the constructor, rather than
+// in each renderer: a control every output format has to remember is a control
+// the next output format forgets. The catalog runner sanitises again on the
+// way out, so a check that builds an Evidence literal is safe too — but a
+// check author copying the reference implementation should copy this.
+//
+// sha256 is the digest of the full source in the bundle's evidence store, or
+// empty when the evidence is not backed by a stored blob.
+func NewEvidence(source string, line int, excerpt, sha256 string) Evidence {
+	return Evidence{
+		Source:  sanitize.Text(source),
+		Line:    line,
+		Excerpt: sanitize.Excerpt(excerpt),
+		SHA256:  sha256,
+	}
 }
 
 // Remediation is how to fix a failing check. Steps are for humans, Commands

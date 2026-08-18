@@ -17,16 +17,20 @@ const fixtureRoot = "../../testdata/fixtures"
 // because a real collector cannot be made to panic or hang on demand.
 type stub struct {
 	id       string
+	produces []fact.ID
 	deps     []string
 	requires collect.Capability
 	cost     collect.Cost
+	timeout  time.Duration
 	run      func(ctx context.Context, s system.System, fs *fact.Set) error
 }
 
 func (c stub) ID() string                   { return c.id }
+func (c stub) Produces() []fact.ID          { return c.produces }
 func (c stub) DependsOn() []string          { return c.deps }
 func (c stub) Requires() collect.Capability { return c.requires }
 func (c stub) Cost() collect.Cost           { return c.cost }
+func (c stub) Timeout() time.Duration       { return c.timeout }
 func (c stub) Collect(ctx context.Context, s system.System, fs *fact.Set) error {
 	if c.run == nil {
 		return nil

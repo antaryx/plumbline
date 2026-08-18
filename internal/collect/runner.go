@@ -26,17 +26,24 @@ type Runner struct {
 	// Registry supplies the collectors and their dependency order.
 	Registry *Registry
 
-	// Timeout bounds one collector, measured from the moment it actually
+	// Timeout is the fallback budget for a collector whose own Timeout is
+	// zero. A collector that declares one is bounded by its own, because what
+	// is pathological for a config-file read is normal for a filesystem walk.
+	//
+	// Either way the budget is measured from the moment the collector actually
 	// starts — after its dependencies finish and after it acquires the
 	// Expensive slot — so that a collector is never charged for time it spent
 	// queued behind another.
 	//
-	// Zero means no per-collector budget: the context passed to Run is then
-	// the only bound, which is the whole-scan --timeout from CLI-SPEC §
-	// collect. Set it explicitly for an unattended scan; a collector blocked
-	// on a pathological filesystem otherwise consumes the entire scan budget
-	// on its own.
+	// Zero on both means no per-collector budget: the context passed to Run is
+	// then the only bound, which is the whole-scan --timeout from CLI-SPEC §
+	// collect.
 	Timeout time.Duration
+
+	// Evidence, when set, receives the raw bytes of every file a collector
+	// reads, so that findings can cite content-addressed sources. Nil means
+	// evidence is not being kept for this run.
+	Evidence EvidenceRecorder
 }
 
 // Run executes every registered collector and records the result in fs.
@@ -62,6 +69,10 @@ func (r Runner) Run(ctx context.Context, s system.System, fs *fact.Set) error {
 		return errors.New("collect: runner has no fact set")
 	}
 
+	if r.Evidence != nil {
+		s = recordingSystem{System: s, rec: r.Evidence}
+	}
+
 	order := r.Registry.Order()
 	missing := r.Registry.MissingDependencies()
 
@@ -78,10 +89,16 @@ func (r Runner) Run(ctx context.Context, s system.System, fs *fact.Set) error {
 		mu sync.Mutex // guards every write to fs
 		wg sync.WaitGroup
 	)
-	record := func(e fact.Error) {
+	// record files one fact error against every fact the collector was
+	// responsible for. A check looks up the fact it requires, not the
+	// collector that was supposed to produce it, so an error filed under the
+	// collector's name is an error no check ever sees.
+	record := func(c Collector, kind fact.ErrorKind, msg string) {
 		mu.Lock()
 		defer mu.Unlock()
-		fs.PutError(e)
+		for _, id := range blame(c) {
+			fs.PutError(fact.Error{Fact: id, Kind: kind, Msg: msg})
+		}
 	}
 	// A slot of one. This is the constraint enforced by the runner rather than
 	// by convention, because convention is what produced twelve simultaneous
@@ -100,24 +117,18 @@ func (r Runner) Run(ctx context.Context, s system.System, fs *fact.Set) error {
 			defer close(done[c.ID()])
 
 			if deps := missing[c.ID()]; len(deps) > 0 {
-				record(fact.Error{
-					Fact: fact.ID(c.ID()),
-					Kind: fact.ErrInternal,
-					Msg: fmt.Sprintf("collector %s depends on unregistered collector(s) %v; it was not run",
-						c.ID(), deps),
-				})
+				record(c, fact.ErrInternal,
+					fmt.Sprintf("collector %s depends on unregistered collector(s) %v; it was not run",
+						c.ID(), deps))
 				return
 			}
 
 			// Privilege is checked before anything is waited on: there is no
 			// point queueing a collector that cannot observe truthfully.
 			if euid := s.Euid(); !c.Requires().satisfiedBy(euid) {
-				record(fact.Error{
-					Fact: fact.ID(c.ID()),
-					Kind: fact.ErrPermission,
-					Msg: fmt.Sprintf("collector %s requires %s and the scan is running as euid %d; it was not run",
-						c.ID(), c.Requires(), euid),
-				})
+				record(c, fact.ErrPermission,
+					fmt.Sprintf("collector %s requires %s and the scan is running as euid %d; it was not run",
+						c.ID(), c.Requires(), euid))
 				return
 			}
 
@@ -129,7 +140,7 @@ func (r Runner) Run(ctx context.Context, s system.System, fs *fact.Set) error {
 				select {
 				case <-ch:
 				case <-ctx.Done():
-					record(cancelled(c, ctx.Err(), "waiting for dependency "+d))
+					record(c, fact.ErrTimeout, cancelledMsg(c, ctx.Err(), "waiting for dependency "+d))
 					return
 				}
 			}
@@ -139,7 +150,7 @@ func (r Runner) Run(ctx context.Context, s system.System, fs *fact.Set) error {
 				case expensive <- struct{}{}:
 					defer func() { <-expensive }()
 				case <-ctx.Done():
-					record(cancelled(c, ctx.Err(), "waiting for the expensive-collector slot"))
+					record(c, fact.ErrTimeout, cancelledMsg(c, ctx.Err(), "waiting for the expensive-collector slot"))
 					return
 				}
 			}
@@ -163,20 +174,26 @@ type result struct {
 
 // runOne executes a single collector under its budget, isolating a panic and
 // abandoning a collector that outruns the clock.
-func (r Runner) runOne(ctx context.Context, c Collector, s system.System, fs *fact.Set, mu *sync.Mutex, record func(fact.Error)) {
+func (r Runner) runOne(ctx context.Context, c Collector, s system.System, fs *fact.Set, mu *sync.Mutex, record func(Collector, fact.ErrorKind, string)) {
 	// Once the scan is over, no new collector starts. Waiting for a
 	// dependency and waiting for the Expensive slot both race the scan
 	// deadline, and without this a collector could win that race and go on
 	// working a host whose scan has already ended.
 	if err := ctx.Err(); err != nil {
-		record(cancelled(c, err, "the scan ended before it could start"))
+		record(c, fact.ErrTimeout, cancelledMsg(c, err, "the scan ended before it could start"))
 		return
 	}
 
+	// The collector's own budget wins; the runner's is the fallback for one
+	// that does not declare a preference.
+	budget := c.Timeout()
+	if budget <= 0 {
+		budget = r.Timeout
+	}
 	cctx := ctx
-	if r.Timeout > 0 {
+	if budget > 0 {
 		var cancel context.CancelFunc
-		cctx, cancel = context.WithTimeout(ctx, r.Timeout)
+		cctx, cancel = context.WithTimeout(ctx, budget)
 		defer cancel()
 	}
 
@@ -201,25 +218,22 @@ func (r Runner) runOne(ctx context.Context, c Collector, s system.System, fs *fa
 			// A collector bug. Its partial output is not trustworthy — it
 			// stopped somewhere it did not choose — so it is discarded rather
 			// than merged into an audit.
-			record(fact.Error{
-				Fact: fact.ID(c.ID()),
-				Kind: fact.ErrInternal,
-				Msg:  fmt.Sprintf("collector %s panicked: %v", c.ID(), got.panicVal),
-			})
+			record(c, fact.ErrInternal,
+				fmt.Sprintf("collector %s panicked: %v", c.ID(), got.panicVal))
 
 		case cctx.Err() != nil && got.err != nil:
 			// It noticed the deadline and returned rather than being
 			// abandoned. Same situation, same verdict: the budget decided the
 			// outcome, so this is a timeout and not whatever error it chose to
 			// return on the way out.
-			record(timedOut(c, cctx, ctx))
+			record(c, fact.ErrTimeout, timedOutMsg(c, cctx, ctx))
 
 		default:
 			mu.Lock()
 			mergeInto(fs, private)
 			mu.Unlock()
 			if got.err != nil {
-				record(collectorError(c, got.err))
+				recordCollectorError(fs, mu, c, got.err)
 			}
 		}
 
@@ -229,7 +243,7 @@ func (r Runner) runOne(ctx context.Context, c Collector, s system.System, fs *fa
 		// nobody else can see. Partial facts from a collector that ran out of
 		// time are exactly the kind of half-truth this project refuses to
 		// report as an observation.
-		record(timedOut(c, cctx, ctx))
+		record(c, fact.ErrTimeout, timedOutMsg(c, cctx, ctx))
 	}
 }
 
@@ -238,41 +252,53 @@ func (r Runner) runOne(ctx context.Context, c Collector, s system.System, fs *fa
 // no separate cancellation kind — but the message has to say which, or an
 // operator reading errors.json six months later cannot tell whether to raise
 // the budget or stop pressing Ctrl-C.
-func timedOut(c Collector, cctx, parent context.Context) fact.Error {
-	msg := fmt.Sprintf("collector %s exceeded its budget", c.ID())
-	if parent.Err() != nil {
-		msg = fmt.Sprintf("collector %s stopped: the scan was cancelled (%v)", c.ID(), parent.Err())
-	} else if errors.Is(cctx.Err(), context.Canceled) {
-		msg = fmt.Sprintf("collector %s stopped: %v", c.ID(), cctx.Err())
+func timedOutMsg(c Collector, cctx, parent context.Context) string {
+	switch {
+	case parent.Err() != nil:
+		return fmt.Sprintf("collector %s stopped: the scan was cancelled (%v)", c.ID(), parent.Err())
+	case errors.Is(cctx.Err(), context.Canceled):
+		return fmt.Sprintf("collector %s stopped: %v", c.ID(), cctx.Err())
+	default:
+		return fmt.Sprintf("collector %s exceeded its budget", c.ID())
 	}
-	return fact.Error{Fact: fact.ID(c.ID()), Kind: fact.ErrTimeout, Msg: msg}
+}
+
+// blame names the facts a runner-level failure should be filed against. A
+// collector that declares nothing is filed under its own ID: that loses the
+// attribution a check needs, but losing the record entirely would be worse.
+func blame(c Collector) []fact.ID {
+	if ids := c.Produces(); len(ids) > 0 {
+		return ids
+	}
+	return []fact.ID{fact.ID(c.ID())}
 }
 
 // cancelled records a collector that never started because the scan ended
 // while it was queued. It is not the collector's fault and not a host
 // condition, but it is still a gap, and a gap nobody recorded is a gap nobody
 // can explain.
-func cancelled(c Collector, err error, waitingFor string) fact.Error {
-	return fact.Error{
-		Fact: fact.ID(c.ID()),
-		Kind: fact.ErrTimeout,
-		Msg:  fmt.Sprintf("collector %s did not run: the scan ended while %s (%v)", c.ID(), waitingFor, err),
-	}
+func cancelledMsg(c Collector, err error, waitingFor string) string {
+	return fmt.Sprintf("collector %s did not run: the scan ended while %s (%v)", c.ID(), waitingFor, err)
 }
 
-// collectorError records an error a collector returned. A fact.Error is
-// recorded as written, because the collector knows which fact is missing and
-// why; anything else is a failure it could not classify, which makes it a
-// collector bug.
-func collectorError(c Collector, err error) fact.Error {
+// recordCollectorError files an error a collector returned. A fact.Error is
+// recorded exactly as written — the collector knows which fact is missing and
+// why, and that attribution is better than anything the runner could infer.
+// Anything else is a failure it could not classify, which makes it a collector
+// bug, filed against every fact it was responsible for.
+func recordCollectorError(fs *fact.Set, mu *sync.Mutex, c Collector, err error) {
 	var fe fact.Error
 	if errors.As(err, &fe) {
-		return fe
+		mu.Lock()
+		defer mu.Unlock()
+		fs.PutError(fe)
+		return
 	}
-	return fact.Error{
-		Fact: fact.ID(c.ID()),
-		Kind: fact.ErrInternal,
-		Msg:  fmt.Sprintf("collector %s returned an unclassified error: %v", c.ID(), err),
+	msg := fmt.Sprintf("collector %s returned an unclassified error: %v", c.ID(), err)
+	mu.Lock()
+	defer mu.Unlock()
+	for _, id := range blame(c) {
+		fs.PutError(fact.Error{Fact: id, Kind: fact.ErrInternal, Msg: msg})
 	}
 }
 

@@ -36,6 +36,15 @@ type SSHDConfig struct {
 	// could not be read. A check whose keyword might live in an unresolved
 	// include must resolve to UNKNOWN, not PASS.
 	UnresolvedIncludes []string `json:"unresolved_includes,omitempty"`
+	// Digests maps each file in Files to the sha256 of the bytes that were
+	// read from it. A check is a pure function and cannot hash anything
+	// itself, so this is the only way a finding can cite evidence an auditor
+	// can verify against the bundle's evidence store (ADR-0009).
+	//
+	// Absent in bundles written before the field existed. That is deliberate:
+	// the field is optional, so FactVersion is not bumped, and a check reading
+	// an older bundle emits evidence without a digest exactly as it did then.
+	Digests map[string]string `json:"digests,omitempty"`
 }
 
 func (SSHDConfig) FactID() ID       { return SSHDConfigID }

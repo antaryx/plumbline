@@ -12,6 +12,7 @@ import (
 
 	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/finding"
+	"github.com/antaryx/plumbline/internal/sanitize"
 )
 
 // Version is the catalog version stamped into every score and bundle. It is a
@@ -191,7 +192,7 @@ func (c *Catalog) EvaluateOne(ck Check, facts *fact.Set) (f finding.Finding) {
 		if e, bad := facts.Err(id); bad {
 			f.Result = finding.Unknown
 			f.UnknownReason = reasonFor(e.Kind)
-			f.Detail = fmt.Sprintf("required fact %s unavailable: %s", id, e.Msg)
+			f.Detail = sanitize.Text(fmt.Sprintf("required fact %s unavailable: %s", id, e.Msg))
 			return f
 		}
 		if !containsID(facts.IDs(), id) {
@@ -205,10 +206,17 @@ func (c *Catalog) EvaluateOne(ck Check, facts *fact.Set) (f finding.Finding) {
 	oc := ck.Eval(facts)
 	f.Result = oc.Result
 	f.UnknownReason = oc.UnknownReason
-	f.Detail = oc.Detail
-	f.Evidence = oc.Evidence
-	f.Subject = oc.Subject
-	f.Fingerprint = finding.Fingerprint(ck.ID, oc.Subject)
+	// Everything a check interpolated came from the host: a directive value, a
+	// path, a command line. It is neutralised here, on the single path out of
+	// a check, so that no renderer and no future check author has to remember
+	// (THREAT-MODEL.md T-03). Sanitisation is the identity function on the
+	// ordinary text every honest host produces.
+	f.Detail = sanitize.Text(oc.Detail)
+	f.Evidence = sanitizeEvidence(oc.Evidence)
+	f.Subject = sanitize.Text(oc.Subject)
+	// The fingerprint is taken from the sanitised subject so that a suppression
+	// an operator wrote cannot be dodged by re-encoding a control character.
+	f.Fingerprint = finding.Fingerprint(ck.ID, f.Subject)
 	if oc.Severity != "" {
 		f.Severity = oc.Severity
 	}
@@ -216,6 +224,20 @@ func (c *Catalog) EvaluateOne(ck Check, facts *fact.Set) (f finding.Finding) {
 		f.Remediation = ck.Remediation
 	}
 	return f
+}
+
+// sanitizeEvidence neutralises the evidence a check produced. It is applied
+// whether or not the check used finding.NewEvidence, because an Evidence
+// literal is the easiest thing in this codebase to write by hand.
+func sanitizeEvidence(in []finding.Evidence) []finding.Evidence {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]finding.Evidence, len(in))
+	for i, e := range in {
+		out[i] = finding.NewEvidence(e.Source, e.Line, e.Excerpt, e.SHA256)
+	}
+	return out
 }
 
 func reasonFor(k fact.ErrorKind) finding.UnknownReason {
