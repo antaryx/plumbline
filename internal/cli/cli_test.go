@@ -140,6 +140,78 @@ func TestBundleIsOwnerOnly(t *testing.T) {
 	}
 }
 
+// TestReportIsOwnerOnly: the v0.1.0 exit criteria say bundles *and reports* are
+// 0600. A findings document is less sensitive than a bundle but not public — it
+// names paths, accounts and misconfigurations, which is a shopping list for
+// whoever reads it next on a shared machine.
+func TestReportIsOwnerOnly(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "findings.json")
+
+	// Pre-create it world-readable, for the same reason the bundle test does:
+	// O_CREATE's mode does not apply to a file that already exists.
+	if err := os.WriteFile(path, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, _, stderr := run(t, "scan", "--root", hostFixture, "-o", path); code != cli.ExitOK {
+		t.Fatalf("scan exited %d: %s", code, stderr)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("report mode = %04o, want 0600", got)
+	}
+	// And it is the document, not an empty file: a mode assertion on nothing
+	// proves nothing.
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"schema": "findings/v1"`) {
+		t.Errorf("the report is not a findings document:\n%s", body)
+	}
+	// eval writes reports through the same path.
+	bundlePath := filepath.Join(dir, "b.plb")
+	if code, _, _ := run(t, "collect", "--root", hostFixture, "-o", bundlePath); code != cli.ExitOK {
+		t.Fatal("collect failed")
+	}
+	evalReport := filepath.Join(dir, "eval.json")
+	if code, _, _ := run(t, "eval", bundlePath, "-o", evalReport); code != cli.ExitOK {
+		t.Fatal("eval failed")
+	}
+	info, err = os.Stat(evalReport)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("eval report mode = %04o, want 0600", got)
+	}
+}
+
+// TestRepeatedEvaluationsAreByteIdentical is a v0.1.0 exit criterion. Two
+// evaluations of one bundle must not differ, or a diff between two scans of an
+// unchanged host is noise and nobody reads the ones that matter.
+func TestRepeatedEvaluationsAreByteIdentical(t *testing.T) {
+	bundlePath := filepath.Join(t.TempDir(), "b.plb")
+	if code, _, _ := run(t, "collect", "--root", hostFixture, "-o", bundlePath); code != cli.ExitOK {
+		t.Fatal("collect failed")
+	}
+
+	_, first, _ := run(t, "eval", bundlePath)
+	if first == "" {
+		t.Fatal("eval produced nothing; this test would prove nothing")
+	}
+	for i := 0; i < 10; i++ {
+		if _, got, _ := run(t, "eval", bundlePath); got != first {
+			t.Fatalf("evaluation %d differs from the first", i)
+		}
+	}
+}
+
 // TestRedactRemovesTheHostname is the acceptance criterion, asserted over the
 // whole decompressed archive rather than one member: the point of redacting at
 // collection time is that the identity is not in the file anywhere, so the
