@@ -251,7 +251,7 @@ the most valuable reports this kind of project receives.
 | `DEPLOYMENT.md` | Build, sign, publish, distribute, install, air-gap, upgrade, incident response |
 | `ROADMAP.md` | Three stable majors with exit criteria, plus a graveyard of rejected ideas |
 | `DOCUMENT-MAP.md` | Every document the project needs, tiered and gated by release |
-| `BUILD-RUNBOOK-v0.1.md` | Sequenced, session-sized work packages |
+| `BUILD-RUNBOOK-v0.2.md` | Sequenced, session-sized work packages (v0.1's is in git history) |
 | `GLOSSARY.md` | Vocabulary, and the words we deliberately never use |
 
 ### `docs/adr/` (8 files)
@@ -328,7 +328,9 @@ Additionally, from `CONTRIBUTING.md`:
 
 ## 7. What to do next
 
-Follow `docs/BUILD-RUNBOOK-v0.1.md`. WP-00 through WP-05 are **complete**.
+**This section describes the state at the time of handoff.** v0.1.0 has since shipped: WP-00 through WP-14 are complete and tagged, and the current frontier is `docs/BUILD-RUNBOOK-v0.2.md` starting at WP-15. The table below is kept as a record of what was outstanding then.
+
+Follow `docs/BUILD-RUNBOOK-v0.2.md`. WP-00 through WP-14 are **complete**.
 
 | WP | Work | Notes |
 |---|---|---|

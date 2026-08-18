@@ -4,9 +4,17 @@
 
 A deterministic, offline, evidence-first host security auditor for Linux.
 
-> **Status: pre-v0.1.** The reference vertical slice — system seam, facts, one
-> collector, one check, nine fixtures, tests — is implemented and green.
-> Continue from `docs/BUILD-RUNBOOK-v0.1.md`, work package WP-06.
+> **Status: v0.1.0 — pre-release, no stability guarantees.** The walking
+> skeleton is complete: the OS seam, facts, bundles, the collector runner,
+> scoring, the JSON renderer and the CLI, with one collector and one check
+> proving the shape end to end. Offline operation and hostile-input survival
+> are tests rather than promises.
+>
+> `findings/v1`, flag names, exit codes and check IDs are contracts from here.
+> Everything in Go stays `internal/` and may change without notice (ADR-0007).
+>
+> Next: `docs/BUILD-RUNBOOK-v0.2.md`, work package WP-15 — the shared
+> filesystem walker, which blocks the `FILESYS` module.
 
 ## What makes it different
 
@@ -50,7 +58,7 @@ Go 1.23+. No other tooling needed to run the tests.
 
 | Document | Purpose |
 |---|---|
-| `docs/BUILD-RUNBOOK-v0.1.md` | Sequenced, session-sized work packages |
+| `docs/BUILD-RUNBOOK-v0.2.md` | Sequenced, session-sized work packages |
 | `docs/DATA-MODEL.md` | Facts, findings, bundles — normative |
 | `docs/CHECK-AUTHORING.md` | How to add a check |
 | `docs/FIXTURES.md` | Fixture format and the test corpus |

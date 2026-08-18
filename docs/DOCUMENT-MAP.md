@@ -34,6 +34,7 @@ The files a visitor and a contributor hit first. All are v1-gating and most are 
 | `PROJECT-BRIEF.md` | v1 | ✅ **written** — identity, naming rationale, problem, users, differentiation, principles, non-negotiables. |
 | `ROADMAP.md` | ongoing | ✅ **written** — three majors, exit criteria, the graveyard of rejected ideas. |
 | `REQUIREMENTS.md` | v1 | Functional and non-functional requirements with IDs (`FR-012`, `NFR-004`), each traceable to a test. This is the missing link between the roadmap and the test suite, and it is what "acceptance criteria" actually means in practice. |
+| `BUILD-RUNBOOK-v0.2.md` | v0.2 | Sequenced, session-sized work packages for the current release line. Superseded per release; v0.1's is in git history. |
 | `GLOSSARY.md` | v1 | Fact, bundle, check, finding, evidence, catalog, posture, coverage, profile, suppression. Small doc, disproportionate value — these words get used inconsistently within a week otherwise. |
 | `adr/` | ongoing | Architecture Decision Records. ADR-0001 *Collect/evaluate split*; -0002 *Go plugin rejected*; -0003 *No compliance scoring*; -0004 *Vendor feeds over NVD*; -0005 *Five result states*; -0006 *No auto-remediation*; -0007 *JSON schema is the public API*. Each: context, decision, consequences, status. Fifteen minutes each and they end every re-litigation six months later. |
 
