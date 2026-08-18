@@ -27,3 +27,5 @@ intact.
 | [0010](0010-nullable-posture-schema.md) | Posture and coverage are nullable in the schema; null is not zero | accepted |
 | [0011](0011-local-file-system-seam.md) | Local file access is in the seam package, not on the System interface | accepted |
 | [0012](0012-fileinfo-inode-seam.md) | `FileInfo` carries device and inode, flattened to integers | accepted |
+| [0013](0013-fixture-inode-and-type-overrides.md) | Fixtures describe inode identity and file type in the manifest | accepted |
+| [0014](0014-walk-scope-is-not-truncation.md) | Declared scope is not truncation, and a partial walk returns facts | accepted |

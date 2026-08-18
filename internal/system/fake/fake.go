@@ -48,6 +48,13 @@ type Manifest struct {
 	Modes map[string]string `json:"modes,omitempty"`
 	// Owners overrides uid/gid, formatted "uid:gid".
 	Owners map[string]string `json:"owners,omitempty"`
+	// Inodes overrides device and inode identity, formatted "dev:ino". It is
+	// how a fixture simulates a bind mount: two paths reporting one identity
+	// is exactly what a bind-mount cycle is, and it is the only aspect of a
+	// filesystem that a directory tree in git cannot express at all. Creating
+	// a real one needs root and a mount namespace; hardlinking a directory is
+	// forbidden by every Linux filesystem. See ADR-0013.
+	Inodes map[string]string `json:"inodes,omitempty"`
 }
 
 // ExecFixture is a canned command result.
@@ -67,6 +74,7 @@ type System struct {
 	missing  map[string]bool
 	modes    map[string]fs.FileMode
 	owners   map[string][2]uint32
+	inodes   map[string][2]uint64
 }
 
 var _ system.System = (*System)(nil)
@@ -90,6 +98,7 @@ func New(dir string) (*System, error) {
 		missing: map[string]bool{},
 		modes:   map[string]fs.FileMode{},
 		owners:  map[string][2]uint32{},
+		inodes:  map[string][2]uint64{},
 	}
 
 	raw, err := os.ReadFile(filepath.Join(abs, filepath.FromSlash(ManifestPath)))
@@ -125,7 +134,7 @@ func New(dir string) (*System, error) {
 		if _, err := fmt.Sscanf(m, "%o", &mode); err != nil {
 			return nil, fmt.Errorf("fixture mode %q for %s: %w", m, p, err)
 		}
-		s.modes[path.Clean(p)] = fs.FileMode(mode)
+		s.modes[path.Clean(p)] = modeFromUnix(mode)
 	}
 	for p, o := range s.manifest.Owners {
 		var uid, gid uint32
@@ -133,6 +142,20 @@ func New(dir string) (*System, error) {
 			return nil, fmt.Errorf("fixture owner %q for %s: %w", o, p, err)
 		}
 		s.owners[path.Clean(p)] = [2]uint32{uid, gid}
+	}
+	for p, id := range s.manifest.Inodes {
+		var dev, ino uint64
+		if _, err := fmt.Sscanf(id, "%d:%d", &dev, &ino); err != nil {
+			return nil, fmt.Errorf("fixture inode %q for %s: %w", id, p, err)
+		}
+		if dev == 0 && ino == 0 {
+			// Zero means "not recorded" on the seam (ADR-0012). A fixture that
+			// set it deliberately would be asking for an identity that reads
+			// as no identity, which silently disables cycle detection for that
+			// path — the opposite of what anyone writing this field wants.
+			return nil, fmt.Errorf("fixture inode %q for %s: 0:0 means \"not recorded\"; use a non-zero device or inode", id, p)
+		}
+		s.inodes[path.Clean(p)] = [2]uint64{dev, ino}
 	}
 	return s, nil
 }
@@ -189,12 +212,72 @@ func (s *System) infoFor(clean string, st os.FileInfo) system.FileInfo {
 	}
 	// Fixture overrides win: git cannot carry modes or ownership faithfully.
 	if m, ok := s.modes[clean]; ok {
-		fi.Mode = (fi.Mode &^ fs.ModePerm) | (m & fs.ModePerm)
+		// The type is only replaced when the fixture actually named one.
+		// "0644" is a statement about permissions and says nothing about what
+		// the inode is; clearing the type for it would turn every directory
+		// with a mode override into a regular file, and the walk would stop at
+		// it without ever saying why.
+		mask := fs.ModePerm | fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky
+		if m&fs.ModeType != 0 {
+			mask |= fs.ModeType
+		}
+		fi.Mode = (fi.Mode &^ mask) | (m & mask)
+		// The type bits decide what this inode *is*, so the derived booleans
+		// have to be recomputed from the override rather than left describing
+		// the placeholder file that stands in for it in git.
+		fi.IsDir = fi.Mode.IsDir()
+		fi.IsRegular = fi.Mode.IsRegular()
+		fi.IsSymlink = fi.Mode&fs.ModeSymlink != 0
 	}
 	if o, ok := s.owners[clean]; ok {
 		fi.UID, fi.GID = o[0], o[1]
 	}
+	if id, ok := s.inodes[clean]; ok {
+		fi.Dev, fi.Ino = id[0], id[1]
+	}
 	return fi
+}
+
+// modeFromUnix converts an octal Unix mode — the number a fixture author reads
+// out of `stat -c %a` or `ls -l` — into Go's fs.FileMode.
+//
+// The translation is not a cast. Go encodes setuid, sticky and the file type
+// in high bits of its own choosing, so fs.FileMode(0o4755) is 0o755 with a bit
+// set that means nothing: a fixture asking for a SUID binary would silently
+// get an ordinary one, and the SUID check written against it would silently
+// pass. That is exactly the class of quiet wrongness fixtures exist to catch,
+// so the conversion is explicit.
+//
+// The type bits matter for the same reason. A FIFO, a socket and a character
+// device cannot be committed to git, and creating a character device needs
+// root, so a fixture describes them here instead. The shared filesystem walker
+// must never open any of them, and that rule needs a test.
+func modeFromUnix(mode uint32) fs.FileMode {
+	m := fs.FileMode(mode & 0o777)
+	if mode&0o4000 != 0 {
+		m |= fs.ModeSetuid
+	}
+	if mode&0o2000 != 0 {
+		m |= fs.ModeSetgid
+	}
+	if mode&0o1000 != 0 {
+		m |= fs.ModeSticky
+	}
+	switch mode & 0o170000 {
+	case 0o140000:
+		m |= fs.ModeSocket
+	case 0o120000:
+		m |= fs.ModeSymlink
+	case 0o060000:
+		m |= fs.ModeDevice
+	case 0o040000:
+		m |= fs.ModeDir
+	case 0o020000:
+		m |= fs.ModeDevice | fs.ModeCharDevice
+	case 0o010000:
+		m |= fs.ModeNamedPipe
+	}
+	return m
 }
 
 func (s *System) ReadFile(p string, maxBytes int64) (system.ReadResult, error) {

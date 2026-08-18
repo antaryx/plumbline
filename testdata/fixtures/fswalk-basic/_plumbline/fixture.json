@@ -1,0 +1,14 @@
+{
+  "description": "An ordinary small tree: one SUID binary, one world-writable file, nothing hostile",
+  "modes": {
+    "/usr/bin/passwd": "4755",
+    "/usr/bin/ls": "0755",
+    "/etc/hosts": "0644",
+    "/var/tmp/scratch": "0666",
+    "/var/tmp": "1777"
+  },
+  "owners": {
+    "/usr/bin/passwd": "0:0",
+    "/var/tmp/scratch": "1000:1000"
+  }
+}

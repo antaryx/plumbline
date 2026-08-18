@@ -1,0 +1,5 @@
+21 1 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw
+22 21 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:2 - proc proc rw
+23 21 0:22 / /sys rw,nosuid,nodev,noexec,relatime shared:3 - sysfs sysfs rw
+24 21 0:23 / /mnt/nfs rw,relatime shared:4 - nfs4 10.0.0.5:/export rw,vers=4.2
+25 21 8:17 / /mnt/data rw,relatime shared:5 - ext4 /dev/sdb1 rw

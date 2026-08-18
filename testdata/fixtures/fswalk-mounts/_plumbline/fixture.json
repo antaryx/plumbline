@@ -1,0 +1,8 @@
+{
+  "description": "A mount table with two virtual filesystems, one NFS mount and one ordinary ext4 mount on a second device, so the fstype skip list and the device boundary can be told apart",
+  "inodes": {
+    "/mnt/data": "4113:2",
+    "/mnt/data/payroll": "4113:3",
+    "/mnt/data/payroll/records": "4113:4"
+  }
+}

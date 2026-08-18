@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"reflect"
 	"testing"
 	"time"
@@ -492,4 +493,64 @@ func drop(t *testing.T, raw []byte, name string) []byte {
 	}
 	delete(data, name)
 	return rebuild(t, kept, data)
+}
+
+// TestRoundTripWalkerFacts covers the fs.* namespace, whose IDs are not in the
+// decoder registry because there is one per walker interest. A fact that reads
+// back untyped is a fact every filesystem check resolves to UNKNOWN over, and
+// re-evaluating an old bundle is the whole reason bundles exist.
+func TestRoundTripWalkerFacts(t *testing.T) {
+	src := fact.NewSet()
+	src.Put(fact.FSMatches{
+		Interest: "suid",
+		Roots:    []string{"/"},
+		Rows: []fact.FSRow{
+			{Path: "/usr/bin/passwd", Mode: 0o755 | fs.ModeSetuid, UID: 0, GID: 0, Size: 63960, IsRegular: true},
+		},
+		InodesVisited: 4211,
+	})
+	src.Put(fact.FSMatches{
+		Interest:          "world_writable",
+		Roots:             []string{"/"},
+		Rows:              []fact.FSRow{{Path: "/var/tmp/scratch", Mode: 0o666, UID: 1000, GID: 1000, IsRegular: true}},
+		Truncated:         true,
+		TruncationReasons: []fact.TruncationReason{fact.TruncDeadline},
+		Overflow:          17,
+		InodesVisited:     4211,
+	})
+
+	got := read(t, write(t, testBundle(src)))
+	if !reflect.DeepEqual(src, got.Facts) {
+		t.Errorf("walker facts changed across the round trip:\n want %#v\n  got %#v", src, got.Facts)
+	}
+
+	suid, ferr, ok := fact.Get[fact.FSMatches](got.Facts, fact.FSFactID("suid"))
+	if !ok {
+		t.Fatalf("fs.suid did not decode to fact.FSMatches after a round trip: err=%v", ferr)
+	}
+	if len(suid.Rows) != 1 || suid.Rows[0].Path != "/usr/bin/passwd" {
+		t.Errorf("fs.suid rows changed: %+v", suid.Rows)
+	}
+	if suid.Rows[0].Mode&fs.ModeSetuid == 0 {
+		t.Errorf("the setuid bit did not survive the round trip: %v", suid.Rows[0].Mode)
+	}
+	if !suid.Complete() {
+		t.Errorf("fs.suid gained a truncation marker across the round trip: %v", suid.TruncationReasons)
+	}
+
+	// The truncation marker is the field a check's verdict depends on, so it
+	// matters most that it survives.
+	ww, _, ok := fact.Get[fact.FSMatches](got.Facts, fact.FSFactID("world_writable"))
+	if !ok {
+		t.Fatalf("fs.world_writable did not decode")
+	}
+	if ww.Complete() {
+		t.Errorf("a truncated fact came back claiming completeness; every negative assertion over it would flip from UNKNOWN to PASS")
+	}
+	if got, want := ww.Overflow, 17; got != want {
+		t.Errorf("overflow = %d, want %d", got, want)
+	}
+	if len(ww.TruncationReasons) != 1 || ww.TruncationReasons[0] != fact.TruncDeadline {
+		t.Errorf("truncation reasons = %v, want [%s]", ww.TruncationReasons, fact.TruncDeadline)
+	}
 }

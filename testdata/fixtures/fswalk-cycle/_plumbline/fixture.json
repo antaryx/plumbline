@@ -1,0 +1,10 @@
+{
+  "description": "A directory bind-mounted inside itself: /srv/data/self reports the same device and inode as /srv/data, which is what makes the tree infinite on a real host",
+  "inodes": {
+    "/": "64:1",
+    "/srv": "64:2",
+    "/srv/data": "64:900",
+    "/srv/data/self": "64:900",
+    "/srv/data/real": "64:3"
+  }
+}

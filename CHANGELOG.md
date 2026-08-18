@@ -11,6 +11,28 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+### Added
+- Shared filesystem walker (`internal/collect/walker`) and the `fswalk`
+  collector: one traversal per scan, no matter how many modules ask about the
+  filesystem. Consumers register interest predicates up front and the walk
+  evaluates all of them per inode in a single pass
+- `fs.<interest>` facts — one per registered interest (`fs.suid`,
+  `fs.world_writable`, …), each carrying the walk's truncation marker and its
+  own overflow count
+- Fixture manifests can describe inode identity (`inodes`) and file type
+  (`modes` type prefixes), so a bind-mount cycle, a character device and a SUID
+  binary are expressible without root (ADR-0013)
+
+### Changed
+- `fake`'s `modes` override is translated rather than cast: `"4755"` now
+  produces a setuid file instead of silently producing `0755`. A fixture that
+  asked for SUID and quietly did not get it now gets it, which may turn a
+  passing test into a failing one — that is the bug being fixed
+- Bundle reads decode the `fs.*` namespace by prefix, so a walker fact
+  re-evaluated from a bundle stays typed rather than falling back to
+  `UnknownFact`
+
+
 ## [0.1.0] — 2026-08-18
 
 **Pre-release. No stability guarantees.** The walking skeleton: one collector,

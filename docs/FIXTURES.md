@@ -44,8 +44,9 @@ a valid fixture and is the common case.
   "now": "2026-01-01T00:00:00Z",
   "unreadable": ["/etc/ssh/sshd_config"],
   "missing": ["/etc/shadow"],
-  "modes": { "/etc/shadow": "0640", "/tmp": "1777" },
+  "modes": { "/etc/shadow": "0640", "/tmp": "1777", "/usr/bin/passwd": "4755" },
   "owners": { "/etc/shadow": "0:42" },
+  "inodes": { "/srv/data": "64:900", "/mnt/bind": "64:900" },
   "exec": {
     "systemctl is-active sshd": { "stdout": "active\n", "exit_code": 0 },
     "sshd -t": { "stderr": "", "exit_code": 0 }
@@ -60,13 +61,75 @@ a valid fixture and is the common case.
 | `now` | Frozen clock, RFC3339. Default `2026-01-01T00:00:00Z`. |
 | `unreadable` | Paths that exist but fail with `ErrPermission`. **This is how an unprivileged run is simulated** — you cannot commit a file to git that root can read and you cannot. |
 | `missing` | Paths present in the tree that must behave as absent. Useful for reusing one tree across several scenarios. |
-| `modes` | Octal mode overrides. **Required for any permission check**, because git preserves only the execute bit. |
+| `modes` | Octal mode overrides. **Required for any permission check**, because git preserves only the execute bit. Also sets setuid, setgid, sticky and the file type — see §2.1. |
 | `owners` | `"uid:gid"` overrides. Git records neither. |
+| `inodes` | `"dev:ino"` identity overrides. How a fixture describes a bind mount — see §2.2. |
 | `exec` | Canned command output, keyed by space-joined argv. |
 
 An `Exec` call with no matching entry is a **test failure**, not an empty
 result. Silently returning nothing would let a collector appear to work while
 never actually running the command it depends on.
+
+### 2.1 `modes` is the full Unix mode, not just the permission bits
+
+Write the octal number `stat -c %a` would print, with the type prefix when the
+inode is not a regular file:
+
+| Fixture value | Means |
+|---|---|
+| `"0644"` | permissions only; whatever the inode already is, it stays |
+| `"4755"` | setuid, `rwxr-xr-x` — a SUID binary |
+| `"2755"` | setgid |
+| `"1777"` | sticky, world-writable — `/tmp` |
+| `"010600"` | a FIFO |
+| `"020600"` | a character device |
+| `"060600"` | a block device |
+| `"0140660"` | a unix socket |
+
+The translation is deliberate, not a cast: Go encodes setuid and the file type
+in high bits of its own choosing, so a naive `fs.FileMode(0o4755)` is `0o755`
+with a meaningless bit set. A fixture asking for a SUID binary would get an
+ordinary one and the SUID check written against it would pass for the wrong
+reason — the exact class of quiet wrongness fixtures exist to catch.
+
+A value with no type prefix leaves the type alone. `"0644"` on a directory
+keeps it a directory.
+
+The type prefixes exist because a FIFO, a socket and a device node cannot be
+committed to git, and `mknod` needs root so the tree cannot be generated at
+test time either. The shared filesystem walker must never open any of them —
+opening an unprivileged user's FIFO as root hangs the scanner forever — and
+that rule needs a test. See ADR-0013.
+
+### 2.2 `inodes` describes what a directory tree cannot
+
+`"dev:ino"` per path. Two paths given one identity **are** a bind mount, which
+is the only way to write down a tree that contains itself:
+
+```json
+"inodes": {
+  "/srv/data": "64:900",
+  "/srv/data/self": "64:900"
+}
+```
+
+Without this, the walker's cycle detection could not be tested at all: real
+values from the fixture tree make every path genuinely distinct (which is
+right), no Linux filesystem permits hardlinking a directory, and creating a
+real bind mount needs root and a mount namespace.
+
+Two rules when using it:
+
+- **`"0:0"` is rejected.** Zero means "not recorded" on the seam (ADR-0012), so
+  accepting it would silently switch cycle detection off for that path.
+- **Override the whole device, not one directory.** The walker does not cross
+  filesystem boundaries by default, and it decides what a boundary is by
+  comparing `Dev` against the root's. Giving one directory a different `Dev`
+  therefore reads as a separate filesystem and the walk correctly declines to
+  enter it. If a fixture is describing a bind mount, give every path in the
+  tree the same device — or, if it is describing a *second filesystem*, give
+  only that subtree a different one, which is how `fswalk-mounts` tests the
+  boundary rule.
 
 ---
 

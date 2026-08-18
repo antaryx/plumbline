@@ -126,13 +126,64 @@ version the check does not understand, the runner returns
 best-effort read of a misunderstood structure is exactly how a false `PASS`
 gets produced.
 
-### 2.3 Registered facts (v0.1)
+### 2.3 Registered facts
 
 | Fact ID | Version | Produced by | Shape |
 |---|---|---|---|
 | `sshd.config` | 1 | `collect/collectors/sshd` | `Installed`, `Files`, `Directives[]`, `UnresolvedIncludes[]`, `Digests{}` |
+| `fs.<interest>` | 1 | `collect/walker` (`fswalk`) | `Interest`, `Roots[]`, `Rows[]`, `Truncated`, `TruncationReasons[]`, `Overflow`, `InodesVisited` |
 
 Every fact added later is listed here with its version history.
+
+#### `fs.<interest>` — the shared filesystem walk
+
+One fact per registered walker interest: `fs.suid`, `fs.world_writable`,
+`fs.unowned`, and so on. All are the same Go type, `fact.FSMatches`, whose
+`FactID` is derived from `Interest`. A module gets a new fact by registering a
+new interest, not by writing a new fact type.
+
+It is one fact per interest rather than one fact holding every match for a
+specific reason: a check requiring `fs.suid` must not resolve to `UNKNOWN`
+because an unrelated interest overflowed its cap. Facts are the unit of
+ignorance in this design, so they have to be the unit of truncation too.
+
+**The rule that governs every check reading one of these facts is asymmetric:**
+
+> A truncated walk can invalidate a *negative* result. It can never invalidate
+> a *positive* one.
+
+`Rows` is always trustworthy. A SUID binary the walk found is a SUID binary
+that exists, so a check reporting it returns `FAIL` whether or not the walk
+finished. "There are no SUID binaries outside the allowlist" is a claim about
+everything that was *never examined*, so over a partial walk it is not `PASS`
+but `UNKNOWN(source_truncated)`.
+
+`FSMatches.Complete()` mechanises it. **A check asserting absence must gate on
+`Complete()` before it may return `PASS`.** Returning `PASS` from a partial walk
+converts "we stopped looking" into "there is nothing there", which is the single
+failure mode this project exists to prevent.
+
+`TruncationReasons` distinguishes why, because the remedies differ:
+
+| Reason | Meaning | Scope |
+|---|---|---|
+| `depth_limit` | the walk refused to descend further | whole walk |
+| `inode_limit` | the global inode budget was spent | whole walk |
+| `wall_clock` | the walk or its context ran out of time | whole walk |
+| `dir_listing` | a directory listing came back incomplete | whole walk |
+| `unreadable_dir` | a directory could not be opened at all | whole walk |
+| `mounts_unknown` | the mount table was unreadable while crossing was requested | whole walk |
+| `max_hits` | **this interest** reached its own cap; `Overflow` counts what it dropped | one fact |
+
+Two things that are deliberately **not** truncation: a filesystem boundary the
+walk declined to cross, and a filesystem type on the skip list. Those are
+*scope* — the walk states its `Roots` and never claimed to cover anything else
+— and marking them would make every ordinary host report `UNKNOWN` for every
+filesystem check. Breaking a cycle is not truncation either: everything inside
+a directory reached twice was enumerated under its other path. See ADR-0014.
+
+`InodesVisited` is shared by every fact one walk produced, which is what proves
+the tree was traversed once rather than once per interest.
 
 `Digests` maps each entry of `Files` to the sha256 of the bytes read from it.
 It was added after `sshd.config` v1 shipped and did **not** bump the version:

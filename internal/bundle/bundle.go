@@ -248,6 +248,38 @@ var registry = map[fact.ID]decoder{
 	},
 }
 
+// fsMatchesDecoder handles the fs.* namespace, whose IDs cannot be listed in
+// the registry above because there is one per walker interest and the set is
+// decided by which modules are compiled in. A bundle collected by a build that
+// had a FILESYS interest the reader does not must still decode: the fact's
+// shape is fixed by fact.FSMatches regardless of which interest produced it,
+// and falling back to UnknownFact here would silently turn every filesystem
+// check into UNKNOWN when an old bundle is re-evaluated — which is the product
+// promise in DATA-MODEL.md §6.1 broken by an implementation detail.
+var fsMatchesDecoder = decoder{
+	version: fact.FSMatches{}.FactVersion(),
+	decode: func(raw json.RawMessage) (fact.Fact, error) {
+		var f fact.FSMatches
+		if err := json.Unmarshal(raw, &f); err != nil {
+			return nil, err
+		}
+		return f, nil
+	},
+}
+
+// decoderFor resolves a fact ID to its decoder. Exact registrations win; the
+// fs.* namespace is matched by prefix. An ID matching neither is preserved
+// opaquely, never guessed at.
+func decoderFor(id fact.ID) (decoder, bool) {
+	if d, ok := registry[id]; ok {
+		return d, true
+	}
+	if strings.HasPrefix(string(id), fact.FSFactPrefix) && len(id) > len(fact.FSFactPrefix) {
+		return fsMatchesDecoder, true
+	}
+	return decoder{}, false
+}
+
 // member is one tar entry held in memory, in write order.
 type member struct {
 	name string
@@ -605,7 +637,7 @@ func readFacts(b *Bundle, members map[string][]byte) error {
 				ErrMalformed, ref.Member, doc.ID, doc.FactVersion, ref.ID, ref.FactVersion)
 		}
 
-		d, known := registry[doc.ID]
+		d, known := decoderFor(doc.ID)
 		if !known || d.version != doc.FactVersion {
 			b.Facts.Put(UnknownFact{ID: doc.ID, Version: doc.FactVersion, Raw: doc.Data})
 			continue

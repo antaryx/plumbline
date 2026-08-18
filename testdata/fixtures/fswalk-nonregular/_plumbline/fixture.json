@@ -1,0 +1,9 @@
+{
+  "description": "Non-regular inodes the walk must reach but never open: a character device, a FIFO, a socket, and three symlinks including one pointing at the root",
+  "modes": {
+    "/dev/console": "020600",
+    "/run/initctl": "010600",
+    "/run/docker.sock": "0140660",
+    "/etc/hosts": "0644"
+  }
+}
