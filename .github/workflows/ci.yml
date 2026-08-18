@@ -38,7 +38,7 @@ jobs:
     # live in `go test` rather than in a bespoke CI step: a gate that only runs
     # in CI is a gate contributors discover after pushing.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -53,7 +53,7 @@ jobs:
     # there corrupts an audit rather than crashing, which is the worst way for a
     # bug to behave, so this is a separate required job rather than a footnote.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -64,7 +64,7 @@ jobs:
     name: golangci-lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -81,7 +81,7 @@ jobs:
       matrix:
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -121,7 +121,7 @@ jobs:
     name: schema validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -165,7 +165,7 @@ jobs:
     # One dependency that phones home would end it with nothing failing to say
     # so, which is exactly what this job exists to notice.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -196,7 +196,7 @@ jobs:
     # are called out as their own job because "no hang, no panic, no unbounded
     # read" is a claim someone will otherwise assume rather than check.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -226,7 +226,7 @@ jobs:
     # here, because it is the one that proves the static linkage claim rather
     # than assuming it.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: plumbline-linux-amd64
