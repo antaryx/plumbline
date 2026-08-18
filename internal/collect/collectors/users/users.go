@@ -222,6 +222,8 @@ func collectShadow(s system.System, fs *fact.Set) {
 			Locked:    locked,
 			Algorithm: alg,
 			Line:      n + 1,
+			MinDays:   optionalInt(f, 3),
+			MaxDays:   optionalInt(f, 4),
 		})
 	}
 	fs.Put(sh)
@@ -240,6 +242,14 @@ func collectGroup(s system.System, fs *fact.Set) {
 		if skippable(line) {
 			continue
 		}
+		// /etc/group carries the same NIS compatibility syntax as /etc/passwd,
+		// with the same consequence: the groups it imports are not in this
+		// file, so nothing may be concluded absent from it.
+		if first := strings.SplitN(line, ":", 2)[0]; strings.HasPrefix(first, "+") || strings.HasPrefix(first, "-") {
+			g.CompatEntries = append(g.CompatEntries, fact.CompatEntry{Spec: first, Line: n + 1})
+			continue
+		}
+
 		f := strings.Split(line, ":")
 		if len(f) < 4 {
 			g.Malformed = append(g.Malformed, n+1)
@@ -264,6 +274,31 @@ func collectGroup(s system.System, fs *fact.Set) {
 		})
 	}
 	fs.Put(g)
+}
+
+// optionalInt reads a shadow aging field, returning nil when the field is
+// absent or empty.
+//
+// nil is not zero and the difference decides a verdict: an empty MaxDays means
+// "no maximum", while a MaxDays of 0 means "must be changed every day". A
+// parser that returned 0 for an empty field would report the most permissive
+// setting in the file as the strictest one available.
+//
+// A field that is present but not a number is also nil. It is not a valid
+// aging value, and inventing one from it would be a fabricated policy.
+func optionalInt(fields []string, i int) *int {
+	if i >= len(fields) {
+		return nil
+	}
+	raw := strings.TrimSpace(fields[i])
+	if raw == "" {
+		return nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return nil
+	}
+	return &n
 }
 
 // splitLines splits on newline without dropping a trailing empty line's index,

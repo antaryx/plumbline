@@ -2,6 +2,7 @@ package users_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -297,4 +298,76 @@ func registryWith(t *testing.T, c collect.Collector) *collect.Registry {
 	reg := collect.NewRegistry()
 	reg.Register(c)
 	return reg
+}
+
+// TestAgingFieldsDistinguishEmptyFromZero is the load-bearing property of the
+// aging parse. An empty MaxDays means "no maximum"; a MaxDays of 0 means "must
+// be changed every day". They are opposite ends of the range, and a parser
+// returning 0 for an empty field would report the most permissive setting in
+// the file as the strictest one available.
+func TestAgingFieldsDistinguishEmptyFromZero(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, content string) {
+		if err := os.WriteFile(filepath.Join(dir, "etc", name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("passwd", "root:x:0:0:root:/root:/bin/bash\n")
+	write("group", "root:x:0:\n")
+	write("shadow", ""+
+		// min and max both set
+		"root:$6$s$h:19000:1:365:7:::\n"+
+		// both empty: the fields exist but carry nothing
+		"empty:$6$s$h:19000:::7:::\n"+
+		// explicitly zero, which is a policy and not an absence
+		"zero:$6$s$h:19000:0:0:7:::\n"+
+		// not a number: not a valid policy, and must not be invented into one
+		"junk:$6$s$h:19000:x:y:7:::\n")
+
+	sys, err := fake.New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	facts := fact.NewSet()
+	if err := collector.New().Collect(context.Background(), sys, facts); err != nil {
+		t.Fatal(err)
+	}
+	s, _, ok := fact.Get[fact.Shadow](facts, fact.ShadowID)
+	if !ok {
+		t.Fatal("users.shadow missing")
+	}
+
+	deref := func(p *int) string {
+		if p == nil {
+			return "nil"
+		}
+		return fmt.Sprint(*p)
+	}
+	for _, tc := range []struct{ name, min, max string }{
+		{"root", "1", "365"},
+		{"empty", "nil", "nil"},
+		{"zero", "0", "0"},
+		{"junk", "nil", "nil"},
+	} {
+		e, found := s.Entry(tc.name)
+		if !found {
+			t.Errorf("%s missing from the shadow fact", tc.name)
+			continue
+		}
+		if got := deref(e.MinDays); got != tc.min {
+			t.Errorf("%s MinDays = %s, want %s", tc.name, got, tc.min)
+		}
+		if got := deref(e.MaxDays); got != tc.max {
+			t.Errorf("%s MaxDays = %s, want %s", tc.name, got, tc.max)
+		}
+	}
+
+	// Authenticates is what the aging checks gate on: an expiry policy on an
+	// account that cannot authenticate governs nothing.
+	if e, _ := s.Entry("root"); !e.Authenticates() {
+		t.Error("an account with a real hash does not report Authenticates")
+	}
 }

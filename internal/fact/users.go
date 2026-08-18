@@ -136,10 +136,12 @@ const (
 // password strength is derivable from the scheme identifier, which is the part
 // before the salt. See docs/adr/0015-account-data-in-bundles.md.
 //
-// The password-aging fields are also absent. No check in this work package
-// reads them, and a fact field is permanent output surface (CLAUDE.md §7); the
-// cheap direction is to add them when a check needs them, as an optional field
-// that does not bump the version.
+// The aging fields are recorded selectively: MinDays and MaxDays, because
+// USERS-0009 and USERS-0010 read them. The remaining four — last change, warn,
+// inactive, expire — are parsed and discarded, and will be added when a check
+// needs them. A fact field is permanent output surface (CLAUDE.md §7), and the
+// cheap direction is to add one later as an optional field that does not bump
+// the version, not to carry six on the chance that something reads them.
 type ShadowEntry struct {
 	Name string `json:"name"`
 	// Empty means the password field held nothing at all. Such an account
@@ -153,6 +155,27 @@ type ShadowEntry struct {
 	Algorithm HashAlgorithm `json:"algorithm,omitempty"`
 	// Line is 1-based, for evidence.
 	Line int `json:"line"`
+
+	// MinDays and MaxDays are shadow fields 4 and 5: the shortest interval
+	// before a password may be changed again, and the longest it may be kept.
+	//
+	// Both are pointers because an empty field is not a zero. An empty MaxDays
+	// means "no maximum", while a MaxDays of 0 would mean "must be changed
+	// every day" — opposite ends of the range, and a parser that read the
+	// empty field as 0 would report the most permissive setting in the file as
+	// the most restrictive. nil means the field was empty.
+	MinDays *int `json:"min_days,omitempty"`
+	MaxDays *int `json:"max_days,omitempty"`
+}
+
+// Authenticates reports whether this account can authenticate with a password:
+// it stores a hash, is not locked, and its field is not empty.
+//
+// The aging checks use it because an expiry policy on an account that cannot
+// authenticate governs nothing, and reporting one would fill a report with
+// findings about the locked system accounts every distribution ships.
+func (e ShadowEntry) Authenticates() bool {
+	return !e.Locked && !e.Empty && e.Algorithm != HashNone
 }
 
 // Shadow is the parsed /etc/shadow.
@@ -213,10 +236,60 @@ type GroupEntry struct {
 
 // Group is the parsed /etc/group.
 type Group struct {
-	Entries   []GroupEntry `json:"entries"`
-	Malformed []int        `json:"malformed_lines,omitempty"`
-	Path      string       `json:"path"`
-	Digest    string       `json:"digest,omitempty"`
+	Entries []GroupEntry `json:"entries"`
+	// CompatEntries are the NIS/LDAP compatibility lines. /etc/group carries
+	// the same "+" syntax as /etc/passwd and it has the same consequence: the
+	// groups it imports are not in this file, so no negative assertion over
+	// the file covers them.
+	CompatEntries []CompatEntry `json:"compat_entries,omitempty"`
+	Malformed     []int         `json:"malformed_lines,omitempty"`
+	Path          string        `json:"path"`
+	Digest        string        `json:"digest,omitempty"`
+}
+
+// DuplicateGIDs returns every gid held by more than one group, sorted.
+func (g Group) DuplicateGIDs() []uint32 {
+	count := map[uint32]int{}
+	for _, e := range g.Entries {
+		count[e.GID]++
+	}
+	var out []uint32
+	for gid, n := range count {
+		if n > 1 {
+			out = append(out, gid)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// DuplicateNames returns every group name used more than once, sorted. Name
+// resolution returns the first match, so a duplicate silently shadows whatever
+// came after it, including its gid and its member list.
+func (g Group) DuplicateNames() []string {
+	count := map[string]int{}
+	for _, e := range g.Entries {
+		count[e.Name]++
+	}
+	var out []string
+	for name, n := range count {
+		if n > 1 {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ByGID returns every group holding gid, in file order.
+func (g Group) ByGID(gid uint32) []GroupEntry {
+	var out []GroupEntry
+	for _, e := range g.Entries {
+		if e.GID == gid {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func (Group) FactID() ID       { return GroupID }
