@@ -18,10 +18,12 @@
 package sshd
 
 import (
+	"context"
 	"errors"
 	"sort"
 	"strings"
 
+	"github.com/antaryx/plumbline/internal/collect"
 	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/system"
 )
@@ -36,13 +38,62 @@ const DefaultConfigPath = "/etc/ssh/sshd_config"
 // bound it so that a cyclic include cannot spin a root process.
 const maxIncludeDepth = 8
 
-// Collect reads the sshd configuration tree and returns the parsed fact.
+// Collector implements collect.Collector for the sshd configuration.
+type Collector struct{}
+
+// New returns the sshd collector.
+func New() Collector { return Collector{} }
+
+func init() { collect.Register(New()) }
+
+// ID identifies the collector, not the fact it produces: the collector is
+// "sshd", the fact it writes is "sshd.config".
+func (Collector) ID() string { return ID }
+
+// DependsOn is nil. Reading a configuration file needs nothing else observed
+// first, and inventing an ordering constraint would cost concurrency for
+// nothing.
+func (Collector) DependsOn() []string { return nil }
+
+// Requires is CapNone, deliberately, even though an unprivileged run often
+// cannot read the file.
+//
+// Declaring CapRoot would make the runner skip this collector entirely on an
+// unprivileged scan, and the operator would learn only that a collector was
+// skipped. Running it means the collector reads the file itself and reports
+// what actually happened — ErrPermission against this path — which is the
+// specific, actionable observation. A capability declaration is for privileges
+// without which a collector cannot even try, not for ones it may turn out to
+// need.
+func (Collector) Requires() collect.Capability { return collect.CapNone }
+
+// Cost is Cheap: one file plus whatever its Include directives resolve to,
+// bounded by maxIncludeDepth. No walk, no exec.
+func (Collector) Cost() collect.Cost { return collect.Cheap }
+
+// Collect observes the sshd configuration and records it in fs.
+//
+// A fact error is written into the set rather than returned, because "the
+// configuration could not be read" is an observation about the host, carrying
+// which file and why, and the set is where observations belong. The returned
+// error is reserved for a failure this collector could not classify.
+func (Collector) Collect(ctx context.Context, s system.System, fs *fact.Set) error {
+	cfg, ferr := collectConfig(ctx, s)
+	if ferr != nil {
+		fs.PutError(*ferr)
+		return nil
+	}
+	fs.Put(cfg)
+	return nil
+}
+
+// collectConfig reads the sshd configuration tree and returns the parsed fact.
 //
 // The returned error is non-nil only for conditions that should be recorded as
 // a fact error. A missing sshd_config is not an error: it is the legitimate
 // observation "sshd is not configured here", which makes every SSHD check
 // NOT_APPLICABLE.
-func Collect(s system.System) (fact.SSHDConfig, *fact.Error) {
+func collectConfig(ctx context.Context, s system.System) (fact.SSHDConfig, *fact.Error) {
 	cfg := fact.SSHDConfig{}
 
 	res, err := s.ReadFile(DefaultConfigPath, 0)
@@ -76,7 +127,7 @@ func Collect(s system.System) (fact.SSHDConfig, *fact.Error) {
 
 	cfg.Installed = true
 	p := &parser{sys: s, cfg: &cfg, seen: map[string]bool{}}
-	p.parseFile(DefaultConfigPath, res.Data, 0)
+	p.parseFile(ctx, DefaultConfigPath, res.Data, 0)
 	return cfg, nil
 }
 
@@ -88,7 +139,7 @@ type parser struct {
 	match string
 }
 
-func (p *parser) parseFile(path string, data []byte, depth int) {
+func (p *parser) parseFile(ctx context.Context, path string, data []byte, depth int) {
 	p.cfg.Files = append(p.cfg.Files, path)
 	p.seen[path] = true
 
@@ -121,7 +172,7 @@ func (p *parser) parseFile(path string, data []byte, depth int) {
 			continue
 
 		case "include":
-			p.expandInclude(value, depth)
+			p.expandInclude(ctx, value, depth)
 			continue
 		}
 
@@ -136,7 +187,7 @@ func (p *parser) parseFile(path string, data []byte, depth int) {
 	}
 }
 
-func (p *parser) expandInclude(patterns string, depth int) {
+func (p *parser) expandInclude(ctx context.Context, patterns string, depth int) {
 	if depth >= maxIncludeDepth {
 		p.cfg.UnresolvedIncludes = append(p.cfg.UnresolvedIncludes,
 			patterns+" (include depth limit reached)")
@@ -163,12 +214,19 @@ func (p *parser) expandInclude(patterns string, depth int) {
 			if p.seen[m] {
 				continue // cycle
 			}
+			// An abandoned scan stops reading. The runner has already stopped
+			// waiting for this collector, so every further read is work done
+			// on a host for a result nobody will look at.
+			if err := ctx.Err(); err != nil {
+				p.cfg.UnresolvedIncludes = append(p.cfg.UnresolvedIncludes, m)
+				continue
+			}
 			res, err := p.sys.ReadFile(m, 0)
 			if err != nil || res.Truncated {
 				p.cfg.UnresolvedIncludes = append(p.cfg.UnresolvedIncludes, m)
 				continue
 			}
-			p.parseFile(m, res.Data, depth+1)
+			p.parseFile(ctx, m, res.Data, depth+1)
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package sshd_test
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,11 +29,8 @@ func evalFixture(t *testing.T, name string) finding.Finding {
 	}
 
 	facts := fact.NewSet()
-	cfg, ferr := collector.Collect(sys)
-	if ferr != nil {
-		facts.PutError(*ferr)
-	} else {
-		facts.Put(cfg)
+	if err := collector.New().Collect(context.Background(), sys, facts); err != nil {
+		t.Fatalf("collect fixture %s: %v", name, err)
 	}
 
 	cat := catalog.MustNew(checks.Check0002)
