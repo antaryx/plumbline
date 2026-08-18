@@ -20,8 +20,8 @@ import (
 // metadata. Scores are comparable only within one catalog version
 // (05-VERSIONING.md §3).
 //
-// 2 adds the KERNEL module (WP-16); 3 completes it.
-const Version = 3
+// 2 adds the KERNEL module (WP-16); 3 completes it; 4 adds USERS (WP-17).
+const Version = 4
 
 // Outcome is what a check's Eval returns. The runner converts it into a
 // finding, filling in identity and fingerprint so a check cannot get those
@@ -195,6 +195,16 @@ func (c *Catalog) EvaluateOne(ck Check, facts *fact.Set) (f finding.Finding) {
 			f.Result = finding.Unknown
 			f.UnknownReason = reasonFor(e.Kind)
 			f.Detail = sanitize.Text(fmt.Sprintf("required fact %s unavailable: %s", id, e.Msg))
+			// A fact error that names a path is citable, and DATA-MODEL.md
+			// §5.5 requires every UNKNOWN to carry evidence. Without this the
+			// gate produced the one class of finding in the project that said
+			// "I do not know" and gave the reader nothing to look at — which
+			// is precisely the finding an auditor most needs to follow up.
+			if e.Path != "" {
+				f.Evidence = sanitizeEvidence([]finding.Evidence{
+					finding.NewEvidence(e.Path, 0, e.Msg, ""),
+				})
+			}
 			return f
 		}
 		if !containsID(facts.IDs(), id) {

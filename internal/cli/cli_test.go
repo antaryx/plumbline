@@ -272,7 +272,13 @@ func TestGatesDriveTheExitCode(t *testing.T) {
 		{"--fail-on high catches a HIGH failure", []string{"scan", "--root", failFixture, "--fail-on", "high"}, 2},
 		{"--fail-on critical does not", []string{"scan", "--root", failFixture, "--fail-on", "critical"}, cli.ExitOK},
 		{"--threshold below posture", []string{"scan", "--root", hostFixture, "--threshold", "50"}, cli.ExitOK},
-		{"--threshold above posture", []string{"scan", "--root", failFixture, "--threshold", "50"}, 3},
+		// 100 rather than a middling number: posture is a ratio over the whole
+		// catalog, so any threshold below 100 stops discriminating as modules
+		// are added and the one FAIL on this fixture is diluted. A host with
+		// at least one FAIL can never reach 100, which makes this the only
+		// threshold that keeps asserting the gate rather than the size of the
+		// catalog.
+		{"--threshold above posture", []string{"scan", "--root", failFixture, "--threshold", "100"}, 3},
 		{"--min-coverage satisfied", []string{"scan", "--root", hostFixture, "--min-coverage", "100"}, cli.ExitOK},
 	}
 

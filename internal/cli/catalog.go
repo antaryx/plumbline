@@ -4,12 +4,14 @@ import (
 	"github.com/antaryx/plumbline/internal/catalog"
 	kernelchecks "github.com/antaryx/plumbline/internal/catalog/checks/kernel"
 	sshdchecks "github.com/antaryx/plumbline/internal/catalog/checks/sshd"
+	userschecks "github.com/antaryx/plumbline/internal/catalog/checks/users"
 
 	// Collectors register themselves at init. Importing them here, in the
 	// composition root, is what puts them in the default registry; nothing
 	// deeper in the tree reaches for a collector by name.
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/kernel"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/sshd"
+	_ "github.com/antaryx/plumbline/internal/collect/collectors/users"
 )
 
 // buildCatalog assembles the catalog this binary carries.
@@ -37,5 +39,11 @@ func buildCatalog() *catalog.Catalog {
 		kernelchecks.Check0015,
 		kernelchecks.Check0016,
 		sshdchecks.Check0002,
+		userschecks.Check0001,
+		userschecks.Check0002,
+		userschecks.Check0003,
+		userschecks.Check0004,
+		userschecks.Check0005,
+		userschecks.Check0006,
 	)
 }

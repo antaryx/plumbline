@@ -96,10 +96,29 @@ nothing.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--redact` | false | Remove hostname and non-loopback addresses at collection time |
+| `--redact` | false | Remove hostname and non-loopback addresses at collection time. **Not an anonymiser** — see below |
 | `--save-bundle PATH` | — | Keep the bundle `scan` produced |
 | `--timeout DURATION` | `30m` | Whole-scan budget |
 | `--concurrency N` | auto | Cap on concurrent collectors |
+
+### What `--redact` does and does not cover
+
+`--redact` removes the hostname and non-loopback addresses. It does **not**
+anonymise the bundle.
+
+A bundle always contains the host's account list, because every USERS finding
+names the account it is about and a report that will not say which account is
+not actionable. Account names also feed the finding fingerprint, so changing
+them would invalidate every suppression an operator has written.
+
+A bundle never contains password hashes, whether or not `--redact` is passed.
+The contents of `/etc/shadow`, `/etc/gshadow` and `/etc/security/opasswd` are
+read, classified and discarded; only the properties a check judges — empty,
+locked, which crypt scheme — reach the bundle. This is not configurable.
+
+Treat a bundle as sensitive in all cases. It is written `0600`, and `--redact`
+makes it less identifying, not safe to publish. See
+`docs/adr/0015-account-data-in-bundles.md`.
 
 ### Misc
 

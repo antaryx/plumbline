@@ -1,0 +1,1 @@
+{ "description": "Two system accounts can open a session: daemon has bash, and games has an empty shell field, which the system reads as /bin/sh rather than as no shell" }

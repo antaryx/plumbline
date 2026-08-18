@@ -11,7 +11,27 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+### Security
+- **Password hashes never enter a bundle.** Evidence recording is wired at the
+  seam, so reading a file stored its bytes — which, applied to `/etc/shadow`,
+  would have copied every password hash on the host into an artifact designed
+  to be sent to auditors. `/etc/shadow`, `/etc/gshadow`,
+  `/etc/security/opasswd` and `/etc/master.passwd` are now excluded from the
+  evidence store, with no flag to re-enable them, and `users.shadow` records
+  only whether a field is empty or locked and which crypt scheme it uses
+  (ADR-0015)
+- `--redact` is documented precisely in `CLI-SPEC.md`: it removes the hostname,
+  it does not anonymise account names, and it never was what kept hashes out of
+  a bundle
+
 ### Added
+- **USERS module (WP-17), first batch of 6 checks.** Catalog version 4. Root
+  uid uniqueness (USERS-0001), system-account shells (0002), empty passwords
+  (0003), password hash algorithms (0004), duplicate uids and names (0005),
+  and legacy NIS import entries (0006)
+- `users.passwd`, `users.shadow` and `users.group` facts — three facts rather
+  than one, because an unprivileged scan can read two of the three files and a
+  single fact would let the unreadable one erase them
 - **KERNEL module (WP-16), complete at 16 checks.** Catalog version 2
   introduced the module, 3 completes it.
   - Memory and process protections: ASLR (KERNEL-0001), `kptr_restrict`
@@ -42,6 +62,10 @@ explanation in this file is a defect.
   binary are expressible without root (ADR-0013)
 
 ### Changed
+- The required-fact gate attaches evidence when a fact error names a path, so a
+  check that resolves to UNKNOWN because a file was unreadable now cites that
+  file. `DATA-MODEL.md` §5.5 has always required every UNKNOWN to carry
+  evidence; the gate was the one path that did not
 - `KERNEL-0008` and `KERNEL-0015` combine `conf.all` with each interface's own
   value by the rule the kernel actually uses — `max()` for `rp_filter`,
   logical `AND` for `accept_source_route`. The two point in opposite

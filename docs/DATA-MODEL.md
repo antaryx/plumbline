@@ -133,8 +133,49 @@ gets produced.
 | `sshd.config` | 1 | `collect/collectors/sshd` | `Installed`, `Files`, `Directives[]`, `UnresolvedIncludes[]`, `Digests{}` |
 | `fs.<interest>` | 1 | `collect/walker` (`fswalk`) | `Interest`, `Roots[]`, `Rows[]`, `Truncated`, `TruncationReasons[]`, `Overflow`, `InodesVisited` |
 | `kernel.sysctl` | 1 | `collect/collectors/kernel` | `Running{}`, `Configured{}`, `Files[]`, `Digests{}`, `UnreadableFiles[]` |
+| `users.passwd` | 1 | `collect/collectors/users` | `Entries[]`, `CompatEntries[]`, `Malformed[]`, `Path`, `Digest` |
+| `users.shadow` | 1 | `collect/collectors/users` | `Entries[]`, `Malformed[]`, `Path` |
+| `users.group` | 1 | `collect/collectors/users` | `Entries[]`, `Malformed[]`, `Path`, `Digest` |
 
 Every fact added later is listed here with its version history.
+
+#### `users.*` — the local account databases
+
+Three facts rather than one, because the three files have three different
+readabilities. `/etc/passwd` and `/etc/group` are world-readable; `/etc/shadow`
+is not. An unprivileged scan produces two facts and one fact error, every check
+over passwd returns a real verdict, and only the shadow-dependent checks
+resolve to `UNKNOWN(insufficient_privileges)`. A single `users` fact would have
+made one unreadable file erase two readable ones.
+
+**`users.shadow` carries no password hash, and no digest.**
+
+The hash is classified inside the collector — empty, locked, which crypt scheme
+— and discarded. It reaches no fact, no bundle, no renderer and no log line. A
+hash is not a record of what happened on a host; it is the credential itself in
+a form an attacker can work on offline, and a bundle is an artifact designed to
+travel.
+
+The absent digest follows from the same decision. The bytes of `/etc/shadow`
+are never stored as evidence — the exclusion is enforced at the seam, in
+`collect.IsCredentialFile`, not in the collector — so a digest here would point
+into an archive that deliberately does not contain what it points at. Findings
+derived from shadow cite the path and the line and carry no digest, which is
+the honest representation of "we read this and refused to keep it". See
+`docs/adr/0015-account-data-in-bundles.md`.
+
+`users.passwd` omits the GECOS field for a related reason: it holds a person's
+real name and telephone number, no check asserts anything about it, and a field
+nothing reads is a field that only creates exposure.
+
+**`CompatEntries` and `Malformed` are what make negative assertions honest
+here.** A line beginning `+` imports accounts from a directory service, so the
+accounts it governs are not in the file; a line that would not parse could have
+held the account a check claims is absent. Either one turns "no account has uid
+0" from an observation into a guess, so the checks report `UNKNOWN` for the
+negative result and leave the positive one standing — the same asymmetry
+ADR-0014 records for the filesystem walk, arrived at independently because it
+is a property of negative assertions rather than of filesystems.
 
 #### `kernel.sysctl` — running and configured kernel parameters
 

@@ -246,6 +246,36 @@ var registry = map[fact.ID]decoder{
 			return f, nil
 		},
 	},
+	fact.PasswdID: {
+		version: fact.Passwd{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Passwd
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.ShadowID: {
+		version: fact.Shadow{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Shadow
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.GroupID: {
+		version: fact.Group{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Group
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
 	fact.SSHDConfigID: {
 		version: fact.SSHDConfig{}.FactVersion(),
 		decode: func(raw json.RawMessage) (fact.Fact, error) {

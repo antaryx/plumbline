@@ -157,6 +157,17 @@ kernel-drift               file hardened, host never rebooted
 kernel-conflict            two drop-ins disagree → UNKNOWN
 kernel-unparseable         value is not the documented integer → UNKNOWN
 kernel-loopback-only       no non-loopback interface → NOT_APPLICABLE
+
+users-clean                the good case
+users-uid0                 a second account holds uid 0
+users-shells               system accounts that can open a session
+users-nopassword           empty password fields beside locked ones
+users-weakhash             MD5 and DES hashes
+users-duplicates           shared uid and shadowed name
+users-nis                  directory imports → the list is not the whole list
+users-malformed            unparseable lines in both databases
+users-locked-only          no stored hash to assess → NOT_APPLICABLE
+users-unprivileged         /etc/shadow refused → UNKNOWN, the rest still answer
 ```
 
 Name the *scenario*, never the expected result. `sshd-pass` becomes a lie the
@@ -167,6 +178,17 @@ and worst values never tests the middle, and the middle is where a check
 returns a plausible verdict with the wrong severity. `fs.suid_dumpable` at 2 is
 a real exposure and a smaller one than at 1, and only a fixture holding 2
 proves the check says so.
+
+`users-unprivileged` is the same idea applied to privilege rather than value.
+It is the only fixture in the corpus where one file is refused and others are
+not, and it is what proves the USERS collector degrades **per file** instead of
+failing as a unit. A module whose fixtures are all readable never tests the
+path every unprivileged run in production will take.
+
+`users-clean` deserves a note too: its non-root accounts are **locked**, not
+empty. A lock token refuses every password and an empty field accepts every
+password, so a fixture that used one where it meant the other would let a check
+pass for exactly the wrong reason.
 
 ---
 
