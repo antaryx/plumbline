@@ -173,6 +173,27 @@ check meeting a conflict returns `UNKNOWN` rather than picking a winner; see
 a check can map the gap to the right `UNKNOWN` code rather than guessing at
 one.
 
+**The probed set is explicit, not discovered.** Walking `/proc/sys` would
+collect several thousand parameters, put every one of them in the bundle on
+disk — including the ones naming this host's interfaces and routes — and make
+the fact's shape depend on the kernel rather than on the catalog. The collector
+reads the parameters the checks need and no more.
+
+The exception is the parameters the kernel namespaces per network interface
+(`net.ipv4.conf.<interface>.rp_filter`,
+`net.ipv4.conf.<interface>.accept_source_route`). Those are enumerated from
+`/proc/sys/net/ipv4/conf`, because the set of interfaces is a property of the
+host, and the keys are derived from the paths rather than composed from
+interface names — a VLAN device is called `eth0.1` and the dotted form does not
+round-trip.
+
+For those parameters the value under `conf/all` is **not** the effective value
+on its own. It combines with each interface's own setting by a rule that
+differs per parameter: `max()` for `rp_filter`, logical `AND` for
+`accept_source_route`. The fact records the raw per-interface values and leaves
+the combining to the check that knows which rule applies, because a fact that
+pre-combined them would have to pick one rule and would be wrong for the other.
+
 #### `fs.<interest>` — the shared filesystem walk
 
 One fact per registered walker interest: `fs.suid`, `fs.world_writable`,

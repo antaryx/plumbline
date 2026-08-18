@@ -77,7 +77,7 @@ it passes, and the finding says which interfaces are in it.`,
 		)
 
 		for _, r := range probed {
-			iface := interfaceOf(r.Key)
+			iface := interfaceOf(r.Key, rpFilterSuffix)
 			switch iface {
 			case "all", "default":
 				// "all" is folded into every interface below. "default" is a
@@ -203,11 +203,19 @@ it passes, and the finding says which interfaces are in it.`,
 	},
 }
 
-// interfaceOf extracts the interface name from a per-interface sysctl key.
-// The name is whatever sits between the prefix and the suffix, taken whole:
-// a VLAN device is called "eth0.1" and splitting on dots would lose it.
-func interfaceOf(key string) string {
-	trimmed := strings.TrimSuffix(strings.TrimPrefix(key, rpFilterPrefix), rpFilterSuffix)
+// interfaceOf extracts the interface name from a per-interface sysctl key,
+// given the parameter suffix that key carries.
+//
+// The suffix is a parameter rather than a constant because more than one
+// parameter is namespaced this way, and trimming the wrong one leaves the
+// parameter name attached: "all.accept_source_route" is not the interface
+// "all", so a check comparing against "all" would silently stop recognising
+// the pseudo-interfaces and judge them as if they were network cards.
+//
+// The name is whatever sits between the prefix and the suffix, taken whole: a
+// VLAN device is called "eth0.1" and splitting on dots would lose it.
+func interfaceOf(key, suffix string) string {
+	trimmed := strings.TrimSuffix(strings.TrimPrefix(key, rpFilterPrefix), suffix)
 	return path.Clean(trimmed)
 }
 

@@ -12,11 +12,20 @@ explanation in this file is a defect.
 ## [Unreleased]
 
 ### Added
-- **KERNEL module (WP-16), catalog version 2.** Eight checks over kernel
-  runtime parameters: ASLR (KERNEL-0001), `kptr_restrict` (0002), Yama
-  `ptrace_scope` (0003), `dmesg_restrict` (0004), `suid_dumpable` (0005),
-  unprivileged BPF (0006), running-versus-configured drift (0007), and
-  per-interface reverse-path filtering (0008)
+- **KERNEL module (WP-16), complete at 16 checks.** Catalog version 2
+  introduced the module, 3 completes it.
+  - Memory and process protections: ASLR (KERNEL-0001), `kptr_restrict`
+    (0002), Yama `ptrace_scope` (0003), `dmesg_restrict` (0004),
+    `suid_dumpable` (0005), unprivileged BPF (0006),
+    `perf_event_paranoid` (0013)
+  - Filesystem race protections: `protected_symlinks` (0009),
+    `protected_hardlinks` (0010), `protected_fifos` (0011),
+    `protected_regular` (0012)
+  - Core dump destination (0014) — the module's first non-integer parameter
+  - Network stack: per-interface reverse-path filtering (0008),
+    per-interface source routing (0015), TCP SYN cookies (0016)
+  - Configuration drift between the running kernel and its own sysctl files
+    (0007)
 - `kernel.sysctl` fact — running values from `/proc/sys` **and** configured
   values from `/etc/sysctl.conf` and the `sysctl.d` directories, kept as
   separate observations. A host whose file says hardened and whose kernel says
@@ -33,6 +42,11 @@ explanation in this file is a defect.
   binary are expressible without root (ADR-0013)
 
 ### Changed
+- `KERNEL-0008` and `KERNEL-0015` combine `conf.all` with each interface's own
+  value by the rule the kernel actually uses — `max()` for `rp_filter`,
+  logical `AND` for `accept_source_route`. The two point in opposite
+  directions, and a host with `conf.all.accept_source_route = 0` refuses
+  source routing however its interfaces are set
 - The check-purity gate matches the net **import** forms (`"net"`, `"net/`)
   rather than any string beginning with `net`. A sysctl key is called
   `net.ipv4.conf.all.rp_filter`; the old pattern reported it as an impure

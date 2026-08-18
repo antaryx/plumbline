@@ -28,6 +28,14 @@ var all = []catalog.Check{
 	checks.Check0006,
 	checks.Check0007,
 	checks.Check0008,
+	checks.Check0009,
+	checks.Check0010,
+	checks.Check0011,
+	checks.Check0012,
+	checks.Check0013,
+	checks.Check0014,
+	checks.Check0015,
+	checks.Check0016,
 }
 
 // collectFixture runs the real collector against a fixture tree.
@@ -290,6 +298,169 @@ func TestKernel0008RPFilter(t *testing.T) {
 	})
 }
 
+func TestKernel0009ProtectedSymlinks(t *testing.T) {
+	run(t, checks.Check0009, []tc{
+		{fixture: "kernel-hardened", result: finding.Pass, detailContains: "only followed when"},
+		{fixture: "kernel-weak", result: finding.Fail, detailContains: "planted there"},
+		{fixture: "kernel-denied", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "could not be read"},
+	})
+}
+
+func TestKernel0010ProtectedHardlinks(t *testing.T) {
+	run(t, checks.Check0010, []tc{
+		{fixture: "kernel-hardened", result: finding.Pass, detailContains: "owns or can read and write"},
+		{fixture: "kernel-weak", result: finding.Fail, detailContains: "cannot read into a directory they control"},
+		{fixture: "kernel-denied", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "could not be read"},
+	})
+}
+
+func TestKernel0011ProtectedFifos(t *testing.T) {
+	run(t, checks.Check0011, []tc{
+		{fixture: "kernel-hardened", result: finding.Pass, detailContains: "world-writable sticky directory is refused"},
+		{fixture: "kernel-weak", result: finding.Fail, detailContains: "block it indefinitely"},
+		{fixture: "kernel-partial", result: finding.Pass, detailContains: "group-writable"},
+		{
+			// The parameter arrived in Linux 4.19. An older kernel does not
+			// have it to set, which is NOT_APPLICABLE and not a failure.
+			fixture: "kernel-absent", result: finding.NotApplicable,
+			detailContains: "does not expose",
+		},
+		{fixture: "kernel-denied", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "could not be read"},
+	})
+}
+
+func TestKernel0012ProtectedRegular(t *testing.T) {
+	run(t, checks.Check0012, []tc{
+		{fixture: "kernel-hardened", result: finding.Pass, detailContains: "group-writable"},
+		{fixture: "kernel-weak", result: finding.Fail, detailContains: "attacker planted"},
+		{fixture: "kernel-partial", result: finding.Pass, detailContains: "world-writable sticky directory is refused"},
+		{fixture: "kernel-absent", result: finding.NotApplicable, detailContains: "does not expose"},
+		{fixture: "kernel-denied", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "could not be read"},
+	})
+}
+
+func TestKernel0013PerfEventParanoid(t *testing.T) {
+	run(t, checks.Check0013, []tc{
+		{fixture: "kernel-hardened", result: finding.Pass, detailContains: "may not profile the kernel"},
+		{
+			// -1 is the documented value for no restriction whatsoever, which
+			// is materially worse than a merely permissive setting.
+			fixture: "kernel-weak", result: finding.Fail, severity: finding.High,
+			detailContains: "entirely unrestricted",
+		},
+		{fixture: "kernel-partial", result: finding.Fail, severity: finding.Medium, detailContains: "may still profile the kernel"},
+		{
+			// Something is mounted over /proc/sys; neither a fabricated -1 nor
+			// a fabricated 2 is available to us.
+			fixture: "kernel-unparseable", result: finding.Unknown,
+			reason: finding.ReasonParse, detailContains: "not the single integer",
+		},
+		{fixture: "kernel-denied", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "could not be read"},
+	})
+}
+
+func TestKernel0014CorePattern(t *testing.T) {
+	run(t, checks.Check0014, []tc{
+		{fixture: "kernel-hardened", result: finding.Pass, detailContains: "pipes core dumps to /usr/lib/systemd/systemd-coredump"},
+		{
+			// The kernel's own default is the bare word "core", which writes
+			// the dump into the crashing process's working directory.
+			fixture: "kernel-weak", result: finding.Fail,
+			detailContains: "relative path",
+		},
+		{fixture: "kernel-partial", result: finding.Pass, detailContains: "one known location"},
+		{
+			// Pointed at /tmp during a debugging session and never put back:
+			// world-writable destination, and it drifted from the file.
+			fixture: "kernel-drift", result: finding.Fail,
+			detailContains: "world-writable",
+		},
+		{
+			fixture: "kernel-unparseable", result: finding.Unknown,
+			reason: finding.ReasonAmbiguousState, detailContains: "is empty",
+		},
+		{fixture: "kernel-denied", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "could not be read"},
+	})
+}
+
+// TestCorePatternDriftIsNamed: the failing finding has to point at the
+// configuration, or the operator re-applies a file that is already correct.
+func TestCorePatternDriftIsNamed(t *testing.T) {
+	got := evalFixture(t, checks.Check0014, "kernel-drift")
+	if !strings.Contains(got.Detail, "does not match its own configuration") {
+		t.Errorf("the drift was not reported: %s", got.Detail)
+	}
+	if !strings.Contains(got.Detail, "systemd-coredump") {
+		t.Errorf("the configured value was not named: %s", got.Detail)
+	}
+	var sawConfig bool
+	for _, e := range got.Evidence {
+		if strings.Contains(e.Source, "sysctl") {
+			sawConfig = true
+			if e.SHA256 == "" {
+				t.Errorf("configuration evidence carries no digest: %+v", e)
+			}
+		}
+	}
+	if !sawConfig {
+		t.Error("no evidence cites the configuration file")
+	}
+}
+
+func TestKernel0015AcceptSourceRoute(t *testing.T) {
+	run(t, checks.Check0015, []tc{
+		{fixture: "kernel-hardened", result: finding.Pass, detailContains: "refused on every interface"},
+		{fixture: "kernel-weak", result: finding.Fail, detailContains: "accept source-routed packets"},
+		{
+			// conf.all is 0 while eth0 is 1. The kernel takes the logical AND
+			// here, not the maximum it takes for rp_filter, so this host is
+			// safe. A check that reused KERNEL-0008's rule would say the
+			// opposite, which is the whole reason this fixture exists.
+			fixture: "kernel-partial", result: finding.Pass,
+			detailContains: "both non-zero",
+		},
+		{
+			fixture: "kernel-loopback-only", result: finding.NotApplicable,
+			detailContains: "no non-loopback network interface",
+		},
+		{fixture: "kernel-denied", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "could not be resolved"},
+	})
+}
+
+// TestSourceRouteCombiningRuleIsAndNotMax pins the distinction directly. In
+// kernel-partial eth0 carries 1; under the rp_filter maximum rule this host
+// would be reported as accepting source routing, and it does not.
+func TestSourceRouteCombiningRuleIsAndNotMax(t *testing.T) {
+	got := evalFixture(t, checks.Check0015, "kernel-partial")
+	if got.Result != finding.Pass {
+		t.Fatalf("result = %s, want PASS: conf.all is 0, so the AND can never be true\n detail: %s",
+			got.Result, got.Detail)
+	}
+	// The interface that would take effect if conf.all were raised is named,
+	// because a PASS that hides a loaded gun is not helpful.
+	if !strings.Contains(got.Detail, "eth0") {
+		t.Errorf("the non-zero interface was not named: %s", got.Detail)
+	}
+
+	// And the same rule must not turn a genuinely accepting host into a PASS.
+	got = evalFixture(t, checks.Check0015, "kernel-weak")
+	if got.Result != finding.Fail {
+		t.Errorf("result = %s, want FAIL: conf.all and eth0 are both 1", got.Result)
+	}
+	if !strings.Contains(got.Detail, "eth0") {
+		t.Errorf("the accepting interface was not named: %s", got.Detail)
+	}
+}
+
+func TestKernel0016TCPSyncookies(t *testing.T) {
+	run(t, checks.Check0016, []tc{
+		{fixture: "kernel-hardened", result: finding.Pass, detailContains: "backlog overflows"},
+		{fixture: "kernel-weak", result: finding.Fail, severity: finding.Low, detailContains: "deny service"},
+		{fixture: "kernel-partial", result: finding.Pass, detailContains: "unconditionally"},
+		{fixture: "kernel-denied", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "could not be read"},
+	})
+}
+
 // ---------------------------------------------------------------------------
 // module-wide invariants
 // ---------------------------------------------------------------------------
@@ -363,9 +534,16 @@ func TestCheckIdentityIsWellFormed(t *testing.T) {
 		if check.Remediation == nil {
 			t.Errorf("%s has no remediation; every check that can FAIL ships a fix", check.ID)
 		}
-		if check.SinceCatalog != 2 {
-			t.Errorf("%s declares SinceCatalog %d, want 2 (the catalog version that introduces the KERNEL module)",
-				check.ID, check.SinceCatalog)
+		// The module spans two catalog versions: 2 introduced it, 3 completed
+		// it. SinceCatalog lets `plumbline diff` tell "newly failing" from
+		// "newly existing", so it must record when the check actually entered
+		// the catalog and never be bulk-updated to the current version.
+		if check.SinceCatalog != 2 && check.SinceCatalog != 3 {
+			t.Errorf("%s declares SinceCatalog %d, want 2 or 3", check.ID, check.SinceCatalog)
+		}
+		if check.SinceCatalog > catalog.Version {
+			t.Errorf("%s declares SinceCatalog %d, which is ahead of catalog.Version %d",
+				check.ID, check.SinceCatalog, catalog.Version)
 		}
 	}
 }

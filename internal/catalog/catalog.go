@@ -20,8 +20,8 @@ import (
 // metadata. Scores are comparable only within one catalog version
 // (05-VERSIONING.md §3).
 //
-// 2 adds the KERNEL module (WP-16).
-const Version = 2
+// 2 adds the KERNEL module (WP-16); 3 completes it.
+const Version = 3
 
 // Outcome is what a check's Eval returns. The runner converts it into a
 // finding, filling in identity and fingerprint so a check cannot get those

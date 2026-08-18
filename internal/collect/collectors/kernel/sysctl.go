@@ -54,21 +54,40 @@ const maxConfigRead = 1 << 20 // 1 MiB
 // path element — which is why the per-interface parameters below are
 // enumerated from the directory rather than named here.
 var probedKeys = []string{
+	"fs.protected_fifos",
+	"fs.protected_hardlinks",
+	"fs.protected_regular",
+	"fs.protected_symlinks",
 	"fs.suid_dumpable",
+	"kernel.core_pattern",
 	"kernel.dmesg_restrict",
 	"kernel.kptr_restrict",
+	"kernel.perf_event_paranoid",
 	"kernel.randomize_va_space",
 	"kernel.unprivileged_bpf_disabled",
 	"kernel.yama.ptrace_scope",
+	"net.ipv4.tcp_syncookies",
 }
 
-// rpFilterDir is the directory whose subdirectories are network interfaces.
-// Reverse-path filtering is namespaced per interface and the effective value
-// for an interface is max(conf.all, conf.<interface>), so a check that read
-// conf.all alone would report a host as unfiltered while every interface on it
-// was in fact filtered. The set of interfaces is a property of the host, so it
-// is enumerated rather than named.
-const rpFilterDir = "/proc/sys/net/ipv4/conf"
+// interfaceConfDir is the directory whose subdirectories are network
+// interfaces, plus the two pseudo-interfaces "all" and "default".
+//
+// Several parameters are namespaced per interface, and for those the value
+// under conf/all is not the effective value on its own — it is combined with
+// each interface's own setting, by a rule that differs per parameter. A check
+// that read conf/all alone would report a confidently wrong verdict on a large
+// fraction of real hosts, so the per-interface values are collected and the
+// combining is left to the check that knows which rule applies.
+//
+// The set of interfaces is a property of the host, so it is enumerated rather
+// than named.
+const interfaceConfDir = "/proc/sys/net/ipv4/conf"
+
+// perInterfaceLeaves are the parameters collected for every interface.
+var perInterfaceLeaves = []string{
+	"accept_source_route",
+	"rp_filter",
+}
 
 // configFiles are the sysctl configuration sources, in application order:
 // later files override earlier ones.
@@ -149,7 +168,7 @@ func (Collector) Collect(ctx context.Context, s system.System, fs *fact.Set) err
 	}
 
 	keys := append([]string(nil), probedKeys...)
-	keys = append(keys, enumerateRPFilter(s)...)
+	keys = append(keys, enumerateInterfaces(s)...)
 	sort.Strings(keys)
 
 	for _, key := range keys {
@@ -226,18 +245,25 @@ func readRunning(s system.System, key, procPath string) fact.SysctlRunning {
 	}
 }
 
-// enumerateRPFilter lists the per-interface reverse-path-filter parameters.
+// enumerateInterfaces lists the per-interface parameters, one key per
+// interface per leaf in perInterfaceLeaves.
 //
 // The directory is read rather than the interface names guessed, and the keys
 // are derived from the paths, because an interface may be named in a way that
 // does not survive a round trip through the dotted form — a VLAN device is
 // literally called "eth0.1".
-func enumerateRPFilter(s system.System) []string {
-	listing, err := s.ReadDir(rpFilterDir, 0)
+func enumerateInterfaces(s system.System) []string {
+	listing, err := s.ReadDir(interfaceConfDir, 0)
 	if err != nil {
-		// No interfaces enumerated. The check that reads them says it could
-		// not enumerate rather than reporting on an empty set, because an
-		// empty set would read as "no unfiltered interfaces".
+		// No interfaces enumerated. The checks that read them report that they
+		// could not enumerate rather than reporting on an empty set, because
+		// an empty set reads as "no unfiltered interfaces found".
+		return nil
+	}
+	if listing.Truncated {
+		// A partial interface list would let a check conclude that every
+		// interface is safe when it only saw some of them. Enumerating nothing
+		// at all is the honest failure.
 		return nil
 	}
 
@@ -246,14 +272,9 @@ func enumerateRPFilter(s system.System) []string {
 		if !e.IsDir || e.IsSymlink {
 			continue
 		}
-		out = append(out, keyForProcPath(path.Join(e.Path, "rp_filter")))
-	}
-	if listing.Truncated {
-		// A partial interface list would let a check conclude that every
-		// interface is filtered when it only saw some of them. Enumerating
-		// nothing at all is the honest failure: the check then reports that it
-		// could not enumerate.
-		return nil
+		for _, leaf := range perInterfaceLeaves {
+			out = append(out, keyForProcPath(path.Join(e.Path, leaf)))
+		}
 	}
 	return out
 }

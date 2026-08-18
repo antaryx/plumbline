@@ -176,16 +176,60 @@ func intCheck(
 		// Where the configuration disagrees with the running kernel, say so on
 		// the failing finding too. An operator whose file already holds the
 		// right value needs to know a reboot is the fix, not another edit.
-		if set, found := sc.EffectiveConfigured(key); found && !sc.ConfiguredConflict(key) {
-			if strings.TrimSpace(set.Value) != strings.TrimSpace(r.Value) {
-				out.Detail += fmt.Sprintf(
-					" %s is configured as %q at %s:%d, so the running kernel does not match its own configuration; see KERNEL-0007.",
-					key, set.Value, set.File, set.Line)
-				out.Evidence = append(out.Evidence, evidenceForSetting(sc, set))
-			}
-		}
+		note, ev := driftNote(sc, key, r.Value)
+		out.Detail += note
+		out.Evidence = append(out.Evidence, ev...)
 		return out
 	}
+}
+
+// driftNote returns the sentence and evidence to append to a failing finding
+// when the configuration sets this parameter to something other than what is
+// running.
+//
+// It is the reason KERNEL-0007 is not the module's only use of the configured
+// values. A finding that says only "ASLR is off" sends an operator to edit a
+// file that already says 2; a finding that says "and your configuration
+// already sets 2" sends them to reboot instead. Same verdict, different
+// afternoon.
+//
+// Nothing is returned when the parameter is set in more than one file with
+// different values: which one wins is undetermined (see
+// fact.Sysctl.ConfiguredConflict), and KERNEL-0007 reports that ambiguity on
+// its own rather than every check repeating a guess about it.
+func driftNote(sc fact.Sysctl, key, running string) (string, []finding.Evidence) {
+	set, found := sc.EffectiveConfigured(key)
+	if !found || sc.ConfiguredConflict(key) {
+		return "", nil
+	}
+	if strings.TrimSpace(set.Value) == strings.TrimSpace(running) {
+		return "", nil
+	}
+	return fmt.Sprintf(
+			" %s is configured as %q at %s:%d, so the running kernel does not match its own configuration; see KERNEL-0007.",
+			key, set.Value, set.File, set.Line),
+		[]finding.Evidence{evidenceForSetting(sc, set)}
+}
+
+// runningFor resolves one parameter to the outcome that describes it when it
+// has no usable value, or to the value itself when it does. It is the front
+// half of every check that is not built from intCheck.
+func runningFor(sc fact.Sysctl, key string) (fact.SysctlRunning, catalog.Outcome, bool) {
+	r, probed := sc.Run(key)
+	if !probed {
+		// The collector never asked for this key. That is a wiring bug in this
+		// repository, not an observation about the host.
+		return r, catalog.Outcome{
+			Result:        finding.Unknown,
+			UnknownReason: finding.ReasonInternal,
+			Subject:       key,
+			Detail:        fmt.Sprintf("%s was not collected; the KERNEL collector does not probe it.", key),
+		}, false
+	}
+	if out, done := unreadable(r, key); done {
+		return r, out, false
+	}
+	return r, catalog.Outcome{}, true
 }
 
 // joinKeys renders a sorted key list for a detail string.

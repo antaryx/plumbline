@@ -28,6 +28,14 @@ func buildCatalog() *catalog.Catalog {
 		kernelchecks.Check0006,
 		kernelchecks.Check0007,
 		kernelchecks.Check0008,
+		kernelchecks.Check0009,
+		kernelchecks.Check0010,
+		kernelchecks.Check0011,
+		kernelchecks.Check0012,
+		kernelchecks.Check0013,
+		kernelchecks.Check0014,
+		kernelchecks.Check0015,
+		kernelchecks.Check0016,
 		sshdchecks.Check0002,
 	)
 }

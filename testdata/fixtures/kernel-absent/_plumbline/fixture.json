@@ -1,4 +1,8 @@
 {
-  "description": "A kernel built without the Yama LSM and without BPF: the parameters do not exist, which is NOT_APPLICABLE and not a failure",
-  "missing": ["/proc/sys/kernel/unprivileged_bpf_disabled"]
+  "description": "An older kernel: no Yama LSM, no BPF, and none of the fs.protected_{fifos,regular} parameters that arrived in Linux 4.19",
+  "missing": [
+    "/proc/sys/kernel/unprivileged_bpf_disabled",
+    "/proc/sys/fs/protected_fifos",
+    "/proc/sys/fs/protected_regular"
+  ]
 }
