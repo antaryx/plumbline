@@ -1,0 +1,1 @@
+{ "description": "Group 0 is not confined to root, in all three of the ways USERS-0007 tests: root's own primary group is 100, the ordinary account eve has primary group 0, and the root group lists mallory as a supplementary member. The system account operator also has primary group 0, which is the Red Hat convention and must NOT be reported." }

@@ -20,15 +20,32 @@ explanation in this file is a defect.
   evidence store, with no flag to re-enable them, and `users.shadow` records
   only whether a field is empty or locked and which crypt scheme it uses
   (ADR-0015)
+- USERS-0009 (password maximum age) ships at **LOW** severity and names the
+  framework conflict in its own finding. NIST SP 800-63B advises against forced
+  rotation; CIS requires ≤365 days and the DISA STIGs require ≤60. Plumbline
+  reports against the CIS threshold and states the disagreement rather than
+  resolving it, so an organisation following NIST suppresses the check with a
+  recorded reason instead of inheriting this project's opinion silently
 - `--redact` is documented precisely in `CLI-SPEC.md`: it removes the hostname,
   it does not anonymise account names, and it never was what kept hashes out of
   a bundle
 
 ### Added
-- **USERS module (WP-17), first batch of 6 checks.** Catalog version 4. Root
-  uid uniqueness (USERS-0001), system-account shells (0002), empty passwords
-  (0003), password hash algorithms (0004), duplicate uids and names (0005),
-  and legacy NIS import entries (0006)
+- **USERS module (WP-17), complete at 10 checks.** Catalog version 4 introduced
+  the module; 5 completes it.
+  - Accounts: root uid uniqueness (USERS-0001), system-account shells (0002),
+    empty passwords (0003), password hash algorithms (0004), duplicate uids and
+    names (0005), legacy NIS import entries (0006)
+  - Groups: group 0 confined to root (0007), duplicate gids and group names
+    (0008)
+  - Password aging: bounded maximum age (0009), minimum age set (0010)
+- `users.shadow` records the minimum and maximum age fields as **pointers**. An
+  empty field is not a zero: an empty maximum means the password never expires,
+  while a maximum of 0 would mean it expires daily, and a parser conflating them
+  would report the most permissive setting in the file as the strictest
+- `users.group` records NIS compatibility lines, so a negative assertion over
+  the group database is held to the same completeness standard as one over
+  `/etc/passwd`
 - `users.passwd`, `users.shadow` and `users.group` facts — three facts rather
   than one, because an unprivileged scan can read two of the three files and a
   single fact would let the unreadable one erase them

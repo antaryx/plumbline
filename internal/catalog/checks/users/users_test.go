@@ -24,12 +24,18 @@ var all = []catalog.Check{
 	checks.Check0004,
 	checks.Check0005,
 	checks.Check0006,
+	checks.Check0007,
+	checks.Check0008,
+	checks.Check0009,
+	checks.Check0010,
 }
 
 // needsShadow are the checks that cannot answer without /etc/shadow. They are
 // listed rather than derived so that adding a shadow-dependent check without
 // thinking about the unprivileged path fails a test.
-var needsShadow = []catalog.Check{checks.Check0003, checks.Check0004}
+var needsShadow = []catalog.Check{
+	checks.Check0003, checks.Check0004, checks.Check0009, checks.Check0010,
+}
 
 func collectFixture(t *testing.T, name string) *fact.Set {
 	t.Helper()
@@ -118,7 +124,7 @@ func run(t *testing.T, check catalog.Check, cases []tc) {
 
 // TestUnprivilegedScanDegradesPerCheck is what WP-17 exists to get right. An
 // unprivileged scan can read /etc/passwd and /etc/group and cannot read
-// /etc/shadow. The two checks that need shadow must say so; the four that do
+// /etc/shadow. The four checks that need shadow must say so; the six that do
 // not must produce real verdicts.
 //
 // The failure this guards against is a collector that gives up as a unit: an
@@ -178,6 +184,7 @@ func TestUnprivilegedScanDegradesPerCheck(t *testing.T) {
 	// failing as a unit would destroy.
 	for _, check := range []catalog.Check{
 		checks.Check0001, checks.Check0002, checks.Check0005, checks.Check0006,
+		checks.Check0007, checks.Check0008,
 	} {
 		got := evalFixture(t, check, "users-unprivileged")
 		if got.Result == finding.Unknown {
@@ -391,6 +398,222 @@ func TestUsers0006NISEntries(t *testing.T) {
 	})
 }
 
+func TestUsers0007GroupZero(t *testing.T) {
+	run(t, checks.Check0007, []tc{
+		{fixture: "users-clean", result: finding.Pass, detailContains: "root holds primary group 0"},
+		{fixture: "users-gid0", result: finding.Fail, severity: finding.High, detailContains: "group 0 is not confined to root"},
+		{fixture: "users-unprivileged", result: finding.Pass, detailContains: "lists no supplementary members"},
+		{
+			// /etc/group carries the same "+" syntax as /etc/passwd, and it
+			// makes the same negative assertion unsupportable.
+			fixture: "users-nis", result: finding.Unknown,
+			reason: finding.ReasonAmbiguousState, detailContains: "imports groups from a directory service",
+		},
+		{
+			fixture: "users-malformed", result: finding.Unknown,
+			reason: finding.ReasonParse, detailContains: "could not be parsed",
+		},
+	})
+}
+
+// TestSystemAccountsInGroupZeroAreNotFailed pins the judgement that separates
+// this check from the naive form of the rule. Red Hat-family distributions ship
+// operator, halt, shutdown and sync with primary group 0; failing them would
+// put four unactionable findings on every stock RHEL host, and a module that
+// does that stops being read.
+func TestSystemAccountsInGroupZeroAreNotFailed(t *testing.T) {
+	got := evalFixture(t, checks.Check0007, "users-clean")
+	if got.Result != finding.Pass {
+		t.Fatalf("result = %s, want PASS: operator is a system account and its group is the distribution convention\n detail: %s",
+			got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "operator") {
+		t.Errorf("the system account in group 0 was not reported at all; a silent exemption is not an exemption a reader can audit: %s", got.Detail)
+	}
+	if !strings.Contains(got.Detail, "convention") {
+		t.Errorf("the detail does not explain why the system account is exempt: %s", got.Detail)
+	}
+
+	// And the same fixture's ordinary account is not excused by the exemption.
+	got = evalFixture(t, checks.Check0007, "users-gid0")
+	if !strings.Contains(got.Subject, "eve") {
+		t.Errorf("the ordinary account with primary group 0 was not reported: %s", got.Subject)
+	}
+	if strings.Contains(got.Subject, "operator") {
+		t.Errorf("the system account was reported as a violation: %s", got.Subject)
+	}
+}
+
+// TestGroupZeroReportsAllThreeConditions: the check makes three separate
+// propositions and a fixture that violates all three must see all three, or a
+// host would fix the one it was told about and stay exposed by the others.
+func TestGroupZeroReportsAllThreeConditions(t *testing.T) {
+	got := evalFixture(t, checks.Check0007, "users-gid0")
+	if got.Result != finding.Fail {
+		t.Fatalf("result = %s, want FAIL", got.Result)
+	}
+	for _, want := range []string{
+		"root's primary group is 100", // root is not in its own group
+		"eve",                         // an ordinary account holds group 0
+		"mallory",                     // a supplementary member of group 0
+	} {
+		if !strings.Contains(got.Detail, want) {
+			t.Errorf("detail does not report %q: %s", want, got.Detail)
+		}
+	}
+}
+
+func TestUsers0008GroupDuplicates(t *testing.T) {
+	run(t, checks.Check0008, []tc{
+		{fixture: "users-clean", result: finding.Pass, detailContains: "distinct gid"},
+		{fixture: "users-duplicates", result: finding.Fail, detailContains: "gid 50 is shared"},
+		{fixture: "users-unprivileged", result: finding.Pass, detailContains: "distinct gid"},
+		{
+			fixture: "users-nis", result: finding.Unknown,
+			reason: finding.ReasonAmbiguousState, detailContains: "imports groups from a directory service",
+		},
+		{
+			fixture: "users-malformed", result: finding.Unknown,
+			reason: finding.ReasonParse, detailContains: "could not be parsed",
+		},
+	})
+}
+
+// TestDuplicateGroupNameIsReportedAsUnreachable mirrors the passwd case: the
+// second entry for a name is not redundant, it is silently not in force, and
+// 'getent group' will report the first entry's members back to an
+// administrator who just edited the second.
+func TestDuplicateGroupNameIsReportedAsUnreachable(t *testing.T) {
+	got := evalFixture(t, checks.Check0008, "users-duplicates")
+	if !strings.Contains(got.Detail, `"dev"`) {
+		t.Errorf("the duplicated group name was not reported: %s", got.Detail)
+	}
+	if !strings.Contains(got.Detail, "unreachable") {
+		t.Errorf("the detail does not explain that the later entry is unreachable: %s", got.Detail)
+	}
+}
+
+func TestUsers0009MaximumAge(t *testing.T) {
+	run(t, checks.Check0009, []tc{
+		{fixture: "users-clean", result: finding.Pass, severity: finding.Low, detailContains: "365 days or fewer"},
+		{fixture: "users-aging", result: finding.Fail, severity: finding.Low, detailContains: "no bounded password lifetime"},
+		{
+			// Every account is locked, so no password exists that could expire.
+			fixture: "users-locked-only", result: finding.NotApplicable,
+			detailContains: "no password lifetime to bound",
+		},
+		{
+			fixture: "users-unprivileged", result: finding.Unknown,
+			reason: finding.ReasonPermission, detailContains: "users.shadow unavailable",
+		},
+		{
+			fixture: "users-malformed", result: finding.Unknown,
+			reason: finding.ReasonParse, detailContains: "could not be read",
+		},
+	})
+}
+
+// TestMaximumAgeNamesTheFrameworkConflict. The premise of this check is
+// contested — NIST SP 800-63B advises against forced rotation while CIS and
+// the DISA STIGs require it — and a finding that stated the CIS threshold as
+// though it were settled would be telling the reader something untrue about
+// the state of the guidance.
+func TestMaximumAgeNamesTheFrameworkConflict(t *testing.T) {
+	for _, fixture := range []string{"users-clean", "users-aging"} {
+		got := evalFixture(t, checks.Check0009, fixture)
+		if !strings.Contains(got.Detail, "NIST") {
+			t.Errorf("%s: the detail does not mention the framework that disagrees with this check: %s",
+				fixture, got.Detail)
+		}
+	}
+	if checks.Check0009.BaseSeverity != finding.Low {
+		t.Errorf("base severity = %s, want LOW: a check whose premise is contested should not be shouting",
+			checks.Check0009.BaseSeverity)
+	}
+}
+
+// TestLockedAccountsDoNotDominateTheAgingChecks pins the Authenticates() gate.
+// Every distribution ships locked system accounts carrying shadow-utils'
+// 99999 default; reporting them would bury the two accounts that matter.
+func TestLockedAccountsDoNotDominateTheAgingChecks(t *testing.T) {
+	for _, check := range []catalog.Check{checks.Check0009, checks.Check0010} {
+		got := evalFixture(t, check, "users-aging")
+		if got.Result != finding.Fail {
+			t.Fatalf("%s: result = %s, want FAIL", check.ID, got.Result)
+		}
+		for _, locked := range []string{"daemon", "nobody"} {
+			if strings.Contains(got.Subject, locked) {
+				t.Errorf("%s reported the locked account %s, whose password cannot expire because no password can authenticate it: %s",
+					check.ID, locked, got.Subject)
+			}
+		}
+	}
+}
+
+// TestEmptyMaximumAgeIsNotZero is the pointer decision made visible. alice's
+// aging fields are empty, which means "no maximum"; a parser that read them as
+// 0 would report the most permissive setting in the file as the strictest one
+// available and this check would return PASS for her.
+func TestEmptyMaximumAgeIsNotZero(t *testing.T) {
+	got := evalFixture(t, checks.Check0009, "users-aging")
+	if !strings.Contains(got.Subject, "alice") {
+		t.Fatalf("the account with empty aging fields was not reported: %s", got.Subject)
+	}
+	if !strings.Contains(got.Detail, "never expires") {
+		t.Errorf("the detail does not say what an empty maximum age means: %s", got.Detail)
+	}
+}
+
+func TestUsers0010MinimumAge(t *testing.T) {
+	run(t, checks.Check0010, []tc{
+		{fixture: "users-clean", result: finding.Pass, detailContains: "at least one day"},
+		{
+			// bob's minimum exceeds his maximum, which escalates this fixture
+			// past the base severity.
+			fixture: "users-aging", result: finding.Fail, severity: finding.Medium,
+			detailContains: "locked out by construction",
+		},
+		{
+			fixture: "users-locked-only", result: finding.NotApplicable,
+			detailContains: "no password change interval to govern",
+		},
+		{
+			fixture: "users-unprivileged", result: finding.Unknown,
+			reason: finding.ReasonPermission, detailContains: "users.shadow unavailable",
+		},
+		{
+			fixture: "users-malformed", result: finding.Unknown,
+			reason: finding.ReasonParse, detailContains: "could not be read",
+		},
+	})
+}
+
+// TestMinimumGreaterThanMaximumEscalates. A missing minimum is a policy
+// preference that only matters where password history is enforced; a minimum
+// above the maximum locks the account out of changing its own expired
+// password, which is an availability failure and does not depend on the PAM
+// stack at all. The two must not carry the same weight.
+func TestMinimumGreaterThanMaximumEscalates(t *testing.T) {
+	got := evalFixture(t, checks.Check0010, "users-aging")
+	if got.Severity != finding.Medium {
+		t.Errorf("severity = %s, want MEDIUM when an account cannot change its expired password", got.Severity)
+	}
+	if got.BaseSeverity != finding.Low {
+		t.Errorf("base severity = %s, want LOW; the escalation is per-outcome", got.BaseSeverity)
+	}
+	if !strings.Contains(got.Detail, "bob") {
+		t.Errorf("the locked-out account was not named: %s", got.Detail)
+	}
+
+	// The missing-minimum accounts are still reported in the same finding;
+	// escalating must not swallow them.
+	for _, want := range []string{"root", "alice"} {
+		if !strings.Contains(got.Detail, want) {
+			t.Errorf("account %s has no minimum age and was not reported: %s", want, got.Detail)
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // module-wide invariants
 // ---------------------------------------------------------------------------
@@ -451,8 +674,12 @@ func TestCheckIdentityIsWellFormed(t *testing.T) {
 		if check.Remediation == nil {
 			t.Errorf("%s has no remediation", check.ID)
 		}
-		if check.SinceCatalog != 4 {
-			t.Errorf("%s declares SinceCatalog %d, want 4", check.ID, check.SinceCatalog)
+		// The module spans two catalog versions: 0001-0006 shipped at 4,
+		// 0007-0010 at 5. The floor stays asserted so a check cannot claim to
+		// predate the module it is in.
+		if check.SinceCatalog < 4 {
+			t.Errorf("%s declares SinceCatalog %d, which predates the USERS module",
+				check.ID, check.SinceCatalog)
 		}
 		if check.SinceCatalog > catalog.Version {
 			t.Errorf("%s declares SinceCatalog %d, ahead of catalog.Version %d",

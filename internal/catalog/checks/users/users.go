@@ -43,6 +43,11 @@ func shadowFact(fs *fact.Set) fact.Shadow {
 	return s
 }
 
+func groupFact(fs *fact.Set) fact.Group {
+	g, _, _ := fact.Get[fact.Group](fs, fact.GroupID)
+	return g
+}
+
 // incompleteness describes why /etc/passwd may not be the whole account list.
 type incompleteness struct {
 	compat    []fact.CompatEntry
@@ -97,6 +102,13 @@ func incompleteView(p fact.Passwd) incompleteness {
 // looked at the accounts we could see", which is exactly the false assurance
 // this project exists to prevent.
 func unknownIfIncomplete(p fact.Passwd, pass catalog.Outcome) catalog.Outcome {
+	// Only a PASS is at risk. A FAIL was drawn from an entry we read, and
+	// reading more of the file cannot unmake it; anything already UNKNOWN has
+	// a reason of its own that this one must not overwrite. The guard is what
+	// makes these helpers safe to nest, which USERS-0007 relies on.
+	if pass.Result != finding.Pass {
+		return pass
+	}
 	inc := incompleteView(p)
 	if !inc.any() {
 		return pass
@@ -117,6 +129,9 @@ func shadowIncomplete(s fact.Shadow) bool { return len(s.Malformed) > 0 }
 
 // unknownIfShadowIncomplete is unknownIfIncomplete for the shadow database.
 func unknownIfShadowIncomplete(p fact.Passwd, s fact.Shadow, pass catalog.Outcome) catalog.Outcome {
+	if pass.Result != finding.Pass {
+		return pass
+	}
 	if shadowIncomplete(s) {
 		return catalog.Outcome{
 			Result:        finding.Unknown,
@@ -129,6 +144,69 @@ func unknownIfShadowIncomplete(p fact.Passwd, s fact.Shadow, pass catalog.Outcom
 		}
 	}
 	return unknownIfIncomplete(p, pass)
+}
+
+// unknownIfGroupIncomplete is unknownIfIncomplete for the group database.
+//
+// It exists separately rather than as a second argument to unknownIfIncomplete
+// because the two files fail independently: a check over /etc/group alone
+// (USERS-0008) has no passwd fact to consult, and a check over both
+// (USERS-0007) needs each file's incompleteness described in its own terms —
+// "the groups it imports are not in this file" is a different sentence from
+// "the accounts it imports are not in this file", and an operator reading the
+// finding has to know which file to go and look at.
+func unknownIfGroupIncomplete(g fact.Group, pass catalog.Outcome) catalog.Outcome {
+	if pass.Result != finding.Pass {
+		return pass
+	}
+	if len(g.CompatEntries) == 0 && len(g.Malformed) == 0 {
+		return pass
+	}
+
+	var (
+		parts    []string
+		evidence []finding.Evidence
+		reason   = finding.ReasonAmbiguousState
+	)
+	if len(g.CompatEntries) > 0 {
+		specs := make([]string, 0, len(g.CompatEntries))
+		for _, c := range g.CompatEntries {
+			specs = append(specs, fmt.Sprintf("%q at line %d", c.Spec, c.Line))
+			evidence = append(evidence, finding.NewEvidence(g.Path, c.Line,
+				c.Spec+"  (directory-service import; the groups it adds are not in this file)", g.Digest))
+		}
+		parts = append(parts, fmt.Sprintf(
+			"%s imports groups from a directory service (%s), so the groups it governs are not in this file",
+			g.Path, strings.Join(specs, ", ")))
+	}
+	if len(g.Malformed) > 0 {
+		// A line we could not parse is a stronger statement about this file
+		// than an import directive is, and it maps to a different reason code:
+		// the source was unparseable rather than merely partial.
+		reason = finding.ReasonParse
+		parts = append(parts, fmt.Sprintf(
+			"%d line(s) of %s could not be parsed (line %s), and a line we could not read could have held the group in question",
+			len(g.Malformed), g.Path, joinInts(g.Malformed)))
+		for _, line := range g.Malformed {
+			evidence = append(evidence, finding.NewEvidence(g.Path, line, "unparseable line", g.Digest))
+		}
+	}
+
+	return catalog.Outcome{
+		Result:        finding.Unknown,
+		UnknownReason: reason,
+		Subject:       pass.Subject,
+		Detail: fmt.Sprintf(
+			"No violation was found among the groups defined locally, but %s. The result therefore cannot be confirmed for every group on this host.",
+			strings.Join(parts, "; ")),
+		Evidence: evidence,
+	}
+}
+
+// groupEvidence cites one group's line in /etc/group.
+func groupEvidence(g fact.Group, e fact.GroupEntry) finding.Evidence {
+	return finding.NewEvidence(g.Path, e.Line,
+		fmt.Sprintf("%s:x:%d:%s", e.Name, e.GID, strings.Join(e.Members, ",")), g.Digest)
 }
 
 // passwdEvidence cites one account's line in /etc/passwd.
@@ -217,6 +295,43 @@ const SystemUIDMax = 999
 // isSystemAccount reports whether uid falls in the system range, excluding
 // root, which USERS-0001 governs.
 func isSystemAccount(uid uint32) bool { return uid > 0 && uid <= SystemUIDMax }
+
+// MaxPasswordAgeDays is the longest password lifetime USERS-0009 accepts.
+//
+// 365 is CIS's number. It is not the only defensible one and it is not the
+// strictest in circulation — DISA's STIG says 60 — but it is the threshold at
+// which the setting stops being a policy and becomes an absence: shadow-utils
+// writes 99999 by default, which is 273 years and means "never". See
+// docs/checks/USERS-0009.md for why this check ships at LOW severity given
+// that NIST SP 800-63B argues against forced rotation altogether.
+const MaxPasswordAgeDays = 365
+
+// authenticating returns the accounts that can actually authenticate with a
+// password: not locked, not empty, and holding a stored hash.
+//
+// The aging checks read this rather than iterating every shadow entry because
+// an expiry policy on an account no password can satisfy governs nothing. Every
+// distribution ships a dozen locked system accounts with a max age of 99999,
+// and a check that reported them would produce a dozen unactionable findings
+// on every host — which is how a module teaches its reader to skip it.
+func authenticating(s fact.Shadow) []fact.ShadowEntry {
+	var out []fact.ShadowEntry
+	for _, e := range s.Entries {
+		if e.Authenticates() {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// agingValue renders a shadow aging field for a detail string, distinguishing
+// an empty field from a zero one because they are opposite settings.
+func agingValue(v *int) string {
+	if v == nil {
+		return "unset"
+	}
+	return fmt.Sprintf("%d", *v)
+}
 
 // joinInts renders a sorted line-number list for a detail string.
 func joinInts(in []int) string {

@@ -45,5 +45,9 @@ func buildCatalog() *catalog.Catalog {
 		userschecks.Check0004,
 		userschecks.Check0005,
 		userschecks.Check0006,
+		userschecks.Check0007,
+		userschecks.Check0008,
+		userschecks.Check0009,
+		userschecks.Check0010,
 	)
 }

@@ -168,6 +168,8 @@ users-nis                  directory imports → the list is not the whole list
 users-malformed            unparseable lines in both databases
 users-locked-only          no stored hash to assess → NOT_APPLICABLE
 users-unprivileged         /etc/shadow refused → UNKNOWN, the rest still answer
+users-gid0                 group 0 reached three different ways
+users-aging                password aging in four states, one of them empty
 ```
 
 Name the *scenario*, never the expected result. `sshd-pass` becomes a lie the
@@ -188,7 +190,26 @@ path every unprivileged run in production will take.
 `users-clean` deserves a note too: its non-root accounts are **locked**, not
 empty. A lock token refuses every password and an empty field accepts every
 password, so a fixture that used one where it meant the other would let a check
-pass for exactly the wrong reason.
+pass for exactly the wrong reason. It also carries `operator:x:11:0`, a system
+account in group 0 — the Red Hat convention — so that the *clean* host is what
+proves USERS-0007 does not fail a distribution default.
+
+`users-gid0` is deliberately a triple violation: root outside group 0, an
+ordinary account inside it, and a supplementary member listed on the group line.
+USERS-0007 makes three separate propositions, and three fixtures each proving
+one would not prove the check reports all three when all three are true — which
+is the case where an operator fixes what they were told about and stays exposed
+by the rest.
+
+`users-aging` carries the pointer distinction that `internal/fact` exists to
+preserve. `alice`'s minimum and maximum fields are **empty**, not zero: an empty
+maximum means the password never expires while a maximum of 0 would mean it
+expires daily. A fixture with `0` where it meant empty would let a parser that
+conflated the two look correct. `bob` holds minimum 30 against maximum 20, the
+state in which an account is required to change its password and forbidden from
+doing so; and `daemon` carries the same unbounded defaults as `root` while
+locked, which is what proves the aging checks gate on `Authenticates()` rather
+than iterating every line.
 
 ---
 

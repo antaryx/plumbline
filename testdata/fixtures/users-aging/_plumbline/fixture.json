@@ -1,0 +1,1 @@
+{ "description": "Password aging policy in four states: root keeps shadow-utils' defaults (min 0, max 99999), alice has both fields empty, bob has a minimum greater than his maximum and is locked out by construction, and the locked system account daemon carries the same unbounded defaults but must be ignored because no password can authenticate it." }

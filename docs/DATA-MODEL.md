@@ -135,7 +135,7 @@ gets produced.
 | `kernel.sysctl` | 1 | `collect/collectors/kernel` | `Running{}`, `Configured{}`, `Files[]`, `Digests{}`, `UnreadableFiles[]` |
 | `users.passwd` | 1 | `collect/collectors/users` | `Entries[]`, `CompatEntries[]`, `Malformed[]`, `Path`, `Digest` |
 | `users.shadow` | 1 | `collect/collectors/users` | `Entries[]`, `Malformed[]`, `Path` |
-| `users.group` | 1 | `collect/collectors/users` | `Entries[]`, `Malformed[]`, `Path`, `Digest` |
+| `users.group` | 1 | `collect/collectors/users` | `Entries[]`, `CompatEntries[]`, `Malformed[]`, `Path`, `Digest` |
 
 Every fact added later is listed here with its version history.
 
@@ -176,6 +176,25 @@ held the account a check claims is absent. Either one turns "no account has uid
 negative result and leave the positive one standing — the same asymmetry
 ADR-0014 records for the filesystem walk, arrived at independently because it
 is a property of negative assertions rather than of filesystems.
+
+`users.group` carries both fields for the same reason and they are not
+decorative: `/etc/group` accepts the same `+` syntax as `/etc/passwd`, and a
+check asserting that no gid is duplicated over a file that imports groups from
+a directory service is describing a list that is explicitly not the whole list.
+
+**`ShadowEntry.MinDays` and `MaxDays` are pointers, and the nil is
+load-bearing.** An empty aging field is not a zero. An empty maximum means "no
+maximum"; a maximum of 0 means "must be changed every day" — opposite ends of
+the range. A parser that read the empty field as 0 would report the most
+permissive setting in the file as the strictest, and USERS-0009 would return
+PASS for exactly the accounts it exists to find. A field that is present but
+not a number is also nil: it is not a valid aging value, and inventing one from
+it would be a fabricated policy.
+
+The four remaining shadow fields — last change, warn, inactive and expire — are
+parsed and discarded. A fact field is permanent output surface (CLAUDE.md §7),
+and adding one later as an optional field costs nothing, while carrying six on
+the chance that something reads them is six fields that travel in every bundle.
 
 #### `kernel.sysctl` — running and configured kernel parameters
 
