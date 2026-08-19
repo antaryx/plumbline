@@ -43,6 +43,17 @@ type Manifest struct {
 	Unreadable []string `json:"unreadable,omitempty"`
 	// Missing lists paths that must fail with ErrNotExist even if present.
 	Missing []string `json:"missing,omitempty"`
+	// Unstattable lists paths whose *metadata* must fail with ErrPermission.
+	//
+	// It is separate from Unreadable because the two are different situations
+	// on a real host and produce different verdicts. A file at mode 0640 that
+	// you do not own is unreadable but perfectly stat-able: `stat /etc/shadow`
+	// succeeds for any user. What defeats a stat is a *parent directory*
+	// without execute permission, and that is what this key simulates. Folding
+	// the two together would have made every unreadable-file fixture also
+	// claim its ownership was unknown, which is not what such a host looks
+	// like.
+	Unstattable []string `json:"unstattable,omitempty"`
 	// Modes overrides file modes, since git only preserves the execute bit.
 	// Keys are absolute simulated paths, values are octal strings ("0600").
 	Modes map[string]string `json:"modes,omitempty"`
@@ -72,6 +83,7 @@ type System struct {
 	euid     int
 	deny     map[string]bool
 	missing  map[string]bool
+	denyStat map[string]bool
 	modes    map[string]fs.FileMode
 	owners   map[string][2]uint32
 	inodes   map[string][2]uint64
@@ -91,14 +103,15 @@ func New(dir string) (*System, error) {
 	}
 
 	s := &System{
-		dir:     abs,
-		now:     time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-		euid:    0,
-		deny:    map[string]bool{},
-		missing: map[string]bool{},
-		modes:   map[string]fs.FileMode{},
-		owners:  map[string][2]uint32{},
-		inodes:  map[string][2]uint64{},
+		dir:      abs,
+		now:      time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		euid:     0,
+		deny:     map[string]bool{},
+		missing:  map[string]bool{},
+		denyStat: map[string]bool{},
+		modes:    map[string]fs.FileMode{},
+		owners:   map[string][2]uint32{},
+		inodes:   map[string][2]uint64{},
 	}
 
 	raw, err := os.ReadFile(filepath.Join(abs, filepath.FromSlash(ManifestPath)))
@@ -128,6 +141,9 @@ func New(dir string) (*System, error) {
 	}
 	for _, p := range s.manifest.Missing {
 		s.missing[path.Clean(p)] = true
+	}
+	for _, p := range s.manifest.Unstattable {
+		s.denyStat[path.Clean(p)] = true
 	}
 	for p, m := range s.manifest.Modes {
 		var mode uint32
@@ -183,6 +199,13 @@ func (s *System) Stat(p string) (system.FileInfo, error) {
 	clean, real, err := s.resolve(p)
 	if err != nil {
 		return system.FileInfo{}, err
+	}
+	// A parent directory that refuses traversal. Nothing about the path can be
+	// observed — not its mode, not its owner, not whether it exists at all —
+	// which is a materially different situation from a file we may stat and
+	// may not read.
+	if s.denyStat[clean] {
+		return system.FileInfo{}, system.ErrPermission
 	}
 	st, err := os.Lstat(real)
 	if err != nil {

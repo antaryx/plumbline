@@ -1,1 +1,21 @@
-{"description":"Host with an identity, a hardened sshd and a hardened kernel whose configuration matches what is running; used by the CLI tests for --redact, meta and the coverage gate"}
+{
+  "description": "Host with an identity, a hardened sshd, a hardened kernel whose configuration matches what is running, and a hardened cron; used by the CLI tests for --redact, meta and the coverage gate. Every check in the catalog answers PASS or NOT_APPLICABLE over this tree.",
+  "modes": {
+    "/etc/crontab": "0600",
+    "/etc/cron.allow": "0600",
+    "/etc/cron.d": "040700",
+    "/etc/cron.hourly": "040700",
+    "/etc/cron.daily": "040700",
+    "/etc/cron.weekly": "040700",
+    "/etc/cron.monthly": "040700"
+  },
+  "owners": {
+    "/etc/crontab": "0:0",
+    "/etc/cron.allow": "0:0",
+    "/etc/cron.d": "0:0",
+    "/etc/cron.hourly": "0:0",
+    "/etc/cron.daily": "0:0",
+    "/etc/cron.weekly": "0:0",
+    "/etc/cron.monthly": "0:0"
+  }
+}

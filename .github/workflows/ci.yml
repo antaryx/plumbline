@@ -69,9 +69,14 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+      # Pinned rather than `latest`, and pinned to the last v1 release. The
+      # config in .golangci.yml is v1 format; golangci-lint v2 requires a
+      # `version: "2"` key and a restructured file, so `latest` would silently
+      # flip the linter to a major that cannot read the config — which is
+      # exactly how the G304 exclusion went missing once already.
       - uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.8
 
   build:
     name: build linux/${{ matrix.goarch }}
