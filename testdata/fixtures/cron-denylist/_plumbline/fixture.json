@@ -1,0 +1,15 @@
+{
+  "description": "Everything else is correct, but access is governed by a deny list: cron.allow is absent and cron.deny is present. That fails open — an account created tomorrow is permitted by omission — which is CRON-0003's finding and nothing else's.",
+  "modes": {
+    "/etc/crontab": "0600", "/etc/cron.deny": "0600",
+    "/etc/cron.d": "040700", "/etc/cron.hourly": "040700",
+    "/etc/cron.daily": "040700", "/etc/cron.weekly": "040700",
+    "/etc/cron.monthly": "040700"
+  },
+  "owners": {
+    "/etc/crontab": "0:0", "/etc/cron.deny": "0:0",
+    "/etc/cron.d": "0:0", "/etc/cron.hourly": "0:0",
+    "/etc/cron.daily": "0:0", "/etc/cron.weekly": "0:0",
+    "/etc/cron.monthly": "0:0"
+  }
+}

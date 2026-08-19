@@ -1,0 +1,1 @@
+{ "description": "No system cron at all: none of the eight paths exists. Every CRON check is NOT_APPLICABLE — a host with no cron has not satisfied \"the crontab is owned by root\", it has removed the subject of the sentence." }
