@@ -163,6 +163,8 @@ gets produced.
 | `logging.rsyslog` | 1 | `collect/collectors/logging` | `Installed`, `Files[]`, `Directives[]`, `Objects[]`, `Rules[]`, `UnresolvedIncludes[]`, `Digests{}` |
 | `logging.journald` | 1 | `collect/collectors/logging` | `Installed`, `Files[]`, `Settings[]`, `PersistentDirState`, `Digests{}` |
 | `services.units` | 1 | `collect/collectors/services` | `Dirs[]`, `Units[]`, `Links[]`, `Systemd` |
+| `network.firewall` | 1 | `collect/collectors/network` | `Sources[]` |
+| `auth.pam` | 1 | `collect/collectors/auth` | `Installed`, `DirState`, `Services[]`, `PwQuality`, `Faillock`, `Digests{}` |
 
 Every fact added later is listed here with its version history.
 
@@ -293,6 +295,79 @@ of the eight standard paths was observed **or refused**. A refusal counts as
 presence — we could not read it, but something is there — because treating it
 as absence would turn an unprivileged scan into a report that the host has no
 cron.
+
+#### `auth.pam` — how this host decides somebody is who they claim
+
+PAM is the only place on a Linux host where the authentication rules are
+actually written down, and it is a **graph** rather than a file. Three include
+directives with different scopes build it: `@include <file>` inlines a whole
+file, every management group at once, and exists only in `pam.d`; `<type>
+include <file>` pulls in that one type's lines; `<type> substack <file>` does
+the same and scopes any die/done jump. Confusing the first two either drops
+three quarters of a Debian host's rules or imports password rules into the auth
+stack.
+
+`Services[]` therefore carries each stack **fully resolved, in evaluation
+order**, with every rule keeping the `File` and `Line` it was actually written
+at — which is not the service file whenever an include brought it in. A finding
+has to send an operator to the file they must edit.
+
+`Unresolved[]` is the half that makes the fact honest. An include that could
+not be followed leaves the stack incomplete, and while it is non-empty **nothing
+may be concluded from a module's absence**. Every AUTH check that draws a
+conclusion from not finding a rule resolves to UNKNOWN instead. That is
+ADR-0014's asymmetry applied to a graph: an include we did not read may hold
+the rule that decides the verdict, but it cannot unmake one we already read.
+
+`ResolvedPath` records where the content came from when the service file is a
+symlink. Red Hat's `/etc/pam.d/system-auth` points at `system-auth-ac`, or into
+`/etc/authselect`, on every stock install — so this is the common case rather
+than an oddity, and the collector resolves it through `Readlink` because the
+seam's `ReadFile` refuses a symlink with `O_NOFOLLOW` (ADR-0017). Citing the
+link rather than the target would send an operator to edit a file that
+authselect overwrites.
+
+**Control is kept as raw text and not parsed into a decision table.** Simulating
+PAM means implementing the bracketed `[success=1 default=ignore]` jump
+semantics, and a stack simulator that is subtly wrong produces confident
+verdicts about which module runs. `PAMLine.Enforcing()` answers the one
+question the checks need — can this rule's failure deny the operation — and
+reports anything bracketed that it does not recognise as *not* enforcing, which
+is the direction that produces a finding a human reads rather than a PASS drawn
+from an expression nothing understood.
+
+`PwQuality` and `Faillock` are the `/etc/security` files that hold the other
+half of those modules' configuration. Both modules read their file first and let
+arguments on the PAM line override it, so neither source alone is the effective
+configuration — a check consulting one would be right on whichever kind of host
+it was written against and wrong on the other, silently.
+
+The fact carries no password hash, no user name and no authentication token:
+these files hold policy, not credentials.
+
+#### `network.firewall` — what filtering is configured, not what is loaded
+
+The fact records **derived properties only**. A firewall ruleset is a map of
+the network — internal ranges, which hosts reach which ports, where the
+management network is — and a bundle designed to travel would carry it wherever
+the bundle is filed. What is kept is the kind, the state, a statement count, the
+manager's on/off switch, and the single policy line a finding has to quote.
+Same reasoning as ADR-0015 and `cron.files`.
+
+`Statements` is what distinguishes a configured firewall from an installed
+package: Debian's `nftables` package writes `/etc/nftables.conf` whether or not
+anybody has put a rule in it, so `FirewallSource.Active()` requires more than
+zero — and, for a manager, requires that it is not switched off.
+
+`FirewallKind.Manager()` draws the distinction the conflict check rests on. ufw
+and firewalld **own** the ruleset and flush the table on start; an
+iptables-save file or `nftables.conf` **is** a ruleset, loaded verbatim by its
+own unit. A manager beside a saved ruleset is not redundancy — the manager
+discards what the ruleset installed, and the file keeps being maintained and
+stops meaning anything.
+
+The whole module reports what is **configured**. Whether the unit that loads it
+is enabled is `services.units`' half, and neither fact claims the other's.
 
 #### `services.units` — what systemd will start at boot
 

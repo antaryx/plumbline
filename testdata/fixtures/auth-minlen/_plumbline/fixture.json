@@ -1,0 +1,3 @@
+{
+  "description": "The quality module is present and enforcing and requires almost nothing: minlen 8, and four *positive* credit values. A positive credit is a discount toward minlen rather than a requirement, so 'dcredit = 1' has demanded no digit while reading exactly like a rule that does. AUTH-0002 fails on both counts; every other check passes."
+}

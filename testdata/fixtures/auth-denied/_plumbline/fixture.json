@@ -1,0 +1,4 @@
+{
+  "description": "An unprivileged scan of a host whose /etc/pam.d a parent directory refuses to traverse. Every authentication policy this host has is written there and nowhere else, so every AUTH check is UNKNOWN rather than reporting on what it could reach.",
+  "unstattable": ["/etc/pam.d"]
+}

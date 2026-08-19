@@ -1,0 +1,3 @@
+{
+  "description": "A minimal container image with no PAM at all: no /etc/pam.d. Whatever decides that a login succeeds here is a mechanism this module cannot read, so every AUTH check is NOT_APPLICABLE — PASS would be assurance about something never examined, on a host that may well have no password policy whatsoever."
+}

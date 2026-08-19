@@ -1,0 +1,4 @@
+{
+  "description": "An unprivileged scan that cannot read the one configuration file present. Every NETWORK check is UNKNOWN rather than reporting the host unfirewalled: the file we were refused could be the firewall, could be the second manager, and could hold the accept policy.",
+  "unreadable": ["/etc/nftables.conf"]
+}

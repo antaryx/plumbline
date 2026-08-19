@@ -241,6 +241,23 @@ cron-absent                no cron installed → NOT_APPLICABLE
 cron-denied                metadata refused → UNKNOWN
 cron-symlink               a redirection out of /etc
 
+auth-rhel                  the good case, Red Hat layout, stacks reached by symlink
+auth-debian                the same host in the common-* layout — verdicts must match
+auth-weak                  every AUTH check fails
+auth-optional              pwquality present, correct, and 'optional' — so inert
+auth-minlen                minlen 8 and four *positive* credits, which require nothing
+auth-unresolved            an @include naming a file that is not there → UNKNOWN
+auth-denied                /etc/pam.d refuses traversal → UNKNOWN
+auth-absent                no PAM at all → NOT_APPLICABLE
+
+network-nftables           default-deny nftables; the policy is on its own line
+network-ufw                the same host via ufw, whose policy lives in a second file
+network-accept             a deny list: default accept with a few blocks
+network-both               ufw and firewalld, each individually sound
+network-empty              Debian's stock comments-only nftables.conf
+network-none               no firewall configuration of any kind
+network-denied             the one file present is unreadable → UNKNOWN
+
 services-compliant         the good case; also the usr-merge and relative-link shapes
 services-cleartext         telnet and rsh enabled through socket activation
 services-masked            enabled AND masked — the mask wins
@@ -352,6 +369,46 @@ CRON-0002 turning every unhardened host into two HIGH findings.
 only way to reach the state where a path's owner and mode are unknowable. Every
 CRON check must return UNKNOWN over it rather than reporting on the paths it
 happened to reach.
+
+`auth-rhel` and `auth-debian` are one hardened host written twice, and the pair
+is the point. Fourteen-character minimum, faillock, history of five, no
+`nullok`, strong hashing — one keeps its rules in `system-auth` and
+`password-auth` reached through symlinks to authselect's generated files, the
+other in `common-*` pulled in with `@include`. A collector that understood one
+family would report "no password quality is enforced" on every host of the
+other, which is a wrong verdict produced entirely by packaging. A test asserts
+every check reaches the **same verdict** over both.
+
+`auth-rhel` is also the only fixture whose primary files are symlinks that must
+be *followed to be read*. The seam's `ReadFile` refuses a symlink with
+`O_NOFOLLOW`, so without explicit resolution the AUTH module would report
+UNKNOWN across the entire Red Hat family. It uses the manifest's `symlinks` key
+(§2.4) rather than real links, because the targets are absolute.
+
+`auth-debian` carries the bracketed control form —
+`password [success=1 default=ignore] pam_unix.so … yescrypt` — which a
+`strings.Fields` split reads as control `[success=1` and module
+`default=ignore]`. A naive parser then finds no `pam_unix.so` at all and
+reports UNKNOWN on a stock Debian host: a wrong answer that looks like caution.
+
+`auth-optional` is one line different from a working host. `pam_pwquality` is
+present, correctly placed and correctly parameterised, and marked `optional` —
+so PAM runs it, it decides the password is unacceptable, and the password is set
+anyway. It exists because that line reads to a human exactly like one that
+works.
+
+`network-empty` earns its place the way `cron-vendor` does: it holds Debian's
+stock `/etc/nftables.conf`, the file the package installs whether or not
+anybody has written a rule in it. Nothing but comments. It is what proves
+NETWORK-0001 counts statements rather than testing for the file's existence —
+treating presence as protection would report every host with that package
+installed as firewalled, by a dependency somebody else chose.
+
+`network-both` is deliberately a fixture where the *individual* configurations
+are both sound. ufw and firewalld are each enabled with a deny default, so
+NETWORK-0001 and 0002 pass and only 0003 fails. That is what makes the conflict
+hard to notice on a real host, and a fixture where one of them was also
+misconfigured would not have tested it.
 
 `services-compliant` carries two shapes a naive fixture would not have, and
 both are load-bearing. Its `/lib` is the **usr-merge symlink**, so

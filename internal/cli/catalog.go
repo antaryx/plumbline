@@ -2,9 +2,11 @@ package cli
 
 import (
 	"github.com/antaryx/plumbline/internal/catalog"
+	authchecks "github.com/antaryx/plumbline/internal/catalog/checks/auth"
 	cronchecks "github.com/antaryx/plumbline/internal/catalog/checks/cron"
 	kernelchecks "github.com/antaryx/plumbline/internal/catalog/checks/kernel"
 	loggingchecks "github.com/antaryx/plumbline/internal/catalog/checks/logging"
+	networkchecks "github.com/antaryx/plumbline/internal/catalog/checks/network"
 	serviceschecks "github.com/antaryx/plumbline/internal/catalog/checks/services"
 	sshdchecks "github.com/antaryx/plumbline/internal/catalog/checks/sshd"
 	userschecks "github.com/antaryx/plumbline/internal/catalog/checks/users"
@@ -12,9 +14,11 @@ import (
 	// Collectors register themselves at init. Importing them here, in the
 	// composition root, is what puts them in the default registry; nothing
 	// deeper in the tree reaches for a collector by name.
+	_ "github.com/antaryx/plumbline/internal/collect/collectors/auth"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/cron"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/kernel"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/logging"
+	_ "github.com/antaryx/plumbline/internal/collect/collectors/network"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/services"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/sshd"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/users"
@@ -28,6 +32,12 @@ import (
 // not run" should be answerable by reading one function.
 func buildCatalog() *catalog.Catalog {
 	return catalog.MustNew(
+		authchecks.Check0001,
+		authchecks.Check0002,
+		authchecks.Check0003,
+		authchecks.Check0004,
+		authchecks.Check0005,
+		authchecks.Check0006,
 		cronchecks.Check0001,
 		cronchecks.Check0002,
 		cronchecks.Check0003,
@@ -54,6 +64,9 @@ func buildCatalog() *catalog.Catalog {
 		loggingchecks.Check0003,
 		loggingchecks.Check0004,
 		loggingchecks.Check0005,
+		networkchecks.Check0001,
+		networkchecks.Check0002,
+		networkchecks.Check0003,
 		serviceschecks.Check0001,
 		serviceschecks.Check0002,
 		serviceschecks.Check0003,

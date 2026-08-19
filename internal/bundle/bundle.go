@@ -256,6 +256,26 @@ var registry = map[fact.ID]decoder{
 			return f, nil
 		},
 	},
+	fact.FirewallID: {
+		version: fact.Firewall{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Firewall
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.PAMID: {
+		version: fact.PAM{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.PAM
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
 	fact.ServicesID: {
 		version: fact.Services{}.FactVersion(),
 		decode: func(raw json.RawMessage) (fact.Fact, error) {

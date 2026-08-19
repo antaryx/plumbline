@@ -1,0 +1,3 @@
+{
+  "description": "The Ubuntu default done correctly: ufw enabled with DEFAULT_INPUT_POLICY=DROP. The policy lives in a second file from the one that holds the on/off switch, which is why the collector reads both into one record — a finding that cited two files for one verdict would be harder to act on than one that names the manager."
+}

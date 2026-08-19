@@ -1,0 +1,3 @@
+{
+  "description": "pam_pwquality is present, correctly placed, correctly parameterised — and 'optional'. PAM ignores an optional module's result entirely: it runs, decides the password is unacceptable, and the password is set anyway. The line reads to a human exactly like a working one, which is why AUTH-0001 tests the control and not merely the presence."
+}
