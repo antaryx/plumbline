@@ -160,6 +160,8 @@ gets produced.
 | `users.shadow` | 1 | `collect/collectors/users` | `Entries[]`, `Malformed[]`, `Path` |
 | `users.group` | 1 | `collect/collectors/users` | `Entries[]`, `CompatEntries[]`, `Malformed[]`, `Path`, `Digest` |
 | `cron.files` | 1 | `collect/collectors/cron` | `Paths[]`, `Installed` |
+| `logging.rsyslog` | 1 | `collect/collectors/logging` | `Installed`, `Files[]`, `Directives[]`, `Objects[]`, `Rules[]`, `UnresolvedIncludes[]`, `Digests{}` |
+| `logging.journald` | 1 | `collect/collectors/logging` | `Installed`, `Files[]`, `Settings[]`, `PersistentDirState`, `Digests{}` |
 
 Every fact added later is listed here with its version history.
 
@@ -219,6 +221,53 @@ The four remaining shadow fields — last change, warn, inactive and expire — 
 parsed and discarded. A fact field is permanent output surface (CLAUDE.md §7),
 and adding one later as an optional field costs nothing, while carrying six on
 the chance that something reads them is six fields that travel in every bundle.
+
+#### `logging.*` — two daemons, two facts, and rsyslog's two languages
+
+Separate facts because a host may run rsyslog, journald, both or neither, and a
+single fact would let one absent daemon erase what is known about the other.
+The same reasoning as the three account-database facts.
+
+**`logging.rsyslog` carries three statement lists rather than one, because
+rsyslog has three configuration languages and a stock host uses all of them in
+the same file:**
+
+| List | Language | Example |
+|---|---|---|
+| `Rules[]` | sysklogd legacy: selector, whitespace, action | `*.* @@logs.example.net:514` |
+| `Directives[]` | rsyslog `$Name value` | `$FileCreateMode 0640` |
+| `Objects[]` | RainerScript, rsyslog 6+ | `action(type="omfwd" target="…" protocol="tcp")` |
+
+The syntax a statement was written in is preserved into the fact rather than
+resolved away, because a finding has to quote the operator's file back in the
+language it is actually written in. Telling somebody to change
+`action(type="omfwd")` when their file says `*.* @@host` sends them looking for
+a line that does not exist, and at that point they stop trusting the tool.
+
+What checks read is the *normalised* view — `RemoteDestinations()` and
+`FileCreateModes()` — which merges both syntaxes and carries the provenance
+along. Normalising in the fact rather than in each check is deliberate: which
+language produced a destination is a property of rsyslog, not a policy
+question, and every check would otherwise repeat the same translation and get
+it subtly different.
+
+`FileCreateModes()` returns **every** occurrence rather than the last, because
+the legacy directive is positional: it governs the file actions written after
+it, so a permissive one applies to whatever follows regardless of a later line.
+
+**`logging.journald` precedence is last-wins, the reverse of `sshd.config`.**
+systemd reads `journald.conf` and then the drop-ins under `journald.conf.d/` in
+lexical order, each overriding the last, so `Effective()` returns the final
+match. A check that took the first would report the value the operator's
+drop-in was written to replace. `Overridden()` exists so a finding can cite the
+occurrences that were replaced and explain why the value in the main file is
+not the value in force.
+
+`PersistentDirState` records whether `/var/log/journal` exists. It is there
+because `Storage=auto` is journald's default and its effect is a property of
+the filesystem rather than of the configuration — without that one stat,
+"Storage is not configured" would be UNKNOWN on the majority of hosts, which is
+honest and useless.
 
 #### `cron.files` — who may write the schedule
 

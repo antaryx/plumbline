@@ -1,0 +1,1 @@
+{ "description": "Every LOGGING check fails. A world-readable file mode, forwarding over UDP, a volatile journal and forwarding to syslog explicitly disabled. /var/log/journal is deliberately absent so Storage=volatile is not the only thing making the journal transient." }

@@ -1,5 +1,5 @@
 {
-  "description": "A realistic checkout baseline, not a clean host. sshd, the kernel and the account databases are hardened and pass; the CRON ownership checks fail permanently and by construction, because these files are read through the LIVE seam and carry the ownership of whoever checked the repository out — git cannot record ownership, and the modes/owners overrides below only apply under the fake. Used by the CLI tests for --redact, meta, and the coverage and threshold gates. \"Clean\" for this fixture means the scan exits 0, not that it produces no findings.",
+  "description": "A realistic checkout baseline, not a clean host. sshd, the kernel, the account databases and both logging daemons are hardened and pass; the CRON ownership checks fail permanently and by construction, because these files are read through the LIVE seam and carry the ownership of whoever checked the repository out — git cannot record ownership, and the modes/owners overrides below only apply under the fake. Used by the CLI tests for --redact, meta, and the coverage and threshold gates. \"Clean\" for this fixture means the scan exits 0, not that it produces no findings.",
   "modes": {
     "/etc/crontab": "0600",
     "/etc/cron.allow": "0600",

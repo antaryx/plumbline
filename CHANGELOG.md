@@ -47,6 +47,30 @@ explanation in this file is a defect.
   reachable and the finding said otherwise.
 
 ### Added
+- **LOGGING module (WP-20), 5 checks.** Catalog version 8. rsyslog log file
+  permissions (LOGGING-0001), remote forwarding configured (0002), persistent
+  journal storage (0003), journald-to-rsyslog forwarding (0004), and a reliable
+  forwarding transport (0005).
+- `logging.rsyslog` and `logging.journald` facts. **Both of rsyslog's
+  configuration languages are parsed**: the sysklogd legacy format
+  (`*.* @@host`), rsyslog's own `$Name value` directives, and RainerScript
+  objects (`action(type="omfwd" ...)`), including statements that span several
+  lines. All three appear in the same file on a stock Debian or RHEL host, and
+  a parser reading only one would report a correctly-forwarding host as not
+  forwarding. Which language a statement was written in is preserved into the
+  fact, because a finding has to quote the operator's file back in the language
+  it is actually written in.
+- The journald fact records whether `/var/log/journal` exists. `Storage=auto`
+  is the default and its effect is a property of the filesystem rather than of
+  the configuration; without that one stat, "Storage is not configured" would
+  be UNKNOWN on the majority of hosts.
+- **journald precedence is last-wins**, the reverse of `sshd_config`: systemd
+  drop-ins override the main file. `Journald.Overridden()` lets a finding cite
+  the replaced occurrences so a reader who edited the main file can see why
+  their value is not in force.
+- `testdata/fixtures/cli-host` gains a compliant logging configuration. Unlike
+  the CRON checks, these read file *contents* rather than ownership, so the
+  baseline can exercise them rather than skipping the module.
 - **CRON module (WP-19), 5 checks.** Catalog version 7. `/etc/crontab`
   ownership and write permissions (CRON-0001), the five drop-in directories
   (0002), access restricted by an allow list (0003), the access-control files'

@@ -186,6 +186,16 @@ cron-absent                no cron installed → NOT_APPLICABLE
 cron-denied                metadata refused → UNKNOWN
 cron-symlink               a redirection out of /etc
 
+logging-compliant          both daemons correct, RainerScript throughout
+logging-legacy             the same host in legacy syntax — verdicts must match
+logging-weak               every logging check fails
+logging-nodefault          stock host; every verdict comes from a built-in default
+logging-rsyslog-absent     journald only → the rsyslog checks step aside
+logging-absent             neither daemon → NOT_APPLICABLE
+logging-unresolved-include include matched nothing → UNKNOWN
+logging-unreadable         both configurations refused → UNKNOWN
+logging-dropin-override    a systemd drop-in overrides the main file
+
 kernel-hardened            the good case; running and configured agree
 kernel-weak                every parameter at its insecure value
 kernel-partial             the middling values: neither best nor worst
@@ -249,6 +259,20 @@ load, which would make it a fixture for a state that cannot exist.
 then unknowable from configuration alone — except that a `+` or `^` which *adds*
 a broken algorithm enables it whatever the base list holds. The fixture uses one
 of each form so that the FAIL and the two UNKNOWNs are all exercised.
+
+`logging-compliant` and `logging-legacy` are one fixture written twice, and the
+pair is the point. They describe the same host — the same file mode, the same
+TCP destination, the same journald settings — one entirely in RainerScript and
+one entirely in the sysklogd and `$`-directive syntaxes rsyslog inherited. Both
+appear in the wild, frequently in the same file, and a parser that understood
+only one would report a correctly-forwarding host as not forwarding. A test
+asserts every check reaches the *same verdict* over both, which is a stronger
+statement than either fixture could make alone.
+
+`logging-dropin-override` exists because systemd's precedence is the reverse of
+`sshd_config`'s: the last occurrence wins, so a drop-in overrides the main file.
+The fixture sets `Storage=persistent` in `journald.conf` and `volatile` in a
+drop-in, and the check must report volatile and cite the overridden line.
 
 `cron-vendor` earns its place the way `kernel-partial` does. It holds the modes
 Debian, Ubuntu, RHEL and Fedora all ship — `/etc/crontab` at 0644, the drop-in

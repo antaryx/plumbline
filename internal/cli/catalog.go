@@ -4,6 +4,7 @@ import (
 	"github.com/antaryx/plumbline/internal/catalog"
 	cronchecks "github.com/antaryx/plumbline/internal/catalog/checks/cron"
 	kernelchecks "github.com/antaryx/plumbline/internal/catalog/checks/kernel"
+	loggingchecks "github.com/antaryx/plumbline/internal/catalog/checks/logging"
 	sshdchecks "github.com/antaryx/plumbline/internal/catalog/checks/sshd"
 	userschecks "github.com/antaryx/plumbline/internal/catalog/checks/users"
 
@@ -12,6 +13,7 @@ import (
 	// deeper in the tree reaches for a collector by name.
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/cron"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/kernel"
+	_ "github.com/antaryx/plumbline/internal/collect/collectors/logging"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/sshd"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/users"
 )
@@ -45,6 +47,11 @@ func buildCatalog() *catalog.Catalog {
 		kernelchecks.Check0014,
 		kernelchecks.Check0015,
 		kernelchecks.Check0016,
+		loggingchecks.Check0001,
+		loggingchecks.Check0002,
+		loggingchecks.Check0003,
+		loggingchecks.Check0004,
+		loggingchecks.Check0005,
 		sshdchecks.Check0002,
 		sshdchecks.Check0003,
 		sshdchecks.Check0004,

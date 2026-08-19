@@ -1,0 +1,5 @@
+{
+  "description": "An unprivileged run where both configurations are refused. Every check resolves to UNKNOWN(insufficient_privileges) through the runner's required-fact gate rather than reporting on a file it could not read.",
+  "euid": 1000,
+  "unreadable": ["/etc/rsyslog.conf", "/etc/systemd/journald.conf"]
+}

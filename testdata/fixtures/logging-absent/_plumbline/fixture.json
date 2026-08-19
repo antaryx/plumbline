@@ -1,0 +1,1 @@
+{ "description": "Neither logging daemon is present — a container base image. Every LOGGING check is NOT_APPLICABLE." }

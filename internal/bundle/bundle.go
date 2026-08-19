@@ -236,6 +236,26 @@ type decoder struct {
 }
 
 var registry = map[fact.ID]decoder{
+	fact.RsyslogID: {
+		version: fact.Rsyslog{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Rsyslog
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.JournaldID: {
+		version: fact.Journald{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Journald
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
 	fact.CronID: {
 		version: fact.Cron{}.FactVersion(),
 		decode: func(raw json.RawMessage) (fact.Fact, error) {
