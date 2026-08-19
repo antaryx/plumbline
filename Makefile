@@ -75,15 +75,26 @@ check-system-seam:
 ## A check may not import system, context, time, net or math/rand. Purity is
 ## what makes findings deterministic.
 ##
-## The net pattern matches the import forms -- "net" and "net/..." -- rather
-## than any string starting with net. A sysctl key is called
-## net.ipv4.conf.all.rp_filter and a tag is called "network"; matching those
-## made the gate report a violation that was not one, and a gate that cries
-## wolf is a gate someone eventually silences.
+## The pattern matches an import *line* rather than any occurrence of the
+## quoted path, because a check's own data is full of these words. A sysctl key
+## is called net.ipv4.conf.all.rp_filter, a tag is called "network", and
+## SERVICES-0003 is about clock synchronisation so its tags include "time".
+## Matching those reports violations that are not ones, and a gate that cries
+## wolf is a gate somebody eventually silences -- which is a far worse outcome
+## than the one it was guarding against.
+##
+## What makes the line form unambiguous is that an import ends after the quoted
+## path, while a slice element ends with a comma that gofmt will not remove. An
+## optional leading identifier covers the aliased, blank and dot forms
+## (t "time", _ "net/http", . "context"), and the optional 'import' keyword
+## covers the single-line declaration.
+##
+## internal/system is still matched anywhere in the line: it is a path that
+## appears in no check's data, and a mention of it in a check is worth reading
+## whether or not it is an import.
+IMPURE := ^[[:space:]]*(import[[:space:]]+)?([A-Za-z0-9_.]+[[:space:]]+)?"(context|time|net|net/[^"]*|math/rand)"[[:space:]]*(//.*)?$$
 check-check-purity:
-	@bad=$$(grep -rn --include='*.go' \
-		-e '"context"' -e '"time"' -e '"net"' -e '"net/' -e '"math/rand"' \
-		-e 'internal/system' \
+	@bad=$$(grep -rEn --include='*.go' -e '$(IMPURE)' -e 'internal/system' \
 		internal/catalog/checks/ 2>/dev/null | grep -v '_test\.go:' || true); \
 	if [ -n "$$bad" ]; then \
 		echo "ERROR: impure import in a check:"; echo "$$bad"; exit 1; \

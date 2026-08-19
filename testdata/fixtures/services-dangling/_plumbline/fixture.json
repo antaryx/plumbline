@@ -1,0 +1,8 @@
+{
+  "description": "auditd was removed without being disabled first, so its enablement symlink survives and points at a unit file that is gone. systemctl still reports it enabled; systemd logs 'Unit not found' once at boot and starts nothing. SERVICES-0004 fails.",
+  "symlinks": {
+    "/etc/systemd/system/multi-user.target.wants/sshd.service": "/usr/lib/systemd/system/sshd.service",
+    "/etc/systemd/system/multi-user.target.wants/chronyd.service": "/usr/lib/systemd/system/chronyd.service",
+    "/etc/systemd/system/multi-user.target.wants/auditd.service": "/usr/lib/systemd/system/auditd.service"
+  }
+}

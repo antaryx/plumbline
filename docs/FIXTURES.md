@@ -47,6 +47,7 @@ a valid fixture and is the common case.
   "missing": ["/etc/shadow"],
   "modes": { "/etc/shadow": "0640", "/tmp": "1777", "/usr/bin/passwd": "4755" },
   "owners": { "/etc/shadow": "0:42" },
+  "symlinks": { "/etc/systemd/system/sshd.service": "/dev/null" },
   "inodes": { "/srv/data": "64:900", "/mnt/bind": "64:900" },
   "exec": {
     "systemctl is-active sshd": { "stdout": "active\n", "exit_code": 0 },
@@ -65,6 +66,7 @@ a valid fixture and is the common case.
 | `missing` | Paths present in the tree that must behave as absent. Useful for reusing one tree across several scenarios. |
 | `modes` | Octal mode overrides. **Required for any permission check**, because git preserves only the execute bit. Also sets setuid, setgid, sticky and the file type — see §2.1. |
 | `owners` | `"uid:gid"` overrides. Git records neither. |
+| `symlinks` | Declares a path to be a symlink and gives its target verbatim. **Use this rather than committing a real link whenever the target is absolute** — see §2.4. |
 | `inodes` | `"dev:ino"` identity overrides. How a fixture describes a bind mount — see §2.2. |
 | `exec` | Canned command output, keyed by space-joined argv. |
 
@@ -159,6 +161,59 @@ such a host looks like — and it would have made the CRON module's
 is metadata rather than contents. `cron-denied` is the fixture that uses it.
 See ADR-0016.
 
+### 2.4 `symlinks` keeps an absolute link target inside the fixture
+
+Git stores symlinks natively, so unlike `inodes` this is not a capability the
+format lacks. It is a **containment rule**, and it has one trigger: the target
+is an absolute path.
+
+```json
+"symlinks": {
+  "/etc/systemd/system/multi-user.target.wants/sshd.service":
+      "/usr/lib/systemd/system/sshd.service",
+  "/etc/systemd/system/telnet.socket": "/dev/null"
+}
+```
+
+A real symlink committed with that target resolves against **the developer's
+root, not the fixture's**. `/var/tmp/jobs` in `cron-symlink` gets away with it
+because nothing on a developer's machine is there and nothing dereferences it.
+`/usr/lib/systemd/system/sshd.service` is on every Linux workstation, and
+anything that follows the link — `find -L`, `tar -h`, an editor indexing the
+tree, a future tool that walks `testdata/` — reads the real host through it. A
+fixture that can read the real host has stopped being a fixture. Git for
+Windows compounds the problem: with `core.symlinks` off the link is checked out
+as a text file containing its target, and the scenario silently becomes a
+different one.
+
+Declaring the link in the manifest creates no real link, so nothing can follow
+it, and `Readlink` hands the string back exactly as written.
+
+Three rules:
+
+- **The tree still needs a placeholder file at the path.** An empty file is
+  fine. `Stat` and `Readlink` both consult the tree before the manifest, so a
+  path misspelled here reports `ErrNotExist` from both rather than existing
+  only as a link to nowhere.
+- **A `modes` entry with the `0120000` prefix is not enough on its own** and is
+  rejected at load. It would make `Stat` report a symlink whose `Readlink` says
+  it is not one — two seam methods contradicting each other about one inode,
+  which no real filesystem does. A `symlinks` entry sets the type bit for you;
+  add a `modes` entry only if the permission bits matter, which for a symlink
+  they do not (the kernel ignores them; `lstat` reports `lrwxrwxrwx`, and that
+  is what a declared link reports by default).
+- **An empty target is rejected.** `readlink` can never return `""` for a real
+  link, so honouring it would hand a check a value no host can produce.
+
+A **relative** target is legal, needs no manifest entry, and is what
+`cli-host` uses. That fixture is evaluated through the *live* seam — `scan
+--root testdata/fixtures/cli-host` — where there is no manifest to read, so its
+systemd links are real ones written relative to their own directory. They
+resolve inside the fixture tree no matter who follows them, which is the same
+containment property reached the other way. Resolving a relative target is the
+*caller's* job, against the link's own directory and back through the seam, so
+that `--root` still applies.
+
 ---
 
 ## 3. Naming
@@ -185,6 +240,18 @@ cron-denylist              access governed by cron.deny, which fails open
 cron-absent                no cron installed → NOT_APPLICABLE
 cron-denied                metadata refused → UNKNOWN
 cron-symlink               a redirection out of /etc
+
+services-compliant         the good case; also the usr-merge and relative-link shapes
+services-cleartext         telnet and rsh enabled through socket activation
+services-masked            enabled AND masked — the mask wins
+services-discovery         a server image carrying a desktop package set
+services-notime            no time daemon enabled
+services-twoclocks         two time daemons competing for the clock
+services-dangling          an enablement symlink to a unit file that is gone
+services-unresolved        a link whose target cannot be stat'ed → UNKNOWN
+services-writable          the escalation, reached by mode and by ownership
+services-absent            not a systemd host → NOT_APPLICABLE
+services-denied            /etc/systemd/system refused → UNKNOWN
 
 logging-compliant          both daemons correct, RainerScript throughout
 logging-legacy             the same host in legacy syntax — verdicts must match
@@ -285,6 +352,30 @@ CRON-0002 turning every unhardened host into two HIGH findings.
 only way to reach the state where a path's owner and mode are unknowable. Every
 CRON check must return UNKNOWN over it rather than reporting on the paths it
 happened to reach.
+
+`services-compliant` carries two shapes a naive fixture would not have, and
+both are load-bearing. Its `/lib` is the **usr-merge symlink**, so
+`/lib/systemd/system` and `/usr/lib/systemd/system` are one directory — the
+collector proves they are the same by inode rather than assuming a layout,
+because assuming either one double-counts every vendor unit on half the
+distributions in service. And `dbus.service` is enabled through a real
+**relative** symlink, which is what an administrator running `ln -s` produces
+and which names a completely different file if it is read as absolute.
+
+`services-masked` exists for one case that reading the `.wants` directory alone
+gets wrong. `telnet.socket` has both an enablement symlink and a mask, and
+systemd will not start it: a masked unit cannot be started by anything,
+including a unit that `Requires=` it. SERVICES-0001 must therefore **pass** over
+it. Getting this backwards produces a FAIL about a service that cannot run,
+which sends somebody to disable something already off while the real findings go
+unread.
+
+`services-dangling` and `services-unresolved` are two fixtures for what looks
+like one situation. "The link's target is not there" is a FAIL; "we were not
+allowed to look at the target" is UNKNOWN. A single fixture could not have shown
+that the collector keeps them apart, and a single boolean in the fact would have
+collapsed them into a guess — the same distinction `cron-denied` draws for
+metadata.
 
 `users-clean` deserves a note too: its non-root accounts are **locked**, not
 empty. A lock token refuses every password and an empty field accepts every

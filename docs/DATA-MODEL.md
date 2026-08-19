@@ -162,6 +162,7 @@ gets produced.
 | `cron.files` | 1 | `collect/collectors/cron` | `Paths[]`, `Installed` |
 | `logging.rsyslog` | 1 | `collect/collectors/logging` | `Installed`, `Files[]`, `Directives[]`, `Objects[]`, `Rules[]`, `UnresolvedIncludes[]`, `Digests{}` |
 | `logging.journald` | 1 | `collect/collectors/logging` | `Installed`, `Files[]`, `Settings[]`, `PersistentDirState`, `Digests{}` |
+| `services.units` | 1 | `collect/collectors/services` | `Dirs[]`, `Units[]`, `Links[]`, `Systemd` |
 
 Every fact added later is listed here with its version history.
 
@@ -292,6 +293,43 @@ of the eight standard paths was observed **or refused**. A refusal counts as
 presence — we could not read it, but something is there — because treating it
 as absence would turn an unprivileged scan into a report that the host has no
 cron.
+
+#### `services.units` — what systemd will start at boot
+
+The fact is a record of **symlinks**, because that is what systemd enablement
+is. `systemctl enable` writes no database row and sets no flag inside the unit
+file; it creates a link in `<target>.wants/`, `disable` removes it, and `mask`
+replaces the unit file with a link to `/dev/null`. Reading those directories
+recovers exactly the state `systemctl is-enabled` reports, with no dbus and no
+privilege — which is why the collector declares `CapNone`.
+
+`Links[]` holds the enablement symlinks, each with the target as written
+(`Dest`), the same target made absolute against the link's own directory
+(`Resolved`), and a `DestState` of `present`, `dangling` or `unknown`. The last
+two are separate for the reason `cron.files` separates absent from denied: "the
+target is not there" is a FAIL and "we were not allowed to look at it" is
+UNKNOWN, and a single boolean would have collapsed them into a guess. See
+ADR-0017 for why resolution happens here rather than at the seam.
+
+`Units[]` holds the unit files, with the search directory they came from
+(`Origin`: `admin`, `runtime` or `vendor`). The origin is systemd's own
+precedence order and it is what makes masking legible: `/etc` outranks
+`/usr/lib`, so an admin unit file pointing at `/dev/null` overrides a vendor
+unit that cannot be deleted. `Services.Status` therefore tests masking **before**
+enablement, because systemd does — a masked unit does not start even with a
+`.wants` symlink naming it.
+
+`Dirs[]` records every directory probed, including the absent ones, with a
+`DirState` of `read`, `absent`, `denied`, `error` or `alias`. `alias` is
+`/lib/systemd/system` on a usr-merged host, proved identical to
+`/usr/lib/systemd/system` by inode rather than assumed from the distribution.
+`Truncated` rides alongside `State` rather than replacing it: a listing that was
+cut short was still read, so everything it returned is true and only conclusions
+about *absence* are invalidated (ADR-0014).
+
+The fact carries **no unit file contents**, for the reason `cron.files` carries
+no crontab. A unit body is `ExecStart` command lines and `Environment=`
+assignments that routinely hold credentials, and no SERVICES check reads them.
 
 #### `kernel.sysctl` — running and configured kernel parameters
 

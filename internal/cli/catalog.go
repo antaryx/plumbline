@@ -5,6 +5,7 @@ import (
 	cronchecks "github.com/antaryx/plumbline/internal/catalog/checks/cron"
 	kernelchecks "github.com/antaryx/plumbline/internal/catalog/checks/kernel"
 	loggingchecks "github.com/antaryx/plumbline/internal/catalog/checks/logging"
+	serviceschecks "github.com/antaryx/plumbline/internal/catalog/checks/services"
 	sshdchecks "github.com/antaryx/plumbline/internal/catalog/checks/sshd"
 	userschecks "github.com/antaryx/plumbline/internal/catalog/checks/users"
 
@@ -14,6 +15,7 @@ import (
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/cron"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/kernel"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/logging"
+	_ "github.com/antaryx/plumbline/internal/collect/collectors/services"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/sshd"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/users"
 )
@@ -52,6 +54,11 @@ func buildCatalog() *catalog.Catalog {
 		loggingchecks.Check0003,
 		loggingchecks.Check0004,
 		loggingchecks.Check0005,
+		serviceschecks.Check0001,
+		serviceschecks.Check0002,
+		serviceschecks.Check0003,
+		serviceschecks.Check0004,
+		serviceschecks.Check0005,
 		sshdchecks.Check0002,
 		sshdchecks.Check0003,
 		sshdchecks.Check0004,

@@ -533,3 +533,116 @@ func TestFileInfoCarriesDeviceAndInode(t *testing.T) {
 		}
 	}
 }
+
+// TestReadlinkDoesNotResolveAndDoesNotEscape is the acceptance criterion for
+// the seam method WP-21 added.
+//
+// Readlink is the one seam call whose *result* is attacker-influenced data
+// rather than a verdict: it returns whatever string is in the link, and a
+// systemd enablement link is written by whoever can write the .wants
+// directory. The guarantees that make that safe are that it reads the link
+// itself and follows nothing, and that resolving the result is the caller's
+// job — through Stat, through the seam, so --root still governs it. A seam
+// that resolved the target here would have dereferenced an absolute link
+// against the *real* host, which is exactly what --root exists to prevent.
+func TestReadlinkDoesNotResolveAndDoesNotEscape(t *testing.T) {
+	root := hostileRoot(t)
+	dir := filepath.Join(root, "etc", "ssh")
+	sys := live.New(root)
+
+	// The absolute target is the systemd case: it names a path inside the
+	// simulated system, and there is nothing at it here.
+	if err := os.Symlink("/usr/lib/systemd/system/sshd.service", filepath.Join(dir, "absolute")); err != nil {
+		t.Fatal(err)
+	}
+	// A link pointing straight out of the scan root. Reading it is fine; what
+	// must not happen is following it.
+	if err := os.Symlink("../../../../../../etc/shadow", filepath.Join(dir, "escaping")); err != nil {
+		t.Fatal(err)
+	}
+	// A loop. Readlink terminates on it by construction, because it never
+	// takes the second step.
+	a, b := filepath.Join(dir, "loop_a"), filepath.Join(dir, "loop_b")
+	if err := os.Symlink(b, a); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(a, b); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "regular"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("returns the target verbatim without resolving it", func(t *testing.T) {
+		got, err := sys.Readlink("/etc/ssh/absolute")
+		if err != nil {
+			t.Fatalf("Readlink: %v", err)
+		}
+		// Not the root-prefixed path, and not an error for a target that does
+		// not exist: a dangling enablement link is the state SERVICES-0004
+		// reports, so it has to be readable.
+		if got != "/usr/lib/systemd/system/sshd.service" {
+			t.Errorf("target = %q, want the string as written", got)
+		}
+	})
+
+	t.Run("a target outside the root is returned, not followed", func(t *testing.T) {
+		got, err := sys.Readlink("/etc/ssh/escaping")
+		if err != nil {
+			t.Fatalf("Readlink: %v", err)
+		}
+		if got != "../../../../../../etc/shadow" {
+			t.Errorf("target = %q, want the string as written", got)
+		}
+		// The proof that nothing was dereferenced: the real /etc/shadow is not
+		// readable here, and resolving the link through the seam lands inside
+		// the scan root, where there is nothing.
+		if _, err := sys.ReadFile("/etc/ssh/escaping", 0); !errors.Is(err, system.ErrNotRegular) {
+			t.Errorf("ReadFile through the link: err = %v, want ErrNotRegular", err)
+		}
+	})
+
+	t.Run("a loop terminates", func(t *testing.T) {
+		var got string
+		var err error
+		withinDeadline(t, 5*time.Second, "Readlink on a symlink loop", func() {
+			got, err = sys.Readlink("/etc/ssh/loop_a")
+		})
+		if err != nil {
+			t.Fatalf("Readlink: %v", err)
+		}
+		if !strings.HasSuffix(got, "loop_b") {
+			t.Errorf("target = %q, want the link's own contents", got)
+		}
+	})
+
+	t.Run("a regular file is ErrNotSymlink", func(t *testing.T) {
+		// EINVAL translated at the seam, so live and fake agree and a
+		// collector can tell "not a link" from "not there" and from "not
+		// allowed" without knowing what platform it is on.
+		if _, err := sys.Readlink("/etc/ssh/regular"); !errors.Is(err, system.ErrNotSymlink) {
+			t.Errorf("err = %v, want ErrNotSymlink", err)
+		}
+	})
+
+	t.Run("a missing path is ErrNotExist", func(t *testing.T) {
+		if _, err := sys.Readlink("/etc/ssh/nothing"); !errors.Is(err, system.ErrNotExist) {
+			t.Errorf("err = %v, want ErrNotExist", err)
+		}
+	})
+
+	t.Run("traversal in the argument stays under the root", func(t *testing.T) {
+		// path.Clean folds these to /etc/shadow beneath the scan root, which
+		// does not exist there — the same answer TestEscapingTheRootIsRefused
+		// asserts for ReadFile. What must never happen is reading the real
+		// host's /etc/shadow, or the link at it if one exists.
+		for _, p := range []string{
+			"/../../../../etc/shadow",
+			"/etc/ssh/../../../etc/shadow",
+		} {
+			if got, err := sys.Readlink(p); err == nil {
+				t.Errorf("Readlink(%q) = %q, want an error from beneath the scan root", p, got)
+			}
+		}
+	})
+}

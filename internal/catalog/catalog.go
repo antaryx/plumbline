@@ -22,8 +22,9 @@ import (
 //
 // 2 adds the KERNEL module (WP-16); 3 completes it; 4 adds USERS (WP-17); 5
 // completes USERS with the group and password-aging checks; 6 completes SSHD
-// (WP-18); 7 adds CRON (WP-19); 8 adds LOGGING (WP-20).
-const Version = 8
+// (WP-18); 7 adds CRON (WP-19); 8 adds LOGGING (WP-20); 9 adds SERVICES
+// (WP-21).
+const Version = 9
 
 // Outcome is what a check's Eval returns. The runner converts it into a
 // finding, filling in identity and fingerprint so a check cannot get those

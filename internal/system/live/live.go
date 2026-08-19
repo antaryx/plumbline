@@ -105,6 +105,31 @@ func infoFor(clean string, st os.FileInfo) system.FileInfo {
 	return fi
 }
 
+// Readlink returns a symlink's target as written, without resolving it.
+//
+// os.Readlink does not follow anything: it reads the link's own contents, so
+// there is no TOCTOU window here and no risk of a hostile chain being walked
+// by a root process. A relative target stays relative; the caller resolves it
+// against the link's directory and back through this seam, so that --root
+// still governs what gets looked at.
+func (s *System) Readlink(p string) (string, error) {
+	_, real, err := s.resolve(p)
+	if err != nil {
+		return "", err
+	}
+	target, err := os.Readlink(real)
+	if err != nil {
+		// EINVAL from readlink means "this is not a symlink", which is a
+		// different fact about the host from "it is not there" or "you may not
+		// look". Translating it here is what lets fake and live agree.
+		if errors.Is(err, syscall.EINVAL) {
+			return "", system.ErrNotSymlink
+		}
+		return "", translate(err)
+	}
+	return target, nil
+}
+
 func (s *System) ReadFile(p string, maxBytes int64) (system.ReadResult, error) {
 	clean, real, err := s.resolve(p)
 	if err != nil {

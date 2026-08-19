@@ -1,0 +1,4 @@
+# chronyd.service
+#
+# A placeholder. Plumbline never reads a unit body: ExecStart lines and
+# Environment= assignments are operator data and no SERVICES check looks at them.
