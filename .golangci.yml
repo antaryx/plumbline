@@ -1,4 +1,13 @@
-version: "2"
+# This file is in golangci-lint **v1** configuration format, and the pinning in
+# .github/workflows/ci.yml has to stay on a v1 line for it to load.
+#
+# v2 introduced a mandatory `version: "2"` key and moved `linters-settings` to
+# `linters.settings` and `issues.exclude-rules` to `linters.exclusions.rules`. A
+# `version: "2"` key was previously present here without the rest of that
+# migration, which a v1 binary rejects outright with
+# `additional properties "version" not allowed` — the whole file goes unread,
+# taking the G304 exclusion below with it. Whoever moves the action to v7/v8
+# must migrate this file in the same commit.
 
 run:
   timeout: 5m

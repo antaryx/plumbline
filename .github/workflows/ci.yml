@@ -247,18 +247,27 @@ jobs:
           echo "identical verdict produced on ${{ matrix.image }}"
 
       # And the container's own filesystem, which is what an operator actually
-      # points this at. The verdict differs per image and that is fine; what
-      # must hold is that it runs, emits a valid document, and does not crash.
+      # points this at. The verdict differs per image and that is fine — that is
+      # the point of running four of them; what must hold is that it runs, emits
+      # a document that parses, and does not crash.
       - name: Scan the container's own root
         run: |
           docker run --rm -v "$PWD/dist:/dist:ro" ${{ matrix.image }} \
             /dist/plumbline-linux-amd64 scan > /tmp/self.json
+          jq . /tmp/self.json > /dev/null
           grep -q '"schema": "findings/v1"' /tmp/self.json
           grep -q '"euid": 0' /tmp/self.json
-          # No sshd in a base image, so the only finding is NOT_APPLICABLE and
-          # both figures are undefined. null rather than 0 is the whole point of
-          # ADR-0010, and this is it happening in the shipped binary.
-          grep -q '"posture": null' /tmp/self.json
+          # This step deliberately asserts nothing about the verdict. It used to
+          # require '"posture": null' — true when SSHD was the only module, so a
+          # base image with no sshd produced NOT_APPLICABLE and nothing else. The
+          # KERNEL and USERS modules changed that: every base image has /proc/sys
+          # and /etc/passwd, so real checks now evaluate and posture is a real
+          # number (81-95 across this matrix). The assertion was pinned to a
+          # property of the catalog's size rather than to anything about the
+          # binary, which is why it broke on a change that was working correctly.
+          #
+          # ADR-0010's null-vs-zero distinction is still covered, in the place
+          # that can hold it steady: internal/score's unit tests.
 
       - name: version reports all three versions
         run: |
