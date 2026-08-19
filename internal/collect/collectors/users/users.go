@@ -97,11 +97,21 @@ func (Collector) Timeout() time.Duration { return 5 * time.Second }
 func (Collector) Collect(ctx context.Context, s system.System, fs *fact.Set) error {
 	collectPasswd(s, fs)
 
+	// Returning nil rather than ctx.Err() on a deadline is load-bearing, not an
+	// oversight. internal/collect.runner treats a collector that returns an
+	// error while its context is done as a timeout and **discards its partial
+	// facts** — so returning the context error here would throw away the passwd
+	// fact this function has already gathered, which is precisely the graceful
+	// degradation this collector exists to provide. Returning nil takes the
+	// runner's merge path, the facts collected so far survive, and the runner
+	// records the deadline itself.
+	//nolint:nilerr // error deliberately swallowed for graceful degradation; the facts already collected are kept in the FactSet
 	if err := ctx.Err(); err != nil {
 		return nil
 	}
 	collectShadow(s, fs)
 
+	//nolint:nilerr // as above: returning the context error would discard the passwd and shadow facts
 	if err := ctx.Err(); err != nil {
 		return nil
 	}

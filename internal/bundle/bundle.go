@@ -515,12 +515,12 @@ func Read(r io.Reader) (Bundle, error) {
 		return b, fmt.Errorf("%w: no %s", ErrMalformed, manifestMember)
 	}
 	if err := json.Unmarshal(manifestJSON, &b.Manifest); err != nil {
-		return b, fmt.Errorf("%w: %s: %v", ErrMalformed, manifestMember, err)
+		return b, fmt.Errorf("%w: %s: %w", ErrMalformed, manifestMember, err)
 	}
 
 	if metaJSON, ok := members[metaMember]; ok {
 		if err := json.Unmarshal(metaJSON, &b.Meta); err != nil {
-			return b, fmt.Errorf("%w: %s: %v", ErrMalformed, metaMember, err)
+			return b, fmt.Errorf("%w: %s: %w", ErrMalformed, metaMember, err)
 		}
 	}
 
@@ -536,7 +536,7 @@ func Read(r io.Reader) (Bundle, error) {
 	if errorsJSON, ok := members[errorsMember]; ok {
 		var errs []fact.Error
 		if err := json.Unmarshal(errorsJSON, &errs); err != nil {
-			return b, fmt.Errorf("%w: %s: %v", ErrMalformed, errorsMember, err)
+			return b, fmt.Errorf("%w: %s: %w", ErrMalformed, errorsMember, err)
 		}
 		for _, e := range errs {
 			b.Facts.PutError(e)
@@ -568,7 +568,7 @@ func readArchive(r io.Reader) (map[string][]byte, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%w: reading tar: %v", ErrMalformed, err)
+			return nil, fmt.Errorf("%w: reading tar: %w", ErrMalformed, err)
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			return nil, fmt.Errorf("%w: member %q is not a regular file", ErrMalformed, hdr.Name)
@@ -588,7 +588,7 @@ func readArchive(r io.Reader) (map[string][]byte, error) {
 		var buf bytes.Buffer
 		n, err := io.Copy(&buf, io.LimitReader(tr, remaining+1))
 		if err != nil {
-			return nil, fmt.Errorf("%w: reading member %q: %v", ErrMalformed, hdr.Name, err)
+			return nil, fmt.Errorf("%w: reading member %q: %w", ErrMalformed, hdr.Name, err)
 		}
 		if n > remaining {
 			return nil, ErrTooLarge
@@ -619,7 +619,7 @@ func verifyIntegrity(members map[string][]byte) error {
 
 	var doc integrityDoc
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		return fmt.Errorf("%w: %s: %v", ErrMalformed, integrityMember, err)
+		return fmt.Errorf("%w: %s: %w", ErrMalformed, integrityMember, err)
 	}
 	if doc.Algorithm != hashAlgorithm {
 		return fmt.Errorf("%w: %s names algorithm %q, this build verifies %q only",
@@ -670,7 +670,7 @@ func readFacts(b *Bundle, members map[string][]byte) error {
 
 		var doc factDoc
 		if err := json.Unmarshal(raw, &doc); err != nil {
-			return fmt.Errorf("%w: %s: %v", ErrMalformed, ref.Member, err)
+			return fmt.Errorf("%w: %s: %w", ErrMalformed, ref.Member, err)
 		}
 		if doc.ID != ref.ID || doc.FactVersion != ref.FactVersion {
 			return fmt.Errorf("%w: %s declares %s v%d, manifest indexes it as %s v%d",
@@ -684,7 +684,7 @@ func readFacts(b *Bundle, members map[string][]byte) error {
 		}
 		f, err := d.decode(doc.Data)
 		if err != nil {
-			return fmt.Errorf("%w: decoding fact %s: %v", ErrMalformed, doc.ID, err)
+			return fmt.Errorf("%w: decoding fact %s: %w", ErrMalformed, doc.ID, err)
 		}
 		b.Facts.Put(f)
 	}

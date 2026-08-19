@@ -201,9 +201,18 @@ func (s algSpec) eval(fs *fact.Set) catalog.Outcome {
 			}
 			sort.Slice(found, func(i, j int) bool { return found[i].Name < found[j].Name })
 
-			names := make([]string, 0, len(found))
+			// One evidence entry per weak algorithm, so an auditor reading the
+			// findings document gets the reason attached to the name rather
+			// than having to parse it back out of the detail string.
+			//
+			// The names are deliberately not also collected into a slice here:
+			// describeWeaknesses(found) renders them with their reasons in
+			// every detail below, and Subject stays the keyword. Subject feeds
+			// the fingerprint, and a fingerprint built from the set of weak
+			// algorithms would change the moment an operator removed one of
+			// them — silently detaching any suppression written against it
+			// (DATA-MODEL.md 5.4).
 			for _, w := range found {
-				names = append(names, w.Name)
 				ev = append(ev, finding.NewEvidence(d.File, d.Line,
 					fmt.Sprintf("%s: %s", w.Name, w.Reason), cfg.Digests[d.File]))
 			}

@@ -93,6 +93,7 @@ func (Collector) Collect(ctx context.Context, s system.System, fs *fact.Set) err
 	cfg, ferr := collectConfig(ctx, s)
 	if ferr != nil {
 		fs.PutError(*ferr)
+		//nolint:nilerr // error deliberately swallowed for graceful degradation; recorded in FactSet
 		return nil
 	}
 	fs.Put(cfg)
