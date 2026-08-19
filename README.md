@@ -4,17 +4,53 @@
 
 A deterministic, offline, evidence-first host security auditor for Linux.
 
-> **Status: v0.1.0 — pre-release, no stability guarantees.** The walking
-> skeleton is complete: the OS seam, facts, bundles, the collector runner,
-> scoring, the JSON renderer and the CLI, with one collector and one check
-> proving the shape end to end. Offline operation and hostile-input survival
-> are tests rather than promises.
+> **Status: v0.2.0 — pre-release, no stability guarantees.** The catalog is
+> the milestone: **78 checks across nine modules**, every one with PASS and
+> FAIL fixtures enforced in CI, evaluated from a single filesystem traversal
+> and a bounded set of configuration reads.
 >
 > `findings/v1`, flag names, exit codes and check IDs are contracts from here.
 > Everything in Go stays `internal/` and may change without notice (ADR-0007).
 >
-> Next: `docs/BUILD-RUNBOOK-v0.2.md`, work package WP-15 — the shared
-> filesystem walker, which blocks the `FILESYS` module.
+> Next: `docs/ROADMAP.md` v0.3 — the terminal and SARIF renderers, `diff`,
+> suppressions and `doctor`. None of them changes a fact or a check.
+
+## What it checks
+
+| Module | Checks | Reads |
+|---|---|---|
+| **SSHD** | 19 | `sshd_config` and its includes, `Match` block scoping |
+| **KERNEL** | 16 | `/proc/sys` and the `sysctl.d` files, separately |
+| **USERS** | 10 | `passwd`, `shadow`, `group` — three facts, three readabilities |
+| **FILESYS** | 9 | one shared traversal: setuid, world-writable, device nodes, mount options |
+| **AUTH** | 6 | the PAM stack as a graph, `pwquality.conf`, `faillock.conf` |
+| **CRON** | 5 | who may write the schedule — metadata only, never a crontab |
+| **LOGGING** | 5 | rsyslog in all three of its syntaxes, journald with drop-ins |
+| **SERVICES** | 5 | systemd enablement recovered from symlinks |
+| **NETWORK** | 3 | nftables, iptables, ufw, firewalld — configured, not loaded |
+
+## Offline by construction
+
+Plumbline talks to no daemon. There is no dbus connection, no `systemctl`, no
+`nft list ruleset`, no `iptables -S`, and no network call of any kind — the
+offline test runs a scan inside `unshare -n` and asserts it produces a
+byte-identical document to an online one.
+
+That is not asceticism; it is what makes the other properties possible:
+
+- **Service enablement is recovered from the filesystem.** `systemctl enable`
+  creates a symlink in `<target>.wants/` and nothing else — so reading those
+  directories recovers exactly what `systemctl is-enabled` would report,
+  without a running init system.
+- **A mounted image audits like a live host.** `--root /mnt` works because
+  nothing asks the kernel about itself.
+- **A bundle collected months ago re-evaluates today.** There is no live state
+  to have gone stale.
+
+The cost is stated rather than hidden: this reports what is **configured**, not
+what is loaded. A host with a perfect `nftables.conf` and a disabled
+`nftables.service` has no firewall, and the two halves are reported by two
+modules that each decline to claim the other's.
 
 ## What makes it different
 
@@ -89,6 +125,10 @@ are.
 `internal/collect/collectors/sshd/sshd.go` and
 `internal/catalog/checks/sshd/sshd0002.go`, with nine fixtures under
 `testdata/fixtures/`. Deliberately over-commented. Copy their shape.
+
+For a module that reads the filesystem rather than a config file, copy
+`internal/catalog/checks/filesys/` instead — in particular `mustBeComplete`,
+which is where the asymmetric truncation rule is applied.
 
 ## Licence
 

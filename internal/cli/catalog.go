@@ -4,6 +4,7 @@ import (
 	"github.com/antaryx/plumbline/internal/catalog"
 	authchecks "github.com/antaryx/plumbline/internal/catalog/checks/auth"
 	cronchecks "github.com/antaryx/plumbline/internal/catalog/checks/cron"
+	filesyschecks "github.com/antaryx/plumbline/internal/catalog/checks/filesys"
 	kernelchecks "github.com/antaryx/plumbline/internal/catalog/checks/kernel"
 	loggingchecks "github.com/antaryx/plumbline/internal/catalog/checks/logging"
 	networkchecks "github.com/antaryx/plumbline/internal/catalog/checks/network"
@@ -16,12 +17,16 @@ import (
 	// deeper in the tree reaches for a collector by name.
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/auth"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/cron"
+	// filesys registers walker interests rather than a collector of its own:
+	// there is one traversal per scan and it belongs to collect/walker.
+	_ "github.com/antaryx/plumbline/internal/collect/collectors/filesys"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/kernel"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/logging"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/network"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/services"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/sshd"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/users"
+	_ "github.com/antaryx/plumbline/internal/collect/walker"
 )
 
 // buildCatalog assembles the catalog this binary carries.
@@ -43,6 +48,15 @@ func buildCatalog() *catalog.Catalog {
 		cronchecks.Check0003,
 		cronchecks.Check0004,
 		cronchecks.Check0005,
+		filesyschecks.Check0001,
+		filesyschecks.Check0002,
+		filesyschecks.Check0003,
+		filesyschecks.Check0004,
+		filesyschecks.Check0005,
+		filesyschecks.Check0006,
+		filesyschecks.Check0007,
+		filesyschecks.Check0008,
+		filesyschecks.Check0009,
 		kernelchecks.Check0001,
 		kernelchecks.Check0002,
 		kernelchecks.Check0003,

@@ -241,6 +241,17 @@ cron-absent                no cron installed → NOT_APPLICABLE
 cron-denied                metadata refused → UNKNOWN
 cron-symlink               a redirection out of /etc
 
+filesys-clean              the good case; every FILESYS check passes
+filesys-suid-writable      a setuid helper at 4775 — a root shell with a wait
+filesys-suid-outside       setuid shells in /home and /var/tmp, both 4755
+filesys-world-writable     a 0666 config and a 0777 script, plus a symlink
+filesys-sticky             a 0777 drop point with no sticky bit
+filesys-system-dir         /etc/cron.d world-writable AND sticky
+filesys-device             a block node in /var/tmp with /dev/sda's numbers
+filesys-mounts-weak        /tmp not separate, /dev/shm without noexec, bare /home
+filesys-mounts-unknown     the mount table is unreadable → UNKNOWN
+filesys-truncated          nothing wrong; driven with a tiny inode budget
+
 auth-rhel                  the good case, Red Hat layout, stacks reached by symlink
 auth-debian                the same host in the common-* layout — verdicts must match
 auth-weak                  every AUTH check fails
@@ -369,6 +380,40 @@ CRON-0002 turning every unhardened host into two HIGH findings.
 only way to reach the state where a path's owner and mode are unknowable. Every
 CRON check must return UNKNOWN over it rather than reporting on the paths it
 happened to reach.
+
+`filesys-truncated` is the module's most important fixture and the only one
+that violates nothing. It is driven **twice**: once with a normal walk, where
+every inode check must return PASS, and once with `MaxInodes: 4`, where every
+one of them must return `UNKNOWN(source_truncated)` instead. Both halves are
+needed — without the first, a check that returned UNKNOWN unconditionally would
+satisfy the second while being useless. This is the runbook's WP-23 rule
+mechanised: *a truncated walk can invalidate a negative result, never a
+positive one.*
+
+`filesys-suid-writable` and `filesys-suid-outside` exist as a pair because they
+separate two properties that look like one finding. In the first, a setuid
+binary under `/opt` is group-writable: FILESYS-0001 fails and FILESYS-0002
+passes, because `/opt` is a directory a package manager installs into. In the
+second, setuid shells sit in `/home/alice` and `/var/tmp` at mode 4755 — owned
+by root, writable by nobody else — so FILESYS-0001 passes and only their
+*location* gives them away. Neither check can be written as a name allowlist,
+and the pair is what proves the two rules are independent.
+
+`filesys-system-dir` is the same trick for directories. `/etc/cron.d` is
+world-writable **and** sticky, so FILESYS-0004 passes over it. The sticky bit
+restricts deleting existing entries and says nothing about creating new ones,
+and creating one file in `/etc/cron.d` is root on a schedule — which is
+FILESYS-0005's entire reason for existing separately.
+
+`filesys-world-writable` carries a symlink deliberately. A symlink's own mode is
+`lrwxrwxrwx` and the kernel ignores it, so an interest that did not exclude
+symlinks would report every one on a host as world-writable and bury the two
+real findings among thousands of false ones.
+
+`filesys-mounts-weak` models a host that *looks* fine: `/dev/shm` has `nosuid`
+and `nodev` but not `noexec`, which is the distribution default on many systems.
+A fixture where nothing was configured would not have tested the case that
+actually occurs.
 
 `auth-rhel` and `auth-debian` are one hardened host written twice, and the pair
 is the point. Fourteen-character minimum, faillock, history of five, no

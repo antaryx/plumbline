@@ -1,0 +1,4 @@
+{
+  "description": "A walk that does not finish. The test drives this fixture with a deliberately tiny inode budget so the traversal is cut short, which is the state every negative assertion in this module must refuse to answer from. Nothing here violates any rule — that is the point: the checks must still return UNKNOWN(source_truncated) rather than PASS, because the claim is about everything the walk never reached and reporting PASS would convert 'we stopped looking' into 'there is nothing there'.",
+  "modes": { "/usr/bin/passwd": "4755" }
+}

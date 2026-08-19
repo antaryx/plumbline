@@ -24,8 +24,9 @@ import (
 // completes USERS with the group and password-aging checks; 6 completes SSHD
 // (WP-18); 7 adds CRON (WP-19); 8 adds LOGGING (WP-20); 9 adds SERVICES
 // (WP-21); 10 adds NETWORK and AUTH, completing the v0.2 catalog (WP-22,
-// WP-23).
-const Version = 10
+// WP-23); 11 adds FILESYS and wires the shared walker into the scan (WP-24),
+// completing the v0.2.0 catalog.
+const Version = 11
 
 // Outcome is what a check's Eval returns. The runner converts it into a
 // finding, filling in identity and fingerprint so a check cannot get those

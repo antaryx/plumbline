@@ -287,6 +287,12 @@ type Result struct {
 	// Facts holds one fact per interest, sorted by interest name.
 	Facts []fact.FSMatches
 
+	// Mounts is the kernel's mount table, which the walk reads anyway to apply
+	// its filesystem-type skip list. It is carried out rather than re-read by
+	// a collector of its own: two reads of the same kernel table could
+	// disagree, and the disagreement would be invisible.
+	Mounts fact.Mounts
+
 	// InodesVisited counts every inode the walk examined, across all roots.
 	InodesVisited int
 	// DirsVisited counts directories actually listed. It is what proves the
@@ -610,6 +616,7 @@ func (st *walkState) finish() {
 		st.out[n].InodesVisited = st.res.InodesVisited
 	}
 	st.res.Facts = st.out
+	st.res.Mounts = st.mounts.asFact()
 }
 
 // Collector is the fswalk collector: the shared traversal, wired into the
@@ -641,11 +648,13 @@ func (Collector) ID() string { return ID }
 // for rather than against a collector name they have never heard of.
 func (Collector) Produces() []fact.ID {
 	in := Interests()
-	out := make([]fact.ID, 0, len(in))
+	out := make([]fact.ID, 0, len(in)+1)
 	for _, i := range in {
 		out = append(out, fact.FSFactID(i.Name))
 	}
-	return out
+	// The mount table is published whether or not any interest was registered,
+	// so it is named here unconditionally.
+	return append(out, fact.MountsID)
 }
 
 // DependsOn is nil. The walk needs nothing observed first.
@@ -685,14 +694,24 @@ func (c Collector) Timeout() time.Duration {
 func (c Collector) Collect(ctx context.Context, s system.System, fs *fact.Set) error {
 	cfg := c.cfg
 	cfg.Interests = Interests()
-	if len(cfg.Interests) == 0 {
-		// No module registered an interest, so there is nothing to look for
-		// and no fact to write. Walking the filesystem to answer no questions
-		// is pure cost on the host being audited.
-		return nil
-	}
 	if cfg.Now == nil {
 		cfg.Now = s.Now
+	}
+
+	if len(cfg.Interests) == 0 {
+		// No module registered an interest, so there is no tree to walk:
+		// traversing a filesystem to answer no questions is pure cost on the
+		// host being audited.
+		//
+		// The mount table is still read and still published. It is not a
+		// product of the traversal — the walk reads it to decide where *not*
+		// to descend — and making it conditional on some unrelated module
+		// having registered an interest would mean the FILESYS mount checks
+		// resolved to UNKNOWN for a reason that has nothing to do with the
+		// host. A fact that silently depends on another module's wiring is
+		// the kind of gap that survives review.
+		fs.Put(readMountTable(s).asFact())
+		return nil
 	}
 
 	res, err := Walk(ctx, s, cfg)
@@ -702,5 +721,6 @@ func (c Collector) Collect(ctx context.Context, s system.System, fs *fact.Set) e
 	for _, f := range res.Facts {
 		fs.Put(f)
 	}
+	fs.Put(res.Mounts)
 	return nil
 }

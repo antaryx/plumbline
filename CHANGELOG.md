@@ -11,6 +11,25 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+Nothing yet. `docs/ROADMAP.md` v0.3 is next: the terminal and SARIF renderers,
+`diff`, suppressions and `doctor` — none of which changes a fact or a check.
+
+---
+
+## [0.2.0] — 2026-08-20
+
+**The catalog milestone: 78 checks across nine modules**, every one with PASS
+and FAIL fixtures enforced in CI, evaluated from a single filesystem traversal
+and a bounded set of configuration reads. Catalog version 11.
+
+| Module | Checks | | Module | Checks |
+|---|---|---|---|---|
+| SSHD | 19 | | AUTH | 6 |
+| KERNEL | 16 | | CRON | 5 |
+| USERS | 10 | | LOGGING | 5 |
+| FILESYS | 9 | | SERVICES | 5 |
+| | | | NETWORK | 3 |
+
 ### Security
 - **Password hashes never enter a bundle.** Evidence recording is wired at the
   seam, so reading a file stored its bytes — which, applied to `/etc/shadow`,
@@ -47,6 +66,99 @@ explanation in this file is a defect.
   reachable and the finding said otherwise.
 
 ### Added
+- **FILESYS module (WP-24), 9 checks.** Catalog version 11. Six over the shared
+  traversal — setuid or setgid executables writable by group or other
+  (FILESYS-0001), the same outside the system binary directories (0002),
+  world-writable files (0003), world-writable directories without the sticky
+  bit (0004), world-writable system directories (0005), device nodes outside
+  /dev (0006) — and three over the mount table: /tmp (0007), /dev/shm (0008)
+  and /home (0009).
+- **The shared filesystem walker is wired into the scan.** WP-15 built it and
+  nothing consumed it; `internal/cli/catalog.go` now imports both the walker
+  and the FILESYS interest registrations, so one traversal per scan actually
+  happens. Five interests are registered: `suid`, `sgid`, `world_writable`,
+  `world_writable_dir`, `device_outside_dev`.
+- **The asymmetric truncation rule is enforced and tested first.** Every FILESYS
+  check that concludes something from *not* finding a match returns
+  `UNKNOWN(source_truncated)` when the walk hit a limit, and every check that
+  reports something the walk *did* find returns FAIL whether or not the
+  traversal finished. `filesys-truncated` is driven twice — once complete,
+  where every check must PASS, and once with a four-inode budget, where every
+  one must return UNKNOWN — because without the first half a check that
+  returned UNKNOWN unconditionally would satisfy the second while being
+  useless.
+- **`fs.mounts` fact**, carrying each mount point's type, per-mount options,
+  superblock options and a `Known` flag. It is derived from the mount table the
+  walk **already reads** to apply its filesystem-type skip list rather than
+  from a second read of /proc/self/mountinfo: two reads of one kernel table
+  could disagree and the disagreement would be invisible. It is published
+  unconditionally, including when no interest is registered and no traversal
+  happens, because making it depend on an unrelated module's wiring would leave
+  the mount checks UNKNOWN for a reason unconnected to the host.
+- `parseMountInfoLine` now returns the per-mount and superblock option lists.
+  The two are kept separate because mountinfo reports them separately and they
+  are not the same thing — "is /tmp nosuid" is a question about the first, and
+  answering from the second would be right often enough to look correct.
+- **No FILESYS check carries an allowlist of blessed binaries**, per the
+  runbook. Which setuid executables are legitimate differs per distribution and
+  a hardcoded list silently excuses whatever an attacker names their implant
+  after. What is asserted instead are properties no legitimate setuid binary
+  has: being writable by a non-owner, and sitting outside the directories a
+  package manager installs into.
+- **SERVICES module (WP-21), 5 checks.** Catalog version 9. Cleartext-credential
+  services not enabled (SERVICES-0001), network discovery and RPC portmapping
+  (0002), exactly one time synchronisation daemon (0003), every enabled unit
+  resolving to a unit file that exists (0004), and unit directories writable by
+  root alone (0005).
+- `services.units` fact. **systemd enablement is recovered from symlinks**:
+  `systemctl enable` writes no database row and sets no flag inside the unit
+  file, it creates a link in `<target>.wants/`, so reading those directories
+  recovers exactly what `systemctl is-enabled` reports with no dbus and no
+  privilege. Masking is tested before enablement because systemd does — a
+  masked unit does not start even with a `.wants` symlink naming it.
+- **`System.Readlink`**, which returns a symlink's target *as written* and
+  resolves nothing (ADR-0017). A seam method returning a resolved absolute path
+  would have dereferenced it against the real host rather than the scan root,
+  silently, because a developer's machine has the file a fixture names.
+  Resolution happens in the collector and goes back through `Stat`, so `--root`
+  still governs it. `ErrNotSymlink` was added so `live` and `fake` agree about
+  a path that is not a link.
+- `symlinks` fixture-manifest key. Git stores symlinks natively, so unlike
+  ADR-0013's inode overrides this is a containment rule rather than a
+  capability gap: an *absolute* target committed as a real link resolves
+  against the developer's root, and a fixture naming
+  `/usr/lib/systemd/system/sshd.service` points at the real unit on every Linux
+  workstation. Relative targets stay as real links and need no entry.
+- **NETWORK module (WP-22), 3 checks.** Catalog version 10. A host firewall is
+  configured (NETWORK-0001), its default inbound policy denies (0002), and
+  exactly one configuration is in force (0003). The module is small on purpose:
+  SSHD covers the exposed service and KERNEL covers the packet-handling
+  parameters a firewall does not govern.
+- `network.firewall` fact — **derived properties only, never ruleset contents**.
+  A firewall configuration is a map of the network, and a bundle designed to
+  travel would carry it wherever the bundle is filed. An empty configuration
+  file is not a firewall: Debian's nftables package installs
+  /etc/nftables.conf whether or not anybody wrote a rule in it, so statements
+  are counted rather than the file's existence being trusted.
+- **AUTH module (WP-23), 6 checks.** Catalog version 10. Password quality
+  enforced (AUTH-0001), its parameters strict enough (0002), account lockout
+  configured (0003), empty passwords refused (0004), strong password hashing
+  (0005), and password history kept (0006).
+- `auth.pam` fact — **the PAM stack as a graph, not a file**. Three include
+  directives with different scopes build it: `@include` inlines a whole file,
+  `<type> include` pulls in one management group, and confusing them either
+  drops three quarters of a Debian host's rules or imports password rules into
+  the auth stack. Both distribution layouts are always probed, so the layout is
+  read from what is there rather than guessed. Control flow is deliberately
+  **not** simulated: implementing the bracketed `[success=1 default=ignore]`
+  jump semantics wrongly would produce confident verdicts about which module
+  actually runs.
+- Red Hat's `/etc/pam.d/system-auth` is a symlink on every stock install, which
+  the seam's `O_NOFOLLOW` correctly refuses. The collector resolves the chain
+  explicitly through `Readlink` — one observed hop at a time, bounded, each
+  recorded — and cites the resolved file, because citing the link would send an
+  operator to edit something authselect overwrites. Without this the module
+  would report UNKNOWN across the entire Red Hat family.
 - **LOGGING module (WP-20), 5 checks.** Catalog version 8. rsyslog log file
   permissions (LOGGING-0001), remote forwarding configured (0002), persistent
   journal storage (0003), journald-to-rsyslog forwarding (0004), and a reliable
@@ -171,6 +283,27 @@ explanation in this file is a defect.
   binary are expressible without root (ADR-0013)
 
 ### Changed
+- **The check-purity gate matches import *lines* rather than any occurrence of
+  a quoted path.** SERVICES-0003 is about clock synchronisation so its tags
+  include `"time"`, which the old grep read as an import of the `time` package.
+  That is the same false positive the `net` pattern was already fixed for, and
+  a gate that cries wolf is one somebody eventually silences. All nine
+  forbidden import forms — bare, aliased, blank, dot, `net/...`,
+  `internal/system` — were verified to still fire.
+- **`system.FileInfo.LinkTarget` is removed.** It had been in the struct since
+  the initial slice and nothing ever populated it. Left beside a working
+  `Readlink` it is the trap ADR-0016 was written about: a future collector
+  reads it, gets `""`, and concludes the path is not a link, in code that
+  compiles and passes review. Not a schema change — `system.FileInfo` never
+  reaches a fact or a bundle.
+- `fs.mounts`, `services.units`, `network.firewall` and `auth.pam` are
+  registered in the bundle decoder, so a saved bundle re-evaluates to the same
+  findings as the scan that produced it. The omission was caught by
+  `TestSaveBundleFromScan`, which is what that test exists for.
+- `testdata/fixtures/cli-host` gains systemd enablement symlinks (real and
+  **relative**, so they resolve inside the tree no matter who follows them), a
+  firewall configuration, a PAM stack, and a mount table. It now measures 73
+  pass / 5 fail over 78 checks at coverage 100.
 - **`cmd/plumbline`'s offline test compares an offline scan against an online
   scan of the same fixture** instead of asserting every finding passes. The old
   assertion was a proxy and it broke for a reason unrelated to networking: the
@@ -285,5 +418,9 @@ Catalog version 1 · schema `findings/v1` · bundle `bundle/v1`
 
 ### Check corrections
 None. SSHD-0002 is new in this release.
+
+### Check corrections
+None beyond the SSHD-0002 correction recorded above. Every other check in this
+release is new.
 
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/

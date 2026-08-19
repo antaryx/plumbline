@@ -1,0 +1,4 @@
+{
+  "description": "The kernel's mount table cannot be read. Every mount check is UNKNOWN(source_truncated) rather than reporting that /tmp is not a separate mount: a table we could not read is not a table with nothing in it, and the two conclusions lead to opposite actions. This is the mount-table half of the same asymmetry the truncated-walk rule enforces for the traversal.",
+  "unreadable": ["/proc/self/mountinfo"]
+}

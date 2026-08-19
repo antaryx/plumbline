@@ -1,0 +1,10 @@
+{
+  "description": "A correctly hardened host. Three setuid binaries, all in /usr/bin or /usr/sbin and writable by root alone; /tmp is world-writable and sticky, which is what /tmp is supposed to be; no world-writable files; no device node outside /dev; /tmp, /dev/shm and /home are separate mounts with the options each check requires. Every FILESYS check passes here, which is what makes it the module's fixture-coverage backstop.",
+  "modes": {
+    "/usr/bin/passwd": "4755",
+    "/usr/bin/sudo": "4755",
+    "/usr/sbin/unix_chkpwd": "2755",
+    "/tmp": "041777",
+    "/dev/null": "020666"
+  }
+}

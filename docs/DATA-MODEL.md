@@ -165,6 +165,7 @@ gets produced.
 | `services.units` | 1 | `collect/collectors/services` | `Dirs[]`, `Units[]`, `Links[]`, `Systemd` |
 | `network.firewall` | 1 | `collect/collectors/network` | `Sources[]` |
 | `auth.pam` | 1 | `collect/collectors/auth` | `Installed`, `DirState`, `Services[]`, `PwQuality`, `Faillock`, `Digests{}` |
+| `fs.mounts` | 1 | `collect/walker` (`fswalk`) | `Entries[]`, `Known` |
 
 Every fact added later is listed here with its version history.
 
@@ -295,6 +296,35 @@ of the eight standard paths was observed **or refused**. A refusal counts as
 presence — we could not read it, but something is there — because treating it
 as absence would turn an unprivileged scan into a report that the host has no
 cron.
+
+#### `fs.mounts` — the kernel's mount table
+
+Produced by the shared walker rather than by a collector of its own, because
+**the walk already reads `/proc/self/mountinfo`** to apply its filesystem-type
+skip list. Two reads of the same kernel table could disagree and the
+disagreement would be invisible; one read, shared, cannot. It is the
+one-traversal rule applied to a file rather than to a tree.
+
+It is published **unconditionally** — including when no module registered a
+walker interest and no traversal happened at all. The mount table is not a
+product of the walk, and making it conditional on some unrelated module's
+wiring would have left the FILESYS mount checks resolving to UNKNOWN for a
+reason that has nothing to do with the host.
+
+`Options` and `SuperOpts` are separate because `mountinfo` reports them
+separately and they are not the same thing. The per-mount options — `nodev`,
+`nosuid`, `noexec`, `ro` — are properties of *this* mount and are what a bind
+mount can differ in. The superblock options belong to the filesystem and are
+shared by every mount of it. A check asking "is /tmp nosuid" is asking about the
+first; reading the second would answer a different question and be right often
+enough to look correct.
+
+`Known` is the most important field. **An unknown table must never read as an
+empty one:** "/tmp is not a separate mount" is a finding and "we could not find
+out what /tmp is" is UNKNOWN, and they lead to opposite actions. A truncated
+read sets `Known` false rather than returning the entries it managed to parse,
+because a partial mount table is one with entries missing from the end — and
+the missing one may be exactly the entry being asked about.
 
 #### `auth.pam` — how this host decides somebody is who they claim
 

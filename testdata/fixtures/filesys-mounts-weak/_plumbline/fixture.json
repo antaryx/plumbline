@@ -1,0 +1,4 @@
+{
+  "description": "A host that looks fine and is not. /tmp is not a separate mount at all — it is a directory on the root filesystem, so it cannot carry the options no matter what fstab says. /dev/shm has nosuid and nodev but not noexec, which is the distribution default on many systems and is exactly why this check is worth running on a host nobody has touched. /home is a separate mount carrying neither nodev nor nosuid. All three mount checks fail, each for a different reason.",
+  "modes": { "/tmp": "041777" }
+}

@@ -1,0 +1,7 @@
+{
+  "description": "A deployment left its configuration file and its entrypoint script world-writable. FILESYS-0003 fails on both. The fixture also carries a symlink, which is what proves symlinks are excluded from the interest: a symlink's own mode is lrwxrwxrwx and the kernel ignores it, so including them would report every symlink on a host as world-writable and bury the two real findings among thousands of false ones.",
+  "modes": {
+    "/opt/app/config.env": "0666",
+    "/opt/app/run.sh": "0777"
+  }
+}

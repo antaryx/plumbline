@@ -1,0 +1,7 @@
+{
+  "description": "A shared drop point created with 'mkdir -m 777' so two services could exchange files. /tmp is correct at 1777; /var/spool/upload is 0777 and lacks the sticky bit, so any account can delete another's file and put its own there under the same name — the reader opens the path it always opens and gets somebody else's content. FILESYS-0004 fails on the upload directory alone.",
+  "modes": {
+    "/tmp": "041777",
+    "/var/spool/upload": "040777"
+  }
+}
