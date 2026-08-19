@@ -270,7 +270,13 @@ func TestGatesDriveTheExitCode(t *testing.T) {
 		{"a clean host with no gates", []string{"scan", "--root", hostFixture}, cli.ExitOK},
 		{"a failing host with no gates is still 0", []string{"scan", "--root", failFixture}, cli.ExitOK},
 		{"--fail-on high catches a HIGH failure", []string{"scan", "--root", failFixture, "--fail-on", "high"}, 2},
-		{"--fail-on critical does not", []string{"scan", "--root", failFixture, "--fail-on", "critical"}, cli.ExitOK},
+		{"--fail-on critical catches a CRITICAL failure", []string{"scan", "--root", failFixture, "--fail-on", "critical"}, 2},
+		// The "does not fire" half of the gate needs a host whose worst
+		// failure is below the threshold. sshd-permit-yes stopped being that
+		// host when SSHD-0004 (PermitEmptyPasswords, CRITICAL) was added to
+		// the catalog, so this case moved to a fixture that fails at HIGH and
+		// no higher — which is the property the case is actually asserting.
+		{"--fail-on critical does not fire below it", []string{"scan", "--root", includeFixture, "--fail-on", "critical"}, cli.ExitOK},
 		{"--threshold below posture", []string{"scan", "--root", hostFixture, "--threshold", "50"}, cli.ExitOK},
 		// 100 rather than a middling number: posture is a ratio over the whole
 		// catalog, so any threshold below 100 stops discriminating as modules

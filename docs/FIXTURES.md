@@ -138,11 +138,13 @@ Two rules when using it:
 `<module>-<scenario>`, lowercase, hyphenated:
 
 ```
-sshd-hardened              the good case
-sshd-permit-yes            the specific bad case
+sshd-hardened              the good case — every check's secure value
+sshd-permit-yes            the bad case — every check's insecure value
 sshd-default               keyword absent, built-in default applies
 sshd-include               value arrives via a drop-in
 sshd-match-trap            the value exists but is Match-scoped
+sshd-match-loosened        the secure global is overridden inside a Match block
+sshd-crypto-relative       algorithm lists use the +, - and ^ forms
 sshd-absent                subject not installed → NOT_APPLICABLE
 sshd-unreadable            permission denied → UNKNOWN
 sshd-unresolved-include    ambiguous state → UNKNOWN
@@ -186,6 +188,31 @@ It is the only fixture in the corpus where one file is refused and others are
 not, and it is what proves the USERS collector degrades **per file** instead of
 failing as a unit. A module whose fixtures are all readable never tests the
 path every unprivileged run in production will take.
+
+The SSHD module leans on its fixtures differently from the others: five of them
+are asserted **across the whole module** rather than per check.
+`sshd-hardened` must PASS every check, `sshd-permit-yes` must FAIL every check,
+`sshd-absent` must be NOT_APPLICABLE everywhere, `sshd-unresolved-include` must
+be UNKNOWN(`ambiguous_system_state`) everywhere, and `sshd-unreadable` must be
+UNKNOWN(`insufficient_privileges`) everywhere. A check added without a value in
+the first two fails a test immediately, which is a much better error than
+discovering months later that the "clean host" fixture never satisfied it.
+
+`sshd-match-trap` and `sshd-match-loosened` are the same trap from both sides.
+In the first, the only secure value is inside a `Match` block and must not count
+toward the global verdict; in the second, the global value is secure and a
+`Match` block reintroduces the insecure one. A tool that got either wrong would
+report a permissive host as compliant. Note that the second fixture's `Match`
+block contains **only keywords `sshd_config` actually permits there** — a block
+containing `StrictModes` or `Ciphers` would be a configuration sshd refuses to
+load, which would make it a fixture for a state that cannot exist.
+
+`sshd-crypto-relative` exists for the one asymmetry in the module. `Ciphers`,
+`MACs` and `KexAlgorithms` may be written relative to the compiled-in default
+(`+` appends, `-` removes, `^` places at the head), and the effective list is
+then unknowable from configuration alone — except that a `+` or `^` which *adds*
+a broken algorithm enables it whatever the base list holds. The fixture uses one
+of each form so that the FAIL and the two UNKNOWNs are all exercised.
 
 `users-clean` deserves a note too: its non-root accounts are **locked**, not
 empty. A lock token refuses every password and an empty field accepts every

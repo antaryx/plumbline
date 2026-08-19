@@ -26,11 +26,54 @@ explanation in this file is a defect.
   reports against the CIS threshold and states the disagreement rather than
   resolving it, so an organisation following NIST suppresses the check with a
   recorded reason instead of inheriting this project's opinion silently
+- SSHD-0020 records the joint between two modules: with `UsePAM no`, sshd never
+  runs the PAM account phase, so the password-aging policy USERS-0009 and
+  USERS-0010 report is configured and not enforced for SSH logins
 - `--redact` is documented precisely in `CLI-SPEC.md`: it removes the hostname,
   it does not anonymise account names, and it never was what kept hashes out of
   a bundle
 
+### Check corrections
+- **SSHD-0002 (root login) now reports a `Match` block that re-enables root
+  login.** Previously a configuration with `PermitRootLogin no` globally and
+  `PermitRootLogin yes` inside a `Match` block returned PASS, citing the
+  Match-scoped directive as evidence but not acting on it. It now returns FAIL
+  at MEDIUM — one class below the HIGH of a global misconfiguration, because the
+  exposure is conditional rather than universal — and names the `Match` criteria
+  in the detail.
+  **Who is affected:** any host whose `sshd_config` re-enables root login inside
+  a `Match` block. Those hosts move from PASS to FAIL and their posture score
+  falls accordingly. The verdict was wrong before: the insecure state was
+  reachable and the finding said otherwise.
+
 ### Added
+- **SSHD module (WP-18), complete at 19 checks.** Catalog version 6.
+  - Authentication: `PasswordAuthentication` (SSHD-0003), `PermitEmptyPasswords`
+    (0004, the module's only CRITICAL), `MaxAuthTries` (0006), `IgnoreRhosts`
+    (0013), `HostbasedAuthentication` (0014), `StrictModes` (0019), `UsePAM`
+    (0020)
+  - Forwarding and session environment: `X11Forwarding` (0005),
+    `AllowTcpForwarding` (0008), `PermitUserEnvironment` (0015),
+    `AllowAgentForwarding` (0018)
+  - Session lifetime: `ClientAliveInterval` × `ClientAliveCountMax` (0007),
+    `LoginGraceTime` (0016)
+  - Logging and notice: `LogLevel` (0009), `Banner` (0017)
+  - Cryptography: `Ciphers` (0010), `MACs` (0011), `KexAlgorithms` (0012)
+- **`Match` blocks that loosen a secure global setting are reported as
+  conditional failures**, one severity class below a global misconfiguration,
+  with the `Match` criteria quoted in the detail. Reporting PASS would have been
+  false assurance — the insecure state is reachable — and reporting FAIL at full
+  severity would have overstated an exposure limited to a named subset of
+  connections. Only the twelve keywords `sshd_config` actually permits inside a
+  `Match` block are treated this way.
+- **The three algorithm-list checks return UNKNOWN when the keyword is absent,
+  not PASS.** The effective `Ciphers`, `MACs` and `KexAlgorithms` lists are
+  compiled into the sshd binary, changed between OpenSSH releases, and are
+  rewritten by Red Hat's `crypto-policies`; Plumbline does not read the binary's
+  version, so asserting the default would be a guess. A relative form (`+`, `-`,
+  `^`) inherits the same unknowability — except that a `+` or `^` adding a broken
+  algorithm is a definite FAIL, because that algorithm is enabled whatever the
+  base list holds. Same asymmetry as ADR-0014.
 - **USERS module (WP-17), complete at 10 checks.** Catalog version 4 introduced
   the module; 5 completes it.
   - Accounts: root uid uniqueness (USERS-0001), system-account shells (0002),

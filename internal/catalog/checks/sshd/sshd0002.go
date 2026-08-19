@@ -98,12 +98,23 @@ keyword is absent is prohibit-password: key-based root login remains possible.`,
 		// If the operator has a Match-scoped override, name it. Otherwise the
 		// report contradicts what they can plainly see in the file, and they
 		// stop trusting the tool.
-		if scoped := matchScoped(cfg); len(scoped) > 0 {
+		if scoped := matchScopedEvidence(cfg, "PermitRootLogin"); len(scoped) > 0 {
 			ev = append(ev, scoped...)
 		}
 
 		switch strings.ToLower(d.Value) {
 		case "no":
+			// A Match block can re-enable root login for a subset of
+			// connections, and reporting PASS while that is true would be
+			// exactly the false assurance this module exists to avoid. The
+			// severity steps down one class because the exposure is
+			// conditional rather than global — see conditionalFail.
+			if loosened := loosenedInMatch(cfg, "PermitRootLogin", permitsRootLogin); len(loosened) > 0 {
+				return conditionalFail(cfg, "PermitRootLogin",
+					fmt.Sprintf("set to %q globally at %s:%d", d.Value, d.File, d.Line),
+					ev[0], loosened, finding.High,
+					"Root may log in directly on connections matching those blocks, so administrator actions from them are not individually attributable.")
+			}
 			return catalog.Outcome{
 				Result:   finding.Pass,
 				Detail:   "PermitRootLogin is set to no; direct root login over SSH is refused.",
@@ -173,19 +184,15 @@ keyword is absent is prohibit-password: key-based root login remains possible.`,
 	},
 }
 
-// matchScoped returns evidence for PermitRootLogin directives that appear
-// inside Match blocks and therefore do not govern the global configuration.
-func matchScoped(cfg fact.SSHDConfig) []finding.Evidence {
-	var out []finding.Evidence
-	for _, d := range cfg.AllOccurrences("PermitRootLogin") {
-		if !d.InMatch {
-			continue
-		}
-		out = append(out, finding.NewEvidence(
-			d.File, d.Line,
-			fmt.Sprintf("%s %s  (inside 'Match %s'; conditional, does not set the global value)",
-				d.Keyword, d.Value, d.MatchCriteria),
-			cfg.Digests[d.File]))
+// permitsRootLogin reports whether a PermitRootLogin value admits root at all.
+//
+// An unrecognised value is not "permits": sshd would refuse to start on it, so
+// it is a parse problem rather than a permissive setting, and treating the two
+// alike would report a typo inside a Match block as a deliberate weakening.
+func permitsRootLogin(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "yes", "prohibit-password", "without-password", "forced-commands-only":
+		return true
 	}
-	return out
+	return false
 }

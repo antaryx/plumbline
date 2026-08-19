@@ -1,0 +1,12 @@
+Port 22
+PermitRootLogin no
+
+# Removes from the default: cannot introduce a weak cipher, but says nothing
+# about what remains.
+Ciphers -aes128-cbc,3des-cbc
+
+# Appends to the default: whatever the default holds, these are now enabled.
+MACs +hmac-md5,hmac-sha1
+
+# Places at the head of the default: same conclusion as +.
+KexAlgorithms ^diffie-hellman-group14-sha1

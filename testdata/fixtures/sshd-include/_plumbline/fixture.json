@@ -1,1 +1,1 @@
-{"description":"Drop-in include wins over a later value in the main file"}
+{"description":"Drop-in include wins over a later value in the main file. The drop-in also sets LogLevel DEBUG3, which is the branch where a value is neither too quiet nor acceptable but too loud: sshd_config(5) states that debug logging violates user privacy."}

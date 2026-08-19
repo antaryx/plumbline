@@ -1,0 +1,1 @@
+{"description":"The three algorithm lists use sshd_config's relative forms. '-' removes from the built-in default and '+'/'^' add to it, so the effective list is the binary's compiled-in default modified — unknowable from configuration. A relative form that ADDS a weak algorithm is still a definite FAIL, because that algorithm is enabled regardless of what the default holds."}

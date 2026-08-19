@@ -1,1 +1,1 @@
-{"description":"Hardened host: PermitRootLogin explicitly no","euid":0,"now":"2026-01-01T00:00:00Z"}
+{"description":"Hardened host: every SSHD check's secure value set explicitly. The module-wide invariant test asserts this fixture passes all of them, so a new check with no home here is caught immediately.","euid":0,"now":"2026-01-01T00:00:00Z"}
