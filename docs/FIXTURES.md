@@ -43,6 +43,7 @@ a valid fixture and is the common case.
   "euid": 1000,
   "now": "2026-01-01T00:00:00Z",
   "unreadable": ["/etc/ssh/sshd_config"],
+  "unstattable": ["/etc/cron.d"],
   "missing": ["/etc/shadow"],
   "modes": { "/etc/shadow": "0640", "/tmp": "1777", "/usr/bin/passwd": "4755" },
   "owners": { "/etc/shadow": "0:42" },
@@ -59,7 +60,8 @@ a valid fixture and is the common case.
 | `description` | Shown in test failure output. Write it as the scenario, not the filename. |
 | `euid` | What the scan believes it is running as. Default 0. |
 | `now` | Frozen clock, RFC3339. Default `2026-01-01T00:00:00Z`. |
-| `unreadable` | Paths that exist but fail with `ErrPermission`. **This is how an unprivileged run is simulated** — you cannot commit a file to git that root can read and you cannot. |
+| `unreadable` | Paths whose **contents** fail with `ErrPermission`; `Stat` still succeeds. **This is how an unprivileged run is simulated** — you cannot commit a file to git that root can read and you cannot. |
+| `unstattable` | Paths whose **metadata** fails with `ErrPermission`. Distinct from `unreadable` — see §2.3. |
 | `missing` | Paths present in the tree that must behave as absent. Useful for reusing one tree across several scenarios. |
 | `modes` | Octal mode overrides. **Required for any permission check**, because git preserves only the execute bit. Also sets setuid, setgid, sticky and the file type — see §2.1. |
 | `owners` | `"uid:gid"` overrides. Git records neither. |
@@ -131,6 +133,32 @@ Two rules when using it:
   only that subtree a different one, which is how `fswalk-mounts` tests the
   boundary rule.
 
+### 2.3 `unstattable` is not `unreadable`
+
+They look interchangeable and are not, and the difference decides a verdict.
+
+`unreadable` defeats `ReadFile` and `ReadDir` while leaving `Stat` working.
+That is what an ordinary permission problem actually looks like: `/etc/shadow`
+at mode 0640 owned `root:shadow` cannot be read by an unprivileged user, but
+`stat /etc/shadow` succeeds for anyone. Its mode, its owner and its size are
+public.
+
+`unstattable` defeats `Stat` as well, which on a real host is caused by
+something different: a **parent directory** that refuses traversal. When that
+happens nothing about the path can be observed — not the mode, not the owner,
+not whether it exists at all.
+
+```json
+"unstattable": ["/etc/cron.d", "/etc/cron.allow"]
+```
+
+The two keys are separate because folding them together would have made every
+unreadable-file fixture also claim its ownership was unknown, which is not what
+such a host looks like — and it would have made the CRON module's
+`UNKNOWN(insufficient_privileges)` branch untestable, since every path it reads
+is metadata rather than contents. `cron-denied` is the fixture that uses it.
+See ADR-0016.
+
 ---
 
 ## 3. Naming
@@ -149,6 +177,14 @@ sshd-absent                subject not installed → NOT_APPLICABLE
 sshd-unreadable            permission denied → UNKNOWN
 sshd-unresolved-include    ambiguous state → UNKNOWN
 sshd-bad-value             unparseable → UNKNOWN
+
+cron-compliant             the good case
+cron-writable              the escalation, reached by mode and by ownership
+cron-vendor                stock distribution modes; nothing here is a mistake
+cron-denylist              access governed by cron.deny, which fails open
+cron-absent                no cron installed → NOT_APPLICABLE
+cron-denied                metadata refused → UNKNOWN
+cron-symlink               a redirection out of /etc
 
 kernel-hardened            the good case; running and configured agree
 kernel-weak                every parameter at its insecure value
@@ -213,6 +249,18 @@ load, which would make it a fixture for a state that cannot exist.
 then unknowable from configuration alone — except that a `+` or `^` which *adds*
 a broken algorithm enables it whatever the base list holds. The fixture uses one
 of each form so that the FAIL and the two UNKNOWNs are all exercised.
+
+`cron-vendor` earns its place the way `kernel-partial` does. It holds the modes
+Debian, Ubuntu, RHEL and Fedora all ship — `/etc/crontab` at 0644, the drop-in
+directories at 0755 — none of which is a mistake. It is what proves the two
+escalation checks do not fire on a vendor default while the disclosure check
+does, at LOW, and it is what would catch a future tightening of CRON-0001 or
+CRON-0002 turning every unhardened host into two HIGH findings.
+
+`cron-denied` is the only fixture using `unstattable` (§2.3), and it is the
+only way to reach the state where a path's owner and mode are unknowable. Every
+CRON check must return UNKNOWN over it rather than reporting on the paths it
+happened to reach.
 
 `users-clean` deserves a note too: its non-root accounts are **locked**, not
 empty. A lock token refuses every password and an empty field accepts every

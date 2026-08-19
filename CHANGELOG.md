@@ -47,6 +47,31 @@ explanation in this file is a defect.
   reachable and the finding said otherwise.
 
 ### Added
+- **CRON module (WP-19), 5 checks.** Catalog version 7. `/etc/crontab`
+  ownership and write permissions (CRON-0001), the five drop-in directories
+  (0002), access restricted by an allow list (0003), the access-control files'
+  own permissions (0004), and schedule disclosure (0005).
+- `cron.files` fact — file metadata only. **No crontab contents are collected.**
+  Every check in the module asks who may *write* the schedule, not what it says,
+  and a crontab's command lines carry script paths, hostnames and occasionally
+  credentials passed as arguments. That is ADR-0015's reasoning applied before
+  the mistake rather than after it.
+- **ADR-0016** formalises `system.FileInfo`'s ownership fields as a verdict
+  input. `UID` and `GID` have been in the seam since the initial slice, added
+  for the walker; CRON is the first module whose PASS or FAIL rests on a uid
+  comparison, and that promotion carries obligations. Chiefly: **uid 0 cannot
+  double as "not recorded"** the way inode 0 does for `Dev`/`Ino`, because 0 is
+  precisely the value an ownership check tests for and an unrecorded zero would
+  read as "owned by root". Facts carrying ownership carry an explicit state
+  beside it.
+- `unstattable` fixture-manifest key, distinct from `unreadable`. A file at mode
+  0640 is unreadable and perfectly stat-able; what defeats a stat is a parent
+  directory refusing traversal. Without the distinction the CRON module's
+  `UNKNOWN(insufficient_privileges)` branch had no way to be reached from a
+  fixture.
+- golangci-lint pinned to v1.64.8 in CI. The config is v1 format, so `latest`
+  would silently move the linter to a major that cannot read it — which is how
+  the G304 exclusion went missing once already.
 - **SSHD module (WP-18), complete at 19 checks.** Catalog version 6.
   - Authentication: `PasswordAuthentication` (SSHD-0003), `PermitEmptyPasswords`
     (0004, the module's only CRITICAL), `MaxAuthTries` (0006), `IgnoreRhosts`
@@ -122,6 +147,18 @@ explanation in this file is a defect.
   binary are expressible without root (ADR-0013)
 
 ### Changed
+- **`cmd/plumbline`'s offline test compares an offline scan against an online
+  scan of the same fixture** instead of asserting every finding passes. The old
+  assertion was a proxy and it broke for a reason unrelated to networking: the
+  CLI fixtures are read through the *live* seam, so their files carry the
+  ownership of whoever checked the repository out, and git cannot record
+  ownership. Both runs go through `unshare -r` and only the offline one adds
+  `-n`, because `-r` maps the calling uid to 0 inside the namespace — a bare
+  online run would differ in identity as well as in networking.
+- `testdata/fixtures/cli-host` is documented as a **realistic checkout
+  baseline**, not a clean host. "Clean" for it means the scan exits 0, not that
+  it produces no findings; the CRON ownership checks fail over it permanently
+  and by construction.
 - The required-fact gate attaches evidence when a fact error names a path, so a
   check that resolves to UNKNOWN because a file was unreadable now cites that
   file. `DATA-MODEL.md` §5.5 has always required every UNKNOWN to carry

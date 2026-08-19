@@ -16,6 +16,18 @@ import (
 	"github.com/antaryx/plumbline/internal/fact"
 )
 
+// hostFixture is a realistic checkout baseline rather than a clean host, and
+// the distinction matters for what the gate tests below may assert.
+//
+// Its files are read through the LIVE seam — `scan --root` does not use the
+// fake — so they carry the ownership of whoever checked the repository out.
+// Git cannot record ownership, so the CRON checks that require root-owned cron
+// files fail over it permanently and by construction. That is the fixture
+// being honest about a real host's files, not a defect.
+//
+// **"Clean" here means the scan exits 0**, not that it produces no findings.
+// Coverage is still 100 because a FAIL is an evaluated check, and posture stays
+// well above the threshold asserted below.
 const (
 	hostFixture    = "../../testdata/fixtures/cli-host"
 	includeFixture = "../../testdata/fixtures/sshd-include"
@@ -267,7 +279,9 @@ func TestGatesDriveTheExitCode(t *testing.T) {
 		args []string
 		want int
 	}{
-		{"a clean host with no gates", []string{"scan", "--root", hostFixture}, cli.ExitOK},
+		// No gates were requested, so findings alone must not change the exit
+		// code — that is the whole point of --fail-on being opt-in.
+		{"a baseline host with no gates", []string{"scan", "--root", hostFixture}, cli.ExitOK},
 		{"a failing host with no gates is still 0", []string{"scan", "--root", failFixture}, cli.ExitOK},
 		{"--fail-on high catches a HIGH failure", []string{"scan", "--root", failFixture, "--fail-on", "high"}, 2},
 		{"--fail-on critical catches a CRITICAL failure", []string{"scan", "--root", failFixture, "--fail-on", "critical"}, 2},
@@ -277,6 +291,9 @@ func TestGatesDriveTheExitCode(t *testing.T) {
 		// the catalog, so this case moved to a fixture that fails at HIGH and
 		// no higher — which is the property the case is actually asserting.
 		{"--fail-on critical does not fire below it", []string{"scan", "--root", includeFixture, "--fail-on", "critical"}, cli.ExitOK},
+		// Measured at 91.96 on this fixture with catalog 7. 50 keeps a wide
+		// margin over the CRON failures that are structural here, so the case
+		// asserts the gate rather than tracking the catalog.
 		{"--threshold below posture", []string{"scan", "--root", hostFixture, "--threshold", "50"}, cli.ExitOK},
 		// 100 rather than a middling number: posture is a ratio over the whole
 		// catalog, so any threshold below 100 stops discriminating as modules
@@ -285,6 +302,9 @@ func TestGatesDriveTheExitCode(t *testing.T) {
 		// threshold that keeps asserting the gate rather than the size of the
 		// catalog.
 		{"--threshold above posture", []string{"scan", "--root", failFixture, "--threshold", "100"}, 3},
+		// 100 still holds despite the CRON failures: coverage counts checks
+		// that reached a verdict, and a FAIL is a verdict. It would only drop
+		// if a check went UNKNOWN or the collector could not see the host.
 		{"--min-coverage satisfied", []string{"scan", "--root", hostFixture, "--min-coverage", "100"}, cli.ExitOK},
 	}
 

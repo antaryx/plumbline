@@ -66,7 +66,7 @@ carries must survive a round trip through a bundle.
 |---|---|
 | `path` | Absolute, as the scan saw it — beneath `--root`, not the real path |
 | `mode` | Permission bits and type bits |
-| `uid`, `gid` | Numeric owner; names are resolved by checks, not collectors |
+| `uid`, `gid` | Numeric owner. Never a name — see below |
 | `size`, `mod_time` | As reported by the kernel |
 | `is_dir`, `is_regular`, `is_symlink` | The type questions checks actually ask |
 | `link_target` | Where a symlink points; the link is never followed |
@@ -80,6 +80,29 @@ no syscall type reaches a fact or a check; extraction happens inside
 `internal/system`, which is the only package permitted to know that `syscall`
 exists. Zero means not recorded — inode 0 is not a valid inode and device 0 is
 not a real device for a file. See `docs/adr/0012-fileinfo-inode-seam.md`.
+
+`uid` and `gid` are the CRON module's primary verdict input, and two properties
+of them are load-bearing.
+
+**They stay numbers.** Nothing outside `internal/system` may resolve a uid to
+an account name: that is the seam rule, and it is also correct on the merits.
+Resolving means reading `/etc/passwd` as it exists *during the scan*, which is
+a different question from what it held when the file was created — and on a
+bundle evaluated weeks later on another machine, it is a different host's
+`/etc/passwd` entirely. A check that wants to say "owned by root" compares
+against `0`. A check that wants to name the account joins against the
+`users.passwd` fact, which is a recorded observation with its own provenance.
+CRON's findings say `uid 1001`, not `uid 1001 (deploy)`, for exactly this
+reason.
+
+**Zero cannot mean "not recorded".** Unlike `dev` and `ino`, ownership has no
+free sentinel: uid 0 is the single most important value the field takes and is
+precisely what an ownership check tests for, so a missing record decoding as 0
+would read as "owned by root" — turning a FAIL into a PASS. Facts that carry
+ownership therefore carry an explicit state beside it (`fact.CronPath.State` is
+`observed`, `absent`, `denied` or `error`), and `uid`, `gid` and `mode` mean
+nothing unless the state is `observed`. A check reads the state first. See
+`docs/adr/0016-fileinfo-ownership-seam.md`.
 
 ### 2.1.2 Reading a directory is bounded
 
@@ -136,6 +159,7 @@ gets produced.
 | `users.passwd` | 1 | `collect/collectors/users` | `Entries[]`, `CompatEntries[]`, `Malformed[]`, `Path`, `Digest` |
 | `users.shadow` | 1 | `collect/collectors/users` | `Entries[]`, `Malformed[]`, `Path` |
 | `users.group` | 1 | `collect/collectors/users` | `Entries[]`, `CompatEntries[]`, `Malformed[]`, `Path`, `Digest` |
+| `cron.files` | 1 | `collect/collectors/cron` | `Paths[]`, `Installed` |
 
 Every fact added later is listed here with its version history.
 
@@ -195,6 +219,30 @@ The four remaining shadow fields — last change, warn, inactive and expire — 
 parsed and discarded. A fact field is permanent output surface (CLAUDE.md §7),
 and adding one later as an optional field costs nothing, while carrying six on
 the chance that something reads them is six fields that travel in every bundle.
+
+#### `cron.files` — who may write the schedule
+
+The fact records file *metadata* and no file contents at all. Every CRON check
+asks who may write the schedule, not what the schedule says, and a crontab's
+command lines are operator data — script paths, hostnames, database names and
+occasionally credentials passed as arguments. Collecting them would put all of
+that into a bundle designed to travel, for a set of checks that never read it.
+That is ADR-0015's reasoning applied before the mistake rather than after it.
+
+Each `CronPath` carries a `State` — `observed`, `absent`, `denied` or `error` —
+and `Mode`, `UID` and `GID` are meaningful only when it is `observed`. The four
+states are not decoration: "the file is not there" and "we were not allowed to
+look" produce opposite verdicts, NOT_APPLICABLE or FAIL for the first and
+UNKNOWN for the second, and a single boolean would have collapsed them into a
+guess. See §2.1.1 and ADR-0016 for why ownership in particular cannot use a
+zero sentinel.
+
+`Installed` is derived rather than probed: there is no single file whose
+presence means "cron is installed" across distributions, so it is true when any
+of the eight standard paths was observed **or refused**. A refusal counts as
+presence — we could not read it, but something is there — because treating it
+as absence would turn an unprivileged scan into a report that the host has no
+cron.
 
 #### `kernel.sysctl` — running and configured kernel parameters
 
