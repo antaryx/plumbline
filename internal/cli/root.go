@@ -104,6 +104,7 @@ against a later catalog.`,
 		newEvalCmd(g, stdout, stderr),
 		newDiffCmd(g, stdout, stderr),
 		newExplainCmd(g, stdout, stderr),
+		newProfilesCmd(g, stdout, stderr),
 		newScanCmd(g, stdout, stderr),
 	)
 	return root

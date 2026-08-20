@@ -1,0 +1,7 @@
+{
+  "schema": "profile/v1",
+  "id": "default",
+  "title": "The whole catalog",
+  "description": "Every check this build carries. This is what runs when no --profile is given, and it is a real profile rather than a special case so that omitting the flag and passing --profile default cannot diverge.",
+  "included_checks": ["*"]
+}

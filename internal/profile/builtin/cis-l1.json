@@ -1,0 +1,21 @@
+{
+  "schema": "profile/v1",
+  "id": "cis-l1",
+  "title": "Level 1 server hardening baseline (CIS-themed, not a certified benchmark)",
+  "description": "A curated subset covering the hardening themes a CIS Level 1 server benchmark addresses: remote access, account and password policy, kernel and network parameters, scheduled-job ownership, filesystem permissions, and logging.\n\nRead this before relying on it. This profile is NOT a CIS benchmark and running it is NOT a CIS assessment. No check in this catalog carries a CIS control mapping — the catalog maps to NIST 800-53 r5 only — so the selection here is Plumbline's own reading of which of its checks address Level 1 themes, not a claim of correspondence to numbered CIS recommendations. It omits controls a real Level 1 benchmark requires and that this tool cannot yet observe, and it includes checks that no CIS recommendation asks for. Passing it is evidence of sensible hardening; it is not evidence of compliance, and it will not satisfy an auditor who asked for CIS.\n\nWhat it is genuinely useful for is scoping: a server that should meet a hardening bar, scored against the checks that describe that bar rather than against everything the tool can ask.",
+  "included_checks": [
+    "SSHD-*",
+    "USERS-*",
+    "AUTH-*",
+    "KERNEL-*",
+    "CRON-*",
+    "LOGGING-*",
+    "FILESYS-*",
+    "NETWORK-*"
+  ],
+  "excluded_checks": [
+    "SSHD-0009",
+    "LOGGING-0002",
+    "FILESYS-0010"
+  ]
+}

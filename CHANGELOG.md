@@ -15,6 +15,31 @@ explanation in this file is a defect.
 rest: `plumbline explain` and the profile architecture.
 
 ### Added
+- **Profile architecture (WP-33).** `--profile` on `scan` and `eval` scopes an
+  evaluation to a declared baseline, and `plumbline profiles` lists the
+  built-ins with the count each selects. Two are embedded: `default` (the whole
+  catalog) and `cis-l1`.
+
+  **An excluded check is `SKIPPED`, never omitted and never
+  `NOT_APPLICABLE`** — the first would make a narrow profile look like a clean
+  host, the second would claim the subject is absent when the question was
+  withdrawn. It carries a new optional `skipped_by` field naming the profile.
+
+  **An excluded check leaves the posture denominator.** The profile declares
+  what applies, so a thirty-check baseline reports coverage against thirty
+  checks rather than reading as a poorly covered scan.
+
+  `--profile` is the flag `scan` already had. It recorded a label in the bundle
+  manifest and did nothing else; it now scopes the evaluation, and that
+  manifest field becomes the record of the scope. Profiles select from the
+  catalog and can never add to it: a finding that exists only under one profile
+  is one nobody else can reproduce.
+
+  **`cis-l1` is not a CIS benchmark and says so in its own description.** No
+  check in this catalog carries a CIS mapping — the catalog maps to NIST
+  800-53 r5 only — so the selection is this project's reading of Level 1
+  themes. Passing it is evidence of sensible hardening, not of compliance.
+
 - **`plumbline explain CHECK-ID` (WP-32).** Prints one catalog entry in full:
   what the check tests, which facts it reads, the remediation with every step
   and command, the control mappings and the references. This is where the
@@ -52,6 +77,12 @@ rest: `plumbline explain` and the profile architecture.
   why, and `VERSIONING.md` §4.4 already forbids it outside a schema major.
 
   No new dependency: the SARIF subset needed is structs and `encoding/json`.
+
+### Schema
+- **`findings-v1` gained an optional `skipped_by` string on a finding.**
+  Additive within the major (`VERSIONING.md` §4.1). A new constraint enforces
+  that it appears only on a `SKIPPED` finding and never alongside a
+  `suppression`.
 
 ### Fixed
 - **Multi-paragraph prose rendered as one run with `\x0a` escapes embedded in

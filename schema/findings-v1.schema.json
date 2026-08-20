@@ -490,6 +490,11 @@
               "description": "The result the check actually reached. A PASS is never suppressed."
             }
           }
+        },
+        "skipped_by": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The profile that put this check out of scope. Present only when result is SKIPPED and there is no suppression. A check skipped by a profile leaves the posture denominator: the profile declares what applies, so the applicable set is the profile. Added as an optional field within findings/v1 (VERSIONING.md 4.1)."
         }
       },
       "allOf": [
@@ -570,6 +575,26 @@
               "result": {
                 "const": "SKIPPED"
               }
+            }
+          }
+        },
+        {
+          "description": "skipped_by only ever appears on a SKIPPED finding, and never together with a suppression.",
+          "if": {
+            "required": [
+              "skipped_by"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "const": "SKIPPED"
+              }
+            },
+            "not": {
+              "required": [
+                "suppression"
+              ]
             }
           }
         }

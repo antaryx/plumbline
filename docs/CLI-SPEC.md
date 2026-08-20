@@ -418,6 +418,94 @@ a verdict about a host belongs.
 
 ---
 
+## 3a. Profiles
+
+```
+plumbline scan --profile cis-l1
+plumbline eval host.plb --profile ./company-baseline.json
+plumbline profiles
+```
+
+A **profile** is a declared baseline: the checks that apply to this class of
+host. A server, a workstation and a hardened container are not the same machine
+and should not share a posture denominator.
+
+`--profile` takes a built-in name or a path to a `profile/v1` file. It is the
+same flag `scan` has always carried — it was recorded in the bundle manifest
+and displayed in the header and did nothing else; it now scopes the evaluation,
+and the manifest field it already wrote becomes the record of that scope.
+
+### Built-ins
+
+| ID | Selects |
+|---|---|
+| `default` | The whole catalog. In force when no `--profile` is given |
+| `cis-l1` | A Level 1 server hardening baseline. **Not a CIS benchmark** — see below |
+
+`plumbline profiles` lists them with the count each selects.
+
+**`cis-l1` is not a compliance artefact.** No check in this catalog carries a
+CIS control mapping — the catalog maps to NIST 800-53 r5 only — so the
+selection is Plumbline's own reading of which of its checks address Level 1
+themes, not a correspondence to numbered CIS recommendations. It omits controls
+a real Level 1 benchmark requires and cannot yet be observed, and includes
+checks no CIS recommendation asks for. Passing it is evidence of sensible
+hardening; it is **not** evidence of compliance and will not satisfy an auditor
+who asked for CIS. The profile says so in its own description.
+
+### File format
+
+```json
+{
+  "schema": "profile/v1",
+  "id": "company-baseline",
+  "title": "What our servers must meet",
+  "description": "optional",
+  "included_checks": ["SSHD-*", "USERS-0001"],
+  "excluded_checks": ["SSHD-0009"],
+  "severity_overrides": {"CRON-0005": "LOW"}
+}
+```
+
+| Field | Required | Meaning |
+|---|---|---|
+| `schema` | yes | Must be `profile/v1` |
+| `id` | yes | Recorded in every output as the active profile |
+| `title` | yes | A baseline nobody can describe is one nobody should trust |
+| `included_checks` | yes | Check-ID patterns. `*` matches any run; `["*"]` is the catalog |
+| `excluded_checks` | no | Applied after includes, and **wins** |
+| `severity_overrides` | no | Per-check effective severity. One check each, never a pattern |
+
+Unknown keys, a bad pattern, an invalid severity, a pattern used as an override
+key, an empty include list, or a missing title are all **parse errors**, and an
+unknown profile name or unreadable file exits `1`. Falling back to the whole
+catalog would score a host against a baseline nobody asked for, and the
+operator would read the number as though their profile had applied.
+
+### What a profile does to the report
+
+- **An excluded check is `SKIPPED`, never omitted and never
+  `NOT_APPLICABLE`.** Omitting it would make a narrow profile look like a clean
+  host; `NOT_APPLICABLE` would claim the subject is absent when in fact the
+  question was withdrawn. It carries `skipped_by` naming the profile, and its
+  evidence and remediation are cleared — they describe a verdict never reached.
+- **An excluded check leaves the posture denominator.** The profile declares
+  what applies, so the applicable set *is* the profile. A thirty-check baseline
+  reports coverage against thirty checks, not against the catalog.
+- **A severity override moves the effective severity and never the base.** Both
+  are reported, exactly as a context adjustment is.
+- The active profile ID appears in the terminal header, in `scan.profile` in
+  `findings/v1`, and in `plumbline/profile` in SARIF.
+
+The profile is applied **after every check has reached its verdict and before
+anything is scored** — the same seam suppression uses. No check can observe a
+profile, so check purity is untouched: a profile is a statement about which
+questions to count, not an input to answering one. It is applied *before*
+suppression, because a check outside the baseline was never asked and there is
+nothing there to accept.
+
+---
+
 ## 4a. `explain`
 
 ```

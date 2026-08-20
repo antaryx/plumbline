@@ -8,6 +8,7 @@ import (
 	"github.com/antaryx/plumbline/internal/bundle"
 	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/finding"
+	"github.com/antaryx/plumbline/internal/profile"
 	renderjson "github.com/antaryx/plumbline/internal/render/json"
 	rendersarif "github.com/antaryx/plumbline/internal/render/sarif"
 	rendertext "github.com/antaryx/plumbline/internal/render/text"
@@ -46,6 +47,7 @@ func newEvalCmd(g *globals, stdout, stderr io.Writer) *cobra.Command {
 		out outputFlags
 		gt  gates
 		sf  suppressFlags
+		pf  profileFlags
 	)
 
 	cmd := &cobra.Command{
@@ -70,6 +72,10 @@ collected on a production host be analysed somewhere safer.`,
 			if err != nil {
 				return err
 			}
+			prof, err := pf.load()
+			if err != nil {
+				return err
+			}
 
 			b, err := readBundle(args[0])
 			if err != nil {
@@ -79,13 +85,14 @@ collected on a production host be analysed somewhere safer.`,
 				return exitError{code: ExitInternal, message: err.Error()}
 			}
 
-			return renderAndGate(b, failOn, gt, format, out, sup, stdout, stderr)
+			return renderAndGate(b, failOn, gt, format, out, sup, prof, stdout, stderr)
 		},
 	}
 
 	out.register(cmd)
 	gt.register(cmd)
 	sf.register(cmd)
+	pf.register(cmd)
 	return cmd
 }
 
@@ -95,8 +102,15 @@ collected on a production host be analysed somewhere safer.`,
 // Rendering is chosen here rather than inside each command for the same
 // reason: a report and its exit code are one answer, and a second call site
 // would be a second place for the two to disagree.
-func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, stdout, stderr io.Writer) error {
+func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, prof *profile.Profile, stdout, stderr io.Writer) error {
 	findings := evaluate(b.Facts)
+
+	// The profile scopes before suppression does. Both sit between evaluation
+	// and scoring, and the order matters: a check outside the baseline was
+	// never asked, so there is nothing there to accept. Suppressing first would
+	// let a rule fire against a finding the profile had already removed, and
+	// report an accepted risk on a question nobody put.
+	findings = applyProfile(prof, findings)
 
 	// Suppression sits exactly here: after every check has reached its own
 	// verdict, and before anything is scored, rendered or gated on. That
@@ -123,12 +137,12 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 	var renderErr error
 	switch format {
 	case FormatJSON:
-		renderErr = renderJSON(w, b, sc, findings, factErrors)
+		renderErr = renderJSON(w, b, sc, findings, factErrors, prof.Name())
 	case FormatSARIF:
-		renderErr = renderSARIF(w, b, sc, findings, len(factErrors) > 0)
+		renderErr = renderSARIF(w, b, sc, findings, len(factErrors) > 0, prof.Name())
 	default:
 		renderErr = renderTerminal(w, b, sc, findings, factErrors,
-			useColor(w, out.noColor, out.output != ""))
+			useColor(w, out.noColor, out.output != ""), prof.Name())
 	}
 
 	if cerr := closeOut(); renderErr == nil {
@@ -141,7 +155,7 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 	return gateOn(sc, findings, factErrors, failOn, gt)
 }
 
-func renderJSON(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, factErrors []fact.Error) error {
+func renderJSON(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, factErrors []fact.Error, activeProfile string) error {
 	return renderjson.Render(w, renderjson.Input{
 		Tool: renderjson.Tool{Name: "plumbline", Version: version.Version, Commit: version.Commit},
 		Scan: renderjson.Scan{
@@ -149,7 +163,7 @@ func renderJSON(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding
 			Finished: b.Manifest.Scan.Finished,
 			Root:     b.Manifest.Scan.Root,
 			EUID:     b.Manifest.Scan.EUID,
-			Profile:  b.Manifest.Scan.Profile,
+			Profile:  activeProfile,
 			Host:     hostFor(b),
 		},
 		Score:      sc,
@@ -163,7 +177,7 @@ func renderJSON(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding
 // is only the wiring, and deliberately takes the same arguments as the other
 // two renderers so that a third output can never see a different finding set
 // from the first two.
-func renderSARIF(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, degraded bool) error {
+func renderSARIF(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, degraded bool, activeProfile string) error {
 	return rendersarif.Render(w, rendersarif.Input{
 		Tool: rendersarif.Tool{Name: "plumbline", Version: version.Version, Commit: version.Commit},
 		Scan: rendersarif.Scan{
@@ -171,7 +185,7 @@ func renderSARIF(w io.Writer, b bundle.Bundle, sc score.Score, findings []findin
 			Finished: b.Manifest.Scan.Finished,
 			Root:     b.Manifest.Scan.Root,
 			EUID:     b.Manifest.Scan.EUID,
-			Profile:  b.Manifest.Scan.Profile,
+			Profile:  activeProfile,
 			Hostname: b.Meta.Hostname,
 		},
 		Score:    sc,
@@ -180,7 +194,7 @@ func renderSARIF(w io.Writer, b bundle.Bundle, sc score.Score, findings []findin
 	})
 }
 
-func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, factErrors []fact.Error, color bool) error {
+func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, factErrors []fact.Error, color bool, activeProfile string) error {
 	return rendertext.Render(w, rendertext.Input{
 		Tool: rendertext.Tool{Name: "plumbline", Version: version.Version, Commit: version.Commit},
 		Scan: rendertext.Scan{
@@ -188,7 +202,7 @@ func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []fin
 			Finished: b.Manifest.Scan.Finished,
 			Root:     b.Manifest.Scan.Root,
 			EUID:     b.Manifest.Scan.EUID,
-			Profile:  b.Manifest.Scan.Profile,
+			Profile:  activeProfile,
 			Host:     textHostFor(b),
 		},
 		Score:      sc,

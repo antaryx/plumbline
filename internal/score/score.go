@@ -30,16 +30,30 @@ type Counts struct {
 	Skipped       int
 	Unknown       int
 	Total         int
+
+	// OutOfProfile is how many of Skipped were put out of scope by the active
+	// profile. It is a subset of Skipped, not a sixth state, and it is not
+	// serialised anywhere — it exists so Applicable can subtract it.
+	OutOfProfile int
 }
 
 // Evaluated is the number of checks that reached a verdict. Only these score:
 // a check that did not run is not evidence of anything.
 func (c Counts) Evaluated() int { return c.Pass + c.Fail }
 
-// Applicable is the number of checks whose subject exists on this host.
+// Applicable is the number of checks that could have produced a verdict about
+// this host.
+//
 // NOT_APPLICABLE leaves the question entirely — a host with no sshd installed
 // is not doing badly at sshd configuration, and it is not doing well either.
-func (c Counts) Applicable() int { return c.Total - c.NotApplicable }
+//
+// **A check the active profile excluded leaves it too**, and that is the whole
+// point of a profile: it declares what applies, so the applicable set *is* the
+// profile. Without this, scanning a container against a thirty-check baseline
+// would report coverage of 38% and a posture capped in red — punishing an
+// operator for scoping the question correctly, which is the same mistake the
+// audited design made by counting unasked questions as failures.
+func (c Counts) Applicable() int { return c.Total - c.NotApplicable - c.OutOfProfile }
 
 // Score is posture and coverage for one evaluation of one catalog.
 //
@@ -87,6 +101,9 @@ func Compute(findings []finding.Finding, catalogVersion int) Score {
 			s.counts.NotApplicable++
 		case finding.Skipped:
 			s.counts.Skipped++
+			if f.SkippedBy != "" {
+				s.counts.OutOfProfile++
+			}
 		case finding.Unknown:
 			s.counts.Unknown++
 		}

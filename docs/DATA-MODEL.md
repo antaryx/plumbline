@@ -834,12 +834,36 @@ Asserted in every check's test suite:
 | `UNKNOWN` ⇒ `unknown_reason` is set | An unexplained UNKNOWN is unactionable |
 | `FAIL` ⇒ `remediation` is present | Every failure ships a fix (`PROJECT-BRIEF.md` §5) |
 | result ≠ `FAIL` and not suppressed ⇒ `remediation` is absent | Remediation on a PASS confuses readers and renderers. A suppressed finding is the exception: it reached `FAIL` or `UNKNOWN`, and the fix it would need is still the fix it would need |
-| `suppression` present ⇒ result is `SKIPPED` | Enforced by the schema; see §5.6 |
+| `suppression` present ⇒ result is `SKIPPED` | Enforced by the schema; see §5.7 |
+| `skipped_by` present ⇒ result is `SKIPPED` and no suppression | Enforced by the schema; see §5.6 |
 | `FAIL` or `UNKNOWN` ⇒ `evidence` is non-empty | See §5.3 |
 | `base_severity` is never mutated by `Eval` | Adjustment must stay visible |
 | `fingerprint` is non-empty | Suppressions depend on it |
 
-### 5.6 Suppression
+### 5.6 SkippedBy
+
+```go
+SkippedBy string `json:"skipped_by,omitempty"`
+```
+
+Names the profile that put a check out of scope. Set only when `result` is
+`SKIPPED` and there is no suppression; enforced by the schema.
+
+It exists because the three ways a check reaches `SKIPPED` are different facts
+and a consumer has to tell them apart: an accepted risk carries a
+`suppression`, a check outside the declared baseline carries this, and anything
+else is the runner's own doing.
+
+**A check with `skipped_by` set leaves the posture denominator.** That is the
+one place this field changes arithmetic rather than describing it: the profile
+declares what applies, so `Applicable = Total − NOT_APPLICABLE − out-of-profile`.
+Without a marker nothing could compute that. The file format and the rest of
+the semantics are in `CLI-SPEC.md` §3a.
+
+Added to `findings-v1` as an optional field, which `VERSIONING.md` §4.1 permits
+within a schema major.
+
+### 5.7 Suppression
 
 ```go
 type Suppression struct {

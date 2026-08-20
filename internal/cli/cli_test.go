@@ -1712,3 +1712,206 @@ func catalogIDs(t *testing.T) []string {
 	}
 	return out
 }
+
+// ---------------------------------------------------------------------------
+// profiles (WP-33)
+// ---------------------------------------------------------------------------
+
+// TestProfilesListsTheBuiltins with the count each one selects, which is the
+// number an operator is choosing between.
+func TestProfilesListsTheBuiltins(t *testing.T) {
+	code, stdout, stderr := run(t, "profiles")
+	if code != cli.ExitOK {
+		t.Fatalf("exit = %d: %s", code, stderr)
+	}
+	for _, want := range []string{"default", "79/79", "cis-l1", "not a certified benchmark"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("profiles omits %q:\n%s", want, stdout)
+		}
+	}
+}
+
+// TestAProfileScalesThePostureDenominator is the acceptance criterion. A
+// narrow baseline must not read as poor coverage: the profile declares what
+// applies, so the applicable set is the profile.
+func TestAProfileScalesThePostureDenominator(t *testing.T) {
+	_, wide, _ := runJSON(t, "scan", "--root", hostFixture, "--profile", "default")
+	_, narrow, _ := runJSON(t, "scan", "--root", hostFixture, "--profile", "cis-l1")
+
+	w, n := summaryOf(t, wide), summaryOf(t, narrow)
+
+	if n.Counts.Skipped == 0 {
+		t.Fatal("cis-l1 skipped nothing, so this test proves nothing")
+	}
+	if n.Coverage < w.Coverage {
+		t.Errorf("coverage fell from %.1f to %.1f when the question was scoped; "+
+			"an excluded check must leave the denominator, not reduce it", w.Coverage, n.Coverage)
+	}
+	if n.Counts.Total != w.Counts.Total {
+		t.Errorf("a profile changed the number of findings from %d to %d; "+
+			"excluded checks must be reported as SKIPPED, never dropped",
+			w.Counts.Total, n.Counts.Total)
+	}
+}
+
+type profileSummary struct {
+	Counts struct {
+		Pass, Fail, NotApplicable, Skipped, Unknown, Total int
+	} `json:"counts"`
+	Posture  float64 `json:"posture"`
+	Coverage float64 `json:"coverage"`
+}
+
+func summaryOf(t *testing.T, doc string) profileSummary {
+	t.Helper()
+	var d struct {
+		Summary profileSummary `json:"summary"`
+		Scan    struct {
+			Profile string `json:"profile"`
+		} `json:"scan"`
+	}
+	if err := json.Unmarshal([]byte(doc), &d); err != nil {
+		t.Fatalf("parsing the document: %v", err)
+	}
+	return d.Summary
+}
+
+// TestAnExcludedCheckIsSkippedAndSaysWhy. Never omitted, never
+// NOT_APPLICABLE: the first would make a narrow profile look like a clean
+// host, and the second would claim the subject is absent when it is the
+// question that was withdrawn.
+func TestAnExcludedCheckIsSkippedAndSaysWhy(t *testing.T) {
+	_, doc, _ := runJSON(t, "scan", "--root", hostFixture, "--profile", "cis-l1")
+	var d struct {
+		Findings []struct {
+			CheckID   string `json:"check_id"`
+			Result    string `json:"result"`
+			SkippedBy string `json:"skipped_by"`
+			Detail    string `json:"detail"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(doc), &d); err != nil {
+		t.Fatal(err)
+	}
+
+	var found bool
+	for _, f := range d.Findings {
+		if f.CheckID != "SERVICES-0001" { // a module cis-l1 does not name
+			continue
+		}
+		found = true
+		if f.Result != "SKIPPED" {
+			t.Errorf("result = %s, want SKIPPED", f.Result)
+		}
+		if f.SkippedBy != "cis-l1" {
+			t.Errorf("skipped_by = %q, want cis-l1", f.SkippedBy)
+		}
+		if !strings.Contains(f.Detail, "cis-l1") {
+			t.Errorf("the detail does not name the profile: %q", f.Detail)
+		}
+	}
+	if !found {
+		t.Error("an out-of-profile check was dropped from the document entirely")
+	}
+}
+
+// TestTheActiveProfileIsInEveryOutput. A score that means something different
+// depending on a flag has to say which flag was in force.
+func TestTheActiveProfileIsInEveryOutput(t *testing.T) {
+	_, jsonOut, _ := runJSON(t, "scan", "--root", hostFixture, "--profile", "cis-l1")
+	if !strings.Contains(jsonOut, `"profile": "cis-l1"`) {
+		t.Error("the findings document does not name the active profile")
+	}
+	_, textOut, _ := run(t, "scan", "--root", hostFixture, "--profile", "cis-l1")
+	if !strings.Contains(textOut, "cis-l1") {
+		t.Error("the terminal report does not name the active profile")
+	}
+	_, sarifOut, _ := run(t, "scan", "--root", hostFixture, "--format", "sarif", "--profile", "cis-l1")
+	if !strings.Contains(sarifOut, `"plumbline/profile": "cis-l1"`) {
+		t.Error("the SARIF run does not name the active profile")
+	}
+}
+
+// TestACustomProfileFileIsAccepted, and is read through the operator-named
+// seam so --root can never be prefixed onto it.
+func TestACustomProfileFileIsAccepted(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mine.json")
+	body := `{"schema":"profile/v1","id":"mine","title":"Only sshd",
+		"included_checks":["SSHD-*"],"severity_overrides":{"SSHD-0002":"LOW"}}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, doc, stderr := runJSON(t, "scan", "--root", failFixture, "--profile", path)
+	if code != cli.ExitOK {
+		t.Fatalf("exit = %d: %s", code, stderr)
+	}
+	if !strings.Contains(doc, `"profile": "mine"`) {
+		t.Error("the custom profile's id is not recorded")
+	}
+
+	var d struct {
+		Findings []struct {
+			CheckID      string `json:"check_id"`
+			Severity     string `json:"severity"`
+			BaseSeverity string `json:"base_severity"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(doc), &d); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range d.Findings {
+		if f.CheckID != "SSHD-0002" {
+			continue
+		}
+		if f.Severity != "LOW" {
+			t.Errorf("the override did not apply: severity = %s", f.Severity)
+		}
+		// The base is never moved, so an operator can always see that a
+		// number was changed and from what.
+		if f.BaseSeverity == "LOW" {
+			t.Error("the override moved base_severity; adjustment must stay visible")
+		}
+	}
+}
+
+// TestABadProfileFailsFast. Falling back to the whole catalog would score a
+// host against a baseline nobody asked for, and the operator would read the
+// number as though their profile had applied.
+func TestABadProfileFailsFast(t *testing.T) {
+	bad := filepath.Join(t.TempDir(), "bad.json")
+	if err := os.WriteFile(bad, []byte(`{"schema":"profile/v9","id":"x","title":"x","included_checks":["*"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(t.TempDir(), "nope.json")
+
+	for _, tc := range []struct{ name, arg, want string }{
+		{"an unknown name", "no-such-profile", "built-in profiles"},
+		{"a malformed file", bad, "this build understands"},
+		{"a missing file", missing, "--profile"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, _, stderr := run(t, "scan", "--root", hostFixture, "--profile", tc.arg)
+			if code != cli.ExitUsage {
+				t.Errorf("exit = %d, want %d", code, cli.ExitUsage)
+			}
+			if !strings.Contains(stderr, tc.want) {
+				t.Errorf("the error does not explain the problem: %q", stderr)
+			}
+		})
+	}
+}
+
+// TestProfileAppliesToEvalToo. scan and eval share one funnel; a baseline that
+// only one of them honoured would mean the score depended on which command was
+// typed.
+func TestProfileAppliesToEvalToo(t *testing.T) {
+	bundlePath := bundleOf(t, hostFixture)
+
+	_, scanOut, _ := runJSON(t, "scan", "--root", hostFixture, "--profile", "cis-l1")
+	_, evalOut, _ := runJSON(t, "eval", bundlePath, "--profile", "cis-l1")
+
+	if !bytes.Equal(parse(t, scanOut).Findings, parse(t, evalOut).Findings) {
+		t.Error("scan and eval disagree once a profile is applied")
+	}
+}

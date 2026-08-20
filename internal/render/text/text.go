@@ -907,6 +907,15 @@ func (p *printer) summary(in Input) {
 	p.line("  " + pad("evaluated", summaryLabel) + padLeft(strconv.Itoa(c.Total), summaryCount) +
 		p.paint(ansiDim, "   checks in catalog "+strconv.Itoa(in.Score.CatalogVersion())))
 	p.line("  " + pad("posture", summaryLabel) + p.postureLine(in.Score))
+	if n := in.Score.Counts().OutOfProfile; n > 0 {
+		p.blank()
+		for _, l := range wrap(fmt.Sprintf(
+			"Coverage is measured against profile %q, which selects %d of the %d checks in this "+
+				"catalog. The %d outside it were not evaluated and are not counted against this host.",
+			in.Scan.Profile, in.Score.Counts().Applicable(), in.Score.Counts().Total, n), detailWidth) {
+			p.line("  " + p.paint(ansiDim, l))
+		}
+	}
 
 	if in.Degraded {
 		p.blank()
@@ -922,16 +931,30 @@ func (p *printer) summary(in Input) {
 // team that suppressed twenty findings reads the same as a team that filtered
 // twenty out.
 func suppressedNote(in []finding.Finding) string {
-	n := 0
+	var accepted, outOfProfile int
 	for _, f := range in {
-		if f.Suppression != nil {
-			n++
+		switch {
+		case f.Suppression != nil:
+			accepted++
+		case f.SkippedBy != "":
+			outOfProfile++
 		}
 	}
-	if n == 0 {
+	var parts []string
+	if accepted > 0 {
+		parts = append(parts, fmt.Sprintf("%d accepted risk(s)", accepted))
+	}
+	if outOfProfile > 0 {
+		// Said explicitly because coverage will read 100% beneath it. A
+		// profile takes its excluded checks out of the denominator, so a
+		// narrow baseline reports full coverage of a narrow question — true,
+		// and misleading to anyone who does not know the question narrowed.
+		parts = append(parts, fmt.Sprintf("%d outside the profile", outOfProfile))
+	}
+	if len(parts) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("← %d accepted risk(s); see above", n)
+	return "← " + strings.Join(parts, ", ")
 }
 
 func unknownNote(n int) string {

@@ -59,7 +59,7 @@ v1.0.0. The schema is `findings-v1` throughout.
 | v0.3.0 — engine maturation and resilience | **complete** | 13 | 79 | tagged `v0.3.0`, 2026-08-20 |
 | v0.3.1 — verification harness repairs | **complete** | 13 | 79 | tagged `v0.3.1`, 2026-08-20; no behaviour change |
 | v0.4.0 — usable more than once | **complete** | 13 | 79 | tagged `v0.4.0`, 2026-08-20 |
-| v0.5.0 — ecosystem integration | **in progress** | 13 | 79 | WP-31 SARIF; WP-32 `explain` |
+| v0.5.0 — ecosystem integration | **in progress** | 13 | 79 | WP-31 SARIF; WP-32 `explain`; WP-33 profiles |
 
 ### v0.1.0 — Walking skeleton — **COMPLETE**
 
@@ -351,7 +351,7 @@ the terminal report deliberately omits. A block that runs to forty lines per
 finding is one an operator scrolls past; a command they asked for by ID is one
 they read.
 
-#### 3. Profile architecture and golden bundles
+#### 3. Profile architecture and golden bundles — **PROFILES DONE (WP-33, 2026-08-20); golden bundles outstanding**
 
 `--profile cis-level-1`, `--profile stig`, and the machinery that makes a
 profile a *selection over the existing catalog* rather than a second catalog.

@@ -17,12 +17,12 @@ func newScanCmd(g *globals, stdout, stderr io.Writer) *cobra.Command {
 		root         string
 		saveBundle   string
 		redact       bool
-		profile      string
 		timeout      time.Duration
 		perCollector time.Duration
 		out          outputFlags
 		gt           gates
 		sf           suppressFlags
+		pf           profileFlags
 	)
 
 	cmd := &cobra.Command{
@@ -59,13 +59,17 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			if err != nil {
 				return err
 			}
+			prof, err := pf.load()
+			if err != nil {
+				return err
+			}
 
 			ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 			defer cancel()
 
 			sys := live.New(root)
 			got, err := collectFacts(ctx, sys, collectOptions{
-				redact: redact, profile: profile, perCollector: perCollector,
+				redact: redact, profile: pf.name, perCollector: perCollector,
 			})
 			if err != nil {
 				return exitError{code: ExitInternal, message: err.Error()}
@@ -85,7 +89,7 @@ re-evaluated or diffed; the two are not interchangeable.`,
 				return exitError{code: ExitTimeout, message: "scan exceeded --timeout"}
 			}
 
-			return renderAndGate(got.bundle, failOn, gt, format, out, sup, stdout, stderr)
+			return renderAndGate(got.bundle, failOn, gt, format, out, sup, prof, stdout, stderr)
 		},
 	}
 
@@ -93,11 +97,11 @@ re-evaluated or diffed; the two are not interchangeable.`,
 	f.StringVar(&root, "root", "", "scan root; paths are interpreted beneath it")
 	f.StringVar(&saveBundle, "save-bundle", "", "write the evidence bundle this scan used to PATH (e.g. host.plb); required for later eval/diff")
 	f.BoolVar(&redact, "redact", false, "omit hostname and non-loopback addresses at collection time")
-	f.StringVar(&profile, "profile", "default", "collection profile")
 	f.DurationVar(&timeout, "timeout", 30*time.Minute, "whole-scan budget")
 	f.DurationVar(&perCollector, "collector-timeout", 2*time.Minute, "budget for one collector that declares none")
 	out.register(cmd)
 	gt.register(cmd)
 	sf.register(cmd)
+	pf.register(cmd)
 	return cmd
 }

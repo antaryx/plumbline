@@ -161,6 +161,20 @@ type Finding struct {
 	// a port). Empty when the check is about the host as a whole.
 	Subject string `json:"subject,omitempty"`
 
+	// SkippedBy names the profile that put this check out of scope. Set only
+	// when Result is SKIPPED and there is no suppression.
+	//
+	// It exists because the three ways a check can end up SKIPPED are
+	// different facts and a consumer has to be able to tell them apart: an
+	// accepted risk carries a Suppression, a check outside the declared
+	// baseline carries this, and anything else is the runner's own doing. A
+	// profile skip also leaves the posture denominator, which nothing could
+	// compute without a marker to key on.
+	//
+	// Added in findings/v1 as an optional field, which VERSIONING.md §4.1
+	// permits within a schema major.
+	SkippedBy string `json:"skipped_by,omitempty"`
+
 	// Suppression is present when an operator accepted this finding and the
 	// acceptance was still live at scan time. Result is SKIPPED whenever it is
 	// set, and OriginalResult inside it says what the verdict would otherwise

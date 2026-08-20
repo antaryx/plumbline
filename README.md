@@ -40,6 +40,7 @@ plumbline collect -o host.plb         # capture the evidence, evaluate it elsewh
 plumbline eval host.plb               # re-evaluate a bundle against today's catalog
 plumbline diff march.plb today.plb    # what changed between two scans
 plumbline explain FILESYS-0010        # read one catalog entry in full
+plumbline profiles                    # list the built-in baselines
 ```
 
 **`.plb` is an evidence bundle — the facts observed.** `eval` and `diff` take
@@ -143,6 +144,24 @@ dismissal in GitHub carries the reason a human wrote. `PASS` and
 `NOT_APPLICABLE` are counted in the run's invocation rather than emitted as
 results, because seventy-four passing checks bury the three that matter. The
 full mapping is `docs/adr/0018-sarif-mapping.md`.
+
+**Scope the audit to a baseline:**
+
+```bash
+plumbline profiles                   # what this binary carries
+plumbline scan --profile cis-l1      # score against that baseline only
+plumbline scan --profile ./mine.json # or your own
+```
+
+A profile declares which checks apply to this class of host. Checks outside it
+are reported as `SKIPPED` — never omitted — and **leave the posture
+denominator**, so a thirty-check baseline reports coverage against thirty
+checks rather than looking like a poorly covered scan.
+
+`cis-l1` is a Level 1 hardening baseline and **not a CIS benchmark**: no check
+here carries a CIS mapping, so the selection is this project's reading of the
+themes, not a claim of correspondence. Passing it is evidence of sensible
+hardening, not of compliance.
 
 **Read the catalog from your terminal:**
 
