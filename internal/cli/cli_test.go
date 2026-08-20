@@ -579,7 +579,7 @@ func TestTerminalIsTheDefaultFormat(t *testing.T) {
 			if strings.HasPrefix(strings.TrimSpace(stdout), "{") {
 				t.Fatalf("the default output is still JSON:\n%s", stdout[:min(len(stdout), 200)])
 			}
-			for _, want := range []string{"CHECKS BY MODULE", "SUMMARY", "posture", "coverage"} {
+			for _, want := range []string{"[+] ", "[ OK ]", "[=] Scan summary", "posture", "coverage"} {
 				if !strings.Contains(stdout, want) {
 					t.Errorf("the default report omits %q", want)
 				}
@@ -693,7 +693,7 @@ func TestNoAnsiReachesANonTerminal(t *testing.T) {
 	if bytes.Contains(body, []byte{0x1b}) {
 		t.Errorf("an escape sequence was written into --output:\n%s", body)
 	}
-	if !bytes.Contains(body, []byte("SUMMARY")) {
+	if !bytes.Contains(body, []byte("Scan summary")) {
 		t.Errorf("--output did not receive the terminal report:\n%s", body)
 	}
 }
@@ -748,9 +748,10 @@ func TestTheTerminalReportNamesWhatItCouldNotDetermine(t *testing.T) {
 
 	_, stdout, _ := run(t, "scan", "--root", root)
 	for _, want := range []string{
-		"COULD NOT DETERMINE",
-		"These are not passes",
-		"COLLECTION GAPS",
+		"Could not determine",
+		"not passes",
+		"Collection gaps",
+		"[ UNKNOWN ]",
 		"/etc/ssh/sshd_config",
 		"degraded",
 	} {

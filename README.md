@@ -42,7 +42,7 @@ plumbline eval host.plb             # re-evaluate a bundle against today's catal
 The default output is a report for a person:
 
 ```
-plumbline 0.3.0   catalog 13
+plumbline 0.4.0   catalog 13
 
   host     auditbox   Debian GNU/Linux 12 (bookworm)
   root     /  (live host)
@@ -50,53 +50,54 @@ plumbline 0.3.0   catalog 13
   euid     0  (root)
   profile  default
 
-CHECKS BY MODULE
-───────────────────────────────────────────────────────────────────────────
+[+] CRON  · 5 checks, 1 failing
+  - The system crontab is owned by root and writable only by root       [ OK ]
+  - The cron drop-in directories are owned by root and writable o…      [ OK ]
+  - Access to crontab is restricted by an allow list               [ WARNING ]
+  - The cron access-control files are owned by root and writable …      [ OK ]
+  - The cron schedule is not readable by unprivileged accounts          [ OK ]
 
-  CRON  · 5 checks, 1 failing
-    PASS     CRON-0001      The system crontab is owned by root and writable only by root
-    PASS     CRON-0002      The cron drop-in directories are owned by root and writable only by root
-    FAIL     CRON-0003      Access to crontab is restricted by an allow list
-    PASS     CRON-0004      The cron access-control files are owned by root and writable only by root
-    PASS     CRON-0005      The cron schedule is not readable by unprivileged accounts
+[+] FILESYS  · 10 checks, 1 unknown
+  - No setuid or setgid executable is writable by group or other        [ OK ]
+  …
+  - Every uid and gid owning a file resolves to a local account o… [ UNKNOWN ]
 
-  FILESYS  · 10 checks, 1 unknown
-    ...
-    UNKNOWN  FILESYS-0010   Every uid and gid owning a file resolves to a local account or group
+[=] Warnings and suggestions
+──────────────────────────────────────────────────────────────────────────────
 
-FAILING — 1
-───────────────────────────────────────────────────────────────────────────
+  Warnings (1)  ·  a check read the value and it does not meet the requirement
 
-  FAIL  CRON-0003  Access to crontab is restricted by an allow list
-      HIGH  ·  subject /etc/cron.deny
-      Access is governed by /etc/cron.deny, which fails open: every account not
-      named in it may schedule jobs, including accounts created after the file
-      was last edited.
+  * Access to crontab is restricted by an allow list [CRON-0003]
+      - Severity  : HIGH
+      - Subject   : /etc/cron.deny
+      - Detail    : Access is governed by /etc/cron.deny, which fails open:
+                    every account not named in it may schedule jobs, including
+                    accounts created after the file was last edited.
+      - Evidence  : /etc/cron.deny
+                    file: mode 0644, uid 0, gid 0
+      - Remedy    : Replace cron.deny with a cron.allow naming the accounts
+                    that need cron.
+      - Effort    : LOW
 
-      evidence
-        /etc/cron.deny
-          file: mode 0644, uid 0, gid 0
+  Could not determine (1)  ·  these are not passes
 
-      remediation  ·  effort LOW
-        Replace cron.deny with a cron.allow naming the accounts that need cron.
+  Each one is a question this scan could not answer, with the reason it
+  could not. Treat them as findings until they are resolved.
 
-COULD NOT DETERMINE — 1
-───────────────────────────────────────────────────────────────────────────
+  * Every uid and gid owning a file resolves to a local accoun… [FILESYS-0010]
+      - Severity  : MEDIUM
+      - Reason    : ambiguous_system_state
+      - Subject   : /etc/nsswitch.conf
+      - Detail    : 2 owners on this filesystem do not resolve in the local
+                    files — uid 4242 owns 3 inodes (for example
+                    /var/lib/oldapp) — but the local files are not this host's
+                    whole account database: /etc/nsswitch.conf routes "passwd"
+                    to files, sss. An identity absent from /etc/passwd may
+                    still be a real account served from somewhere this scan
+                    cannot ask, because Plumbline never opens a network socket.
 
-  These are not passes. Each one is a question this scan could not answer,
-  with the reason it could not. Treat them as findings until they are resolved.
-
-  UNKNOWN  FILESYS-0010  Every uid and gid owning a file resolves to a local account or group
-      MEDIUM  ·  reason ambiguous_system_state  ·  subject /etc/nsswitch.conf
-      2 owners on this filesystem do not resolve in the local files — uid 4242
-      owns 3 inodes (for example /var/lib/oldapp) — but the local files are not
-      this host's whole account database: /etc/nsswitch.conf routes "passwd" to
-      files, sss. An identity absent from /etc/passwd may still be a real account
-      served from somewhere this scan cannot ask, because Plumbline never opens a
-      network socket.
-
-SUMMARY
-───────────────────────────────────────────────────────────────────────────
+[=] Scan summary
+──────────────────────────────────────────────────────────────────────────────
 
   PASS              73
   FAIL               1

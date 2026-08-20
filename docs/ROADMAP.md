@@ -48,7 +48,8 @@ Tagged and released as pre-releases so the pipeline gets exercised, but with an
 explicit "no stability guarantees" banner.
 
 **Status at 2026-08-20:** v0.1.0, v0.2.0, v0.3.0 and the v0.3.1 patch are
-complete and tagged. v0.4.0 is next and carries feature freeze. The schema is
+complete and tagged. v0.4.0 is under way — it opened with WP-28, the
+lynis-style CLI overhaul — and carries feature freeze. The schema is
 `findings-v1` throughout.
 
 | Milestone | State | Catalog | Checks | Shipped |
@@ -57,7 +58,7 @@ complete and tagged. v0.4.0 is next and carries feature freeze. The schema is
 | v0.2.0 — catalog machinery | **complete** | 11 | 78 | tagged `v0.2.0`, 2026-08-20 |
 | v0.3.0 — engine maturation and resilience | **complete** | 13 | 79 | tagged `v0.3.0`, 2026-08-20 |
 | v0.3.1 — verification harness repairs | **complete** | 13 | 79 | tagged `v0.3.1`, 2026-08-20; no behaviour change |
-| v0.4.0 — feature complete for v1 | next | 13+ | — | — |
+| v0.4.0 — feature complete for v1 | **in progress** | 13 | 79 | WP-28 lynis-style CLI overhaul |
 
 ### v0.1.0 — Walking skeleton — **COMPLETE**
 
@@ -206,11 +207,22 @@ does not panic. Before WP-27 the same host produced 22 `PASS`, 23 `FAIL` and
   `finding.ReasonFactVersion` had been declared since v0.1 and was never once
   emitted; the case it was for reported `NOT_APPLICABLE` instead.
 
-### v0.4.0 — Feature complete for v1 — **NEXT**
+### v0.4.0 — Feature complete for v1 — **IN PROGRESS**
 
 Everything v0.3.0 did not carry, in the order it should be built. The ordering
 is not the original one: it now leads with what makes the tool *usable more
 than once* rather than with what adds to it.
+
+**Started 2026-08-20 with WP-28, a CLI visual overhaul.** The terminal report
+is now laid out in the manner of `lynis`: a scan phase of one line per check
+under `[+] MODULE` headings, each carrying a bracketed verdict flush against a
+fixed 78-column grid (`[ OK ]`, `[ WARNING ]`, `[ UNKNOWN ]`, `[ SKIPPED ]`,
+`[ DISABLED ]`), and a `[=] Warnings and suggestions` phase at the bottom that
+carries every detail, evidence excerpt and remediation. The previous layout
+interleaved the two, which put forty lines of advice between two check results
+and destroyed the column of verdicts the layout exists to provide. `UNKNOWN`
+keeps its own heading at equal weight in the suggestion phase — the detail
+moved, the emphasis did not. See `docs/CLI-SPEC.md` §Output.
 
 #### 1. Make a repeat scan survivable
 

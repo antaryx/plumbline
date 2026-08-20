@@ -225,7 +225,7 @@ func TestRenderIsDeterministic(t *testing.T) {
 func TestUnknownGetsTheSameWeightAsFail(t *testing.T) {
 	out := render(t, sample(t))
 
-	if !strings.Contains(out, "COULD NOT DETERMINE") {
+	if !strings.Contains(out, "Could not determine (1)") {
 		t.Fatal("there is no section for results the scan could not determine")
 	}
 	// The full block, not just a count: reason, detail and evidence.
@@ -239,7 +239,7 @@ func TestUnknownGetsTheSameWeightAsFail(t *testing.T) {
 			t.Errorf("the UNKNOWN block omits %q", want)
 		}
 	}
-	if !strings.Contains(out, "These are not passes") {
+	if !strings.Contains(out, "not passes") {
 		t.Error("the section does not say that an UNKNOWN is not a pass")
 	}
 }
@@ -248,14 +248,15 @@ func TestFailingFindingsCarryDetailEvidenceAndRemediation(t *testing.T) {
 	out := render(t, sample(t))
 
 	for _, want := range []string{
-		"FAILING — 1",
+		"Warnings (1)",
 		"SSHD-0002",
 		"PermitRootLogin is yes.",
 		"/etc/ssh/sshd_config:12", // evidence source and line
 		"PermitRootLogin yes",     // evidence excerpt
-		"effort LOW",              // remediation effort
-		"Set PermitRootLogin no",  // remediation summary
-		"CAUTION:",                // and its caution
+		"Effort",                  // remediation effort
+		"LOW",
+		"Set PermitRootLogin no", // remediation summary
+		"Caution",                // and its caution
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the FAIL block omits %q:\n%s", want, out)
@@ -391,6 +392,11 @@ func lineContaining(t *testing.T, out, want string) string {
 // regressed, the check-ID column would ripple with the length of each result
 // word and the report would look broken on precisely the hosts that have
 // something to report.
+// reportWidth is the grid the renderer lays the report out on. It is repeated
+// here rather than exported: this test's job is to pin the layout, so it has
+// to fail when the renderer's constant changes rather than follow it.
+const reportWidth = 78
+
 func TestColumnsAlignWithColourOn(t *testing.T) {
 	out := render(t, sample(t))
 	coloured := func() string {
@@ -399,49 +405,93 @@ func TestColumnsAlignWithColourOn(t *testing.T) {
 		return render(t, in)
 	}()
 
-	plainCols := checkIDColumns(t, out)
-	colourCols := checkIDColumns(t, coloured)
-	if len(plainCols) == 0 {
-		t.Fatal("no check-ID lines found")
+	plain := bracketColumns(t, out)
+	colour := bracketColumns(t, coloured)
+	if len(plain) == 0 {
+		t.Fatal("no status-bracket lines found")
 	}
-	for i := range plainCols {
-		if plainCols[i] != colourCols[i] {
-			t.Fatalf("check-ID column moved when colour was enabled: %v vs %v", plainCols, colourCols)
+	if len(plain) != len(colour) {
+		t.Fatalf("colour changed the number of status lines: %d vs %d", len(plain), len(colour))
+	}
+	for i := range plain {
+		if plain[i] != colour[i] {
+			t.Fatalf("the status column moved when colour was enabled: %v vs %v", plain, colour)
 		}
 	}
-	// And every ID starts in the same column as every other.
-	for _, c := range plainCols {
-		if c != plainCols[0] {
-			t.Fatalf("check IDs do not line up: %v", plainCols)
+	// Every closing bracket lands on the same column, and that column is the
+	// grid's right edge rather than wherever the longest title happened to
+	// push it. This is the assertion the whole layout is built to satisfy.
+	for _, c := range plain {
+		if c != reportWidth {
+			t.Fatalf("a status bracket ends at column %d, not the grid edge %d: %v", c, reportWidth, plain)
 		}
 	}
 }
 
-// checkIDColumns returns the visible column each module-listing line's check ID
-// starts at.
-func checkIDColumns(t *testing.T, out string) []int {
+// TestNoLineOverflowsTheGrid. The grid is only worth having if nothing escapes
+// it: one long title or subject running past the right edge undoes the run of
+// brackets the eye is following down the page.
+func TestNoLineOverflowsTheGrid(t *testing.T) {
+	in := sample(t)
+	in.FactErrors = []fact.Error{{Fact: "users.shadow", Kind: fact.ErrPermission, Path: "/etc/shadow", Msg: "denied"}}
+	for _, colour := range []bool{false, true} {
+		in.Color = colour
+		for _, raw := range strings.Split(render(t, in), "\n") {
+			// The header and the collection-gap table are tabwriter output
+			// sized by their content, and the posture line carries a sentence
+			// explaining an undefined score. The grid governs the scan phase
+			// and the entries, which is where the alignment lives.
+			line := stripANSI(raw)
+			if !strings.HasPrefix(line, "  - ") && !strings.HasPrefix(line, "  * ") &&
+				!strings.HasPrefix(line, "      - ") {
+				continue
+			}
+			if n := len([]rune(line)); n > reportWidth {
+				t.Errorf("colour=%v: line is %d columns, grid is %d:\n%s", colour, n, reportWidth, line)
+			}
+		}
+	}
+}
+
+// TestTheScanPhaseCarriesNoDetail is WP-28's actual requirement. The status
+// listing has to stay a status listing: the moment a detail sentence or a
+// remediation line appears between two check rows, the column of brackets
+// stops being scannable and the report is back to what it replaced.
+func TestTheScanPhaseCarriesNoDetail(t *testing.T) {
+	out := render(t, sample(t))
+
+	head, tail, found := strings.Cut(out, "[=] ")
+	if !found {
+		t.Fatal("the report has no [=] section, so there is no scan phase to bound")
+	}
+	for _, leaked := range []string{
+		"PermitRootLogin is yes.",            // a detail
+		"Set PermitRootLogin no",             // a remediation summary
+		"nsswitch.conf routes passwd to sss", // an unknown's detail
+		"Effort",
+	} {
+		if strings.Contains(head, leaked) {
+			t.Errorf("the scan phase leaked %q; it belongs in the section at the bottom", leaked)
+		}
+		if !strings.Contains(tail, leaked) {
+			t.Errorf("%q is missing from the bottom section entirely", leaked)
+		}
+	}
+}
+
+// bracketColumns returns the visible column each scan-phase line's closing
+// bracket sits in.
+func bracketColumns(t *testing.T, out string) []int {
 	t.Helper()
 	var cols []int
 	for _, raw := range strings.Split(out, "\n") {
 		line := stripANSI(raw)
-		if !strings.HasPrefix(line, "    ") {
+		if !strings.HasPrefix(line, "  - ") || !strings.HasSuffix(line, "]") {
 			continue
 		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 || !isResultWord(fields[0]) {
-			continue
-		}
-		cols = append(cols, strings.Index(line, fields[1]))
+		cols = append(cols, len([]rune(line)))
 	}
 	return cols
-}
-
-func isResultWord(s string) bool {
-	switch s {
-	case "PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE", "SKIPPED":
-		return true
-	}
-	return false
 }
 
 func stripANSI(s string) string {
@@ -487,7 +537,7 @@ func TestCollectionGapsAreReportedSeparately(t *testing.T) {
 	}
 
 	out := render(t, in)
-	for _, want := range []string{"COLLECTION GAPS", "users.shadow", "/etc/shadow", "permission denied", "degraded"} {
+	for _, want := range []string{"Collection gaps", "users.shadow", "/etc/shadow", "permission denied", "degraded"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the report omits %q:\n%s", want, out)
 		}
@@ -502,7 +552,7 @@ func TestAnEmptyReportStillRenders(t *testing.T) {
 		Tool:  rendertext.Tool{Name: "plumbline", Version: "0.3.0-dev"},
 		Score: score.Compute(nil, 12),
 	})
-	if !strings.Contains(out, "SUMMARY") {
+	if !strings.Contains(out, "Scan summary") {
 		t.Errorf("an empty report has no summary:\n%s", out)
 	}
 	if !strings.Contains(out, "undefined") {

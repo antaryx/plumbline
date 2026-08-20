@@ -11,8 +11,29 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-Nothing yet. `docs/ROADMAP.md` v0.4.0 is next and carries feature freeze:
+`v0.4.0` in progress. `docs/ROADMAP.md` carries the rest of the milestone:
 suppressions first, then `diff`, then the catalog-legibility commands.
+
+### Changed
+- **The terminal report is laid out in the manner of `lynis` (WP-28).** A scan
+  phase of one line per check under `[+] MODULE` headings, each carrying a
+  bracketed verdict flush against a fixed 78-column grid — `[ OK ]`,
+  `[ WARNING ]`, `[ UNKNOWN ]`, `[ SKIPPED ]`, `[ DISABLED ]` — and a
+  `[=] Warnings and suggestions` phase at the bottom carrying every detail,
+  evidence excerpt and remediation. The previous layout interleaved the two,
+  which put forty lines of advice between two check results and destroyed the
+  column of verdicts the layout exists to provide.
+
+  `NOT_APPLICABLE` and `SKIPPED` render as different tokens rather than
+  collapsing into one: the first means the subject is not on this host, the
+  second that the check was deliberately not run.
+
+  `UNKNOWN` keeps its own heading at equal weight in the suggestion phase. The
+  detail moved; the emphasis did not.
+
+  **This is a layout change to output that is explicitly not the API**
+  (`docs/VERSIONING.md`, `CLI-SPEC.md` §Output). Anything parsing the terminal
+  report was already unsupported and should ask for `--json`.
 
 ---
 

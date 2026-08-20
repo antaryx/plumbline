@@ -94,6 +94,41 @@ escape sequence in a file the operator asked to keep is not a rendering choice;
 it is corruption of an artefact they will read later in something that is not a
 terminal.
 
+#### Terminal layout
+
+The terminal report is in two phases.
+
+The **scan phase** is one line per check, grouped under a `[+] MODULE` heading:
+the check's title on the left, and a bracketed verdict flush against the right
+edge of a fixed 78-column grid.
+
+| Result | Token | Colour |
+|---|---|---|
+| `PASS` | `[ OK ]` | green |
+| `FAIL` | `[ WARNING ]` | red |
+| `UNKNOWN` | `[ UNKNOWN ]` | yellow |
+| `NOT_APPLICABLE` | `[ SKIPPED ]` | dim |
+| `SKIPPED` | `[ DISABLED ]` | dim |
+
+`NOT_APPLICABLE` and `SKIPPED` do not share a token. The first means the
+subject is not on this host; the second means it may well be and the check was
+deliberately not run. Collapsing them would report a declined check where in
+truth there was nothing to check.
+
+The scan phase carries **no** detail, evidence or remediation. All of it is in
+the **suggestion phase** at the bottom, under `[=] Warnings and suggestions`,
+where each finding gets a starred headline carrying its check ID and labelled
+value lines beneath. `FAIL` and `UNKNOWN` appear there under separate headings
+and at equal weight — moving the detail to the bottom is a change of layout and
+must never become a change of emphasis.
+
+**The grid is 78 columns and does not follow the terminal.** A report has to be
+byte-identical across two runs of an unchanged host, or a scheduled scan
+produces a diff every night and people stop reading it. Only check titles are
+ever truncated to fit; a check ID, a path or an evidence excerpt is a value an
+operator copies, and one silently shortened to make a column line up is worse
+than a ragged column.
+
 #### What may be parsed
 
 **`--format json` is the API. `--format terminal` is not.** The terminal

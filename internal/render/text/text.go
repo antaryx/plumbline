@@ -6,15 +6,29 @@
 // `--format json`, which is why the two renderers are separate packages over
 // the same model rather than one renderer with a mode flag.
 //
-// Three properties are load-bearing, and each exists because the obvious
+// The report is in two phases, in the manner of lynis. The **scan phase** is a
+// status column and nothing else: one line per check, its title on the left and
+// a bracketed verdict flush against the right edge of a fixed grid. The
+// **suggestion phase** at the bottom carries every detail, every piece of
+// evidence and every remediation, gathered together. Interleaving the two —
+// which is what this package used to do — puts forty lines of advice between
+// two check results and destroys the one thing the layout is for, which is a
+// column of brackets an operator can run their eye down.
+//
+// Four properties are load-bearing, and each exists because the obvious
 // implementation gets it wrong.
 //
 // **UNKNOWN is never quiet.** A tool that lists failures and buries what it
 // could not determine is reporting a cleaner host than it actually saw. Every
-// UNKNOWN gets the same full block a FAIL gets, the summary states the count on
-// its own line, and coverage is printed beside posture every single time —
-// because 100 over two checks out of two hundred is not a clean host, it is an
-// unexamined one.
+// UNKNOWN gets the same entry a FAIL gets under its own heading in the
+// suggestion phase, the summary states the count on its own line, and coverage
+// is printed beside posture every single time — because 100 over two checks out
+// of two hundred is not a clean host, it is an unexamined one. Moving the
+// detail to the bottom was a change of layout and must never become a change of
+// emphasis.
+//
+// **The grid is fixed, not terminal-derived.** Two reports of an unchanged host
+// have to be byte-identical or a nightly diff is noise. See reportWidth.
 //
 // **Colour is a decision the caller makes, not one this package infers.** It
 // takes a bool. The three rules that produce that bool — --no-color, NO_COLOR,
@@ -114,9 +128,9 @@ func Render(w io.Writer, in Input) error {
 	p := &printer{w: w, color: in.Color}
 
 	p.header(in)
-	p.resultsByModule(in.Findings)
-	p.attention(in.Findings)
+	p.scanPhase(in.Findings)
 	p.factErrors(in.FactErrors)
+	p.warningsAndSuggestions(in.Findings)
 	p.summary(in)
 
 	return p.err
@@ -142,6 +156,28 @@ func (p *printer) printf(format string, args ...any) {
 func (p *printer) line(s string) { p.printf("%s\n", s) }
 func (p *printer) blank()        { p.printf("\n") }
 
+// flusher is implemented by a buffered writer. The scan phase calls flush
+// after every check line so the report appears as it is produced rather than
+// arriving all at once when the process exits.
+//
+// This is not an animation and there is no sleep anywhere in this package. A
+// deliberate delay would be a lie about how long the work took, and on a host
+// with 79 checks it would turn a 2 ms scan into a 2 s one for the sake of
+// looking busy. What it does is remove *buffering* as a reason for the report
+// to arrive in one lump: os.Stdout is already unbuffered, so in the real CLI
+// every line is a write syscall the moment it is formatted, and this hook
+// makes that true as well for a caller that wraps the writer.
+type flusher interface{ Flush() error }
+
+func (p *printer) flush() {
+	if p.err != nil {
+		return
+	}
+	if f, ok := p.w.(flusher); ok {
+		p.err = f.Flush()
+	}
+}
+
 // paint wraps s in an escape sequence, or returns it untouched when colour is
 // off. Every colour in this package goes through here; there is no second path
 // that could forget the switch.
@@ -156,12 +192,46 @@ func (p *printer) paint(code, s string) string {
 // header
 // ---------------------------------------------------------------------------
 
-const rule = "───────────────────────────────────────────────────────────────────────────"
+// The report is laid out on a fixed grid, and every width in this package is
+// derived from reportWidth rather than from the terminal.
+//
+// **The grid does not read $COLUMNS, and that is deliberate.** A report has to
+// be byte-identical across two runs of an unchanged host — that is what makes
+// a nightly scan diff to nothing and stay worth reading. A layout that follows
+// the window would make the same host produce a different report on a laptop
+// and in CI, and the diff between them would be noise about furniture.
+// Eighty columns is the width every terminal, serial console and CI log pane
+// agrees on, so the grid is two narrower than that to leave room for a pager's
+// gutter.
+const reportWidth = 78
 
+// rule is computed rather than typed out, because a box-drawing character is
+// three bytes and one accidentally missing from a literal is invisible in
+// review and misaligns the report by a column.
+var rule = strings.Repeat("─", reportWidth)
+
+// section is a top-level report heading: `[=] Warnings and suggestions`.
+//
+// `[+]` marks a group of checks being run and `[=]` marks a conclusion drawn
+// from them, which is the distinction Lynis draws and the reason the two
+// markers exist rather than one.
 func (p *printer) section(title string) {
 	p.blank()
-	p.line(p.paint(ansiBold, title))
+	p.line(p.paint(ansiBold, "[=] "+title))
 	p.line(p.paint(ansiDim, rule))
+}
+
+// group is a module heading inside the scan phase: `[+] sshd`.
+//
+// The module's own identifier is printed rather than a prose name like "SSH
+// configuration". A display-name table here would be a second place where the
+// catalog's modules are enumerated, and the moment a module is added and the
+// table is not updated the report starts lying about what it ran. The
+// identifier is also what `--module` takes, so what is printed is what an
+// operator can type back.
+func (p *printer) group(name, tally string) {
+	p.blank()
+	p.line(p.paint(ansiBold, "[+] "+name) + "  " + p.paint(ansiDim, tally))
 }
 
 func (p *printer) header(in Input) {
@@ -262,60 +332,113 @@ func resultColor(r finding.Result) string {
 	}
 }
 
-// resultWidth is the width the result column pads to: the widest result word
+// statusToken is the bracketed word a result is shown as.
+//
+// The mapping is not one-to-one with finding.Result, and the two places it
+// bends are worth stating.
+//
+// **FAIL shows as WARNING.** The result state is still FAIL everywhere it
+// matters — in the JSON, in the exit code, in the score — but the word an
+// operator reads beside a check is the word that describes what to do about
+// it, and "warning" is that word.
+//
+// **NOT_APPLICABLE and SKIPPED do not collapse into one token.** They are
+// different facts: NOT_APPLICABLE means the subject is not on this host, and
+// SKIPPED means the subject may well be here and the check was deliberately
+// not run. Printing both as SKIPPED would tell an operator that a check was
+// declined when in truth there was nothing to check, and the whole argument of
+// this tool is that those states stay distinct.
+func statusToken(r finding.Result) string {
+	switch r {
+	case finding.Pass:
+		return "[ OK ]"
+	case finding.Fail:
+		return "[ WARNING ]"
+	case finding.Unknown:
+		return "[ UNKNOWN ]"
+	case finding.NotApplicable:
+		return "[ SKIPPED ]"
+	case finding.Skipped:
+		return "[ DISABLED ]"
+	default:
+		// An unrecognised result still gets a row. Dropping it would be the
+		// worst possible response to a report from a newer catalog.
+		return "[ " + string(r) + " ]"
+	}
+}
+
+// statusWidth is the width the status column occupies: the widest token
 // actually present, not the widest that exists.
 //
-// NOT_APPLICABLE is fourteen characters and most hosts never produce one, so
-// padding to it unconditionally would put ten spaces after every PASS on every
-// report for the sake of a state that is not there. Measuring the input keeps
-// the common report tight and is still perfectly deterministic — the width is
-// a function of the findings, so two reports of an unchanged host remain
-// byte-identical.
-func resultWidth(in []finding.Finding) int {
+// Measuring the input rather than the enum keeps the common report tight — a
+// host with no SKIPPED results should not carry four columns of padding on
+// every line for the sake of a token that is not there — and it is still
+// perfectly deterministic, because the width is a pure function of the
+// findings. Two reports of an unchanged host stay byte-identical.
+func statusWidth(in []finding.Finding) int {
 	w := 0
 	for _, f := range in {
-		if n := len(f.Result); n > w {
+		if n := len(statusToken(f.Result)); n > w {
 			w = n
 		}
 	}
 	return w
 }
 
-// idWidth is the same measurement for the check-ID column.
-func idWidth(in []finding.Finding) int {
-	w := 0
-	for _, f := range in {
-		if n := len(f.CheckID); n > w {
-			w = n
-		}
-	}
-	return w
-}
+// The scan-phase line is a fixed four-column grid:
+//
+//   - Root login is disabled over SSH ....................... [ OK ]
+//     └┬┘└──────────────────── title ────────────────────────┘ └status┘
+//     indent                                                 gap
+//
+// and the arithmetic that keeps the closing bracket flush right is one line:
+//
+//	titleWidth = reportWidth - scanIndent - statusGap - statusWidth(findings)
+//
+// so that indent + titleWidth + gap + statusWidth == reportWidth exactly. The
+// title is left-padded to titleWidth and the status token is **right**-padded
+// into statusWidth, which is what puts every `]` on the same column while the
+// tokens themselves stay their natural width. Padding the word *inside* the
+// brackets would align both brackets but produce `[ OK      ]`, which reads as
+// a rendering bug rather than a status.
+//
+// Both pads go through visibleWidth, so a coloured token occupies exactly the
+// columns it draws and the grid does not move when --no-color is dropped.
+// TestColumnsAlignWithColourOn is the gate on that.
+const (
+	scanIndent = 4 // "  - "
+	statusGap  = 1 // at least one space before the bracket
+)
 
-func (p *printer) resultsByModule(findings []finding.Finding) {
+func (p *printer) scanPhase(findings []finding.Finding) {
 	if len(findings) == 0 {
 		return
 	}
-	p.section("CHECKS BY MODULE")
 
-	// Both widths are measured across the whole report rather than per module,
-	// so the columns line up from the first module to the last. A table that
-	// re-aligns itself every few lines is harder to scan than a slightly wider
-	// one.
-	rw, iw := resultWidth(findings), idWidth(findings)
+	// Measured across the whole report rather than per module, so the bracket
+	// column holds from the first module to the last. A table that re-aligns
+	// itself every few lines is harder to scan than a slightly wider one.
+	sw := statusWidth(findings)
+	titleWidth := reportWidth - scanIndent - statusGap - sw
+	if titleWidth < 16 {
+		// Only reachable if reportWidth is ever lowered below what a status
+		// token needs. Sixteen columns of title is not useful, but a wrapped
+		// grid is worse than a wide one.
+		titleWidth = 16
+	}
 
 	for _, m := range modulesOf(findings) {
-		in := m.findings
-		p.blank()
-		p.printf("  %s  %s\n",
-			p.paint(ansiBold, m.name),
-			p.paint(ansiDim, p.moduleTally(in)))
+		p.group(m.name, p.moduleTally(m.findings))
 
-		for _, f := range in {
-			p.printf("    %s  %s  %s\n",
-				p.paint(resultColor(f.Result), pad(string(f.Result), rw)),
-				pad(f.CheckID, iw),
-				cell(f.Title))
+		for _, f := range m.findings {
+			title := truncate(cell(f.Title), titleWidth)
+			p.printf("  - %s%s%s\n",
+				pad(title, titleWidth),
+				strings.Repeat(" ", statusGap),
+				p.paint(resultColor(f.Result), padLeft(statusToken(f.Result), sw)))
+			// Line by line, so a slow terminal shows the audit progressing
+			// instead of sitting blank and then printing everything at once.
+			p.flush()
 		}
 	}
 }
@@ -394,87 +517,121 @@ func modulesOf(in []finding.Finding) []moduleGroup {
 // the blocks that matter
 // ---------------------------------------------------------------------------
 
-// attention prints the full block for every FAIL and every UNKNOWN.
+// warningsAndSuggestions is the whole of the detail, gathered at the end.
 //
-// UNKNOWN is here, at the same weight as FAIL, and that placement is the whole
-// argument of this project rendered as layout. A check that could not tell is
-// not a check that passed, and a report that lists failures loudly while
-// mentioning unknowns in a footnote is describing a cleaner host than the one
-// it examined.
-func (p *printer) attention(findings []finding.Finding) {
+// The scan phase above is a status column and nothing else: no detail, no
+// evidence, no remediation. That is the point of the restructure — a report
+// that interleaves forty lines of advice between check results is one an
+// operator scrolls through rather than reads, and the run of brackets down the
+// right-hand side is unreadable if something breaks it up every few rows.
+//
+// **UNKNOWN is here, under its own heading, at the same weight as a warning.**
+// Moving detail to the bottom of the report was a change of layout and must
+// not become a change of emphasis: a check that could not tell is not a check
+// that passed, and a tool that lists failures in full while summarising its
+// unknowns is describing a cleaner host than the one it examined. Both groups
+// get the same entry shape, and the unknown group carries the sentence saying
+// so in as many words.
+func (p *printer) warningsAndSuggestions(findings []finding.Finding) {
 	fails := withResult(findings, finding.Fail)
 	unknowns := withResult(findings, finding.Unknown)
 	if len(fails) == 0 && len(unknowns) == 0 {
 		return
 	}
 
+	p.section("Warnings and suggestions")
+
 	if len(fails) > 0 {
-		p.section(fmt.Sprintf("FAILING — %d", len(fails)))
 		sortBySeverityThenID(fails)
+		p.blank()
+		p.line("  " + p.paint(ansiRed, fmt.Sprintf("Warnings (%d)", len(fails))) +
+			p.paint(ansiDim, "  ·  a check read the value and it does not meet the requirement"))
 		for _, f := range fails {
-			p.block(f)
+			p.entry(f)
 		}
 	}
 
 	if len(unknowns) > 0 {
-		p.section(fmt.Sprintf("COULD NOT DETERMINE — %d", len(unknowns)))
 		p.blank()
-		p.line(p.paint(ansiDim, "  These are not passes. Each one is a question this scan could not answer,"))
-		p.line(p.paint(ansiDim, "  with the reason it could not. Treat them as findings until they are resolved."))
+		p.line("  " + p.paint(ansiYellow, fmt.Sprintf("Could not determine (%d)", len(unknowns))) +
+			p.paint(ansiDim, "  ·  these are not passes"))
+		p.blank()
+		p.line("  " + p.paint(ansiDim, "Each one is a question this scan could not answer, with the reason it"))
+		p.line("  " + p.paint(ansiDim, "could not. Treat them as findings until they are resolved."))
 		for _, f := range unknowns {
-			p.block(f)
+			p.entry(f)
 		}
 	}
 }
 
-// block is one finding in full: what it is, what was observed, what that was
-// derived from, and what to do about it.
-func (p *printer) block(f finding.Finding) {
+// entry is one finding in full, in the shape Lynis uses for a suggestion: a
+// starred headline carrying the check ID, then labelled detail lines beneath.
+//
+// The check ID is on the headline rather than buried, because it is the one
+// field a suppression file matches on and the one an operator pastes into
+// `docs/checks/<ID>.md`. It is never truncated for the same reason.
+func (p *printer) entry(f finding.Finding) {
 	p.blank()
 
-	label := p.paint(resultColor(f.Result), string(f.Result))
-	head := fmt.Sprintf("  %s  %s  %s", label, p.paint(ansiBold, f.CheckID), cell(f.Title))
-	p.line(head)
+	// "  * " + title + " " + "[ID]" must fit the grid. The ID is never the
+	// part that gives, so the title absorbs the whole shortfall.
+	id := "[" + f.CheckID + "]"
+	title := truncate(cell(f.Title), reportWidth-4-1-visibleWidth(id))
+	p.line("  " + p.paint(resultColor(f.Result), "*") + " " +
+		title + " " + p.paint(ansiBold, id))
 
-	// The severity line carries the base severity too when the two differ, so
-	// a context adjustment is never invisible.
-	meta := []string{p.severityLabel(f)}
+	p.field("Severity", p.severityLabel(f))
 	if f.UnknownReason != "" {
-		meta = append(meta, "reason "+p.paint(ansiYellow, string(f.UnknownReason)))
+		p.field("Reason", p.paint(ansiYellow, string(f.UnknownReason)))
 	}
-	subject := cell(f.Subject)
-	// A short subject rides along on the metadata line; a long one — a check
-	// reporting on nine paths at once — gets its own wrapped lines rather than
-	// running off the right edge of the terminal.
-	if subject != "" && visibleWidth(subject) <= shortSubject {
-		meta = append(meta, "subject "+subject)
-		subject = ""
-	}
-	p.line("      " + strings.Join(meta, p.paint(ansiDim, "  ·  ")))
-	if subject != "" {
-		for _, l := range wrap("subject  "+subject, detailWidth) {
-			p.line("      " + p.paint(ansiDim, l))
-		}
-	}
-
-	for _, l := range wrap(f.Detail, detailWidth) {
-		p.line("      " + l)
-	}
+	p.fieldWrapped("Subject", f.Subject)
+	p.fieldWrapped("Detail", f.Detail)
 
 	if len(f.Evidence) > 0 {
-		p.blank()
-		p.line("      " + p.paint(ansiDim, "evidence"))
-		for _, e := range f.Evidence[:min(len(f.Evidence), maxEvidence)] {
-			p.evidence(e)
+		for i, e := range f.Evidence[:min(len(f.Evidence), maxEvidence)] {
+			label := "Evidence"
+			if i > 0 {
+				label = ""
+			}
+			p.evidence(label, e)
 		}
 		if extra := len(f.Evidence) - maxEvidence; extra > 0 {
-			p.line("        " + p.paint(ansiDim,
-				fmt.Sprintf("… and %d more; --format json carries all of it", extra)))
+			p.continuation(p.paint(ansiDim,
+				fmt.Sprintf("… and %d more; --json carries all of it", extra)))
 		}
 	}
 
 	if f.Remediation != nil {
 		p.remediation(*f.Remediation)
+	}
+}
+
+// fieldLabel is the width of the label column in an entry. Every labelled line
+// is "      - Label      : value", so the values line up down the entry and the
+// labels can be skimmed without reading them.
+const fieldLabel = 10
+
+func (p *printer) field(label, value string) {
+	if value == "" {
+		return
+	}
+	p.line("      " + p.paint(ansiDim, "- "+pad(label, fieldLabel)+": ") + value)
+}
+
+// continuation is a value line with no label, aligned under the values above
+// it: 6 indent + 2 dash + label + 2 for ": ".
+func (p *printer) continuation(value string) {
+	p.line(strings.Repeat(" ", 6+2+fieldLabel+2) + value)
+}
+
+func (p *printer) fieldWrapped(label, value string) {
+	lines := wrap(value, fieldWidth)
+	for i, l := range lines {
+		if i == 0 {
+			p.field(label, l)
+			continue
+		}
+		p.continuation(l)
 	}
 }
 
@@ -504,11 +661,7 @@ func (p *printer) severityLabel(f finding.Finding) string {
 // world-writable files produces a finding nobody reads if every one is listed.
 const maxEvidence = 5
 
-// shortSubject is how much subject fits on the metadata line before it earns
-// lines of its own.
-const shortSubject = 56
-
-func (p *printer) evidence(e finding.Evidence) {
+func (p *printer) evidence(label string, e finding.Evidence) {
 	where := cell(e.Source)
 	if where == "" {
 		where = "(no source)"
@@ -516,25 +669,29 @@ func (p *printer) evidence(e finding.Evidence) {
 	if e.Line > 0 {
 		where += fmt.Sprintf(":%d", e.Line)
 	}
-	p.line("        " + p.paint(ansiDim, where))
-	for _, l := range wrap(e.Excerpt, evidenceWidth) {
-		p.line("          " + l)
+	if label != "" {
+		p.field(label, p.paint(ansiDim, where))
+	} else {
+		p.continuation(p.paint(ansiDim, where))
+	}
+	for _, l := range wrap(e.Excerpt, fieldWidth) {
+		p.continuation(l)
 	}
 }
 
 func (p *printer) remediation(r finding.Remediation) {
-	p.blank()
-	head := "      " + p.paint(ansiDim, "remediation")
+	p.fieldWrapped("Remedy", r.Summary)
 	if r.Effort != "" {
-		head += p.paint(ansiDim, fmt.Sprintf("  ·  effort %s", r.Effort))
-	}
-	p.line(head)
-	for _, l := range wrap(r.Summary, detailWidth) {
-		p.line("        " + l)
+		p.field("Effort", r.Effort)
 	}
 	if r.Caution != "" {
-		for _, l := range wrap("CAUTION: "+r.Caution, detailWidth) {
-			p.line("        " + p.paint(ansiYellow, l))
+		lines := wrap(r.Caution, fieldWidth)
+		for i, l := range lines {
+			if i == 0 {
+				p.field("Caution", p.paint(ansiYellow, l))
+				continue
+			}
+			p.continuation(p.paint(ansiYellow, l))
 		}
 	}
 	// Steps and commands are deliberately not printed. A block that runs to
@@ -605,7 +762,7 @@ func (p *printer) factErrors(errs []fact.Error) {
 	if len(errs) == 0 {
 		return
 	}
-	p.section(fmt.Sprintf("COLLECTION GAPS — %d", len(errs)))
+	p.section(fmt.Sprintf("Collection gaps (%d)", len(errs)))
 	p.blank()
 	p.line(p.paint(ansiDim, "  Facts the scan could not gather. Every check that needed one of these"))
 	p.line(p.paint(ansiDim, "  is UNKNOWN above, and coverage is reduced accordingly."))
@@ -656,7 +813,7 @@ const (
 
 func (p *printer) summary(in Input) {
 	c := in.Score.Counts()
-	p.section("SUMMARY")
+	p.section("Scan summary")
 	p.blank()
 
 	row := func(colour, label string, n int, note string) {
@@ -745,13 +902,45 @@ func (p *printer) postureLine(sc score.Score) string {
 // ---------------------------------------------------------------------------
 
 const (
-	// detailWidth and evidenceWidth are the wrap columns for prose. They are
-	// fixed rather than read from the terminal: a report has to be
-	// byte-identical across two runs of an unchanged host, and a width that
-	// depends on how wide somebody's window happened to be is not.
-	detailWidth   = 92
-	evidenceWidth = 88
+	// detailWidth is the wrap column for free prose that starts at the left
+	// margin — the degraded-scan note in the summary.
+	//
+	// fieldWidth is the wrap column for a labelled value inside an entry, and
+	// it is what is left of the grid once the indent, the dash, the label and
+	// the colon have been spent: reportWidth - (6 + 2 + fieldLabel + 2).
+	//
+	// Both are fixed rather than read from the terminal, for the reason stated
+	// on reportWidth: a report has to be byte-identical across two runs of an
+	// unchanged host, and a width that depends on how wide somebody's window
+	// happened to be is not.
+	detailWidth = 76
+	fieldWidth  = reportWidth - (6 + 2 + fieldLabel + 2)
 )
+
+// truncate shortens s to w visible columns, marking the cut with an ellipsis.
+//
+// This is used on titles and on nothing else. A title is prose written for
+// this report and losing its tail costs a few words of context; a check ID, a
+// path or an evidence excerpt is a value an operator copies, and one silently
+// shortened to make a column line up is worse than a ragged column. The
+// ellipsis is one column wide, so the result is exactly w.
+func truncate(s string, w int) string {
+	if w <= 0 || visibleWidth(s) <= w {
+		return s
+	}
+	if w == 1 {
+		return "…"
+	}
+	out, n := make([]rune, 0, w), 0
+	for _, r := range s {
+		if n == w-1 {
+			break
+		}
+		out = append(out, r)
+		n++
+	}
+	return string(out) + "…"
+}
 
 // visibleWidth counts the runes a terminal will actually draw, skipping SGR
 // escape sequences. It is what lets pad align a coloured column, which
