@@ -14,6 +14,41 @@ explanation in this file is a defect.
 `v0.4.0` in progress. `docs/ROADMAP.md` carries the rest of the milestone:
 suppressions first, then `diff`, then the catalog-legibility commands.
 
+### Added
+- **Acknowledgeable suppressions (WP-29).** `--suppress PATH` applies a
+  `suppressions/v1` file mapping a finding fingerprint to a justification and an
+  optional expiry.
+
+  **A suppression never removes a finding.** The result becomes `SKIPPED` and
+  the finding carries a new `suppression` object recording the justification,
+  the expiry, and `original_result` — what the check actually reached. Accepted
+  risks get their own `[=] Accepted risks` section in the terminal report and a
+  distinct `[ SUPPRESSED ]` status token, so "we accepted this" can never read
+  as "we never looked".
+
+  A blank justification, an unknown field, a duplicate fingerprint, or a
+  `check_id`/`subject` label that fingerprints to something else are all **parse
+  errors**, and a bad file is a hard error rather than a scan with nothing
+  suppressed. Rules that lapsed or matched nothing are reported on stderr.
+
+  Expiry is measured against the scan's start time rather than the wall clock,
+  so re-evaluating an archived bundle gives the same answer forever.
+
+  An accepted risk leaves the posture denominator (a team is not scored down for
+  reviewing something) and reduces coverage, which is the existing meaning of
+  `SKIPPED`.
+
+### Schema
+- **`findings-v1` gained an optional `suppression` object on a finding.**
+  Additive within the schema major (`VERSIONING.md` §4.1); consumers written
+  before it existed ignore it and correctly see a `SKIPPED` finding. The
+  `result` enum is unchanged.
+- The constraint "a result other than `FAIL` carries no remediation" now excepts
+  suppressed findings, which keep the fix they would otherwise need so the
+  acceptance stays reviewable. This relaxes a rule — no previously valid
+  document becomes invalid.
+- A new constraint enforces that `suppression` appears only on `SKIPPED`.
+
 ### Changed
 - **The terminal report is laid out in the manner of `lynis` (WP-28).** A scan
   phase of one line per check under `[+] MODULE` headings, each carrying a

@@ -3,6 +3,7 @@ package cli_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -977,5 +978,202 @@ func TestTheHostFixtureCanReachAVerdictOnOwnership(t *testing.T) {
 				"or FILESYS-0010 goes UNKNOWN on any checkout whose uid is absent from the fixture's passwd",
 				db, sources)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// suppressions (WP-29)
+// ---------------------------------------------------------------------------
+
+// writeSuppressions puts a suppression file somewhere the CLI can read it and
+// returns the path.
+func writeSuppressions(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "accepted.json")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("writing the suppression file: %v", err)
+	}
+	return path
+}
+
+// failuresOf scans a fixture and returns the fingerprint and check ID of every
+// failing finding, which is what an operator would copy into their file.
+//
+// Every one of them, not the first: sshd-permit-yes fails several checks at
+// HIGH and above, so a test that suppressed one and then asserted --fail-on
+// had gone quiet would be asserting nothing.
+func failuresOf(t *testing.T, root string) (fingerprints, checkIDs []string) {
+	t.Helper()
+	_, stdout, _ := runJSON(t, "scan", "--root", root)
+	var doc struct {
+		Findings []struct {
+			CheckID     string `json:"check_id"`
+			Result      string `json:"result"`
+			Fingerprint string `json:"fingerprint"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil {
+		t.Fatalf("parsing the scan document: %v", err)
+	}
+	for _, f := range doc.Findings {
+		if f.Result == "FAIL" {
+			fingerprints = append(fingerprints, f.Fingerprint)
+			checkIDs = append(checkIDs, f.CheckID)
+		}
+	}
+	if len(fingerprints) == 0 {
+		t.Fatalf("%s produced no FAIL, so there is nothing to suppress", root)
+	}
+	return fingerprints, checkIDs
+}
+
+// suppressAll builds a file accepting every fingerprint given, with an
+// optional expiry applied to all of them.
+func suppressAll(t *testing.T, fingerprints []string, justification, expiresAt string) string {
+	t.Helper()
+	rules := make([]string, 0, len(fingerprints))
+	for _, fp := range fingerprints {
+		r := fmt.Sprintf(`{"fingerprint":%q,"justification":%q`, fp, justification)
+		if expiresAt != "" {
+			r += fmt.Sprintf(`,"expires_at":%q`, expiresAt)
+		}
+		rules = append(rules, r+"}")
+	}
+	return writeSuppressions(t, fmt.Sprintf(`{"schema":"suppressions/v1","suppressions":[%s]}`,
+		strings.Join(rules, ",")))
+}
+
+// TestSuppressingAFailureSilencesTheGateButNotTheReport is the end-to-end
+// acceptance criterion. --fail-on stops firing, which is the point of
+// accepting a risk; the finding is still in the document, which is the point
+// of this project.
+func TestSuppressingAFailureSilencesTheGateButNotTheReport(t *testing.T) {
+	fps, checkIDs := failuresOf(t, failFixture)
+	checkID := checkIDs[0]
+
+	// Without the file, the gate fires.
+	if code, _, _ := run(t, "scan", "--root", failFixture, "--fail-on", "high"); code != 2 {
+		t.Fatalf("exit = %d, want 2 before suppression — this test proves nothing otherwise", code)
+	}
+
+	path := suppressAll(t, fps, "break-glass bastion, reviewed by platform-sec, SEC-4471", "")
+
+	code, stdout, _ := run(t, "scan", "--root", failFixture, "--fail-on", "high", "--suppress", path)
+	if code != cli.ExitOK {
+		t.Errorf("exit = %d, want 0: an accepted risk must not fire --fail-on\n%s", code, stdout)
+	}
+	for _, want := range []string{checkID, "SEC-4471", "Accepted risks", "[ SUPPRESSED ]"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("the report omits %q; a suppression must not hide the finding:\n%s", want, stdout)
+		}
+	}
+}
+
+// TestSuppressionSurvivesTheBundleRoundTrip. scan and eval share one funnel,
+// so a suppression applied to a live scan and to a bundle of that same scan
+// have to agree — otherwise the answer depends on which command you typed.
+func TestSuppressionSurvivesTheBundleRoundTrip(t *testing.T) {
+	fps, _ := failuresOf(t, failFixture)
+	path := suppressAll(t, fps, "accepted", "")
+
+	bundlePath := filepath.Join(t.TempDir(), "b.plb")
+	if code, _, e := run(t, "collect", "--root", failFixture, "-o", bundlePath); code != cli.ExitOK {
+		t.Fatalf("collect failed: %s", e)
+	}
+
+	_, scanOut, _ := runJSON(t, "scan", "--root", failFixture, "--suppress", path)
+	_, evalOut, _ := runJSON(t, "eval", bundlePath, "--suppress", path)
+
+	if parse(t, scanOut).Findings == nil {
+		t.Fatal("scan produced no findings")
+	}
+	if !bytes.Equal(parse(t, scanOut).Findings, parse(t, evalOut).Findings) {
+		t.Errorf("scan and eval disagree once suppressions are applied:\n scan: %s\n eval: %s",
+			parse(t, scanOut).Findings, parse(t, evalOut).Findings)
+	}
+}
+
+// TestAnExpiredSuppressionStillFailsTheGate, end to end. The expiry is
+// measured against the scan's own timestamp, and a fixture scan happens now,
+// so a rule that lapsed in the past is spent.
+func TestAnExpiredSuppressionStillFailsTheGate(t *testing.T) {
+	fps, _ := failuresOf(t, failFixture)
+	path := suppressAll(t, fps, "was temporary", "2020-01-01T00:00:00Z")
+
+	code, stdout, stderr := run(t, "scan", "--root", failFixture, "--fail-on", "high", "--suppress", path)
+	if code != 2 {
+		t.Errorf("exit = %d, want 2: a lapsed acceptance must stop protecting the finding\n%s", code, stdout)
+	}
+	if !strings.Contains(stderr, "expired") {
+		t.Errorf("the lapse was not reported on stderr, so it is invisible: %q", stderr)
+	}
+}
+
+// TestABadSuppressionFileIsAHardError. Continuing without the file would print
+// a report full of findings the operator has already accepted, which they
+// would reasonably read as the suppressions having applied and nothing having
+// been accepted.
+func TestABadSuppressionFileIsAHardError(t *testing.T) {
+	for _, tc := range []struct{ name, body string }{
+		{"a blank justification", `{"schema":"suppressions/v1","suppressions":[{"fingerprint":"00112233445566778899aabbccddeeff","justification":""}]}`},
+		{"the wrong schema", `{"schema":"suppressions/v2","suppressions":[]}`},
+		{"not JSON", `nope`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeSuppressions(t, tc.body)
+			code, _, stderr := run(t, "scan", "--root", hostFixture, "--suppress", path)
+			if code != cli.ExitInternal {
+				t.Errorf("exit = %d, want %d", code, cli.ExitInternal)
+			}
+			if !strings.Contains(stderr, "--suppress") {
+				t.Errorf("the error does not name the flag that caused it: %q", stderr)
+			}
+		})
+	}
+}
+
+// TestAMissingSuppressionFileIsAHardError. Silently scanning with no
+// suppressions because the path was mistyped is the same failure as above,
+// arrived at more easily.
+func TestAMissingSuppressionFileIsAHardError(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist.json")
+	if code, _, _ := run(t, "scan", "--root", hostFixture, "--suppress", missing); code != cli.ExitInternal {
+		t.Errorf("exit = %d, want %d for a missing --suppress file", code, cli.ExitInternal)
+	}
+}
+
+// TestTheSuppressionPathIsNotRootPrefixed. A suppression file is a path the
+// *operator* named, like the bundle, so --root must never be prefixed onto it
+// (ADR-0011). Getting this wrong is silent: the file is simply not found
+// inside the audited tree, and the scan runs with nothing suppressed.
+func TestTheSuppressionPathIsNotRootPrefixed(t *testing.T) {
+	fps, _ := failuresOf(t, failFixture)
+	path := suppressAll(t, fps, "accepted", "")
+
+	// The path is absolute and far outside failFixture. If --root were applied
+	// to it the open would fail and the exit code would be ExitInternal.
+	code, stdout, _ := run(t, "scan", "--root", failFixture, "--fail-on", "high", "--suppress", path)
+	if code != cli.ExitOK {
+		t.Fatalf("exit = %d, want 0; --root was applied to an operator-named path", code)
+	}
+	if !strings.Contains(stdout, "Accepted risks") {
+		t.Error("the suppression did not apply, so --root probably reached the operator's file")
+	}
+}
+
+// TestAStaleSuppressionIsReported. Fingerprints change when a subject changes,
+// so a suppression file rots. A rule that matches nothing is either a finding
+// that got fixed or a rule that has quietly stopped covering what its author
+// thought it covered.
+func TestAStaleSuppressionIsReported(t *testing.T) {
+	path := writeSuppressions(t, `{"schema":"suppressions/v1","suppressions":[
+		{"fingerprint":"00112233445566778899aabbccddeeff","justification":"matches nothing on this host"}]}`)
+
+	code, _, stderr := run(t, "scan", "--root", hostFixture, "--suppress", path)
+	if code != cli.ExitOK {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if !strings.Contains(stderr, "matched no failing finding") {
+		t.Errorf("a stale rule was not reported: %q", stderr)
 	}
 }

@@ -137,6 +137,90 @@ report's layout may change in a patch release and nothing may depend on it;
 rules in `VERSIONING.md`. A pipeline that greps the terminal report is a
 pipeline that will break, and it will break silently.
 
+### Suppressions
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--suppress PATH` | — | Apply accepted-risk suppressions from a `suppressions/v1` file |
+
+A team that has reviewed a finding and accepted it must be able to say so, or
+the second scan reports the same thing as the first and people stop reading it.
+**A suppression never removes a finding.** It changes the result to `SKIPPED`
+and attaches the justification, and the report gives accepted risks their own
+`[=] Accepted risks` section stating what each one would otherwise have said.
+
+The path is an **operator-named path**, like `--output` and the bundle. `--root`
+is never prefixed onto it (ADR-0011): `--root /mnt/image --suppress
+./accepted.json` reads the operator's file from the working directory, not from
+inside the filesystem under audit.
+
+#### File format
+
+```json
+{
+  "schema": "suppressions/v1",
+  "suppressions": [
+    {
+      "fingerprint": "f18675a62f48a1e849159a7516d827a2",
+      "justification": "Deploy account owns cron by design; reviewed by platform-sec, SEC-4471.",
+      "expires_at": "2027-01-31T00:00:00Z",
+      "check_id": "CRON-0001",
+      "subject": "/etc/crontab"
+    }
+  ]
+}
+```
+
+| Field | Required | Meaning |
+|---|---|---|
+| `schema` | yes | Must be `suppressions/v1` |
+| `fingerprint` | yes | 32 lowercase hex characters, copied from a findings document |
+| `justification` | yes | Why the risk was accepted. **May not be blank.** |
+| `expires_at` | no | RFC 3339. The rule stops applying at this instant |
+| `check_id`, `subject` | no | Advisory labels, so a human can read the file |
+
+Five rules govern the format, and each one exists because the obvious
+implementation gets it wrong.
+
+1. **A blank justification is a parse error, not a warning.** An unaccountable
+   suppression is a hidden finding with extra steps, and a format that tolerates
+   a blank reason becomes the format everyone uses. A warning on stderr in CI is
+   a warning nobody reads.
+2. **Unknown fields are a parse error.** `"justifcation"` silently parsing as an
+   absent justification is precisely the failure this feature must not have.
+3. **`check_id` and `subject` are verified, never trusted.** If present, they
+   must fingerprint to the value recorded beside them. A label that can drift
+   from what it describes is worse than no label.
+4. **A `PASS` is never suppressed**, and a rule matching one is reported as
+   unmatched — which is how an operator learns the acceptance is no longer
+   needed.
+5. **Expiry is measured against the scan's start time, not the wall clock.**
+   The same bundle, catalog and suppression file give the same findings today
+   and in three years, which is what makes a bundle evidence rather than a
+   snapshot of an opinion.
+
+Rules that did not fire are reported on **stderr**, never in the findings
+document — a lapsed or stale rule is a fact about the operator's file, not about
+the host:
+
+```
+plumbline: suppression 00112233… expired 2026-06-30T00:00:00Z; the finding is reported
+plumbline: suppression 44556677… matched no failing finding; it may already be fixed, or the subject may have changed
+```
+
+A `--suppress` file that is missing, unreadable or invalid is a **hard error**
+(exit 20, `ExitInternal`). Continuing without it would print a report full of
+findings the operator had already accepted, which reads exactly like the
+suppressions having applied and nothing having been accepted.
+
+#### Effect on scoring
+
+An accepted risk is `SKIPPED`, which means it **leaves the posture denominator
+entirely** — a team is not scored down for having reviewed something — and
+**reduces coverage**, because a suppressed check genuinely did not produce a
+verdict about the host. That is the existing documented meaning of `SKIPPED`
+(`ARCHITECTURE.md` §5) and suppression does not special-case it.
+
 ### Filtering
 
 | Flag | Default | Meaning |

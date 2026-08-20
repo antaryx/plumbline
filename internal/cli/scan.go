@@ -22,6 +22,7 @@ func newScanCmd(g *globals, stdout, stderr io.Writer) *cobra.Command {
 		perCollector time.Duration
 		out          outputFlags
 		gt           gates
+		sf           suppressFlags
 	)
 
 	cmd := &cobra.Command{
@@ -41,6 +42,13 @@ Use --save-bundle to keep the evidence a scan was derived from.`,
 				return err
 			}
 			format, err := out.resolveFormat(cmd)
+			if err != nil {
+				return err
+			}
+			// Loaded before a single file of the host is touched. A
+			// suppression file with a typo in it is a thirty-millisecond
+			// failure here and a thirty-minute one after the collection.
+			sup, err := sf.load()
 			if err != nil {
 				return err
 			}
@@ -70,7 +78,7 @@ Use --save-bundle to keep the evidence a scan was derived from.`,
 				return exitError{code: ExitTimeout, message: "scan exceeded --timeout"}
 			}
 
-			return renderAndGate(got.bundle, failOn, gt, format, out, stdout, stderr)
+			return renderAndGate(got.bundle, failOn, gt, format, out, sup, stdout, stderr)
 		},
 	}
 
@@ -83,5 +91,6 @@ Use --save-bundle to keep the evidence a scan was derived from.`,
 	f.DurationVar(&perCollector, "collector-timeout", 2*time.Minute, "budget for one collector that declares none")
 	out.register(cmd)
 	gt.register(cmd)
+	sf.register(cmd)
 	return cmd
 }

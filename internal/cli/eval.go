@@ -11,6 +11,7 @@ import (
 	renderjson "github.com/antaryx/plumbline/internal/render/json"
 	rendertext "github.com/antaryx/plumbline/internal/render/text"
 	"github.com/antaryx/plumbline/internal/score"
+	"github.com/antaryx/plumbline/internal/suppress"
 	"github.com/antaryx/plumbline/internal/version"
 )
 
@@ -43,6 +44,7 @@ func newEvalCmd(g *globals, stdout, stderr io.Writer) *cobra.Command {
 	var (
 		out outputFlags
 		gt  gates
+		sf  suppressFlags
 	)
 
 	cmd := &cobra.Command{
@@ -63,6 +65,11 @@ collected on a production host be analysed somewhere safer.`,
 				return err
 			}
 
+			sup, err := sf.load()
+			if err != nil {
+				return err
+			}
+
 			b, err := readBundle(args[0])
 			if err != nil {
 				// A bundle that will not open, or whose integrity fails, is an
@@ -71,12 +78,13 @@ collected on a production host be analysed somewhere safer.`,
 				return exitError{code: ExitInternal, message: err.Error()}
 			}
 
-			return renderAndGate(b, failOn, gt, format, out, stdout, stderr)
+			return renderAndGate(b, failOn, gt, format, out, sup, stdout, stderr)
 		},
 	}
 
 	out.register(cmd)
 	gt.register(cmd)
+	sf.register(cmd)
 	return cmd
 }
 
@@ -86,8 +94,23 @@ collected on a production host be analysed somewhere safer.`,
 // Rendering is chosen here rather than inside each command for the same
 // reason: a report and its exit code are one answer, and a second call site
 // would be a second place for the two to disagree.
-func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, stdout, stderr io.Writer) error {
+func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, stdout, stderr io.Writer) error {
 	findings := evaluate(b.Facts)
+
+	// Suppression sits exactly here: after every check has reached its own
+	// verdict, and before anything is scored, rendered or gated on. That
+	// ordering is what keeps check purity intact — no check can see a
+	// suppression, so no check's logic can depend on one — while still making
+	// the accepted risk invisible to --fail-on and to posture, which is the
+	// point of accepting it.
+	//
+	// Expiry is measured against the scan's start time rather than the wall
+	// clock, so re-evaluating an archived bundle gives the same answer forever.
+	// See suppress.Apply.
+	applied := sup.Apply(findings, b.Manifest.Scan.Started)
+	findings = applied.Findings
+	reportSuppressions(stderr, applied)
+
 	sc := score.Compute(findings, version.Catalog())
 	factErrors := b.Facts.Errors()
 

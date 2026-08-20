@@ -160,6 +160,38 @@ type Finding struct {
 	// Subject is the specific thing this finding is about (a path, an account,
 	// a port). Empty when the check is about the host as a whole.
 	Subject string `json:"subject,omitempty"`
+
+	// Suppression is present when an operator accepted this finding and the
+	// acceptance was still live at scan time. Result is SKIPPED whenever it is
+	// set, and OriginalResult inside it says what the verdict would otherwise
+	// have been.
+	//
+	// Added in findings/v1 as an optional field, which VERSIONING.md §4.1
+	// permits within a schema major. Consumers written before it existed
+	// ignore it and see a SKIPPED finding, which is true.
+	Suppression *Suppression `json:"suppression,omitempty"`
+}
+
+// Suppression records an accepted risk on a finding.
+//
+// **OriginalResult is the field that makes this honest.** A suppressed finding
+// keeps its row, its severity, its detail and its evidence, and states what it
+// would have been. Without that field a suppression is indistinguishable from
+// a check that never ran, and "we accepted this" and "we never looked" would
+// render identically — which is the failure this whole feature exists to
+// avoid.
+type Suppression struct {
+	// Justification is the operator's reason, copied from the suppression
+	// file. Never empty: the parser rejects a blank one.
+	Justification string `json:"justification"`
+
+	// ExpiresAt is the RFC 3339 expiry, when the rule carried one. A
+	// suppression that appears here has not lapsed as of the scan.
+	ExpiresAt string `json:"expires_at,omitempty"`
+
+	// OriginalResult is the result the check actually reached. Always FAIL or
+	// UNKNOWN — a PASS is never suppressed.
+	OriginalResult Result `json:"original_result"`
 }
 
 // Fingerprint computes the stable identity of a finding about subject.

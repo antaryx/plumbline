@@ -559,3 +559,104 @@ func TestAnEmptyReportStillRenders(t *testing.T) {
 		t.Errorf("an empty report does not report its posture as undefined:\n%s", out)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// suppressions (WP-29)
+// ---------------------------------------------------------------------------
+
+// suppressed returns the sample with its FAIL accepted, which is the state the
+// renderer has to describe honestly.
+func suppressed(t *testing.T) rendertext.Input {
+	t.Helper()
+	in := sample(t)
+	for i := range in.Findings {
+		if in.Findings[i].Result == finding.Fail {
+			in.Findings[i].Suppression = &finding.Suppression{
+				Justification:  "bastion host; root login is required by the break-glass runbook, SEC-4471",
+				ExpiresAt:      "2027-01-31T00:00:00Z",
+				OriginalResult: finding.Fail,
+			}
+			in.Findings[i].Result = finding.Skipped
+		}
+	}
+	in.Score = score.Compute(in.Findings, 12)
+	return in
+}
+
+// TestASuppressedFindingIsNotQuiet is WP-29's argument rendered as a test. A
+// suppression makes a finding stop appearing in the warnings list, so if the
+// report said nothing else, a host would look clean because somebody wrote a
+// JSON file.
+func TestASuppressedFindingIsNotQuiet(t *testing.T) {
+	out := render(t, suppressed(t))
+
+	for _, want := range []string{
+		"[ SUPPRESSED ]", // distinct from a profile skip in the scan phase
+		"Accepted risks", // its own section
+		"SSHD-0002",      // the check is still named
+		"SEC-4471",       // the justification is carried, not summarised away
+		"2027-01-31",     // and so is the expiry
+		"Would be",       // and what it would otherwise have said
+		"FAIL",
+		"accepted risk(s)", // and the summary says how many
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("a suppressed report omits %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestASuppressedFindingLeavesTheWarningsList. That is the entire point of
+// suppressing it — but only the warnings list. It must still be somewhere.
+func TestASuppressedFindingLeavesTheWarningsList(t *testing.T) {
+	out := render(t, suppressed(t))
+
+	warnings, rest, found := strings.Cut(out, "[=] Accepted risks")
+	if !found {
+		t.Fatal("there is no accepted-risks section")
+	}
+	if strings.Contains(warnings, "Warnings (1)") {
+		t.Error("the suppressed finding is still listed as a warning")
+	}
+	if !strings.Contains(rest, "SSHD-0002") {
+		t.Error("the suppressed finding is not in the accepted-risks section either — it vanished")
+	}
+}
+
+// TestSuppressionDoesNotBreakTheGrid. [ SUPPRESSED ] is the widest token any
+// result produces, so it is the one most likely to push a line past the right
+// edge.
+func TestSuppressionDoesNotBreakTheGrid(t *testing.T) {
+	for _, colour := range []bool{false, true} {
+		in := suppressed(t)
+		in.Color = colour
+		cols := bracketColumns(t, render(t, in))
+		if len(cols) == 0 {
+			t.Fatal("no status lines")
+		}
+		for _, c := range cols {
+			if c != reportWidth {
+				t.Fatalf("colour=%v: a bracket ends at %d, not %d: %v", colour, c, reportWidth, cols)
+			}
+		}
+	}
+}
+
+// TestSuppressionDoesNotPenalisePosture. An accepted risk leaves the posture
+// denominator entirely rather than counting against it — a team is not scored
+// down for having reviewed something. Coverage does fall, because a suppressed
+// check genuinely did not produce a verdict about the host, and that is the
+// documented meaning of SKIPPED.
+func TestSuppressionDoesNotPenalisePosture(t *testing.T) {
+	before, _ := sample(t).Score.Posture()
+	after, ok := suppressed(t).Score.Posture()
+	if !ok {
+		t.Fatal("posture became undefined")
+	}
+	if after < before {
+		t.Errorf("posture fell from %.2f to %.2f when a finding was accepted", before, after)
+	}
+	if cov, _ := suppressed(t).Score.Coverage(); cov >= 100 {
+		t.Errorf("coverage = %.2f; a suppressed check has not produced a verdict and must reduce it", cov)
+	}
+}

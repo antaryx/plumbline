@@ -58,7 +58,7 @@ lynis-style CLI overhaul — and carries feature freeze. The schema is
 | v0.2.0 — catalog machinery | **complete** | 11 | 78 | tagged `v0.2.0`, 2026-08-20 |
 | v0.3.0 — engine maturation and resilience | **complete** | 13 | 79 | tagged `v0.3.0`, 2026-08-20 |
 | v0.3.1 — verification harness repairs | **complete** | 13 | 79 | tagged `v0.3.1`, 2026-08-20; no behaviour change |
-| v0.4.0 — feature complete for v1 | **in progress** | 13 | 79 | WP-28 lynis-style CLI overhaul |
+| v0.4.0 — feature complete for v1 | **in progress** | 13 | 79 | WP-28 lynis-style CLI overhaul; WP-29 suppressions |
 
 ### v0.1.0 — Walking skeleton — **COMPLETE**
 
@@ -226,7 +226,14 @@ moved, the emphasis did not. See `docs/CLI-SPEC.md` §Output.
 
 #### 1. Make a repeat scan survivable
 
-- **Suppression file format.** The single largest adoption blocker. A team that
+- **Suppression file format — DONE (WP-29, 2026-08-20).** `--suppress` applies
+  a `suppressions/v1` file; a suppressed finding becomes `SKIPPED`, carries its
+  justification and the result it would otherwise have had, and appears under
+  `[=] Accepted risks`. Expiry is measured against the scan's start time so an
+  archived bundle re-evaluates identically forever. Specified in `CLI-SPEC.md`
+  §Suppressions and `DATA-MODEL.md` §5.6.
+
+  *Original scoping:* The single largest adoption blocker. A team that
   has accepted a finding must be able to say so, or the second scan reports the
   same thing as the first and people stop reading it. Suppressions carry a
   reason and an expiry, and a suppressed check is reported as `SKIPPED` with

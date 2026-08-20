@@ -131,6 +131,7 @@ func Render(w io.Writer, in Input) error {
 	p.scanPhase(in.Findings)
 	p.factErrors(in.FactErrors)
 	p.warningsAndSuggestions(in.Findings)
+	p.accepted(in.Findings)
 	p.summary(in)
 
 	return p.err
@@ -332,6 +333,17 @@ func resultColor(r finding.Result) string {
 	}
 }
 
+// findingColor is resultColor with the suppression case folded in. A
+// suppressed finding is dimmed rather than coloured: it is a decision the
+// operator already made, and it should not compete for attention with the
+// findings they have not yet dealt with.
+func findingColor(f finding.Finding) string {
+	if f.Suppression != nil {
+		return ansiDim
+	}
+	return resultColor(f.Result)
+}
+
 // statusToken is the bracketed word a result is shown as.
 //
 // The mapping is not one-to-one with finding.Result, and the two places it
@@ -348,8 +360,15 @@ func resultColor(r finding.Result) string {
 // not run. Printing both as SKIPPED would tell an operator that a check was
 // declined when in truth there was nothing to check, and the whole argument of
 // this tool is that those states stay distinct.
-func statusToken(r finding.Result) string {
-	switch r {
+func statusToken(f finding.Finding) string {
+	// A suppressed finding is SKIPPED like any other, but it did not get there
+	// the same way: somebody looked at a failure and accepted it. Giving it
+	// its own token is what stops "we accepted this" reading identically to
+	// "the profile did not run it".
+	if f.Suppression != nil {
+		return "[ SUPPRESSED ]"
+	}
+	switch f.Result {
 	case finding.Pass:
 		return "[ OK ]"
 	case finding.Fail:
@@ -363,7 +382,7 @@ func statusToken(r finding.Result) string {
 	default:
 		// An unrecognised result still gets a row. Dropping it would be the
 		// worst possible response to a report from a newer catalog.
-		return "[ " + string(r) + " ]"
+		return "[ " + string(f.Result) + " ]"
 	}
 }
 
@@ -378,7 +397,7 @@ func statusToken(r finding.Result) string {
 func statusWidth(in []finding.Finding) int {
 	w := 0
 	for _, f := range in {
-		if n := len(statusToken(f.Result)); n > w {
+		if n := len(statusToken(f)); n > w {
 			w = n
 		}
 	}
@@ -435,7 +454,7 @@ func (p *printer) scanPhase(findings []finding.Finding) {
 			p.printf("  - %s%s%s\n",
 				pad(title, titleWidth),
 				strings.Repeat(" ", statusGap),
-				p.paint(resultColor(f.Result), padLeft(statusToken(f.Result), sw)))
+				p.paint(findingColor(f), padLeft(statusToken(f), sw)))
 			// Line by line, so a slow terminal shows the audit progressing
 			// instead of sitting blank and then printing everything at once.
 			p.flush()
@@ -564,6 +583,56 @@ func (p *printer) warningsAndSuggestions(findings []finding.Finding) {
 	}
 }
 
+// accepted lists the findings an operator suppressed, with the reason each one
+// was accepted.
+//
+// This section is not optional decoration. A suppression file makes findings
+// stop appearing in the warnings list, and a report that did not say so would
+// let a host look clean because somebody wrote a JSON file — which is the
+// exact failure mode this feature has to avoid. What went quiet, why, and what
+// it would otherwise have said, all in one place.
+func (p *printer) accepted(findings []finding.Finding) {
+	var sup []finding.Finding
+	for _, f := range findings {
+		if f.Suppression != nil {
+			sup = append(sup, f)
+		}
+	}
+	if len(sup) == 0 {
+		return
+	}
+	sort.SliceStable(sup, func(i, j int) bool {
+		if sup[i].CheckID != sup[j].CheckID {
+			return sup[i].CheckID < sup[j].CheckID
+		}
+		return sup[i].Subject < sup[j].Subject
+	})
+
+	p.section(fmt.Sprintf("Accepted risks (%d)", len(sup)))
+	p.blank()
+	p.line("  " + p.paint(ansiDim, "These are not passes either. Each one is a finding an operator accepted,"))
+	p.line("  " + p.paint(ansiDim, "with the result it would otherwise have carried. They are excluded from"))
+	p.line("  " + p.paint(ansiDim, "posture and from --fail-on, and they reduce coverage like any SKIPPED check."))
+
+	for _, f := range sup {
+		s := f.Suppression
+		p.blank()
+		id := "[" + f.CheckID + "]"
+		title := truncate(cell(f.Title), reportWidth-4-1-visibleWidth(id))
+		p.line("  " + p.paint(ansiDim, "*") + " " + title + " " + p.paint(ansiBold, id))
+		p.field("Would be", p.paint(resultColor(s.OriginalResult), string(s.OriginalResult)))
+		p.field("Severity", p.severityLabel(f))
+		if subject := cell(f.Subject); subject != "" {
+			p.fieldWrapped("Subject", f.Subject)
+		}
+		p.fieldWrapped("Accepted", s.Justification)
+		if s.ExpiresAt != "" {
+			p.field("Expires", s.ExpiresAt)
+		}
+		p.field("Fingerprint", p.paint(ansiDim, f.Fingerprint))
+	}
+}
+
 // entry is one finding in full, in the shape Lynis uses for a suggestion: a
 // starred headline carrying the check ID, then labelled detail lines beneath.
 //
@@ -609,7 +678,10 @@ func (p *printer) entry(f finding.Finding) {
 // fieldLabel is the width of the label column in an entry. Every labelled line
 // is "      - Label      : value", so the values line up down the entry and the
 // labels can be skimmed without reading them.
-const fieldLabel = 10
+// 11 rather than 10 because "Fingerprint" is the longest label any entry
+// uses, and a label that overflows its column shifts that one line's value out
+// of alignment with every other.
+const fieldLabel = 11
 
 func (p *printer) field(label, value string) {
 	if value == "" {
@@ -828,7 +900,7 @@ func (p *printer) summary(in Input) {
 	row(ansiRed, "FAIL", c.Fail, "")
 	row(ansiYellow, "UNKNOWN", c.Unknown, unknownNote(c.Unknown))
 	row(ansiDim, "NOT_APPLICABLE", c.NotApplicable, "")
-	row(ansiDim, "SKIPPED", c.Skipped, "")
+	row(ansiDim, "SKIPPED", c.Skipped, suppressedNote(in.Findings))
 
 	p.blank()
 	p.line("  " + pad("evaluated", summaryLabel) + padLeft(strconv.Itoa(c.Total), summaryCount) +
@@ -842,6 +914,23 @@ func (p *printer) summary(in Input) {
 		}
 	}
 	p.blank()
+}
+
+// suppressedNote says how much of the SKIPPED count is accepted risk rather
+// than a check the profile never ran. Without it the two are one number, and a
+// team that suppressed twenty findings reads the same as a team that filtered
+// twenty out.
+func suppressedNote(in []finding.Finding) string {
+	n := 0
+	for _, f := range in {
+		if f.Suppression != nil {
+			n++
+		}
+	}
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("← %d accepted risk(s); see above", n)
 }
 
 func unknownNote(n int) string {

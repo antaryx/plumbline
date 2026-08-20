@@ -833,10 +833,40 @@ Asserted in every check's test suite:
 |---|---|
 | `UNKNOWN` ⇒ `unknown_reason` is set | An unexplained UNKNOWN is unactionable |
 | `FAIL` ⇒ `remediation` is present | Every failure ships a fix (`PROJECT-BRIEF.md` §5) |
-| result ≠ `FAIL` ⇒ `remediation` is absent | Remediation on a PASS confuses readers and renderers |
+| result ≠ `FAIL` and not suppressed ⇒ `remediation` is absent | Remediation on a PASS confuses readers and renderers. A suppressed finding is the exception: it reached `FAIL` or `UNKNOWN`, and the fix it would need is still the fix it would need |
+| `suppression` present ⇒ result is `SKIPPED` | Enforced by the schema; see §5.6 |
 | `FAIL` or `UNKNOWN` ⇒ `evidence` is non-empty | See §5.3 |
 | `base_severity` is never mutated by `Eval` | Adjustment must stay visible |
 | `fingerprint` is non-empty | Suppressions depend on it |
+
+### 5.6 Suppression
+
+```go
+type Suppression struct {
+    Justification  string `json:"justification"`
+    ExpiresAt      string `json:"expires_at,omitempty"`
+    OriginalResult Result `json:"original_result"`
+}
+```
+
+Present on a finding an operator accepted, and only ever alongside
+`result: SKIPPED`. Added to `findings-v1` as an optional field, which
+`VERSIONING.md` §4.1 permits within a schema major; consumers written before it
+existed ignore it and see a `SKIPPED` finding, which is true.
+
+**`original_result` is the field that makes this honest.** A suppressed finding
+keeps its row, its severity, its detail, its evidence and its remediation, and
+states what it would have been. Without that field a suppression would be
+indistinguishable from a check that never ran, and "we accepted this" would
+render identically to "we never looked" — which is the failure the whole
+feature exists to avoid. It is always `FAIL` or `UNKNOWN`; a `PASS` is never
+suppressed.
+
+Suppressions are applied by `internal/suppress`, **after every check has
+reached its verdict and before anything is scored**. No check can observe one,
+so check purity is untouched: a suppression is a statement about a finding, not
+an input to producing it. The file format is specified in `CLI-SPEC.md`
+§Suppressions.
 
 ---
 

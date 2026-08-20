@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/antaryx/plumbline/internal/finding"
 	render "github.com/antaryx/plumbline/internal/render/json"
 	"github.com/antaryx/plumbline/internal/score"
+	"github.com/antaryx/plumbline/internal/suppress"
 	"github.com/antaryx/plumbline/internal/system/fake"
 )
 
@@ -402,5 +404,50 @@ func TestFactErrorsAreCarried(t *testing.T) {
 func TestSchemaFileIsTheOneCIValidates(t *testing.T) {
 	if _, err := os.Stat(schemaPath); err != nil {
 		t.Fatalf("the published schema is not where this test reads it: %v", err)
+	}
+}
+
+// TestASuppressedFindingValidatesAgainstTheSchema is the gate on WP-29's one
+// schema change. `suppression` was added to findings-v1 as an optional field,
+// which VERSIONING.md §4.1 permits within a major — but the schema declares
+// additionalProperties:false throughout, so a field added to the Go struct and
+// not to the schema is a document that fails validation in CI. This test is
+// what makes the two move together.
+func TestASuppressedFindingValidatesAgainstTheSchema(t *testing.T) {
+	sch := compileSchema(t)
+	findings, errs := evaluateFixture(t, "sshd-permit-yes")
+
+	set, err := suppress.Parse([]byte(fmt.Sprintf(
+		`{"schema":%q,"suppressions":[{"fingerprint":%q,"justification":"accepted for the bastion; SEC-4471","expires_at":"2027-01-31T00:00:00Z"}]}`,
+		suppress.Schema, findings[0].Fingerprint)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	out := set.Apply(findings, started)
+	if out.Suppressed() != 1 {
+		t.Fatalf("the fixture's first finding was not suppressed, so this test proves nothing: %+v", out)
+	}
+
+	doc := render1(t, inputFor(out.Findings, errs))
+	validate(t, sch, doc)
+
+	// And the field is actually in the document rather than merely permitted
+	// by it. A `suppression` that omitempty'd itself away would validate.
+	for _, want := range []string{`"suppression"`, `"justification"`, `"original_result"`, `"SKIPPED"`} {
+		if !bytes.Contains(doc, []byte(want)) {
+			t.Errorf("the rendered document omits %s:\n%s", want, doc)
+		}
+	}
+}
+
+// TestAnUnsuppressedDocumentCarriesNoSuppressionKey. The field is optional, and
+// optional means absent — not present and empty. Every consumer written before
+// this field existed must see a byte-identical document for an unsuppressed
+// scan.
+func TestAnUnsuppressedDocumentCarriesNoSuppressionKey(t *testing.T) {
+	findings, errs := evaluateFixture(t, "sshd-permit-yes")
+	if doc := render1(t, inputFor(findings, errs)); bytes.Contains(doc, []byte(`"suppression"`)) {
+		t.Errorf("an unsuppressed scan emitted a suppression key:\n%s", doc)
 	}
 }
