@@ -184,10 +184,16 @@ jobs:
 
       # And again from the outside, so the guarantee does not depend on the test
       # harness being correct about its own namespace.
+      #
+      # --json is required, not decorative: since v0.3.0 the default output is
+      # the human-readable terminal report, and every assertion below greps the
+      # findings document. A step that drops the flag does not fail loudly --
+      # it greps a report that never contained the string and reports a broken
+      # scanner.
       - name: A real scan in a namespace with no network
         run: |
           go build -trimpath -o /tmp/plumbline ./cmd/plumbline
-          sudo unshare -n -- /tmp/plumbline scan --root testdata/fixtures/cli-host > /tmp/findings.json
+          sudo unshare -n -- /tmp/plumbline scan --json --root testdata/fixtures/cli-host > /tmp/findings.json
           grep -q '"schema": "findings/v1"' /tmp/findings.json
           grep -q '"result": "PASS"' /tmp/findings.json
           echo "a full scan completed with no network interfaces present"
@@ -244,7 +250,7 @@ jobs:
       - name: Deterministic scan of a fixture tree
         run: |
           docker run --rm -v "$PWD:/w" -w /w ${{ matrix.image }} \
-            /w/dist/plumbline-linux-amd64 scan --root testdata/fixtures/cli-host > /tmp/out.json
+            /w/dist/plumbline-linux-amd64 scan --json --root testdata/fixtures/cli-host > /tmp/out.json
           grep -q '"schema": "findings/v1"' /tmp/out.json
           grep -q '"check_id": "SSHD-0002"' /tmp/out.json
           grep -q '"result": "PASS"' /tmp/out.json
@@ -258,7 +264,7 @@ jobs:
       - name: Scan the container's own root
         run: |
           docker run --rm -v "$PWD/dist:/dist:ro" ${{ matrix.image }} \
-            /dist/plumbline-linux-amd64 scan > /tmp/self.json
+            /dist/plumbline-linux-amd64 scan --json > /tmp/self.json
           jq . /tmp/self.json > /dev/null
           grep -q '"schema": "findings/v1"' /tmp/self.json
           grep -q '"euid": 0' /tmp/self.json
@@ -302,6 +308,6 @@ jobs:
           docker run --rm -v "$PWD:/w" -v /tmp/cross:/out -w /w ubuntu:24.04 \
             /w/dist/plumbline-linux-amd64 collect --root testdata/fixtures/cli-host -o /out/cross.plb
           docker run --rm -v /tmp/cross:/out:ro -v "$PWD/dist:/dist:ro" ${{ matrix.image }} \
-            /dist/plumbline-linux-amd64 eval /out/cross.plb > /tmp/cross.json
+            /dist/plumbline-linux-amd64 eval --json /out/cross.plb > /tmp/cross.json
           grep -q '"result": "PASS"' /tmp/cross.json
           echo "a bundle collected on ubuntu:24.04 evaluated cleanly on ${{ matrix.image }}"
