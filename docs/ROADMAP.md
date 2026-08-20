@@ -2,6 +2,17 @@
 
 **Three stable majors.** Each is a complete, defensible product on its own. If development stops after any of them, what exists is still worth using.
 
+> **Where the project actually is — 2026-08-20.** `v0.2.0` is tagged and shipped
+> 78 checks across nine modules at catalog version 11. `main` is now ahead of
+> it at **79 checks, catalog version 12** (WP-25: walker aggregation and
+> FILESYS-0010). The output schema is `findings-v1`, and the tool runs offline
+> with no network code path in any build. `v0.3.0` is open; its scope is in the
+> pre-1.0 section below.
+>
+> This banner is updated by **every** work package that changes a module, a
+> check count or a catalog version. A roadmap that disagrees with `main` is
+> worse than no roadmap, because people plan against it.
+
 Effort figures assume one developer working part-time (~15 h/week) and are estimates, marked as such — unlike the source design, which stated durations for software that did not exist.
 
 ---
@@ -20,47 +31,169 @@ Pre-1.0 there are three internal milestones (v0.1 – v0.3) that are *not* publi
 
 ## Pre-1.0 internal milestones
 
-Tagged and released as pre-releases so the pipeline gets exercised, but with an explicit "no stability guarantees" banner.
+Tagged and released as pre-releases so the pipeline gets exercised, but with an
+explicit "no stability guarantees" banner.
 
-### v0.1.0 — Walking skeleton *(~5 weeks)*
+**Status at 2026-08-20:** v0.1.0 and v0.2.0 are complete and tagged. v0.3.0 is
+open and has begun. The schema is `findings-v1` throughout.
 
-The thinnest possible end-to-end path, chosen so that every architectural risk is hit on day one rather than month four.
+| Milestone | State | Catalog | Checks | Shipped |
+|---|---|---|---|---|
+| v0.1.0 — walking skeleton | **complete** | 1 | 8 | tagged `v0.1.0` |
+| v0.2.0 — catalog machinery | **complete** | 11 | 78 | tagged `v0.2.0`, 2026-08-20 |
+| v0.3.0 — feature complete for v1 | **in progress** | 12 | 79 on `main` | — |
 
-- `System` interface + `live` and `fake` implementations
-- Bundle format v0: write, read, integrity manifest
-- Collectors: `osrelease`, `passwd`, `sysctl`, `sshd_config`
-- **8 checks** across AUTH and SSHD
-- `plumbline scan`, `collect`, `eval` working end to end
-- JSON renderer + `findings-v0.schema.json`
-- Fixture harness with one Ubuntu 24.04 tree
-- CI: build, vet, test, race, one distro container
+### v0.1.0 — Walking skeleton — **COMPLETE**
 
-**Exit criteria:** `collect` on a real host → `eval` on a different machine → identical findings across two runs, verified byte-for-byte by a test.
+The thinnest possible end-to-end path, chosen so that every architectural risk
+was hit on day one rather than month four. Every item below is in `main`.
 
-### v0.2.0 — Catalog machinery *(~6 weeks)*
+- [x] `System` interface + `live` and `fake` implementations, with `--root`
+      prefixing and the escape-refusal rule
+- [x] Bundle format: write, read, integrity manifest, evidence store
+- [x] Collectors: `osrelease`, `users` (passwd/shadow/group), `sysctl`, `sshd`
+- [x] Checks across AUTH and SSHD
+- [x] `plumbline scan`, `collect`, `eval` working end to end
+- [x] JSON renderer + published schema
+- [x] Fixture harness, one directory per scenario
+- [x] CI: build, vet, test, race
 
-- The single-pass filesystem walker with interest predicates, plus the hostile-fixture corpus (FIFOs, symlink chains, ANSI filenames, huge files, cyclic mounts)
-- Collector DAG with cost classes, budgets and per-collector error capture
-- All five result states wired through, including `UNKNOWN` propagation from `FactError`
-- Scoring: posture + coverage, catalog version stamping
-- Terminal renderer with `NO_COLOR`, non-TTY, and width handling
-- **~45 checks:** KERNEL, AUTH, USERS, SSHD
-- Suppression file format
-- Golden bundles for 3 distros
+**Exit criteria — met.** `collect` on a real host → `eval` elsewhere → identical
+findings across two runs, asserted byte-for-byte by a test.
 
-**Exit criteria:** a full walk of a filesystem with 2M inodes completes inside budget; the hostile corpus produces zero hangs, zero panics, zero unbounded reads.
+**What the milestone actually taught us**, recorded because it changed the
+design and not just the schedule:
 
-### v0.3.0 — Feature complete for v1 *(~7 weeks)*
+- The seam had to be an interface *and* a rule enforced mechanically.
+  `make check-system-seam` exists because a single `os.ReadFile` in a check is
+  invisible in review and fatal to fixture testing.
+- `UNKNOWN` needed to be a first-class result with a mandatory reason code
+  before check #10, not after. Retrofitting it would have meant re-auditing
+  every check written before it.
+- Operator-named paths (the bundle) must **not** go through the `--root`
+  prefix, which is why `localfile.go` sits off the interface (ADR-0011).
 
-- Remaining v1 modules → **~110 checks**
-- SARIF renderer with stable fingerprints
-- `plumbline diff`
-- `plumbline doctor`, `check list/show/explain`
-- Exit code contract implemented and tested per branch
-- `--root` verified against a mounted image and a container filesystem
-- Docs: all v1-gating documents drafted (see `DOCUMENT-MAP.md`)
+### v0.2.0 — Catalog machinery — **COMPLETE** *(tagged 2026-08-20)*
 
-**Exit criteria:** feature freeze. Everything after this is bug-fixing, documentation and fixture expansion.
+- [x] The single-pass filesystem walker with interest predicates, plus the
+      hostile-fixture corpus — FIFOs, 40-deep symlink chains, ANSI filenames,
+      100 MB files, cyclic bind mounts — generated at test time, not committed
+- [x] Collector DAG with cost classes, budgets and per-collector error capture
+- [x] All five result states wired through, including `UNKNOWN` propagation
+      from `FactError`
+- [x] Scoring: posture + coverage, both able to be undefined; catalog version
+      stamped into every score and bundle
+- [x] Control-character sanitisation as a security control (T-03)
+- [x] **78 checks across nine modules** (target was ~45 across four)
+- [x] Golden-bundle round-trip: save a scan, re-evaluate it, identical findings
+
+**Exit criteria — met.** The hostile corpus produces zero hangs, zero panics
+and zero unbounded reads; the walk terminates on cycles by device+inode
+identity rather than by giving up at a depth limit (ADR-0012).
+
+#### Catalog as shipped in v0.2.0
+
+| Module | Checks | What it rests on |
+|---|---|---|
+| `SSHD` | 19 | effective config: `Include` resolution, `Match` blocks, compiled defaults |
+| `KERNEL` | 16 | `sysctl`, module blacklists, boot parameters |
+| `USERS` | 10 | `/etc/passwd`, `/etc/shadow` (properties only, never hashes), `/etc/group` |
+| `FILESYS` | 9 | the shared walk + `/proc/self/mountinfo` |
+| `AUTH` | 6 | the PAM stack as a graph: `@include`, `include`, `substack` |
+| `CRON` | 5 | `crontab`, `cron.d`, per-user spools |
+| `LOGGING` | 5 | rsyslog, journald |
+| `SERVICES` | 5 | systemd enablement **symlinks**, read offline; masking outranks enablement |
+| `NETWORK` | 3 | nftables, iptables-save, ufw, firewalld — local state only |
+| | **78** | catalog version 11 |
+
+#### Deliberate reductions, recorded so they are not rediscovered as bugs
+
+- **Check count came in at 78 against a v1 ceiling of ~110.** The gap is
+  entirely checks that would have needed an allowlist of blessed binaries,
+  package names or service names. `docs/BUILD-RUNBOOK-v0.2.md` forbids a name
+  list that "silently excuses a real finding", and the substitute — asserting a
+  property no legitimate subject has — does not exist for every rule. Correctness
+  is not the flex; check count is.
+- **`SYSINFO` was not built.** Six informational, never-scored checks are the
+  cheapest thing in the plan and the least useful; they are v0.3 filler.
+- **`NETWORK` shipped 3 checks against a planned 12.** Listener enumeration
+  needs `/proc/net/tcp` plus a socket-inode-to-process join, which is a
+  collector, not a check. It is scheduled in v0.3.
+- **`AUTH` shipped 6 against a planned 17.** PAM parsing was the hard part, as
+  the risk table predicted; the graph model landed but the checks over it did
+  not. The remaining eleven are mechanical now that the model exists.
+
+### v0.3.0 — Feature complete for v1 — **IN PROGRESS**
+
+Three themes, in this order: **engine maturation**, then **UX and CLI polish**,
+then **edge-case resilience**. The ordering is deliberate — every UX decision
+below is a rendering of something the engine must be able to state first, and
+resilience work is only meaningful once there is a surface to be resilient at.
+
+#### 1. Engine maturation
+
+- ~~**Aggregating walker interests**~~ — **done, WP-25, catalog 12.** The walker
+  recorded rows: the first N inodes matching a pure predicate. That answers
+  "show me the setuid binaries" and cannot answer "does every uid on disk
+  resolve to an account", because the join is against a fact that does not
+  exist when the predicate is registered, and matching every owned inode would
+  overflow the row cap on any host that has users. A `Tally` folds inodes into
+  a bounded keyspace during the walk — counts and one exemplar per key — so the join
+  happens in the check, where facts exist. Fact namespace `fs.tally.<name>`.
+  First consumer: FILESYS-0010, unowned files.
+- ~~**Name-service awareness.**~~ **done, WP-25.** `nsswitch.conf` decides
+  whether `/etc/passwd` is the whole account database, and four USERS check
+  specs had already named this as a known limitation. Now collected as
+  `users.nsswitch`. It is a precondition for any check that concludes an
+  identity does *not* exist, and FILESYS-0010 is the first to need it. The
+  remaining work is retrofitting the USERS checks that documented the gap.
+- **Listener enumeration** — `/proc/net/tcp`, `tcp6`, `udp`, `udp6` plus the
+  socket-inode-to-process join through `/proc/*/fd`. Unlocks the NETWORK checks
+  cut from v0.2.
+- **Package inventory** — dpkg and rpm database reads, no CVE claims. The v1
+  scope line says inventory only, and it is what `INTEGRITY` and the whole of
+  v2 rest on.
+- **Remaining modules and checks toward the v1 ceiling**: `SYSINFO`, the AUTH
+  balance, the NETWORK balance, and the `FILESYS` mount coverage. FILESYS
+  unowned files landed with the tally that made it possible.
+
+#### 2. UX and CLI polish
+
+- **Terminal renderer** — `NO_COLOR`, non-TTY, width handling, and a summary
+  that leads with `UNKNOWN` count rather than burying it. An auditor who cannot
+  see what the tool failed to see is reading a different report than the one it
+  produced.
+- **SARIF renderer** with stable fingerprints across runs and across catalog
+  versions.
+- **`plumbline diff`** — bundle to bundle, so drift is a first-class output
+  rather than something a user reconstructs from two JSON files.
+- **Suppression file format** — suppressions carry a reason and an expiry, and
+  a suppressed check is reported as `SKIPPED` with the reason, never omitted. A
+  suppression that silently disappears from the output is how a finding gets
+  lost.
+- **`plumbline doctor`** — what this scan could and could not see, before it
+  runs: euid, readable paths, missing collectors, budget headroom.
+- **`check list` / `show` / `explain`** — the catalog is the product; it needs
+  to be legible without reading Go.
+- **Exit code contract** implemented and tested per branch.
+
+#### 3. Edge-case resilience
+
+- **`--root` verified against a real mounted image and a container filesystem**,
+  not only against fixtures. The escape-refusal rule has unit tests; it has
+  never met a real overlayfs.
+- **musl and Alpine** in CI. `live` uses `syscall.Stat_t` and `O_NOFOLLOW`;
+  neither is guaranteed to behave identically.
+- **Golden bundles for ≥6 distro/version combinations**, which is a v1 release
+  criterion and cannot be back-filled quickly.
+- **Determinism under adversarial ordering** — directory entries returned in a
+  hostile order, duplicate mount points, `..` in mountinfo fields.
+- **Budget behaviour on a host that is genuinely large**: 2M+ inodes, and the
+  assertion that a fired budget produces `UNKNOWN` findings rather than a
+  truncated scan that reports `PASS`.
+
+**Exit criteria:** feature freeze. Everything after v0.3.0 is bug-fixing,
+documentation and fixture expansion.
 
 ---
 
@@ -85,20 +218,24 @@ The thinnest possible end-to-end path, chosen so that every architectural risk i
 
 ### Modules and approximate check counts
 
-| Module | Checks | Notes |
-|---|---|---|
-| `SYSINFO` | 6 | Informational facts; never scored |
-| `KERNEL` | 15 | sysctl-driven, deterministic, easy to fixture |
-| `AUTH` | 17 | PAM parsing is the hard part; budget for it |
-| `USERS` | 10 | |
-| `SSHD` | 20 | Requires resolving `Include`, `Match` blocks and defaults correctly — the effective-config collector is the real work here |
-| `NETWORK` | 12 | Local state only: listeners, firewall rules present, sysctls |
-| `SERVICES` | 10 | systemd + OpenRC + sysvinit |
-| `FILESYS` | 14 | Consumes the shared walk |
-| `LOGGING` | 8 | |
-| `CRON` | 8 | |
+| Module | v1 target | Shipped at v0.2.0 | Notes |
+|---|---|---|---|
+| `SYSINFO` | 6 | **0** | Informational facts; never scored. Not started |
+| `KERNEL` | 15 | **16** | sysctl-driven, deterministic, easy to fixture |
+| `AUTH` | 17 | **6** | PAM parsing was the hard part, as predicted. The graph model landed; the checks over it are the remaining work |
+| `USERS` | 10 | **10** | Complete |
+| `SSHD` | 20 | **19** | Resolving `Include`, `Match` blocks and compiled defaults was the real work, and it is done |
+| `NETWORK` | 12 | **3** | Firewall state only so far. Listeners need a `/proc/net/*` collector, not a check |
+| `SERVICES` | 10 | **5** | systemd enablement symlinks read offline. OpenRC and sysvinit degrade gracefully but have no checks |
+| `FILESYS` | 14 | **9** | Consumes the shared walk. Unowned files needed walker aggregation and landed after the tag, at catalog 12 (WP-25) |
+| `LOGGING` | 8 | **5** | |
+| `CRON` | 8 | **5** | |
+| | **~120** | **78** | catalog version 11; `main` is at 79 / 12 |
 
-**~120 checks.** Cut to whatever fits the schedule; check count is the flex, correctness is not.
+**~120 checks was always a ceiling, not a target.** Cut to whatever fits the
+schedule; check count is the flex, correctness is not. The 42-check gap at
+v0.2.0 is accounted for module by module in the pre-1.0 section above, and none
+of it is work that was forgotten.
 
 ### Release criteria — all must hold
 

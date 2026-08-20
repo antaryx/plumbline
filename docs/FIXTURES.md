@@ -251,6 +251,8 @@ filesys-device             a block node in /var/tmp with /dev/sda's numbers
 filesys-mounts-weak        /tmp not separate, /dev/shm without noexec, bare /home
 filesys-mounts-unknown     the mount table is unreadable → UNKNOWN
 filesys-truncated          nothing wrong; driven with a tiny inode budget
+filesys-unowned            uid 4242 owns a tree no account claims → FAIL
+filesys-unowned-directory  the same disk, with nsswitch routing to SSSD → UNKNOWN
 
 auth-rhel                  the good case, Red Hat layout, stacks reached by symlink
 auth-debian                the same host in the common-* layout — verdicts must match
@@ -389,6 +391,21 @@ needed — without the first, a check that returned UNKNOWN unconditionally woul
 satisfy the second while being useless. This is the runbook's WP-23 rule
 mechanised: *a truncated walk can invalidate a negative result, never a
 positive one.*
+
+`filesys-unowned` and `filesys-unowned-directory` are a matched pair, and the
+pair *is* the test. Their ownership is byte-for-byte identical: `/var/lib/oldapp`
+is owned by uid 4242 and gid 4242, and `/home/alice/notes.txt` carries the
+stray gid alone so the uid and gid arms of FILESYS-0010 are exercised
+independently rather than always together. The **only** difference between the
+two fixtures is one word in `/etc/nsswitch.conf` — `passwd: files` against
+`passwd: files sss`. The first must FAIL and the second must return
+UNKNOWN(`ambiguous_system_state`), because a check that reads `/etc/passwd`
+alone would report every Active Directory user's home directory as unowned. Two
+fixtures rather than one, because a single fixture could show that the check
+handles one case and could not show that it distinguishes them.
+
+Both use the `owners` manifest key, which is the only way a fixture can state a
+uid at all: git records ownership no more faithfully than it records mode.
 
 `filesys-suid-writable` and `filesys-suid-outside` exist as a pair because they
 separate two properties that look like one finding. In the first, a setuid

@@ -4,16 +4,17 @@
 
 A deterministic, offline, evidence-first host security auditor for Linux.
 
-> **Status: v0.2.0 — pre-release, no stability guarantees.** The catalog is
-> the milestone: **78 checks across nine modules**, every one with PASS and
-> FAIL fixtures enforced in CI, evaluated from a single filesystem traversal
-> and a bounded set of configuration reads.
+> **Status: v0.2.0 released; v0.3.0 in progress — pre-release, no stability
+> guarantees.** The catalog is the milestone: **79 checks across nine modules**
+> at catalog version 12, every one with PASS and FAIL fixtures enforced in CI,
+> evaluated from a single filesystem traversal and a bounded set of
+> configuration reads.
 >
 > `findings/v1`, flag names, exit codes and check IDs are contracts from here.
 > Everything in Go stays `internal/` and may change without notice (ADR-0007).
 >
-> Next: `docs/ROADMAP.md` v0.3 — the terminal and SARIF renderers, `diff`,
-> suppressions and `doctor`. None of them changes a fact or a check.
+> Next: `docs/ROADMAP.md` v0.3 — engine maturation, then the terminal and SARIF
+> renderers, `diff`, suppressions and `doctor`.
 
 ## What it checks
 
@@ -21,8 +22,8 @@ A deterministic, offline, evidence-first host security auditor for Linux.
 |---|---|---|
 | **SSHD** | 19 | `sshd_config` and its includes, `Match` block scoping |
 | **KERNEL** | 16 | `/proc/sys` and the `sysctl.d` files, separately |
-| **USERS** | 10 | `passwd`, `shadow`, `group` — three facts, three readabilities |
-| **FILESYS** | 9 | one shared traversal: setuid, world-writable, device nodes, mount options |
+| **USERS** | 10 | `passwd`, `shadow`, `group`, `nsswitch.conf` — four facts, four readabilities |
+| **FILESYS** | 10 | one shared traversal: setuid, world-writable, device nodes, unowned files, mount options |
 | **AUTH** | 6 | the PAM stack as a graph, `pwquality.conf`, `faillock.conf` |
 | **CRON** | 5 | who may write the schedule — metadata only, never a crontab |
 | **LOGGING** | 5 | rsyslog in all three of its syntaxes, journald with drop-ins |
@@ -69,6 +70,15 @@ That single decision buys things a live-evaluating scanner cannot have:
   hundreds of checks stays verifiable.
 
 And it says `UNKNOWN` when it cannot tell, instead of reporting `PASS`.
+
+Two examples of what that costs and what it buys. A filesystem walk that hits
+its inode budget makes every *absence* claim resolve to `UNKNOWN` while still
+reporting the setuid binary it did find — a truncated walk can invalidate a
+negative result and never a positive one. And FILESYS-0010, which reports files
+owned by accounts that no longer exist, reads `/etc/nsswitch.conf` first: on a
+host joined to Active Directory an unresolved uid is very likely a real user
+this offline scan simply cannot ask about, so the check declines rather than
+accusing a correctly configured machine.
 
 ## Development
 

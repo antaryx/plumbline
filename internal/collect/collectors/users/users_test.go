@@ -36,7 +36,7 @@ func TestCollectorContract(t *testing.T) {
 	if got, want := c.ID(), "users"; got != want {
 		t.Errorf("ID = %q, want %q", got, want)
 	}
-	want := []fact.ID{fact.PasswdID, fact.ShadowID, fact.GroupID}
+	want := []fact.ID{fact.PasswdID, fact.ShadowID, fact.GroupID, fact.NSSwitchID}
 	got := c.Produces()
 	if len(got) != len(want) {
 		t.Fatalf("Produces = %v, want %v", got, want)

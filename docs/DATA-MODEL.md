@@ -166,6 +166,8 @@ gets produced.
 | `network.firewall` | 1 | `collect/collectors/network` | `Sources[]` |
 | `auth.pam` | 1 | `collect/collectors/auth` | `Installed`, `DirState`, `Services[]`, `PwQuality`, `Faillock`, `Digests{}` |
 | `fs.mounts` | 1 | `collect/walker` (`fswalk`) | `Entries[]`, `Known` |
+| `fs.tally.<tally>` | 1 | `collect/walker` (`fswalk`) | `Tally`, `Roots[]`, `Buckets[]`, `Truncated`, `TruncationReasons[]`, `KeysDropped`, `InodesTallied`, `InodesVisited` |
+| `users.nsswitch` | 1 | `collect/collectors/users` | `Databases[]`, `State`, `Path`, `Malformed[]`, `Digest` |
 
 Every fact added later is listed here with its version history.
 
@@ -497,9 +499,9 @@ pre-combined them would have to pick one rule and would be wrong for the other.
 #### `fs.<interest>` — the shared filesystem walk
 
 One fact per registered walker interest: `fs.suid`, `fs.world_writable`,
-`fs.unowned`, and so on. All are the same Go type, `fact.FSMatches`, whose
-`FactID` is derived from `Interest`. A module gets a new fact by registering a
-new interest, not by writing a new fact type.
+`fs.device_outside_dev`, and so on. All are the same Go type,
+`fact.FSMatches`, whose `FactID` is derived from `Interest`. A module gets a
+new fact by registering a new interest, not by writing a new fact type.
 
 It is one fact per interest rather than one fact holding every match for a
 specific reason: a check requiring `fs.suid` must not resolve to `UNKNOWN`
@@ -543,6 +545,80 @@ a directory reached twice was enumerated under its other path. See ADR-0014.
 
 `InodesVisited` is shared by every fact one walk produced, which is what proves
 the tree was traversed once rather than once per interest.
+
+#### `fs.tally.<tally>` — the same walk, aggregated
+
+One fact per registered walker **tally**: `fs.tally.owner_uid`,
+`fs.tally.owner_gid`. The Go type is `fact.FSTally`, and it is a different type
+from `FSMatches` because it answers a different shape of question.
+
+An `Interest` **records**: it keeps the first `MaxHits` inodes matching a pure
+predicate. A `Tally` **folds**: it maps every inode to a key, counts the keys,
+and keeps one exemplar per key. The difference is memory, and it is what
+decides which questions the walk can answer at all.
+
+| | `fs.<interest>` | `fs.tally.<tally>` |
+|---|---|---|
+| Cost | one row per matching inode | one bucket per **distinct key** |
+| Cap | `MaxHits` (default 20,000 rows) | `MaxKeys` (default 16,384 keys) |
+| Coverage once the cap fires | the first N matches only | **every inode still counted**; only new keys are refused |
+| Answers | "show me the setuid binaries" | "does every uid on disk resolve to an account" |
+
+The second question cannot be answered by an interest. `Interest.Match` is pure
+and is evaluated at registration time, before any fact exists, so it cannot
+join against `/etc/passwd`; and deferring the join by recording every owned
+inode as a row would overflow the row cap in the first populated directory of
+any host that has users. The tally counts owners during the walk and the check
+does the join where facts live. See `internal/collect/walker/tally.go` and
+`docs/checks/FILESYS-0010.md`.
+
+`Buckets` is sorted by key and each carries a `Count` and one `Example` row —
+the first inode in walk order that fell into it. The exemplar is what makes a
+tally actionable rather than merely numeric: a count says there is a problem,
+an exemplar says where to look.
+
+**The asymmetric truncation rule is unchanged**, and `FSTally.Complete()`
+mechanises it exactly as `FSMatches.Complete()` does. One reason code is added:
+
+| Reason | Meaning | Scope |
+|---|---|---|
+| `max_keys` | **this tally** reached its keyspace cap and refused a key it had never seen; `KeysDropped` counts them | one fact |
+
+`max_keys` is a separate reason from `max_hits` because the two say opposite
+things about how much was examined. A row cap means the walk stopped
+*recording* after N matches. A key cap means the walk kept counting every inode
+it met and only stopped admitting new buckets — which is why `InodesTallied`
+exceeds the sum of the bucket counts on a tally that dropped keys. An operator
+raising the wrong limit fixes neither.
+
+Every whole-walk reason — `inode_limit`, `wall_clock`, `unreadable_dir` and the
+rest — lands on tallies exactly as it lands on interests: it is one traversal,
+so a limit that fires is a property of every fact it produced.
+
+#### `users.nsswitch` — whether the local files are the whole account database
+
+`/etc/passwd` is a file. The *account database* is whatever
+`/etc/nsswitch.conf` routes `passwd` to, and on a host joined to LDAP, SSSD,
+Active Directory or `systemd-homed` that is somewhere else, holding accounts
+`/etc/passwd` has never heard of.
+
+The distinction matters to exactly one kind of claim: a claim that an identity
+does **not** exist. "This uid is not in `/etc/passwd`" is a fact about a file;
+"this uid belongs to nobody" is a fact about the host, and the two are the same
+statement only when the files are authoritative. `LocalFilesAuthoritative(db)`
+is that predicate, and it is deliberately conservative: it is true only when
+the file was read and names exactly one source, `files`, for the database. A
+false negative costs an `UNKNOWN`; a false positive reports a legitimate
+directory account as belonging to nobody.
+
+`State` distinguishes `present`, `absent`, `denied` and `error`. **Absent is
+not "files".** glibc falls back to a compiled-in default when the file is
+missing, and that default is a property of the libc build rather than of
+anything on this host, so a missing file leaves the effective policy unknown.
+
+Action brackets — `[NOTFOUND=return]`, `[SUCCESS=merge]` — are parsed and
+dropped. They govern what happens *between* two sources and no check asks about
+them; carrying a field nothing reads is output surface bought for nothing.
 
 `Digests` maps each entry of `Files` to the sha256 of the bytes read from it.
 It was added after `sshd.config` v1 shipped and did **not** bump the version:

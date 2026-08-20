@@ -1,0 +1,14 @@
+{
+  "description": "A host with files left behind by an account that no longer exists. /var/lib/oldapp is owned by uid 4242 and gid 4242, and neither number appears in /etc/passwd or /etc/group; one file in alice's home carries the stray gid alone, so the uid and gid arms of FILESYS-0010 are exercised independently rather than always together. nsswitch.conf routes passwd and group to 'files' alone, which is what makes the absence conclusive: there is nowhere else an identity could be coming from, so the check may FAIL rather than declining. Every other FILESYS check passes here — the point of the fixture is ownership, and a fixture that also violated three other rules would not prove which check the FAIL came from.",
+  "modes": {
+    "/usr/bin/passwd": "4755",
+    "/tmp": "041777"
+  },
+  "owners": {
+    "/var/lib/oldapp": "4242:4242",
+    "/var/lib/oldapp/state.db": "4242:4242",
+    "/var/lib/oldapp/cache.idx": "4242:4242",
+    "/home/alice": "1000:1000",
+    "/home/alice/notes.txt": "1000:4242"
+  }
+}

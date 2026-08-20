@@ -1,5 +1,7 @@
-// Package users collects the local account databases: /etc/passwd,
-// /etc/shadow and /etc/group.
+// Package users collects the local account databases — /etc/passwd,
+// /etc/shadow and /etc/group — and /etc/nsswitch.conf, which is the statement
+// of whether those files are the whole account database or merely the local
+// part of one.
 //
 // This is the module where an unprivileged scan stops being a theoretical
 // concern. /etc/passwd and /etc/group are world-readable; /etc/shadow is not.
@@ -61,7 +63,7 @@ func (Collector) ID() string { return ID }
 // to report — a timeout, a panic — is recorded against each of them rather
 // than against a collector name no check has heard of.
 func (Collector) Produces() []fact.ID {
-	return []fact.ID{fact.PasswdID, fact.ShadowID, fact.GroupID}
+	return []fact.ID{fact.PasswdID, fact.ShadowID, fact.GroupID, fact.NSSwitchID}
 }
 
 // DependsOn is nil. Reading three files needs nothing observed first.
@@ -78,16 +80,17 @@ func (Collector) DependsOn() []string { return nil }
 // checks resolve to UNKNOWN, each naming the file and the reason.
 func (Collector) Requires() collect.Capability { return collect.CapNone }
 
-// Cost is Cheap: three line-oriented files, no walk, no exec.
+// Cost is Cheap: four line-oriented files, no walk, no exec.
 func (Collector) Cost() collect.Cost { return collect.Cheap }
 
-// Timeout is five seconds. Three files of bounded size on local storage; if
+// Timeout is five seconds. Four files of bounded size on local storage; if
 // this does not complete, the path is on a filesystem that is not answering,
 // and an audit that hangs on /etc/passwd is worse than one that records why it
 // stopped.
 func (Collector) Timeout() time.Duration { return 5 * time.Second }
 
-// Collect reads the three databases, recording each independently.
+// Collect reads the three databases and the routing table, recording each
+// independently.
 //
 // Each file gets its own fact or its own fact error. There is no path through
 // this function where one file's failure removes another file's observation,
@@ -116,6 +119,12 @@ func (Collector) Collect(ctx context.Context, s system.System, fs *fact.Set) err
 		return nil
 	}
 	collectGroup(s, fs)
+
+	//nolint:nilerr // as above
+	if err := ctx.Err(); err != nil {
+		return nil
+	}
+	collectNSSwitch(s, fs)
 	return nil
 }
 

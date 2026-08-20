@@ -346,6 +346,16 @@ var registry = map[fact.ID]decoder{
 			return f, nil
 		},
 	},
+	fact.NSSwitchID: {
+		version: fact.NSSwitch{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.NSSwitch
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
 	fact.SSHDConfigID: {
 		version: fact.SSHDConfig{}.FactVersion(),
 		decode: func(raw json.RawMessage) (fact.Fact, error) {
@@ -377,12 +387,38 @@ var fsMatchesDecoder = decoder{
 	},
 }
 
+// fsTallyDecoder handles the fs.tally.* namespace, for the reason
+// fsMatchesDecoder handles fs.*: there is one ID per registered walker tally
+// and the set is decided by which modules are compiled in, so the IDs cannot
+// be listed ahead of time.
+var fsTallyDecoder = decoder{
+	version: fact.FSTally{}.FactVersion(),
+	decode: func(raw json.RawMessage) (fact.Fact, error) {
+		var f fact.FSTally
+		if err := json.Unmarshal(raw, &f); err != nil {
+			return nil, err
+		}
+		return f, nil
+	},
+}
+
 // decoderFor resolves a fact ID to its decoder. Exact registrations win; the
-// fs.* namespace is matched by prefix. An ID matching neither is preserved
+// fs.* namespaces are matched by prefix. An ID matching neither is preserved
 // opaquely, never guessed at.
+//
+// **fs.tally. must be tested before fs.**, and the ordering is load bearing
+// rather than stylistic: fs.tally.owner_uid also has the fs. prefix, and
+// decoding it as an FSMatches would succeed — encoding/json ignores fields it
+// does not recognise — producing an empty, complete-looking match set instead
+// of the tally that was collected. Every check reading it would then get a
+// confident wrong answer from a bundle that was written correctly. The longer
+// prefix wins, and the test below proves it.
 func decoderFor(id fact.ID) (decoder, bool) {
 	if d, ok := registry[id]; ok {
 		return d, true
+	}
+	if strings.HasPrefix(string(id), fact.FSTallyPrefix) && len(id) > len(fact.FSTallyPrefix) {
+		return fsTallyDecoder, true
 	}
 	if strings.HasPrefix(string(id), fact.FSFactPrefix) && len(id) > len(fact.FSFactPrefix) {
 		return fsMatchesDecoder, true

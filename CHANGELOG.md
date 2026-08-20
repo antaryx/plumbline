@@ -11,8 +11,73 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-Nothing yet. `docs/ROADMAP.md` v0.3 is next: the terminal and SARIF renderers,
-`diff`, suppressions and `doctor` — none of which changes a fact or a check.
+Catalog version **12**. The first of the v0.3 engine-maturation work: the
+shared filesystem walker can now aggregate, which unlocks a class of check that
+was previously impossible to write without guessing.
+
+### Added
+- **Aggregating walker tallies** (`internal/collect/walker/tally.go`). The walk
+  already answered "which inodes match this predicate" by recording rows. It
+  now also answers "how are these inodes distributed across a keyspace" by
+  folding: one bucket per distinct key, an unbounded count inside it, and one
+  exemplar path. Memory is bounded by distinct keys rather than by inodes, so a
+  tally can cover a ten-million-inode filesystem inside a budget a
+  row-recording interest would exhaust in its first populated directory. New
+  fact namespace `fs.tally.<name>` (`fact.FSTally`), new truncation reason
+  `max_keys`, default keyspace cap 16,384
+- **FILESYS-0010 — every uid and gid owning a file resolves to a local account
+  or group.** MEDIUM. Files left behind by a deleted account are not untidiness:
+  `useradd` allocates the lowest free uid, so the next account created inherits
+  the number and everything the departed one owned, and nothing records that it
+  happened
+- **`users.nsswitch`** (`fact.NSSwitch`) — `/etc/nsswitch.conf`, parsed into
+  which name services answer for which databases. Four USERS check specs
+  already named this file as a known limitation; it is now collected
+
+### Changed
+- `internal/collect/collectors/users` reads a fourth file. `Produces()` gains
+  `users.nsswitch`; a missing file is recorded as a *state* rather than as a
+  fact error, because glibc falling back to a compiled-in default is a real
+  observation about the host and simply not the same one as "configured to
+  files"
+- `walker.Walk` and the `fswalk` collector accept a walk justified by a tally
+  alone. Previously a walk with no interests was a caller error
+- `bundle.decoderFor` tests the `fs.tally.` prefix before `fs.`. The ordering is
+  load bearing: `fs.tally.owner_uid` also carries the `fs.` prefix, and
+  decoding it as an `FSMatches` would have *succeeded* — `encoding/json`
+  ignores unrecognised fields — leaving an empty, complete-looking match set
+  where a tally used to be, and FILESYS-0010 returning a confident PASS from a
+  bundle that recorded a host full of unowned files. `TestRoundTripWalkerTallyFacts`
+  pins it
+
+### Documentation
+- **`docs/ROADMAP.md` rewritten against reality.** It still described the
+  project as pre-v0.1 with everything ahead of it. v0.1.0 and v0.2.0 are now
+  marked complete with what each actually shipped, the v1 module table carries
+  a shipped-count column beside its target, and the 42-check gap between the
+  78 that shipped and the ~120 planned is accounted for module by module rather
+  than left to be rediscovered as a defect. v0.3.0 is scoped into engine
+  maturation, UX and CLI polish, and edge-case resilience, in that order
+- From this release, **every work package syncs `ROADMAP.md`, `CHANGELOG.md`
+  and `DATA-MODEL.md` with what is actually in `main`.** A roadmap that
+  disagrees with the code is worse than no roadmap, because people plan against
+  it
+- `docs/checks/FILESYS-0010.md`, and `docs/DATA-MODEL.md` §2.3 gains
+  `fs.tally.<tally>` and `users.nsswitch`
+
+### Notes on what FILESYS-0010 will not do
+- **It will not report a directory account as unowned.** "This uid is not in
+  `/etc/passwd`" is a fact about a file; "this uid belongs to nobody" is a fact
+  about the host, and the two coincide only when the local files are the whole
+  account database. Where `nsswitch.conf` routes `passwd` or `group` anywhere
+  else — including `systemd`, which is on the default line of every current
+  systemd distribution — an unresolved identity yields
+  `UNKNOWN(ambiguous_system_state)` naming the routing table, not a FAIL
+- **The PASS branch never consults `nsswitch.conf`**, and that asymmetry is
+  what keeps the check useful rather than permanently unknown. A name service
+  can add identities that resolve; it cannot remove one `/etc/passwd` already
+  resolves. So on a healthy directory-joined host every uid on disk still
+  resolves locally and the check passes outright
 
 ---
 

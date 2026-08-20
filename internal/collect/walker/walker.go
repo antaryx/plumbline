@@ -3,9 +3,22 @@
 // Nine modules of the v0.2 catalog want to know something about the
 // filesystem — SUID binaries, world-writable files, unowned files, sticky-bit
 // directories. Nine independent walks of a production host is the design
-// mistake this package exists to prevent, so consumers register *interest
-// predicates* up front and the walker evaluates every one of them per inode in
+// mistake this package exists to prevent, so consumers register their
+// questions up front and the walker answers every one of them per inode in
 // one pass (ARCHITECTURE.md §3.2, BUILD-RUNBOOK-v0.2.md WP-15).
+//
+// There are two kinds of question, and the difference is memory, not taste:
+//
+//   - an Interest *records* — it keeps the first MaxHits inodes matching a
+//     pure predicate, which answers "show me the setuid binaries";
+//   - a Tally *folds* — it maps every inode to a bounded keyspace and keeps
+//     counts plus one exemplar per key, which answers "does every uid on this
+//     filesystem resolve to an account" without recording ten million rows to
+//     find out.
+//
+// A Tally's cost is the number of distinct keys, not the number of inodes, so
+// it can cover a whole filesystem inside a budget an Interest would exhaust in
+// its first populated directory. See tally.go.
 //
 // The traversal is hostile-input territory by definition: it reaches paths
 // nobody named, on filesystems nobody chose, on a host that may be actively
@@ -165,9 +178,10 @@ func (i Interest) row(fi system.FileInfo) fact.FSRow {
 // themselves, so a wiring mistake panics on the first test run rather than
 // producing a scan that quietly answered fewer questions than it was asked.
 var (
-	registryMu sync.Mutex
-	registry   []Interest
-	sealed     bool
+	registryMu    sync.Mutex
+	registry      []Interest
+	tallyRegistry []Tally
+	sealed        bool
 )
 
 // Register adds an interest to the shared walk.
@@ -214,13 +228,18 @@ func resetRegistry() {
 	registryMu.Lock()
 	defer registryMu.Unlock()
 	registry = nil
+	tallyRegistry = nil
 	sealed = false
 }
 
 // Config is one traversal's parameters.
 type Config struct {
-	// Interests are the questions this walk answers. Required.
+	// Interests are the row-recording questions this walk answers.
 	Interests []Interest
+
+	// Tallies are the aggregating questions this walk answers. A walk needs
+	// at least one Interest or one Tally; either alone is enough.
+	Tallies []Tally
 
 	// Roots are the paths to start from. Empty means []string{"/"}.
 	Roots []string
@@ -287,6 +306,9 @@ type Result struct {
 	// Facts holds one fact per interest, sorted by interest name.
 	Facts []fact.FSMatches
 
+	// TallyFacts holds one fact per tally, sorted by tally name.
+	TallyFacts []fact.FSTally
+
 	// Mounts is the kernel's mount table, which the walk reads anyway to apply
 	// its filesystem-type skip list. It is carried out rather than re-read by
 	// a collector of its own: two reads of the same kernel table could
@@ -320,6 +342,11 @@ type walkState struct {
 	// hits counts rows recorded per interest, to compare against MaxHits.
 	hits []int
 
+	// tallyOut and tallies are the same pair for the aggregating questions:
+	// the fact being assembled, and the bounded map doing the folding.
+	tallyOut []fact.FSTally
+	tallies  []*tallyState
+
 	// visited is the device+inode set. It is what makes a bind-mount cycle
 	// terminate for the right reason: a depth limit also stops an infinite
 	// walk, but it reports the host as truncated when the host is merely
@@ -349,22 +376,29 @@ func identified(fi system.FileInfo) bool { return fi.Dev != 0 || fi.Ino != 0 }
 // because "the walk could not finish" is an observation a check needs, not a
 // failure that should discard the observations already made.
 func Walk(ctx context.Context, s system.System, cfg Config) (Result, error) {
-	if len(cfg.Interests) == 0 {
-		return Result{}, fmt.Errorf("walker: Walk called with no interests")
+	if len(cfg.Interests) == 0 && len(cfg.Tallies) == 0 {
+		return Result{}, fmt.Errorf("walker: Walk called with no interests and no tallies")
 	}
 	for _, i := range cfg.Interests {
 		if err := i.validate(); err != nil {
 			return Result{}, fmt.Errorf("walker: %w", err)
 		}
 	}
+	for _, t := range cfg.Tallies {
+		if err := t.validate(); err != nil {
+			return Result{}, fmt.Errorf("walker: %w", err)
+		}
+	}
 
 	st := &walkState{
-		cfg:     cfg,
-		sys:     s,
-		mounts:  readMountTable(s),
-		visited: map[devIno]bool{},
-		out:     make([]fact.FSMatches, len(cfg.Interests)),
-		hits:    make([]int, len(cfg.Interests)),
+		cfg:      cfg,
+		sys:      s,
+		mounts:   readMountTable(s),
+		visited:  map[devIno]bool{},
+		out:      make([]fact.FSMatches, len(cfg.Interests)),
+		hits:     make([]int, len(cfg.Interests)),
+		tallyOut: make([]fact.FSTally, len(cfg.Tallies)),
+		tallies:  make([]*tallyState, len(cfg.Tallies)),
 	}
 	st.deadline = cfg.now().Add(cfg.budget())
 
@@ -374,6 +408,13 @@ func Walk(ctx context.Context, s system.System, cfg Config) (Result, error) {
 			Interest: i.Name,
 			Roots:    append([]string(nil), roots...),
 		}
+	}
+	for n, t := range cfg.Tallies {
+		st.tallyOut[n] = fact.FSTally{
+			Tally: t.Name,
+			Roots: append([]string(nil), roots...),
+		}
+		st.tallies[n] = newTallyState(t)
 	}
 
 	// A mount table we could not read means the fstype skip list cannot be
@@ -556,6 +597,19 @@ func (st *walkState) offer(fi system.FileInfo) bool {
 		st.out[n].Rows = append(st.out[n].Rows, i.row(fi))
 		st.hits[n]++
 	}
+
+	for n, t := range st.cfg.Tallies {
+		key, ok := t.Key(fi)
+		if !ok {
+			continue
+		}
+		if st.tallies[n].fold(key, fi) {
+			// The keyspace cap discarded a key never seen before. Like
+			// MaxHits this truncates one fact and leaves every other fact,
+			// and the rest of the walk, complete.
+			st.tallyOut[n].MarkTruncated(fact.TruncMaxKeys)
+		}
+	}
 	return true
 }
 
@@ -606,6 +660,9 @@ func (st *walkState) truncateAll(reason fact.TruncationReason) {
 	for n := range st.out {
 		st.out[n].MarkTruncated(reason)
 	}
+	for n := range st.tallyOut {
+		st.tallyOut[n].MarkTruncated(reason)
+	}
 }
 
 // finish sorts each fact's rows and stamps the shared counters.
@@ -615,7 +672,12 @@ func (st *walkState) finish() {
 		sort.Slice(rows, func(a, b int) bool { return rows[a].Path < rows[b].Path })
 		st.out[n].InodesVisited = st.res.InodesVisited
 	}
+	for n := range st.tallyOut {
+		st.tallies[n].asFact(&st.tallyOut[n])
+		st.tallyOut[n].InodesVisited = st.res.InodesVisited
+	}
 	st.res.Facts = st.out
+	st.res.TallyFacts = st.tallyOut
 	st.res.Mounts = st.mounts.asFact()
 }
 
@@ -633,7 +695,7 @@ func New() Collector { return Collector{} }
 // walk and one set of consumers, and letting a caller substitute them would be
 // a second walk wearing the first one's name.
 func NewWithConfig(cfg Config) Collector {
-	cfg.Interests = nil
+	cfg.Interests, cfg.Tallies = nil, nil
 	return Collector{cfg: cfg}
 }
 
@@ -647,10 +709,13 @@ func (Collector) ID() string { return ID }
 // out or panicked is recorded against the facts the checks will actually look
 // for rather than against a collector name they have never heard of.
 func (Collector) Produces() []fact.ID {
-	in := Interests()
-	out := make([]fact.ID, 0, len(in)+1)
+	in, tal := Interests(), Tallies()
+	out := make([]fact.ID, 0, len(in)+len(tal)+1)
 	for _, i := range in {
 		out = append(out, fact.FSFactID(i.Name))
+	}
+	for _, t := range tal {
+		out = append(out, fact.FSTallyFactID(t.Name))
 	}
 	// The mount table is published whether or not any interest was registered,
 	// so it is named here unconditionally.
@@ -694,14 +759,15 @@ func (c Collector) Timeout() time.Duration {
 func (c Collector) Collect(ctx context.Context, s system.System, fs *fact.Set) error {
 	cfg := c.cfg
 	cfg.Interests = Interests()
+	cfg.Tallies = Tallies()
 	if cfg.Now == nil {
 		cfg.Now = s.Now
 	}
 
-	if len(cfg.Interests) == 0 {
-		// No module registered an interest, so there is no tree to walk:
-		// traversing a filesystem to answer no questions is pure cost on the
-		// host being audited.
+	if len(cfg.Interests) == 0 && len(cfg.Tallies) == 0 {
+		// No module registered an interest or a tally, so there is no tree to
+		// walk: traversing a filesystem to answer no questions is pure cost on
+		// the host being audited.
 		//
 		// The mount table is still read and still published. It is not a
 		// product of the traversal — the walk reads it to decide where *not*
@@ -719,6 +785,9 @@ func (c Collector) Collect(ctx context.Context, s system.System, fs *fact.Set) e
 		return err
 	}
 	for _, f := range res.Facts {
+		fs.Put(f)
+	}
+	for _, f := range res.TallyFacts {
 		fs.Put(f)
 	}
 	fs.Put(res.Mounts)

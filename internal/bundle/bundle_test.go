@@ -554,3 +554,68 @@ func TestRoundTripWalkerFacts(t *testing.T) {
 		t.Errorf("truncation reasons = %v, want [%s]", ww.TruncationReasons, fact.TruncDeadline)
 	}
 }
+
+// TestRoundTripWalkerTallyFacts covers the fs.tally.* namespace, and with it
+// the one ordering bug that would not announce itself.
+//
+// fs.tally.owner_uid also carries the fs. prefix. Had decoderFor tested the
+// shorter prefix first, this fact would have decoded as an FSMatches — and
+// succeeded, because encoding/json ignores fields it does not recognise. The
+// result would be an empty, Complete()-looking match set where a tally used to
+// be, and FILESYS-0010 would return a confident PASS from a bundle that
+// recorded a host full of unowned files.
+func TestRoundTripWalkerTallyFacts(t *testing.T) {
+	src := fact.NewSet()
+	src.Put(fact.FSTally{
+		Tally: "owner_uid",
+		Roots: []string{"/"},
+		Buckets: []fact.FSBucket{
+			{Key: 0, Count: 41003, Example: fact.FSRow{Path: "/", Mode: 0o755, IsDir: true}},
+			{Key: 4242, Count: 3, Example: fact.FSRow{Path: "/var/lib/oldapp/cache.idx", Mode: 0o644, UID: 4242, GID: 4242, IsRegular: true}},
+		},
+		InodesTallied: 41006,
+		InodesVisited: 41006,
+	})
+	src.Put(fact.FSTally{
+		Tally:             "owner_gid",
+		Roots:             []string{"/"},
+		Buckets:           []fact.FSBucket{{Key: 0, Count: 9, Example: fact.FSRow{Path: "/etc", IsDir: true}}},
+		Truncated:         true,
+		TruncationReasons: []fact.TruncationReason{fact.TruncMaxKeys},
+		KeysDropped:       11,
+		InodesTallied:     41006,
+		InodesVisited:     41006,
+	})
+
+	got := read(t, write(t, testBundle(src)))
+	if !reflect.DeepEqual(src, got.Facts) {
+		t.Errorf("tally facts changed across the round trip:\n want %#v\n  got %#v", src, got.Facts)
+	}
+
+	uid, ferr, ok := fact.Get[fact.FSTally](got.Facts, fact.FSTallyFactID("owner_uid"))
+	if !ok {
+		t.Fatalf("fs.tally.owner_uid did not decode to fact.FSTally after a round trip: err=%v", ferr)
+	}
+	// The prefix trap: it must NOT have been decoded as an FSMatches.
+	if _, _, isMatches := fact.Get[fact.FSMatches](got.Facts, fact.FSTallyFactID("owner_uid")); isMatches {
+		t.Fatal("fs.tally.owner_uid decoded as fact.FSMatches; the fs. prefix won over fs.tally. and the tally was silently replaced by an empty match set")
+	}
+	if b, found := uid.Bucket(4242); !found || b.Count != 3 || b.Example.Path != "/var/lib/oldapp/cache.idx" {
+		t.Errorf("uid 4242 bucket did not survive: %+v found=%v", b, found)
+	}
+	if !uid.Complete() {
+		t.Errorf("fs.tally.owner_uid gained a truncation marker: %v", uid.TruncationReasons)
+	}
+
+	// The truncation marker is what a verdict turns on, so it matters most.
+	gid, _, ok := fact.Get[fact.FSTally](got.Facts, fact.FSTallyFactID("owner_gid"))
+	if !ok {
+		t.Fatal("fs.tally.owner_gid did not decode")
+	}
+	if gid.Complete() {
+		t.Error("a tally that dropped keys read back as complete; every absence claim over it would be false assurance")
+	}
+	if gid.KeysDropped != 11 {
+		t.Errorf("KeysDropped = %d, want 11", gid.KeysDropped)
+	}
+}

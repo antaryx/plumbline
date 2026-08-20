@@ -57,6 +57,7 @@ func buildCatalog() *catalog.Catalog {
 		filesyschecks.Check0007,
 		filesyschecks.Check0008,
 		filesyschecks.Check0009,
+		filesyschecks.Check0010,
 		kernelchecks.Check0001,
 		kernelchecks.Check0002,
 		kernelchecks.Check0003,

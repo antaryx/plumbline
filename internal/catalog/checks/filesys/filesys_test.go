@@ -9,6 +9,7 @@ import (
 	"github.com/antaryx/plumbline/internal/catalog"
 	checks "github.com/antaryx/plumbline/internal/catalog/checks/filesys"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/filesys"
+	"github.com/antaryx/plumbline/internal/collect/collectors/users"
 	"github.com/antaryx/plumbline/internal/collect/walker"
 	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/finding"
@@ -22,21 +23,36 @@ var all = []catalog.Check{
 	checks.Check0001, checks.Check0002, checks.Check0003,
 	checks.Check0004, checks.Check0005, checks.Check0006,
 	checks.Check0007, checks.Check0008, checks.Check0009,
+	checks.Check0010,
 }
 
-// inodeChecks are the six that rest on the traversal. The three mount checks
+// inodeChecks are the seven that rest on the traversal. The three mount checks
 // read the mount table instead and are unaffected by a truncated walk, which
 // is why the truncation test names these explicitly rather than looping over
 // everything.
+//
+// Check0010 belongs here even though it reads an aggregate rather than rows.
+// Its PASS is still a claim about every inode on the host, so a walk that
+// stopped early invalidates it in exactly the same way — which is the property
+// the truncation test exists to hold the aggregating path to as well.
 var inodeChecks = []catalog.Check{
 	checks.Check0001, checks.Check0002, checks.Check0003,
 	checks.Check0004, checks.Check0005, checks.Check0006,
+	checks.Check0010,
 }
 
 var mountChecks = []catalog.Check{checks.Check0007, checks.Check0008, checks.Check0009}
 
 // collectFixture runs the real shared walk over a fixture, with the real
-// interests the filesys package registered at init.
+// interests and tallies the filesys package registered at init, and then the
+// real users collector.
+//
+// The users collector is here because FILESYS-0010 joins the walk's owner
+// tallies against the account databases and the name-service routing table.
+// Stubbing those facts would test the join against data this project never
+// produces; running the collector means a change to how /etc/nsswitch.conf is
+// parsed shows up as a FILESYS test failure, which is where it belongs — the
+// join is the check's whole substance.
 func collectFixture(t *testing.T, name string, cfg walker.Config) *fact.Set {
 	t.Helper()
 
@@ -51,6 +67,9 @@ func collectFixture(t *testing.T, name string, cfg walker.Config) *fact.Set {
 	}
 	if err := c.Collect(context.Background(), sys, facts); err != nil {
 		t.Fatalf("collect fixture %s: %v", name, err)
+	}
+	if err := users.New().Collect(context.Background(), sys, facts); err != nil {
+		t.Fatalf("collect accounts for fixture %s: %v", name, err)
 	}
 	return facts
 }
@@ -244,10 +263,25 @@ func TestUnreadableMountTableIsUnknownForEveryMountCheck(t *testing.T) {
 // reviewer cannot see from the diff: a check whose SinceCatalog is wrong claims
 // to have existed in a version that never shipped it, and suppression files
 // written against that version silently do not match.
-func TestEveryCheckIsRegisteredAtCatalogEleven(t *testing.T) {
+func TestEveryCheckDeclaresTheVersionItShippedIn(t *testing.T) {
+	since := map[string]int{
+		"FILESYS-0001": 11, "FILESYS-0002": 11, "FILESYS-0003": 11,
+		"FILESYS-0004": 11, "FILESYS-0005": 11, "FILESYS-0006": 11,
+		"FILESYS-0007": 11, "FILESYS-0008": 11, "FILESYS-0009": 11,
+		// 0010 needed walker aggregation, which did not exist at 11.
+		"FILESYS-0010": 12,
+	}
+	if len(since) != len(all) {
+		t.Fatalf("the table lists %d checks and the module has %d; a new check needs a line here", len(since), len(all))
+	}
 	for _, check := range all {
-		if check.SinceCatalog != 11 {
-			t.Errorf("%s SinceCatalog = %d, want 11", check.ID, check.SinceCatalog)
+		want, ok := since[check.ID]
+		if !ok {
+			t.Errorf("%s is not in the SinceCatalog table", check.ID)
+			continue
+		}
+		if check.SinceCatalog != want {
+			t.Errorf("%s SinceCatalog = %d, want %d", check.ID, check.SinceCatalog, want)
 		}
 		if len(check.Requires) == 0 {
 			t.Errorf("%s declares no required facts", check.ID)
@@ -367,5 +401,116 @@ func TestHomeObservesNoexecRatherThanRequiringIt(t *testing.T) {
 	// /tmp, by contrast, does require it.
 	if got := evalCheck(t, checks.Check0007, "filesys-mounts-weak"); got.Result != finding.Fail {
 		t.Errorf("FILESYS-0007 = %s, want FAIL: /tmp requires noexec even though /home does not", got.Result)
+	}
+}
+
+func TestCheck0010(t *testing.T) {
+	run(t, checks.Check0010, []tc{
+		{fixture: "filesys-clean", result: finding.Pass, detailContains: "every owner on this filesystem resolves"},
+		{fixture: "filesys-unowned", result: finding.Fail, severity: finding.Medium,
+			detailContains: "uid 4242 owns 3 inodes"},
+		// The gid arm reports separately from the uid arm, so a file whose
+		// owner resolves and whose group does not is still a finding.
+		{fixture: "filesys-unowned", result: finding.Fail, detailContains: "gid 4242 owns 4 inodes"},
+		{fixture: "filesys-unowned-directory", result: finding.Unknown, reason: finding.ReasonAmbiguousState,
+			detailContains: "sss"},
+	})
+}
+
+// TestTheSameDiskWithADifferentNameServiceIsNotAFinding is the pair that gives
+// FILESYS-0010 its right to exist.
+//
+// filesys-unowned and filesys-unowned-directory have byte-for-byte identical
+// ownership. The only difference between them is one word in
+// /etc/nsswitch.conf. A check that read /etc/passwd alone would return FAIL on
+// both, and on the second one it would be accusing an ordinary
+// directory-joined host — every RHEL box in an Active Directory domain — of
+// harbouring the files of a deleted account.
+func TestTheSameDiskWithADifferentNameServiceIsNotAFinding(t *testing.T) {
+	local := evalCheck(t, checks.Check0010, "filesys-unowned")
+	joined := evalCheck(t, checks.Check0010, "filesys-unowned-directory")
+
+	if local.Result != finding.Fail {
+		t.Fatalf("filesys-unowned = %s, want FAIL: nsswitch.conf routes to files alone, so nothing else can resolve uid 4242:\n  %s",
+			local.Result, local.Detail)
+	}
+	if joined.Result != finding.Unknown {
+		t.Fatalf("filesys-unowned-directory = %s, want UNKNOWN: SSSD may hold uid 4242 and this scan cannot ask it:\n  %s",
+			joined.Result, joined.Detail)
+	}
+	if joined.UnknownReason != finding.ReasonAmbiguousState {
+		t.Errorf("reason = %q, want %q", joined.UnknownReason, finding.ReasonAmbiguousState)
+	}
+	// The UNKNOWN has to name the routing table, or an operator cannot tell
+	// whether to fix the host or to suppress the check.
+	if !strings.Contains(joined.Detail, "nsswitch.conf") {
+		t.Errorf("the UNKNOWN does not name nsswitch.conf, so it does not say what would have to change:\n  %s", joined.Detail)
+	}
+	// And it still has to say what it found, or it is indistinguishable from
+	// a check that ran on a host with nothing on it.
+	if !strings.Contains(joined.Detail, "4242") {
+		t.Errorf("the UNKNOWN does not name the identity that failed to resolve:\n  %s", joined.Detail)
+	}
+}
+
+// TestAPassNeedsNoNameServiceOpinion.
+//
+// A name service can only add identities that resolve; it can never remove one
+// that /etc/passwd already resolves. So "every owner resolves locally" implies
+// "every owner resolves" on any host, whatever it is joined to — and gating
+// the PASS on nsswitch.conf would have made the check return UNKNOWN on every
+// correctly configured directory-joined machine, which is where an UNKNOWN
+// stops being read.
+func TestAPassNeedsNoNameServiceOpinion(t *testing.T) {
+	facts := collectFixture(t, "filesys-clean", walker.Config{})
+
+	// Replace the routing table with one that routes everything through SSSD,
+	// leaving the disk alone. The verdict must not move.
+	facts.Put(fact.NSSwitch{
+		Path:  "/etc/nsswitch.conf",
+		State: fact.FilePresent,
+		Databases: []fact.NSSwitchDB{
+			{Name: fact.NSSDBPasswd, Sources: []string{"files", "sss"}, Line: 1},
+			{Name: fact.NSSDBGroup, Sources: []string{"files", "sss"}, Line: 2},
+		},
+	})
+
+	got := catalog.MustNew(checks.Check0010).Evaluate(facts)[0]
+	if got.Result != finding.Pass {
+		t.Errorf("FILESYS-0010 = %s on a clean host that happens to be joined to a directory, want PASS. Every uid on disk is in /etc/passwd; nothing SSSD could add would change that:\n  %s",
+			got.Result, got.Detail)
+	}
+}
+
+// TestTheFailDetailNamesOnlyTheDatabaseItVerified.
+//
+// The nsswitch routing for a database is only examined when something in that
+// database failed to resolve. A FAIL over a stray uid alone has therefore said
+// nothing about how "group" is routed, and claiming otherwise in the detail
+// would be a correct verdict with a false explanation — which is exactly the
+// bug this module's table tests exist to catch.
+func TestTheFailDetailNamesOnlyTheDatabaseItVerified(t *testing.T) {
+	facts := collectFixture(t, "filesys-unowned", walker.Config{})
+
+	// Add a group for gid 4242 so only the uid arm is left unresolved.
+	group, _, ok := fact.Get[fact.Group](facts, fact.GroupID)
+	if !ok {
+		t.Fatal("the fixture produced no users.group fact")
+	}
+	group.Entries = append(group.Entries, fact.GroupEntry{Name: "oldapp", GID: 4242, Line: 99})
+	facts.Put(group)
+
+	got := catalog.MustNew(checks.Check0010).Evaluate(facts)[0]
+	if got.Result != finding.Fail {
+		t.Fatalf("= %s, want FAIL: uid 4242 still resolves to nothing:\n  %s", got.Result, got.Detail)
+	}
+	if strings.Contains(got.Detail, "passwd and group") {
+		t.Errorf("the detail claims both databases were verified, but only passwd was examined:\n  %s", got.Detail)
+	}
+	if !strings.Contains(got.Detail, "routes passwd to the local files alone") {
+		t.Errorf("the detail does not name the database it did verify:\n  %s", got.Detail)
+	}
+	if strings.Contains(got.Detail, "gid 4242") {
+		t.Errorf("gid 4242 now resolves and must not appear in the finding:\n  %s", got.Detail)
 	}
 }

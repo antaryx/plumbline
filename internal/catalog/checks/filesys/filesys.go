@@ -39,6 +39,12 @@ func matches(fs *fact.Set, interest string) fact.FSMatches {
 	return m
 }
 
+// tally reads one aggregating walker fact.
+func tally(fs *fact.Set, name string) fact.FSTally {
+	t, _, _ := fact.Get[fact.FSTally](fs, fact.FSTallyFactID(name))
+	return t
+}
+
 // mountFact reads the mount table.
 func mountFact(fs *fact.Set) fact.Mounts {
 	m, _, _ := fact.Get[fact.Mounts](fs, fact.MountsID)
@@ -84,6 +90,59 @@ func mustBeComplete(o catalog.Outcome, sources ...fact.FSMatches) catalog.Outcom
 			strings.Join(reasons, "; ")),
 		Evidence: append(ev, o.Evidence...),
 	}
+}
+
+// mustBeCompleteTally is mustBeComplete for the aggregating facts.
+//
+// It is a second function rather than an interface both fact types satisfy,
+// and that is a considered choice. An interface would need the fact types to
+// share a method set they otherwise have no reason to share, and the two
+// truncation stories are genuinely different: an interest that overflowed
+// stopped *recording* matches, while a tally that overflowed kept counting
+// every inode and only stopped admitting new keys. The details below say which
+// happened, and a shared abstraction would have to say neither.
+func mustBeCompleteTally(o catalog.Outcome, sources ...fact.FSTally) catalog.Outcome {
+	var bad []fact.FSTally
+	for _, t := range sources {
+		if !t.Complete() {
+			bad = append(bad, t)
+		}
+	}
+	if len(bad) == 0 {
+		return o
+	}
+
+	var reasons []string
+	var ev []finding.Evidence
+	for _, t := range bad {
+		reasons = append(reasons, fmt.Sprintf("fs.tally.%s (%s)", t.Tally, t.TruncationSummary()))
+		ev = append(ev, tallyTruncationEvidence(t))
+	}
+
+	return catalog.Outcome{
+		Result:        finding.Unknown,
+		UnknownReason: finding.ReasonTruncated,
+		Subject:       o.Subject,
+		Detail: fmt.Sprintf(
+			"The filesystem traversal this result rests on did not finish: %s. Everything the walk did count is accounted for, but the claim is about every inode on the host, and part of the tree was never reached. Reporting PASS here would convert \"we stopped looking\" into \"there is nothing there\".",
+			strings.Join(reasons, "; ")),
+		Evidence: append(ev, o.Evidence...),
+	}
+}
+
+// tallyTruncationEvidence cites why an aggregate stopped short, and how much
+// it managed to fold.
+func tallyTruncationEvidence(t fact.FSTally) finding.Evidence {
+	root := "/"
+	if len(t.Roots) > 0 {
+		root = strings.Join(t.Roots, ", ")
+	}
+	note := fmt.Sprintf("aggregate truncated: %s; %d inode(s) examined, %d tallied into %d key(s)",
+		t.TruncationSummary(), t.InodesVisited, t.InodesTallied, len(t.Buckets))
+	if t.KeysDropped > 0 {
+		note += fmt.Sprintf(", %d distinct key(s) discarded past the cap", t.KeysDropped)
+	}
+	return finding.NewEvidence(root, 0, note, "")
 }
 
 // truncationEvidence cites why a walk stopped short, and how much it saw.

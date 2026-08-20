@@ -8,17 +8,24 @@
 // ten million inodes it is the difference between a scan that finishes and one
 // that does not.
 //
-// Every interest here is a **pure predicate over one inode's metadata**, which
-// is what the walker's Match contract requires: it runs once per inode per
-// interest, on a filesystem that may hold millions, before any fact exists.
-// That constraint is why this module has no "unowned files" check — deciding
-// whether a uid belongs to a real account means joining against /etc/passwd,
-// which is not available at registration time, and matching every non-root
-// file so a check could do the join afterwards would overflow the interest cap
-// on any host that has users. A uid threshold instead of a join would be a
-// guess, and CLAUDE.md rule 3 forbids guessing. It needs an aggregating
-// interest in the walker, which is a change to WP-15's design rather than a
-// check.
+// The module registers both kinds of question the walker supports, and which
+// kind a check needs is decided by the shape of the claim rather than by
+// convenience:
+//
+//   - **Interests** are pure predicates over one inode's metadata, recorded as
+//     rows. Every rule of the form "no inode should have property P" is one of
+//     these, because the answer is a short list of offenders and the walk can
+//     hold it.
+//
+//   - **Tallies** fold every inode into a bounded keyspace. Ownership is the
+//     case that forces them. Deciding whether a uid belongs to a real account
+//     means joining against /etc/passwd, which does not exist when a predicate
+//     is registered; and deferring the join by recording every owned inode as
+//     a row would overflow the interest cap in the first populated directory
+//     of any host that has users. A uid threshold instead of a join would be a
+//     guess, and CLAUDE.md rule 3 forbids guessing. The tally counts owners
+//     during the walk and lets FILESYS-0010 do the join where facts live
+//     (WP-25).
 package filesys
 
 import (
@@ -36,6 +43,12 @@ const (
 	InterestWorldWrite = "world_writable"
 	InterestWorldDir   = "world_writable_dir"
 	InterestDevice     = "device_outside_dev"
+)
+
+// Tally names. They become fact IDs: "owner_uid" is fs.tally.owner_uid.
+const (
+	TallyOwnerUID = "owner_uid"
+	TallyOwnerGID = "owner_gid"
 )
 
 // DevDir is the directory device nodes legitimately live in.
@@ -73,6 +86,24 @@ func init() {
 	walker.Register(walker.Interest{
 		Name:  InterestDevice,
 		Match: deviceOutsideDev,
+	})
+
+	// Owner tallies. Two rather than one, for the reason SUID and SGID are
+	// two: a uid that resolves to nothing and a gid that resolves to nothing
+	// are different findings with different remedies, and a single tally could
+	// not say which it had counted.
+	//
+	// Every inode participates, including symlinks, sockets and device nodes.
+	// A symlink owned by a uid nobody holds is exactly as much of a finding as
+	// a regular file is — more, if someone is using it to hold a name in a
+	// directory they no longer own an account in.
+	walker.RegisterTally(walker.Tally{
+		Name: TallyOwnerUID,
+		Key:  func(fi system.FileInfo) (uint64, bool) { return uint64(fi.UID), true },
+	})
+	walker.RegisterTally(walker.Tally{
+		Name: TallyOwnerGID,
+		Key:  func(fi system.FileInfo) (uint64, bool) { return uint64(fi.GID), true },
 	})
 }
 
