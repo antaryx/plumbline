@@ -247,14 +247,36 @@ jobs:
       # A fixture root, so the verdict is identical on every distribution. If
       # this diverges, the difference is in the binary or the libc, not in the
       # host being scanned.
+      #
+      # --json is load-bearing, not decorative: since v0.3.0 the default output
+      # is the human-readable terminal report, and every grep below parses the
+      # document.
+      #
+      # Coverage must be 100, and that is a real assertion about the fixture,
+      # not a formality. The tree is read through the LIVE seam, so it carries
+      # the ownership of the checkout rather than the manifest's — uid 1001 on
+      # a runner, which is absent from the fixture's /etc/passwd. A check that
+      # cannot resolve that owner and is not told the local files are
+      # authoritative returns UNKNOWN, and coverage falls. See FIXTURES.md §4.3.
       - name: Deterministic scan of a fixture tree
         run: |
+          set -o pipefail
           docker run --rm -v "$PWD:/w" -w /w ${{ matrix.image }} \
             /w/dist/plumbline-linux-amd64 scan --json --root testdata/fixtures/cli-host > /tmp/out.json
-          grep -q '"schema": "findings/v1"' /tmp/out.json
-          grep -q '"check_id": "SSHD-0002"' /tmp/out.json
-          grep -q '"result": "PASS"' /tmp/out.json
-          grep -q '"coverage": 100' /tmp/out.json
+          assert() {
+            if ! grep -q "$1" /tmp/out.json; then
+              echo "::error::expected $1 in the scan document on ${{ matrix.image }}"
+              # A failed assertion here is almost always a verdict that moved,
+              # so print the verdicts rather than making the next person guess.
+              jq -r '.summary, (.findings[] | select(.result != "PASS")
+                    | {check_id, result, unknown_reason, detail})' /tmp/out.json || cat /tmp/out.json
+              exit 1
+            fi
+          }
+          assert '"schema": "findings/v1"'
+          assert '"check_id": "SSHD-0002"'
+          assert '"result": "PASS"'
+          assert '"coverage": 100'
           echo "identical verdict produced on ${{ matrix.image }}"
 
       # And the container's own filesystem, which is what an operator actually

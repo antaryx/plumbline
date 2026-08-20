@@ -28,6 +28,13 @@ import (
 // **"Clean" here means the scan exits 0**, not that it produces no findings.
 // Coverage is still 100 because a FAIL is an evaluated check, and posture stays
 // well above the threshold asserted below.
+//
+// That last sentence is only true because the fixture carries an
+// /etc/nsswitch.conf. FILESYS-0010 sees the same checkout ownership the CRON
+// checks do, but it may not call an unresolvable owner stray until it knows the
+// local files are the whole account database — so without that file it returns
+// UNKNOWN rather than FAIL, and an UNKNOWN is not an evaluated check.
+// TestTheHostFixtureCanReachAVerdictOnOwnership holds that property in place.
 const (
 	hostFixture    = "../../testdata/fixtures/cli-host"
 	includeFixture = "../../testdata/fixtures/sshd-include"
@@ -928,5 +935,46 @@ func TestACorruptedBundleIsRefusedRatherThanEvaluated(t *testing.T) {
 				t.Error("nothing was said about why the bundle was refused")
 			}
 		})
+	}
+}
+
+// TestTheHostFixtureCanReachAVerdictOnOwnership guards the one property of
+// hostFixture that no other test can observe on the machine that runs it.
+//
+// `scan --root` uses the live seam, so every inode under the fixture carries
+// the uid of whoever checked the repository out. That uid is 1000 on the
+// author's machine, where it happens to match `alice` in the fixture's
+// /etc/passwd and FILESYS-0010 returns PASS. It is 1001 on a GitHub runner and
+// 0 in a container, where the owner does not resolve — and there the check must
+// decide whether the local files are the whole account database before it may
+// call that owner stray. Without /etc/nsswitch.conf it correctly refuses to
+// decide and returns UNKNOWN(ambiguous_system_state), which drops coverage
+// below 100 and fails the --min-coverage gate above on every machine except
+// the author's. That is exactly how it reached CI unnoticed.
+//
+// The gate below asserts the fixture's side of that, not the check's, because
+// the check is right either way. It fails on every machine if the file is
+// removed, rather than only on the machines the author does not use.
+func TestTheHostFixtureCanReachAVerdictOnOwnership(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(hostFixture, "etc", "nsswitch.conf"))
+	if err != nil {
+		t.Fatalf("hostFixture must carry /etc/nsswitch.conf so FILESYS-0010 can reach a verdict "+
+			"under any checkout ownership: %v", err)
+	}
+
+	ns := fact.NSSwitch{State: fact.FilePresent, Path: "/etc/nsswitch.conf"}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if db, sources, ok := fact.ParseNSSwitchLine(line); ok {
+			ns.Databases = append(ns.Databases, fact.NSSwitchDB{Name: db, Sources: sources})
+		}
+	}
+
+	for _, db := range []string{fact.NSSDBPasswd, fact.NSSDBGroup} {
+		if !ns.LocalFilesAuthoritative(db) {
+			sources, _ := ns.Sources(db)
+			t.Errorf("nsswitch routes %q to %v; the fixture needs local files to be authoritative, "+
+				"or FILESYS-0010 goes UNKNOWN on any checkout whose uid is absent from the fixture's passwd",
+				db, sources)
+		}
 	}
 }

@@ -614,6 +614,40 @@ on every distribution. No check reads it.
 
 ---
 
+### 4.3 A live-seam fixture carries the checkout's ownership
+
+Every fixture scanned through `scan --root` is read by the **live** seam, not
+the fake. The manifest's `modes` and `owners` overrides do not apply — they are
+a feature of `internal/system/fake`. What the checks see is the real inode
+metadata of a git checkout.
+
+Git records one bit of mode (executable) and no ownership at all, so every file
+in the tree is owned by whoever ran `git clone`. That uid is **1000 on a
+typical developer machine, 1001 on a GitHub Actions runner and 0 in a
+container**, and a fixture that passes on the first is not thereby portable.
+
+This is not a defect to engineer away; it is what a fixture directory is. But
+it constrains what a live-seam fixture may assert:
+
+- **A check whose verdict depends on ownership will differ by machine.** The
+  CRON and SERVICES ownership checks fail permanently over `cli-host` for this
+  reason, and the fixture says so.
+- **A check that must not *guess* about ownership will go `UNKNOWN`, and an
+  `UNKNOWN` is not an evaluated check.** This is the trap, because it moves
+  coverage rather than a verdict, and coverage is what the CLI gates assert.
+  FILESYS-0010 may not call an unresolvable owner stray until it knows the
+  local files are the whole account database, so `cli-host` carries an
+  `/etc/nsswitch.conf` declaring exactly that. Without it the fixture scores
+  coverage 100 on a uid-1000 checkout and 98.7 everywhere else — green locally,
+  red in CI, and the difference invisible in the diff.
+
+The rule that falls out: **a live-seam fixture must give every check enough to
+reach a verdict about an owner it has never heard of.** Assert that property in
+a test over the fixture's own files, not over a scan — a scan on the author's
+machine is the one place the bug cannot appear.
+
+---
+
 ## 5. Recording a fixture from a real host
 
 Hand-authored fixtures test what you imagined. Recorded ones test what
