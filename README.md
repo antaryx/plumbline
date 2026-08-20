@@ -39,6 +39,7 @@ plumbline scan --save-bundle host.plb # keep the evidence this scan used
 plumbline collect -o host.plb         # capture the evidence, evaluate it elsewhere
 plumbline eval host.plb               # re-evaluate a bundle against today's catalog
 plumbline diff march.plb today.plb    # what changed between two scans
+plumbline explain FILESYS-0010        # read one catalog entry in full
 ```
 
 **`.plb` is an evidence bundle — the facts observed.** `eval` and `diff` take
@@ -142,6 +143,16 @@ dismissal in GitHub carries the reason a human wrote. `PASS` and
 `NOT_APPLICABLE` are counted in the run's invocation rather than emitted as
 results, because seventy-four passing checks bury the three that matter. The
 full mapping is `docs/adr/0018-sarif-mapping.md`.
+
+**Read the catalog from your terminal:**
+
+```bash
+plumbline explain FILESYS-0010
+```
+
+Prints what the check tests and why, which facts it reads, and the remediation
+with every step and command — the procedure the scan report deliberately
+summarises. No host, no bundle, no privileges. The ID is case-insensitive.
 
 **Suppress an accepted risk, without hiding it:**
 

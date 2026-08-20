@@ -1098,6 +1098,34 @@ func cell(s string) string {
 	return strings.ReplaceAll(sanitize.Text(s), "\t", " ")
 }
 
+// wrapBlocks is wrap that keeps the blank line between paragraphs.
+//
+// wrap collapses them, which is right for a finding's detail — one paragraph,
+// tightly set. A catalog entry's description is several paragraphs of
+// reasoning, and running them together turns an argument into a wall.
+//
+// Emphasis markers are stripped rather than rendered. `**like this**` is
+// markdown, because the same text is published in CHECK-REFERENCE.md, and
+// turning it into a bold escape here would mean a bold run that spans a wrap
+// boundary leaves the escape unclosed at the end of a line and bleeds colour
+// down the page. Plain text is the honest rendering and cannot bleed.
+func wrapBlocks(s string, width int) [][]string {
+	var out [][]string
+	for _, paragraph := range strings.Split(s, "\n\n") {
+		if lines := wrap(stripEmphasis(paragraph), width); len(lines) > 0 {
+			out = append(out, lines)
+		}
+	}
+	return out
+}
+
+// stripEmphasis removes markdown emphasis markers. It is deliberately literal:
+// anything cleverer would be a markdown parser, and this package renders one
+// field of one struct.
+func stripEmphasis(s string) string {
+	return strings.ReplaceAll(s, "**", "")
+}
+
 // wrap breaks prose at width, on spaces, without hyphenating. It returns at
 // least one line for non-empty input so a caller never has to special-case it.
 //
@@ -1105,27 +1133,37 @@ func cell(s string) string {
 // is emitted on its own line rather than broken. Breaking it would produce a
 // path an operator cannot copy, which defeats the point of printing it.
 func wrap(s string, width int) []string {
-	s = cell(s)
+	// The whole string is reflowed: a single newline inside prose is a
+	// artefact of how the source was typed, not a line the reader asked for.
+	//
+	// Sanitising happens per line, after the split, never before it.
+	// sanitize.Text escapes every C0 control character and a newline is one —
+	// it comes back as the four characters \x0a — so sanitising first would
+	// destroy the separator this function depends on and embed escape
+	// sequences in the prose. Splitting first keeps the structure; every line
+	// still goes through cell(), so nothing reaches a terminal unsanitised and
+	// T-03 holds.
 	if strings.TrimSpace(s) == "" {
 		return nil
 	}
 
+	var words []string
+	for _, raw := range strings.Split(s, "\n") {
+		words = append(words, strings.Fields(cell(raw))...)
+	}
+	if len(words) == 0 {
+		return nil
+	}
+
 	var out []string
-	for _, paragraph := range strings.Split(s, "\n") {
-		words := strings.Fields(paragraph)
-		if len(words) == 0 {
+	cur := words[0]
+	for _, w := range words[1:] {
+		if visibleWidth(cur)+1+visibleWidth(w) > width {
+			out = append(out, cur)
+			cur = w
 			continue
 		}
-		cur := words[0]
-		for _, w := range words[1:] {
-			if visibleWidth(cur)+1+visibleWidth(w) > width {
-				out = append(out, cur)
-				cur = w
-				continue
-			}
-			cur += " " + w
-		}
-		out = append(out, cur)
+		cur += " " + w
 	}
-	return out
+	return append(out, cur)
 }

@@ -418,6 +418,42 @@ a verdict about a host belongs.
 
 ---
 
+## 4a. `explain`
+
+```
+plumbline explain CHECK-ID [--no-color] [-o PATH]
+```
+
+Prints one catalog entry in full: what the check tests, which facts it reads,
+the remediation with **every step and command**, the control mappings and the
+references.
+
+**This is where the remediation procedure lives.** A scan report prints only a
+remediation summary — a block running to forty lines per finding is one an
+operator scrolls past — and the full procedure has to be reachable by ID.
+
+It reads the catalog and nothing else: no host, no bundle, no privileges, no
+network. A question about what a check asks is a question about the binary, and
+answering it must not require pointing the tool at a machine.
+
+The check ID is **case-insensitive** and surrounding space is trimmed, because
+an ID pasted out of a report often brings some with it. An unknown ID exits `1`
+and suggests the IDs in the same module — the mistake operators actually make
+is remembering the module and not the number.
+
+There is no `--format`. One rendering of a catalog entry exists and it is for a
+person; a machine-readable catalog is its own work package with its own schema,
+and inventing one here as a side effect would freeze a shape nobody designed.
+
+Lines wrap to the same 78-column grid as every other report, with two
+deliberate exceptions: **commands and URLs are never wrapped.** A command
+broken across lines does something else when pasted, and a wrapped URL cannot
+be clicked or copied. Both are values an operator takes out of the report, and
+breaking them to keep a margin tidy trades the reader's task for the page's
+appearance.
+
+---
+
 ## 5. Flag precedence
 
 Highest wins:

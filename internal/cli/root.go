@@ -103,6 +103,7 @@ against a later catalog.`,
 		newCollectCmd(g, stdout, stderr),
 		newEvalCmd(g, stdout, stderr),
 		newDiffCmd(g, stdout, stderr),
+		newExplainCmd(g, stdout, stderr),
 		newScanCmd(g, stdout, stderr),
 	)
 	return root

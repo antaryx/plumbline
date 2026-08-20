@@ -15,6 +15,16 @@ explanation in this file is a defect.
 rest: `plumbline explain` and the profile architecture.
 
 ### Added
+- **`plumbline explain CHECK-ID` (WP-32).** Prints one catalog entry in full:
+  what the check tests, which facts it reads, the remediation with every step
+  and command, the control mappings and the references. This is where the
+  remediation procedure lives — a scan report prints only a summary, because a
+  block running to forty lines per finding is one an operator scrolls past.
+
+  Reads the catalog and nothing else: no host, no bundle, no privileges, no
+  network. The ID is case-insensitive, and an unknown one suggests the IDs in
+  the same module.
+
 - **`--format sarif` (WP-31).** SARIF 2.1.0 for GitHub Advanced Security and
   anything else that ingests it, on both `scan` and `eval`. The full mapping is
   `docs/adr/0018-sarif-mapping.md`; the decisions that matter:
@@ -42,6 +52,15 @@ rest: `plumbline explain` and the profile architecture.
   why, and `VERSIONING.md` §4.4 already forbids it outside a schema major.
 
   No new dependency: the SARIF subset needed is structs and `encoding/json`.
+
+### Fixed
+- **Multi-paragraph prose rendered as one run with `\x0a` escapes embedded in
+  it.** `internal/render/text`'s wrapper sanitised before splitting on
+  newlines, and `sanitize.Text` escapes every C0 control character — a newline
+  among them — so the separator was destroyed before it was looked for. Prose
+  now splits first and sanitises each line, and reflows rather than honouring
+  the source's hard wrapping. Invisible until `explain` rendered a paragraph
+  longer than one line.
 
 ### Changed
 - `--format` now accepts `sarif`. It previously returned a usage error saying

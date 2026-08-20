@@ -59,7 +59,7 @@ v1.0.0. The schema is `findings-v1` throughout.
 | v0.3.0 — engine maturation and resilience | **complete** | 13 | 79 | tagged `v0.3.0`, 2026-08-20 |
 | v0.3.1 — verification harness repairs | **complete** | 13 | 79 | tagged `v0.3.1`, 2026-08-20; no behaviour change |
 | v0.4.0 — usable more than once | **complete** | 13 | 79 | tagged `v0.4.0`, 2026-08-20 |
-| v0.5.0 — ecosystem integration | **in progress** | 13 | 79 | WP-31 SARIF export |
+| v0.5.0 — ecosystem integration | **in progress** | 13 | 79 | WP-31 SARIF; WP-32 `explain` |
 
 ### v0.1.0 — Walking skeleton — **COMPLETE**
 
@@ -338,7 +338,7 @@ belong in the run's `invocation` properties, not as findings.
 `schema/` gains no new file: SARIF is an external specification and validating
 against the published one in CI is the correct gate, not a copy of it here.
 
-#### 2. `plumbline explain CHECK-ID`
+#### 2. `plumbline explain CHECK-ID` — **DONE (WP-32, 2026-08-20)**
 
 Catalog legibility. Prints what a check asks, which facts it needs, what each
 result state means for it, and the remediation in full — the material that

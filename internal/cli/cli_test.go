@@ -1549,3 +1549,166 @@ func TestSarifOmitsPassesThatTheFindingsDocumentCarries(t *testing.T) {
 		t.Error("the passing checks were not counted in the invocation either — they vanished")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// explain (WP-32)
+// ---------------------------------------------------------------------------
+
+// TestExplainPrintsTheWholeCatalogEntry. The command exists because the scan
+// report deliberately omits remediation steps and commands; if they are not
+// here they are nowhere an operator can reach from a terminal.
+func TestExplainPrintsTheWholeCatalogEntry(t *testing.T) {
+	code, stdout, stderr := run(t, "explain", "FILESYS-0010")
+	if code != cli.ExitOK {
+		t.Fatalf("exit = %d: %s", code, stderr)
+	}
+	for _, want := range []string{
+		"FILESYS-0010",
+		"Every uid and gid owning a file resolves", // the title
+		"FILESYS", // module
+		"MEDIUM",  // base severity
+		"What this checks",
+		"uids are\n  reused", // description prose, reflowed
+		"Facts it reads",
+		"users.nsswitch", // a required fact
+		"Remediation",
+		"effort MEDIUM",
+		"steps",
+		"commands",
+		"find / -xdev", // a command, verbatim
+		"CAUTION",
+		"References",
+		"nist-800-53-r5",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("explain omits %q:\n%s", want, stdout)
+		}
+	}
+}
+
+// TestExplainNeedsNoHostAndNoBundle. A question about what a check asks is a
+// question about this binary. Requiring a scan first would make the catalog
+// unreadable on the machine where somebody is deciding whether to run one.
+func TestExplainNeedsNoHostAndNoBundle(t *testing.T) {
+	if code, _, _ := run(t, "explain", "SSHD-0002"); code != cli.ExitOK {
+		t.Errorf("exit = %d; explain must not need a host or a bundle", code)
+	}
+}
+
+// TestExplainRejectsAnUnknownCheckAndHelps. A bare "not found" is correct and
+// unkind: the operator has a real check in mind and mistyped it.
+func TestExplainRejectsAnUnknownCheckAndHelps(t *testing.T) {
+	code, _, stderr := run(t, "explain", "FOO-0001")
+	if code != cli.ExitUsage {
+		t.Errorf("exit = %d, want %d", code, cli.ExitUsage)
+	}
+	for _, want := range []string{"FOO-0001", "not found"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("the error omits %q: %q", want, stderr)
+		}
+	}
+
+	// A wrong number in a real module gets that module's IDs back.
+	_, _, stderr = run(t, "explain", "SSHD-9999")
+	if !strings.Contains(stderr, "did you mean") || !strings.Contains(stderr, "SSHD-0002") {
+		t.Errorf("a near miss in a real module was not suggested: %q", stderr)
+	}
+}
+
+// TestExplainAcceptsTheIdAsTyped. Check IDs are upper-case by convention and
+// lower-case to type; rejecting the latter would be the tool being right and
+// useless at once.
+func TestExplainAcceptsTheIdAsTyped(t *testing.T) {
+	for _, id := range []string{"filesys-0010", "FileSys-0010", "  FILESYS-0010  "} {
+		code, stdout, stderr := run(t, "explain", id)
+		if code != cli.ExitOK {
+			t.Errorf("explain %q exited %d: %s", id, code, stderr)
+			continue
+		}
+		if !strings.Contains(stdout, "FILESYS-0010") {
+			t.Errorf("explain %q did not resolve to the check", id)
+		}
+	}
+}
+
+// TestExplainNeedsExactlyOneArgument.
+func TestExplainNeedsExactlyOneArgument(t *testing.T) {
+	for _, args := range [][]string{{"explain"}, {"explain", "A-1", "B-2"}} {
+		if code, _, _ := run(t, args...); code != cli.ExitUsage {
+			t.Errorf("%v: exit = %d, want %d", args, code, cli.ExitUsage)
+		}
+	}
+}
+
+// TestEveryCheckInTheCatalogExplains is the sweep, and it is the test that
+// earns its keep. A check added with an empty description or a remediation
+// that overflows the grid is invisible until somebody asks about that one
+// check — which is exactly when they most need it to be right.
+func TestEveryCheckInTheCatalogExplains(t *testing.T) {
+	for _, id := range catalogIDs(t) {
+		code, stdout, stderr := run(t, "explain", id)
+		if code != cli.ExitOK {
+			t.Errorf("explain %s exited %d: %s", id, code, stderr)
+			continue
+		}
+		if !strings.Contains(stdout, "What this checks") {
+			t.Errorf("%s has no description", id)
+		}
+		if !strings.Contains(stdout, "Remediation") {
+			t.Errorf("%s has no remediation", id)
+		}
+		for _, line := range strings.Split(stdout, "\n") {
+			if n := len([]rune(line)); n > 78 && !isAtomic(line) {
+				t.Errorf("%s: prose overflows the grid at %d columns:\n%s", id, n, line)
+			}
+		}
+	}
+}
+
+// isAtomic reports whether a line is a single unbreakable value — a command, a
+// URL, a cipher list — rather than prose.
+//
+// Such a line is allowed past the right edge, and that is the renderer working
+// as designed rather than a gap in it. A KexAlgorithms list wrapped across two
+// lines is one an operator cannot paste, and a wrapped URL is one they cannot
+// click; both are values copied out of the report, and breaking them to keep a
+// margin tidy trades the reader's actual task for the page's appearance.
+// Prose has no such excuse, which is what this test is really asserting.
+func isAtomic(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	// A command is exempt whatever it contains. `chmod 700 a b c` broken
+	// across two lines is a command that does something else when pasted, and
+	// this is the one place in the tool whose output an operator is expected
+	// to run.
+	if strings.HasPrefix(trimmed, "$ ") {
+		return true
+	}
+	return !strings.Contains(trimmed, " ")
+}
+
+// catalogIDs reads every check ID out of a scan, which is the only listing the
+// CLI currently exposes. It doubles as an assertion that the two agree.
+func catalogIDs(t *testing.T) []string {
+	t.Helper()
+	_, stdout, _ := runJSON(t, "scan", "--root", hostFixture)
+	var doc struct {
+		Findings []struct {
+			CheckID string `json:"check_id"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil {
+		t.Fatalf("parsing the scan document: %v", err)
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, f := range doc.Findings {
+		if !seen[f.CheckID] {
+			seen[f.CheckID] = true
+			out = append(out, f.CheckID)
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("no check IDs found")
+	}
+	return out
+}
