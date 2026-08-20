@@ -4,17 +4,17 @@
 
 A deterministic, offline, evidence-first host security auditor for Linux.
 
-> **Status: v0.2.0 released; v0.3.0 in progress — pre-release, no stability
-> guarantees.** The catalog is the milestone: **79 checks across nine modules**
-> at catalog version 13, every one with PASS and FAIL fixtures enforced in CI,
-> evaluated from a single filesystem traversal and a bounded set of
-> configuration reads.
+> **Status: v0.3.0 — pre-release, no stability guarantees.** **79 checks across
+> nine modules** at catalog version 13, every one with PASS and FAIL fixtures
+> enforced in CI, evaluated from a single filesystem traversal and a bounded
+> set of configuration reads.
 >
 > `findings/v1`, flag names, exit codes and check IDs are contracts from here.
 > Everything in Go stays `internal/` and may change without notice (ADR-0007).
 >
-> Next: `docs/ROADMAP.md` v0.3 — the SARIF renderer, `diff`, suppressions and
-> `doctor`. The engine work and the terminal report are done.
+> Next: `docs/ROADMAP.md` v0.4.0, which carries feature freeze — suppressions
+> first, then `plumbline diff`, then the commands that make the catalog legible
+> without reading Go.
 
 ## What it checks
 
@@ -42,7 +42,7 @@ plumbline eval host.plb             # re-evaluate a bundle against today's catal
 The default output is a report for a person:
 
 ```
-plumbline 0.3.0-dev   catalog 13
+plumbline 0.3.0   catalog 13
 
   host     auditbox   Debian GNU/Linux 12 (bookworm)
   root     /  (live host)

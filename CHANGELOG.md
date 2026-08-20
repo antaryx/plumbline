@@ -11,20 +11,59 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-Catalog version **13**. Three pieces of v0.3.
+Nothing yet. `docs/ROADMAP.md` v0.4.0 is next and carries feature freeze:
+suppressions first, then `diff`, then the catalog-legibility commands.
 
-The engine work: the shared filesystem walker can now aggregate, which unlocks
-a class of check that was previously impossible to write without guessing.
+---
 
-The UX work: `plumbline scan` prints a report for a person by default instead
-of a `findings/v1` document. **This is a breaking change for anything piping
-the output into a parser** — add `--json`. It is called out again under
-*Changed* below, because a default that moves quietly is worse than one that
-moves loudly.
+## [0.3.0] — 2026-08-20
 
-The resilience work: a host whose configuration files are corrupted no longer
-produces confident verdicts about them. This changes verdicts on damaged hosts
-and is recorded in *Check corrections* below.
+**Engine maturation and resilience.** Catalog version 13, 79 checks across nine
+modules, schema `findings-v1` unchanged.
+
+Three things happened, and each closed a hole the previous milestone could not
+have found.
+
+**1 — The walker learned to aggregate, and FILESYS-0010 became possible.**
+The shared walk recorded rows: the first N inodes matching a pure predicate.
+That answers "show me the setuid binaries" and cannot answer "does every uid on
+disk resolve to an account", because the join is against a fact that does not
+exist when the predicate is registered and recording every owned inode to defer
+the join would overflow the row cap on any host that has users. A `Tally` folds
+instead of recording — one bucket per distinct key, an unbounded count inside
+it, one exemplar path — so memory is bounded by distinct *owners* rather than
+by inodes, and a tally covers a ten-million-inode filesystem in about 3 MB. The
+join then happens in the check, where facts live. `users.nsswitch` was
+collected alongside it, because "not in `/etc/passwd`" and "belongs to nobody"
+are the same statement only when the local files are the whole account
+database.
+
+**2 — The default output became a report for a person.** `plumbline scan`
+printed a `findings/v1` document, which is right for a pipeline and wrong for
+whoever typed the command. `internal/render/text` is now the default: a header
+with the scan's context, a per-module listing, a full block for every FAIL
+**and every UNKNOWN**, and a summary that states the UNKNOWN count on its own
+line instead of burying it. **This is a breaking change for anything piping the
+output into a parser** — add `--json`. No new dependency: plain SGR escape
+sequences and `text/tabwriter`.
+
+**3 — The scanner stopped drawing verdicts from files it could not parse.**
+Pointed at a host with four kilobytes of random bytes in every configuration
+file, it used to return **22 PASS, 23 FAIL and zero fact errors**. No parser
+panicked; every one of them silently produced an empty, confident fact, and an
+empty configuration satisfies every negative assertion in the catalog. The same
+host now produces five fact errors and no PASS or FAIL from any content-reading
+module. Recorded in *Check corrections* below, because it moves posture scores
+on damaged hosts.
+
+### Milestone scope
+`v0.3.0` was originally scoped as "feature complete for v1" with eighteen
+items, and shipped four. **Feature freeze moves to v0.4.0**, which carries the
+other fourteen — SARIF, `diff`, suppressions, `doctor`, the platform matrix and
+the remaining collectors. The re-scoping is recorded in `docs/ROADMAP.md`
+rather than applied quietly, because a milestone that redefines itself on the
+way to being tagged is exactly the thing a reader cannot reconstruct from a
+diff.
 
 ### Check corrections
 - **Every check reading a configuration file now returns `UNKNOWN` where it
