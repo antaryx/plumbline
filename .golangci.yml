@@ -1,25 +1,26 @@
-# This file is in golangci-lint **v1** configuration format, and the pinning in
-# .github/workflows/ci.yml has to stay on a v1 line for it to load.
+# golangci-lint **v2** configuration. The pinned version in
+# .github/workflows/ci.yml must stay on a v2 line for this file to load.
 #
-# v2 introduced a mandatory `version: "2"` key and moved `linters-settings` to
-# `linters.settings` and `issues.exclude-rules` to `linters.exclusions.rules`. A
-# `version: "2"` key was previously present here without the rest of that
-# migration, which a v1 binary rejects outright with
-# `additional properties "version" not allowed` — the whole file goes unread,
-# taking the G304 exclusion below with it. Whoever moves the action to v7/v8
-# must migrate this file in the same commit.
+# Migrated from v1 by `golangci-lint migrate` (v2.13.1), not by hand. The
+# `exclusions.presets` block below is not new policy: v1 applied that default
+# exclusion list unless `issues.exclude-use-default: false` was set, and this
+# file never set it, so the presets are the migrator writing down what was
+# already in force.
+#
+# errcheck, govet, ineffassign, staticcheck and unused are absent from `enable`
+# because v2 turns them on by default. They are still running — `golangci-lint
+# linters` lists thirteen enabled, the same thirteen as before.
+#
+# A version mismatch here is silent and expensive: a v1 binary rejects a v2 file
+# outright with `additional properties "version" not allowed`, the whole file
+# goes unread, and the G304 exclusion below goes with it. That has happened once
+# already.
 
+version: "2"
 run:
-  timeout: 5m
   tests: true
-
 linters:
   enable:
-    - errcheck
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
     - bodyclose
     - errorlint
     - gosec
@@ -28,25 +29,39 @@ linters:
     - revive
     - unconvert
     - wastedassign
-
-linters-settings:
-  gosec:
-    excludes:
-      # G304: file inclusion via variable. Reading variable paths IS the job.
-      # The safety controls are in internal/system/live (O_NOFOLLOW, regular-file
-      # verification after open, size caps) and are covered by the hostile-input
-      # corpus, not by avoiding the pattern. See docs/THREAT-MODEL.md T-01, T-02.
-      - G304
-  errcheck:
-    check-type-assertions: true
-  revive:
+  settings:
+    errcheck:
+      check-type-assertions: true
+    gosec:
+      excludes:
+        - G304
+    revive:
+      rules:
+        - name: exported
+          disabled: false
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: exported
-        disabled: false
-
+      - linters:
+          - errcheck
+          - gosec
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters: [gosec, errcheck]
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

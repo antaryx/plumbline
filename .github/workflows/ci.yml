@@ -20,7 +20,11 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.23"
+  # 1.25 rather than the 1.24 floor in go.mod: Go supports only the two newest
+  # majors, so 1.23 and 1.24 no longer receive stdlib security fixes, and this
+  # workflow builds the release binaries for a tool that runs as root. go.mod
+  # states the minimum a source build needs; this states what CI builds with.
+  GO_VERSION: "1.25"
 
 jobs:
   verify:
@@ -69,14 +73,15 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      # Pinned rather than `latest`, and pinned to the last v1 release. The
-      # config in .golangci.yml is v1 format; golangci-lint v2 requires a
-      # `version: "2"` key and a restructured file, so `latest` would silently
-      # flip the linter to a major that cannot read the config — which is
-      # exactly how the G304 exclusion went missing once already.
-      - uses: golangci/golangci-lint-action@v6
+      # Pinned rather than `latest`, and pinned within the v2 line that matches
+      # .golangci.yml. `latest` would eventually flip the linter to a major
+      # that cannot read the config, and a config a linter cannot read is a
+      # config it ignores entirely — which is how the G304 exclusion went
+      # missing once already. Action v7 and above refuse a v1 linter, so the
+      # action major and the config version move together or not at all.
+      - uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.64.8
+          version: v2.13.1
 
   build:
     name: build linux/${{ matrix.goarch }}

@@ -79,8 +79,11 @@ func clean(s string, max int) string {
 			// C0, DEL and C1. C1 matters as much as C0: 0x9b is CSI on its
 			// own in terminals that accept 8-bit controls, so stripping only
 			// ESC would leave a working escape sequence behind. Everything in
-			// those ranges fits in one byte.
-			piece = escapeByte(byte(r))
+			// those ranges fits in one byte, which is what makes the
+			// conversion below total: the case guard is the bounds check, so
+			// gosec's G115 has nothing to warn about that the switch has not
+			// already decided.
+			piece = escapeByte(byte(r)) //nolint:gosec // G115: the case guard bounds r to 0x9f
 		default:
 			piece = s[i : i+size]
 		}

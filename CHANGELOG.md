@@ -14,6 +14,18 @@ explanation in this file is a defect.
 `v0.4.0` in progress. `docs/ROADMAP.md` carries the rest of the milestone:
 suppressions first, then `diff`, then the catalog-legibility commands.
 
+### Build
+- **The minimum Go version is now 1.24** (`go.mod`), and CI builds with 1.25.
+  Go supports only its two newest majors, so 1.23 — which CI used until now —
+  no longer receives stdlib security fixes, and this project ships a binary that
+  runs as root. 1.24 is also the floor `klauspost/compress` v1.19.x requires,
+  so the bump unblocks that dependency update.
+- **golangci-lint moved to v2** (config migrated with `golangci-lint migrate`,
+  action to v9, linter pinned to v2.13.1). The same thirteen linters run. Three
+  findings the older pinned linter did not report were fixed: two tagged-switch
+  simplifications, and a `//nolint` with a stated reason on a `rune`→`byte`
+  conversion whose bounds check is the surrounding case guard.
+
 ### Added
 - **`plumbline diff OLD NEW` (WP-30).** Compares two bundles and reports only
   what moved, in five categories: `NEW FAILURE`, `REGRESSED`,

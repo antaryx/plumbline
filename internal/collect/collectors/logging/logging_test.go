@@ -207,10 +207,10 @@ func TestLegacyRuleParsing(t *testing.T) {
 
 	var sawForward, sawLocal bool
 	for _, rule := range r.Rules {
-		switch {
-		case rule.Action == "@@logs.example.net:514":
+		switch rule.Action {
+		case "@@logs.example.net:514":
 			sawForward = true
-		case rule.Action == "/var/log/auth.log":
+		case "/var/log/auth.log":
 			sawLocal = true
 		}
 	}

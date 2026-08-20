@@ -110,11 +110,11 @@ it passes, and the finding says which interfaces are in it.`,
 			if allOK && all > effective {
 				effective = all
 			}
-			switch {
-			case effective == 0:
+			switch effective {
+			case 0:
 				unfiltered = append(unfiltered, iface)
 				evidence = append(evidence, evidenceFor(r))
-			case effective == 2:
+			case 2:
 				loose = append(loose, iface)
 			}
 		}
