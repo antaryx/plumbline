@@ -74,7 +74,7 @@ jobs:
       # `version: "2"` key and a restructured file, so `latest` would silently
       # flip the linter to a major that cannot read the config — which is
       # exactly how the G304 exclusion went missing once already.
-      - uses: golangci/golangci-lint-action@v6
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v1.64.8
 
