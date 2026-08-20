@@ -11,11 +11,33 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-Catalog version **12**. The first of the v0.3 engine-maturation work: the
-shared filesystem walker can now aggregate, which unlocks a class of check that
-was previously impossible to write without guessing.
+Catalog version **12**. Two pieces of v0.3.
+
+The engine work: the shared filesystem walker can now aggregate, which unlocks
+a class of check that was previously impossible to write without guessing.
+
+The UX work: `plumbline scan` prints a report for a person by default instead
+of a `findings/v1` document. **This is a breaking change for anything piping
+the output into a parser** — add `--json`. It is called out again under
+*Changed* below, because a default that moves quietly is worse than one that
+moves loudly.
 
 ### Added
+- **A human-readable terminal report, and it is now the default.** Running
+  `plumbline scan` printed a `findings/v1` document, which is the right answer
+  for a pipeline and the wrong one for the person who typed the command.
+  `internal/render/text` renders a header with the scan's context, a
+  per-module listing of every check, a full block for every FAIL and every
+  UNKNOWN — detail, evidence, remediation summary and effort — and a summary
+  table. `PASS` is green, `FAIL` red, `UNKNOWN` yellow, `NOT_APPLICABLE` and
+  `SKIPPED` dim. No external dependency: plain SGR escape sequences and
+  `text/tabwriter`
+- **`--json`**, shorthand for `--format json`, on `scan` and `eval`. It is
+  shorthand over the *default*, not an override — `--format terminal --json` is
+  a usage error rather than a silent discard of what the operator typed
+- **`--no-color`**, alongside `NO_COLOR` in the environment (honoured at any
+  value, including `0`, per the no-color.org convention) and a non-terminal
+  stdout. `--output` is never coloured whatever the rules say
 - **Aggregating walker tallies** (`internal/collect/walker/tally.go`). The walk
   already answered "which inodes match this predicate" by recording rows. It
   now also answers "how are these inodes distributed across a keyspace" by
@@ -35,6 +57,17 @@ was previously impossible to write without guessing.
   already named this file as a known limitation; it is now collected
 
 ### Changed
+- **`--format` now defaults to `terminal` rather than `json` on `scan` and
+  `eval`.** This is the one change in this release that can break a caller:
+  anything piping `plumbline scan` into a JSON parser must add `--json` or
+  `--format json`. The exit codes, the schema and every flag that gates on
+  findings are unchanged, and a test asserts the chosen format cannot move the
+  exit code — rendering is display, gating is a verdict, and if the two could
+  influence one another then `--json` would be a way to change what CI
+  concluded about a host
+- `--format` reports an unknown value by name and refuses `sarif` with a
+  message that says it is coming rather than that it is a typo. The two are
+  different problems for whoever is reading the error
 - `internal/collect/collectors/users` reads a fourth file. `Produces()` gains
   `users.nsswitch`; a missing file is recorded as a *state* rather than as a
   fact error, because glibc falling back to a compiled-in default is a real
@@ -50,6 +83,19 @@ was previously impossible to write without guessing.
   bundle that recorded a host full of unowned files. `TestRoundTripWalkerTallyFacts`
   pins it
 
+### Security
+- **The terminal renderer is where a hostile filename stops being a curiosity.**
+  A path may contain arbitrary bytes including ESC, and this is the renderer
+  that writes to an operator's session and that deliberately emits escape
+  sequences of its own. Sanitisation already happens once, upstream, where
+  untrusted text becomes part of a finding (T-03); `TestNoEscapeSequenceFromTheHostReachesTheTerminal`
+  asserts the defence actually holds *through* this renderer rather than
+  assuming it, and a second test asserts that with colour on, every ESC byte in
+  the output is one the renderer wrote
+- Reports written with `--output` are created owner-only, through the same path
+  bundles are. A terminal report names paths, accounts and misconfigurations;
+  it is the same reconnaissance material the JSON is
+
 ### Documentation
 - **`docs/ROADMAP.md` rewritten against reality.** It still described the
   project as pre-v0.1 with everything ahead of it. v0.1.0 and v0.2.0 are now
@@ -64,6 +110,12 @@ was previously impossible to write without guessing.
   it
 - `docs/checks/FILESYS-0010.md`, and `docs/DATA-MODEL.md` §2.3 gains
   `fs.tally.<tally>` and `users.nsswitch`
+- `docs/CLI-SPEC.md` §Output rewritten: which flags exist today and which are
+  still specification, the three colour rules in precedence order, and an
+  explicit statement that `--format json` is the API and the terminal report is
+  not. `README.md` gains a usage section showing both
+- **`docs/ROADMAP.md` v0.3 marks the terminal renderer done.** Per the rule
+  adopted last release, the roadmap is synced in the same commit as the code
 
 ### Notes on what FILESYS-0010 will not do
 - **It will not report a directory account as unowned.** "This uid is not in

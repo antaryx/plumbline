@@ -98,8 +98,11 @@ func TestScanSucceedsWithNoNetwork(t *testing.T) {
 	// ownership sees different numbers. Wrapping both sides in `-r` leaves the
 	// network namespace as the only variable, which is the one thing this test
 	// is about.
-	online := scanDocument(t, []string{"unshare", "-r"}, bin, "scan", "--root", root)
-	offline := scanDocument(t, []string{"unshare", "-n", "-r"}, bin, "scan", "--root", root)
+	// --json, because this test compares documents byte for byte and the
+	// document is the JSON one. The terminal report is not the API and is not
+	// what an offline guarantee is stated over.
+	online := scanDocument(t, []string{"unshare", "-r"}, bin, "scan", "--root", root, "--json")
+	offline := scanDocument(t, []string{"unshare", "-n", "-r"}, bin, "scan", "--root", root, "--json")
 
 	// The document must be complete before it is worth comparing: two empty
 	// documents are also identical.
@@ -239,7 +242,7 @@ func TestCollectAndEvalSucceedWithNoNetwork(t *testing.T) {
 
 	for _, step := range [][]string{
 		{"collect", "--root", root, "-o", bundlePath},
-		{"eval", bundlePath},
+		{"eval", bundlePath, "--json"},
 	} {
 		var stdout, stderr bytes.Buffer
 		cmd := exec.Command("unshare", append([]string{"-n", "-r", bin}, step...)...)

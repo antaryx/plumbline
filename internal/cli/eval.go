@@ -9,6 +9,7 @@ import (
 	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/finding"
 	renderjson "github.com/antaryx/plumbline/internal/render/json"
+	rendertext "github.com/antaryx/plumbline/internal/render/text"
 	"github.com/antaryx/plumbline/internal/score"
 	"github.com/antaryx/plumbline/internal/version"
 )
@@ -40,9 +41,8 @@ func (gt *gates) bind(cmd *cobra.Command) {
 
 func newEvalCmd(g *globals, stdout, stderr io.Writer) *cobra.Command {
 	var (
-		format string
-		output string
-		gt     gates
+		out outputFlags
+		gt  gates
 	)
 
 	cmd := &cobra.Command{
@@ -58,8 +58,9 @@ collected on a production host be analysed somewhere safer.`,
 			if err != nil {
 				return err
 			}
-			if format != "json" {
-				return usageErrorf("--format %q is not implemented yet; only json exists in v0.1", format)
+			format, err := out.resolveFormat(cmd)
+			if err != nil {
+				return err
 			}
 
 			b, err := readBundle(args[0])
@@ -70,29 +71,52 @@ collected on a production host be analysed somewhere safer.`,
 				return exitError{code: ExitInternal, message: err.Error()}
 			}
 
-			return renderAndGate(b, failOn, gt, format, output, stdout, stderr)
+			return renderAndGate(b, failOn, gt, format, out, stdout, stderr)
 		},
 	}
 
-	f := cmd.Flags()
-	f.StringVar(&format, "format", "json", "output format")
-	f.StringVarP(&output, "output", "o", "", "write the document here instead of stdout")
+	out.register(cmd)
 	gt.register(cmd)
 	return cmd
 }
 
 // renderAndGate evaluates a bundle's facts, renders the document, and resolves
 // the exit code. It is shared by eval and scan so that the two cannot drift.
-func renderAndGate(b bundle.Bundle, failOn int, gt gates, format, output string, stdout, stderr io.Writer) error {
+//
+// Rendering is chosen here rather than inside each command for the same
+// reason: a report and its exit code are one answer, and a second call site
+// would be a second place for the two to disagree.
+func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, stdout, stderr io.Writer) error {
 	findings := evaluate(b.Facts)
 	sc := score.Compute(findings, version.Catalog())
 	factErrors := b.Facts.Errors()
 
-	w, closeOut, err := writeTo(output, stdout)
+	w, closeOut, err := writeTo(out.output, stdout)
 	if err != nil {
 		return exitError{code: ExitInternal, message: err.Error()}
 	}
-	renderErr := renderjson.Render(w, renderjson.Input{
+
+	var renderErr error
+	switch format {
+	case FormatJSON:
+		renderErr = renderJSON(w, b, sc, findings, factErrors)
+	default:
+		renderErr = renderTerminal(w, b, sc, findings, factErrors,
+			useColor(w, out.noColor, out.output != ""))
+	}
+
+	if cerr := closeOut(); renderErr == nil {
+		renderErr = cerr
+	}
+	if renderErr != nil {
+		return exitError{code: ExitInternal, message: renderErr.Error()}
+	}
+
+	return gateOn(sc, findings, factErrors, failOn, gt)
+}
+
+func renderJSON(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, factErrors []fact.Error) error {
+	return renderjson.Render(w, renderjson.Input{
 		Tool: renderjson.Tool{Name: "plumbline", Version: version.Version, Commit: version.Commit},
 		Scan: renderjson.Scan{
 			Started:  b.Manifest.Scan.Started,
@@ -107,14 +131,41 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format, output string,
 		FactErrors: factErrors,
 		Degraded:   len(factErrors) > 0,
 	})
-	if cerr := closeOut(); renderErr == nil {
-		renderErr = cerr
-	}
-	if renderErr != nil {
-		return exitError{code: ExitInternal, message: renderErr.Error()}
-	}
+}
 
-	return gateOn(sc, findings, factErrors, failOn, gt)
+func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, factErrors []fact.Error, color bool) error {
+	return rendertext.Render(w, rendertext.Input{
+		Tool: rendertext.Tool{Name: "plumbline", Version: version.Version, Commit: version.Commit},
+		Scan: rendertext.Scan{
+			Started:  b.Manifest.Scan.Started,
+			Finished: b.Manifest.Scan.Finished,
+			Root:     b.Manifest.Scan.Root,
+			EUID:     b.Manifest.Scan.EUID,
+			Profile:  b.Manifest.Scan.Profile,
+			Host:     textHostFor(b),
+		},
+		Score:      sc,
+		Findings:   findings,
+		FactErrors: factErrors,
+		Degraded:   len(factErrors) > 0,
+		Color:      color,
+	})
+}
+
+// textHostFor is hostFor for the terminal renderer. The two host types are
+// separate because the two renderers are separate packages over one model, and
+// making the text report import the JSON document's types would tie a layout
+// this project is free to change in a patch release to the schema it is not.
+func textHostFor(b bundle.Bundle) *rendertext.Host {
+	if b.Meta.Hostname == "" && b.Meta.OSRelease == "" && b.Meta.Kernel == "" && b.Meta.Arch == "" {
+		return nil
+	}
+	return &rendertext.Host{
+		Hostname:  b.Meta.Hostname,
+		OSVersion: b.Meta.OSRelease,
+		Kernel:    b.Meta.Kernel,
+		Arch:      b.Meta.Arch,
+	}
 }
 
 // hostFor maps a bundle's host descriptors into the document. A redacted

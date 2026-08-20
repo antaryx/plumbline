@@ -13,8 +13,8 @@ A deterministic, offline, evidence-first host security auditor for Linux.
 > `findings/v1`, flag names, exit codes and check IDs are contracts from here.
 > Everything in Go stays `internal/` and may change without notice (ADR-0007).
 >
-> Next: `docs/ROADMAP.md` v0.3 — engine maturation, then the terminal and SARIF
-> renderers, `diff`, suppressions and `doctor`.
+> Next: `docs/ROADMAP.md` v0.3 — the SARIF renderer, `diff`, suppressions and
+> `doctor`. The engine work and the terminal report are done.
 
 ## What it checks
 
@@ -29,6 +29,101 @@ A deterministic, offline, evidence-first host security auditor for Linux.
 | **LOGGING** | 5 | rsyslog in all three of its syntaxes, journald with drop-ins |
 | **SERVICES** | 5 | systemd enablement recovered from symlinks |
 | **NETWORK** | 3 | nftables, iptables, ufw, firewalld — configured, not loaded |
+
+## Using it
+
+```bash
+plumbline scan                      # audit this host, human-readable report
+plumbline scan --root /mnt/image    # audit a mounted image or container filesystem
+plumbline collect -o host.plb       # capture the evidence, evaluate it elsewhere
+plumbline eval host.plb             # re-evaluate a bundle against today's catalog
+```
+
+The default output is a report for a person:
+
+```
+plumbline 0.3.0-dev   catalog 12
+
+  host     auditbox   Debian GNU/Linux 12 (bookworm)
+  root     /  (live host)
+  started  2026-08-20 09:14:02 UTC   elapsed 3.1s
+  euid     0  (root)
+  profile  default
+
+CHECKS BY MODULE
+───────────────────────────────────────────────────────────────────────────
+
+  CRON  · 5 checks, 1 failing
+    PASS     CRON-0001      The system crontab is owned by root and writable only by root
+    PASS     CRON-0002      The cron drop-in directories are owned by root and writable only by root
+    FAIL     CRON-0003      Access to crontab is restricted by an allow list
+    PASS     CRON-0004      The cron access-control files are owned by root and writable only by root
+    PASS     CRON-0005      The cron schedule is not readable by unprivileged accounts
+
+  FILESYS  · 10 checks, 1 unknown
+    ...
+    UNKNOWN  FILESYS-0010   Every uid and gid owning a file resolves to a local account or group
+
+FAILING — 1
+───────────────────────────────────────────────────────────────────────────
+
+  FAIL  CRON-0003  Access to crontab is restricted by an allow list
+      HIGH  ·  subject /etc/cron.deny
+      Access is governed by /etc/cron.deny, which fails open: every account not
+      named in it may schedule jobs, including accounts created after the file
+      was last edited.
+
+      evidence
+        /etc/cron.deny
+          file: mode 0644, uid 0, gid 0
+
+      remediation  ·  effort LOW
+        Replace cron.deny with a cron.allow naming the accounts that need cron.
+
+COULD NOT DETERMINE — 1
+───────────────────────────────────────────────────────────────────────────
+
+  These are not passes. Each one is a question this scan could not answer,
+  with the reason it could not. Treat them as findings until they are resolved.
+
+  UNKNOWN  FILESYS-0010  Every uid and gid owning a file resolves to a local account or group
+      MEDIUM  ·  reason ambiguous_system_state  ·  subject /etc/nsswitch.conf
+      2 owners on this filesystem do not resolve in the local files — uid 4242
+      owns 3 inodes (for example /var/lib/oldapp) — but the local files are not
+      this host's whole account database: /etc/nsswitch.conf routes "passwd" to
+      files, sss. An identity absent from /etc/passwd may still be a real account
+      served from somewhere this scan cannot ask, because Plumbline never opens a
+      network socket.
+
+SUMMARY
+───────────────────────────────────────────────────────────────────────────
+
+  PASS              73
+  FAIL               1
+  UNKNOWN            1   ← not passes; the scan could not tell
+  NOT_APPLICABLE     4
+  SKIPPED            0
+
+  evaluated         79   checks in catalog 12
+  posture         97.2   coverage 98.7% of applicable checks
+```
+
+`FAIL` is red, `PASS` green, `UNKNOWN` yellow. Colour is suppressed by
+`--no-color`, by `NO_COLOR` in the environment, when stdout is not a terminal,
+and always when writing to `--output`.
+
+**For pipelines, ask for JSON:**
+
+```bash
+plumbline scan --json | jq '.findings[] | select(.result == "FAIL")'
+plumbline scan --format json -o findings.json
+plumbline scan --fail-on high            # exit 2; the format does not move the exit code
+```
+
+`findings/v1` is the public API and is schema-validated in CI. **The terminal
+report is not** — its layout may change in a patch release, so nothing should
+parse it. That is the whole reason there are two renderers rather than one with
+a flag.
 
 ## Offline by construction
 

@@ -5,9 +5,10 @@
 > **Where the project actually is — 2026-08-20.** `v0.2.0` is tagged and shipped
 > 78 checks across nine modules at catalog version 11. `main` is now ahead of
 > it at **79 checks, catalog version 12** (WP-25: walker aggregation and
-> FILESYS-0010). The output schema is `findings-v1`, and the tool runs offline
-> with no network code path in any build. `v0.3.0` is open; its scope is in the
-> pre-1.0 section below.
+> FILESYS-0010), and the default output is a human-readable terminal report
+> with `--json` for pipelines (WP-26). The output schema is `findings-v1`, and
+> the tool runs offline with no network code path in any build. `v0.3.0` is
+> open; its scope is in the pre-1.0 section below.
 >
 > This banner is updated by **every** work package that changes a module, a
 > check count or a catalog version. A roadmap that disagrees with `main` is
@@ -159,10 +160,14 @@ resilience work is only meaningful once there is a surface to be resilient at.
 
 #### 2. UX and CLI polish
 
-- **Terminal renderer** — `NO_COLOR`, non-TTY, width handling, and a summary
-  that leads with `UNKNOWN` count rather than burying it. An auditor who cannot
-  see what the tool failed to see is reading a different report than the one it
-  produced.
+- ~~**Terminal renderer**~~ — **done, WP-26.** `internal/render/text` is the
+  default output: header, per-module listing, a full block for every FAIL *and*
+  every UNKNOWN, and a summary that states the UNKNOWN count on its own line
+  rather than burying it. An auditor who cannot see what the tool failed to see
+  is reading a different report than the one it produced. `--no-color`,
+  `NO_COLOR` and a non-terminal stdout each suppress colour; `--output` is
+  never coloured. `--format json` (or `--json`) keeps the pipeline path, and a
+  test asserts the format cannot move the exit code.
 - **SARIF renderer** with stable fingerprints across runs and across catalog
   versions.
 - **`plumbline diff`** — bundle to bundle, so drift is a first-class output

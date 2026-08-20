@@ -15,13 +15,12 @@ import (
 func newScanCmd(g *globals, stdout, stderr io.Writer) *cobra.Command {
 	var (
 		root         string
-		format       string
-		output       string
 		saveBundle   string
 		redact       bool
 		profile      string
 		timeout      time.Duration
 		perCollector time.Duration
+		out          outputFlags
 		gt           gates
 	)
 
@@ -41,8 +40,9 @@ Use --save-bundle to keep the evidence a scan was derived from.`,
 			if err != nil {
 				return err
 			}
-			if format != "json" {
-				return usageErrorf("--format %q is not implemented yet; only json exists in v0.1", format)
+			format, err := out.resolveFormat(cmd)
+			if err != nil {
+				return err
 			}
 
 			ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
@@ -70,19 +70,18 @@ Use --save-bundle to keep the evidence a scan was derived from.`,
 				return exitError{code: ExitTimeout, message: "scan exceeded --timeout"}
 			}
 
-			return renderAndGate(got.bundle, failOn, gt, format, output, stdout, stderr)
+			return renderAndGate(got.bundle, failOn, gt, format, out, stdout, stderr)
 		},
 	}
 
 	f := cmd.Flags()
 	f.StringVar(&root, "root", "", "scan root; paths are interpreted beneath it")
-	f.StringVar(&format, "format", "json", "output format")
-	f.StringVarP(&output, "output", "o", "", "write the document here instead of stdout")
 	f.StringVar(&saveBundle, "save-bundle", "", "keep the bundle this scan produced")
 	f.BoolVar(&redact, "redact", false, "omit hostname and non-loopback addresses at collection time")
 	f.StringVar(&profile, "profile", "default", "collection profile")
 	f.DurationVar(&timeout, "timeout", 30*time.Minute, "whole-scan budget")
 	f.DurationVar(&perCollector, "collector-timeout", 2*time.Minute, "budget for one collector that declares none")
+	out.register(cmd)
 	gt.register(cmd)
 	return cmd
 }

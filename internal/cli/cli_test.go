@@ -46,6 +46,16 @@ func run(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	return code, out.String(), errOut.String()
 }
 
+// runJSON is run with --json, for the tests that parse the output.
+//
+// The flag is spelled out at every call site rather than defaulted in the
+// helper, because the default output format is now the terminal report and a
+// test that silently got JSON would stop noticing if that changed.
+func runJSON(t *testing.T, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	return run(t, append(args, "--json")...)
+}
+
 // document is the part of a findings document these tests reason about.
 type document struct {
 	Schema   string          `json:"schema"`
@@ -76,8 +86,8 @@ func TestScanEqualsCollectThenEval(t *testing.T) {
 			bundlePath := filepath.Join(t.TempDir(), "b.plb")
 
 			collectCode, _, _ := run(t, "collect", "--root", fixture, "-o", bundlePath)
-			evalCode, evalOut, _ := run(t, "eval", bundlePath)
-			scanCode, scanOut, _ := run(t, "scan", "--root", fixture)
+			evalCode, evalOut, _ := runJSON(t, "eval", bundlePath)
+			scanCode, scanOut, _ := runJSON(t, "scan", "--root", fixture)
 
 			piped := parse(t, evalOut)
 			fused := parse(t, scanOut)
@@ -166,7 +176,7 @@ func TestReportIsOwnerOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if code, _, stderr := run(t, "scan", "--root", hostFixture, "-o", path); code != cli.ExitOK {
+	if code, _, stderr := runJSON(t, "scan", "--root", hostFixture, "-o", path); code != cli.ExitOK {
 		t.Fatalf("scan exited %d: %s", code, stderr)
 	}
 
@@ -192,7 +202,7 @@ func TestReportIsOwnerOnly(t *testing.T) {
 		t.Fatal("collect failed")
 	}
 	evalReport := filepath.Join(dir, "eval.json")
-	if code, _, _ := run(t, "eval", bundlePath, "-o", evalReport); code != cli.ExitOK {
+	if code, _, _ := runJSON(t, "eval", bundlePath, "-o", evalReport); code != cli.ExitOK {
 		t.Fatal("eval failed")
 	}
 	info, err = os.Stat(evalReport)
@@ -213,14 +223,21 @@ func TestRepeatedEvaluationsAreByteIdentical(t *testing.T) {
 		t.Fatal("collect failed")
 	}
 
-	_, first, _ := run(t, "eval", bundlePath)
-	if first == "" {
-		t.Fatal("eval produced nothing; this test would prove nothing")
-	}
-	for i := 0; i < 10; i++ {
-		if _, got, _ := run(t, "eval", bundlePath); got != first {
-			t.Fatalf("evaluation %d differs from the first", i)
-		}
+	// Both renderers, because both are things a person diffs against last
+	// week's run. The terminal report is not the API and is still not allowed
+	// to be noisy: a nightly scan whose output churns is one nobody reads.
+	for _, format := range []string{"json", "terminal"} {
+		t.Run(format, func(t *testing.T) {
+			_, first, _ := run(t, "eval", bundlePath, "--format", format)
+			if first == "" {
+				t.Fatal("eval produced nothing; this test would prove nothing")
+			}
+			for i := 0; i < 10; i++ {
+				if _, got, _ := run(t, "eval", bundlePath, "--format", format); got != first {
+					t.Fatalf("evaluation %d differs from the first", i)
+				}
+			}
+		})
 	}
 }
 
@@ -462,7 +479,7 @@ func TestVersion(t *testing.T) {
 // nothing else. A JSON document with a progress line in it is not a JSON
 // document (CLI-SPEC.md §7).
 func TestOutputDiscipline(t *testing.T) {
-	_, stdout, _ := run(t, "scan", "--root", hostFixture)
+	_, stdout, _ := runJSON(t, "scan", "--root", hostFixture)
 	var v any
 	if err := json.Unmarshal([]byte(stdout), &v); err != nil {
 		t.Errorf("stdout is not pure JSON: %v\n%s", err, stdout)
@@ -483,7 +500,7 @@ func TestOutputDiscipline(t *testing.T) {
 // agrees with, which is what makes --save-bundle evidence rather than a copy.
 func TestSaveBundleFromScan(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "saved.plb")
-	code, scanOut, _ := run(t, "scan", "--root", hostFixture, "--save-bundle", path)
+	code, scanOut, _ := runJSON(t, "scan", "--root", hostFixture, "--save-bundle", path)
 	if code != cli.ExitOK {
 		t.Fatalf("scan exited %d", code)
 	}
@@ -495,7 +512,7 @@ func TestSaveBundleFromScan(t *testing.T) {
 		t.Errorf("saved bundle mode = %04o, want 0600", got)
 	}
 
-	_, evalOut, _ := run(t, "eval", path)
+	_, evalOut, _ := runJSON(t, "eval", path)
 	if !bytes.Equal(parse(t, scanOut).Findings, parse(t, evalOut).Findings) {
 		t.Error("re-evaluating a saved bundle disagrees with the scan that produced it")
 	}
@@ -534,4 +551,214 @@ func decompress(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// ---------------------------------------------------------------------------
+// output format (WP-26)
+// ---------------------------------------------------------------------------
+
+// TestTerminalIsTheDefaultFormat. The default is what an engineer gets when
+// they type the command they were going to type anyway, and a wall of JSON is
+// not a report. The JSON is still there, behind a flag, and it is still the
+// only thing anything may parse.
+func TestTerminalIsTheDefaultFormat(t *testing.T) {
+	for _, args := range [][]string{
+		{"scan", "--root", hostFixture},
+		{"eval", collectTo(t, hostFixture)},
+	} {
+		t.Run(args[0], func(t *testing.T) {
+			_, stdout, _ := run(t, args...)
+
+			if strings.HasPrefix(strings.TrimSpace(stdout), "{") {
+				t.Fatalf("the default output is still JSON:\n%s", stdout[:min(len(stdout), 200)])
+			}
+			for _, want := range []string{"CHECKS BY MODULE", "SUMMARY", "posture", "coverage"} {
+				if !strings.Contains(stdout, want) {
+					t.Errorf("the default report omits %q", want)
+				}
+			}
+		})
+	}
+}
+
+// TestJSONFlagAndFormatJSONAgree: --json is shorthand, so the two spellings
+// must produce the same bytes. A shorthand that renders differently is a
+// second code path wearing the first one's name.
+func TestJSONFlagAndFormatJSONAgree(t *testing.T) {
+	bundlePath := collectTo(t, hostFixture)
+
+	_, viaFlag, _ := run(t, "eval", bundlePath, "--json")
+	_, viaFormat, _ := run(t, "eval", bundlePath, "--format", "json")
+
+	if viaFlag != viaFormat {
+		t.Error("--json and --format json produced different documents")
+	}
+	parse(t, viaFlag)
+}
+
+// TestContradictoryFormatFlagsAreAUsageError.
+//
+// --json is shorthand over the *default*, not an override of an explicit
+// choice. Silently discarding a --format the operator typed is the same class
+// of bug as silently accepting `--fail-on hgih`: they stated something, the
+// tool did something else, and nothing said so.
+func TestContradictoryFormatFlagsAreAUsageError(t *testing.T) {
+	code, stdout, stderr := run(t, "scan", "--root", hostFixture, "--format", "terminal", "--json")
+	if code != cli.ExitUsage {
+		t.Errorf("exit = %d, want %d (usage)", code, cli.ExitUsage)
+	}
+	if stdout != "" {
+		t.Errorf("a usage error still wrote a report to stdout:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "contradict") {
+		t.Errorf("stderr does not explain the contradiction: %q", stderr)
+	}
+
+	// But --json alongside --format json is not a contradiction, and refusing
+	// it would break the obvious belt-and-braces invocation.
+	if code, _, _ := run(t, "eval", collectTo(t, hostFixture), "--format", "json", "--json"); code != cli.ExitOK {
+		t.Errorf("--format json --json exited %d, want 0", code)
+	}
+}
+
+func TestUnknownFormatIsRefusedByName(t *testing.T) {
+	for _, format := range []string{"yaml", "html", "TERMINAL!"} {
+		code, _, stderr := run(t, "scan", "--root", hostFixture, "--format", format)
+		if code != cli.ExitUsage {
+			t.Errorf("--format %s exited %d, want %d", format, code, cli.ExitUsage)
+		}
+		if !strings.Contains(stderr, "unknown --format") {
+			t.Errorf("--format %s: stderr does not name the problem: %q", format, stderr)
+		}
+	}
+
+	// sarif is refused too, but by a message that says it is coming rather
+	// than that it is nonsense. The two are different problems for a reader.
+	_, _, stderr := run(t, "scan", "--root", hostFixture, "--format", "sarif")
+	if !strings.Contains(stderr, "not implemented yet") {
+		t.Errorf("sarif is refused as though it were a typo: %q", stderr)
+	}
+}
+
+// TestFormatIsCaseInsensitive: an operator typing --format JSON has been
+// unambiguous, and rejecting them teaches nothing.
+func TestFormatIsCaseInsensitive(t *testing.T) {
+	if code, stdout, stderr := run(t, "eval", collectTo(t, hostFixture), "--format", "JSON"); code != cli.ExitOK {
+		t.Fatalf("--format JSON exited %d: %s", code, stderr)
+	} else {
+		parse(t, stdout)
+	}
+}
+
+// TestNoAnsiReachesANonTerminal is the rule that matters most in practice.
+//
+// Every one of these writes somewhere that is not a terminal — a test buffer,
+// a file — and an escape sequence in any of them is corruption of an artefact
+// somebody reads later in something that is not a terminal.
+func TestNoAnsiReachesANonTerminal(t *testing.T) {
+	dir := t.TempDir()
+	reportPath := filepath.Join(dir, "report.txt")
+
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"a buffer", []string{"scan", "--root", hostFixture}},
+		{"--no-color", []string{"scan", "--root", hostFixture, "--no-color"}},
+		{"-o a file", []string{"scan", "--root", hostFixture, "-o", reportPath}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, stdout, _ := run(t, tc.args...)
+			if strings.Contains(stdout, "\033") {
+				t.Errorf("an escape sequence reached stdout:\n%q", stdout)
+			}
+		})
+	}
+
+	body, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body) == 0 {
+		t.Fatal("-o wrote an empty file; the assertion below would prove nothing")
+	}
+	if bytes.Contains(body, []byte{0x1b}) {
+		t.Errorf("an escape sequence was written into --output:\n%s", body)
+	}
+	if !bytes.Contains(body, []byte("SUMMARY")) {
+		t.Errorf("--output did not receive the terminal report:\n%s", body)
+	}
+}
+
+// TestReportsWrittenWithOutputAreOwnerOnly. The terminal report names paths,
+// accounts and misconfigurations; it is the same reconnaissance material the
+// JSON is, and it goes through the same owner-only create.
+func TestReportsWrittenWithOutputAreOwnerOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "report.txt")
+	if err := os.WriteFile(path, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, stderr := run(t, "scan", "--root", hostFixture, "-o", path); code != cli.ExitOK {
+		t.Fatalf("scan exited %d: %s", code, stderr)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("report mode = %04o, want 0600", got)
+	}
+}
+
+// TestTheFormatDoesNotMoveTheExitCode.
+//
+// Rendering is display and gating is a verdict, and the two must not be able
+// to influence one another. If they could, `--json` would be a way to change
+// what CI concluded about a host.
+func TestTheFormatDoesNotMoveTheExitCode(t *testing.T) {
+	cases := [][]string{
+		{"scan", "--root", failFixture, "--fail-on", "high"},
+		{"scan", "--root", hostFixture, "--min-coverage", "100"},
+		{"scan", "--root", hostFixture},
+	}
+	for _, base := range cases {
+		t.Run(strings.Join(base[1:], " "), func(t *testing.T) {
+			terminal, _, _ := run(t, base...)
+			asJSON, _, _ := run(t, append(append([]string{}, base...), "--json")...)
+			if terminal != asJSON {
+				t.Errorf("exit code depends on the output format: terminal %d, json %d", terminal, asJSON)
+			}
+		})
+	}
+}
+
+// TestTheTerminalReportNamesWhatItCouldNotDetermine. A report that lists
+// failures and buries unknowns describes a cleaner host than the one it saw,
+// and this is the end-to-end assertion of that.
+func TestTheTerminalReportNamesWhatItCouldNotDetermine(t *testing.T) {
+	root := deniedRoot(t)
+
+	_, stdout, _ := run(t, "scan", "--root", root)
+	for _, want := range []string{
+		"COULD NOT DETERMINE",
+		"These are not passes",
+		"COLLECTION GAPS",
+		"/etc/ssh/sshd_config",
+		"degraded",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("a scan that could not read the host omits %q from its report:\n%s", want, stdout)
+		}
+	}
+}
+
+// collectTo runs collect against a fixture and returns the bundle path.
+func collectTo(t *testing.T, fixture string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "b.plb")
+	if code, _, stderr := run(t, "collect", "--root", fixture, "-o", path); code != cli.ExitOK {
+		t.Fatalf("collect exited %d: %s", code, stderr)
+	}
+	return path
 }

@@ -57,15 +57,50 @@ the same.
 
 ### Output
 
-| Flag | Default | Meaning |
-|---|---|---|
-| `--format LIST` | `terminal` | `terminal`, `json`, `sarif`. Comma-separated. |
-| `--output PATH` | — | Output file; only valid with a single format |
-| `--output-dir DIR` | — | Directory; required when multiple formats |
-| `--quiet` | false | Findings only, no progress |
-| `--verbose` | false | Per-check execution detail |
-| `--debug` | false | Engine internals to stderr |
-| `--no-color` | false | Also honours `NO_COLOR` and non-TTY stdout |
+| Flag | Default | Meaning | Implemented |
+|---|---|---|---|
+| `--format NAME` | `terminal` | `terminal`, `json`. `sarif` is planned | **yes** (v0.3) |
+| `--json` | false | Shorthand for `--format json` | **yes** (v0.3) |
+| `--output PATH` | — | Output file; only valid with a single format | **yes** |
+| `--no-color` | false | Also honours `NO_COLOR` and non-TTY stdout | **yes** (v0.3) |
+| `--output-dir DIR` | — | Directory; required when multiple formats | no |
+| `--quiet` | false | Findings only, no progress | no |
+| `--verbose` | false | Per-check execution detail | no |
+| `--debug` | false | Engine internals to stderr | no |
+
+`--format` takes a single name today, not a comma-separated list. Multiple
+formats in one run need `--output-dir`, and neither exists yet; the flag is
+specified as `LIST` for the release that adds them, and until then a second
+format is a second invocation.
+
+**`--json` is shorthand over the default, not an override.** `--json` alone
+selects JSON. `--format json --json` is accepted, because it is not a
+contradiction. `--format terminal --json` is a **usage error**: the operator
+stated a format explicitly, and silently discarding it would be the same class
+of defect as silently accepting a misspelled `--fail-on` level.
+
+#### Colour
+
+Three rules, in order of how explicit they are. The first that applies wins.
+
+1. `--no-color` — never colour.
+2. `NO_COLOR` present in the environment, **at any value including `0`** — never
+   colour. The [no-color.org](https://no-color.org) convention is that the
+   variable existing at all is the request.
+3. Otherwise, colour only when the destination is a character device.
+
+Writing to `--output` is never coloured, whatever the rules above say. An
+escape sequence in a file the operator asked to keep is not a rendering choice;
+it is corruption of an artefact they will read later in something that is not a
+terminal.
+
+#### What may be parsed
+
+**`--format json` is the API. `--format terminal` is not.** The terminal
+report's layout may change in a patch release and nothing may depend on it;
+`findings/v1` is versioned, schema-validated in CI, and changes only under the
+rules in `VERSIONING.md`. A pipeline that greps the terminal report is a
+pipeline that will break, and it will break silently.
 
 ### Filtering
 
