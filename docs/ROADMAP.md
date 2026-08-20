@@ -2,17 +2,18 @@
 
 **Three stable majors.** Each is a complete, defensible product on its own. If development stops after any of them, what exists is still worth using.
 
-> **Where the project actually is — 2026-08-20.** `v0.3.1` is tagged: **79
+> **Where the project actually is — 2026-08-20.** `v0.4.0` is tagged: **79
 > checks across nine modules at catalog version 13**, a human-readable terminal
 > report by default with `--json` for pipelines, and a scanner that refuses to
 > draw a verdict from a file it could not really parse. The output schema is
 > `findings-v1`, and the tool runs offline with no network code path in any
 > build.
 >
-> `v0.3.1` changed no behaviour. It repaired the verification harness: `v0.3.0`
-> was tagged with a red pipeline, three fixtures whose FAIL case existed only
-> on the author's machine, and one whose verdict depended on the uid of
-> whoever cloned the repository. All twelve CI jobs now pass on `main`.
+> `v0.4.0` added the three things that make a scan worth running twice: a
+> lynis-style terminal report, explicit `--suppress` acknowledgement of accepted
+> risks, and `plumbline diff` between two bundles. The catalog did not move —
+> every verdict is one `v0.3.1` would have reached. Go's floor is 1.24 and CI
+> builds with 1.25.
 >
 > **`v0.3.0` was re-scoped on the way to being tagged.** It was originally
 > "feature complete for v1" and shipped four of eighteen items; feature freeze
@@ -47,10 +48,9 @@ There were three until v0.3.0 was tagged. The fourth exists because v0.3.0 shipp
 Tagged and released as pre-releases so the pipeline gets exercised, but with an
 explicit "no stability guarantees" banner.
 
-**Status at 2026-08-20:** v0.1.0, v0.2.0, v0.3.0 and the v0.3.1 patch are
-complete and tagged. v0.4.0 is under way — it opened with WP-28, the
-lynis-style CLI overhaul — and carries feature freeze. The schema is
-`findings-v1` throughout.
+**Status at 2026-08-20:** v0.1.0, v0.2.0, v0.3.0, v0.3.1 and v0.4.0 are
+complete and tagged. v0.5.0 is next and is the last feature milestone before
+v1.0.0. The schema is `findings-v1` throughout.
 
 | Milestone | State | Catalog | Checks | Shipped |
 |---|---|---|---|---|
@@ -58,7 +58,8 @@ lynis-style CLI overhaul — and carries feature freeze. The schema is
 | v0.2.0 — catalog machinery | **complete** | 11 | 78 | tagged `v0.2.0`, 2026-08-20 |
 | v0.3.0 — engine maturation and resilience | **complete** | 13 | 79 | tagged `v0.3.0`, 2026-08-20 |
 | v0.3.1 — verification harness repairs | **complete** | 13 | 79 | tagged `v0.3.1`, 2026-08-20; no behaviour change |
-| v0.4.0 — feature complete for v1 | **in progress** | 13 | 79 | WP-28 lynis CLI; WP-29 suppressions; WP-30 `diff` |
+| v0.4.0 — usable more than once | **complete** | 13 | 79 | tagged `v0.4.0`, 2026-08-20 |
+| v0.5.0 — ecosystem integration | next | 13+ | 79+ | — |
 
 ### v0.1.0 — Walking skeleton — **COMPLETE**
 
@@ -207,7 +208,7 @@ does not panic. Before WP-27 the same host produced 22 `PASS`, 23 `FAIL` and
   `finding.ReasonFactVersion` had been declared since v0.1 and was never once
   emitted; the case it was for reported `NOT_APPLICABLE` instead.
 
-### v0.4.0 — Feature complete for v1 — **IN PROGRESS**
+### v0.4.0 — Usable more than once — **COMPLETE** *(tagged 2026-08-20)*
 
 Everything v0.3.0 did not carry, in the order it should be built. The ordering
 is not the original one: it now leads with what makes the tool *usable more
@@ -290,8 +291,74 @@ v1 release criterion.
   `INTEGRITY` and the whole of v2 rest on.
 - **`SYSINFO`, the AUTH balance, the NETWORK balance, FILESYS mount coverage.**
 
-**Exit criteria:** feature freeze. Everything after v0.4.0 is bug-fixing,
+**Exit criteria (met 2026-08-20):** a scan is worth running twice. The report
+is readable, findings can be accepted without being hidden, and two runs can be
+compared.
+
+---
+
+### v0.5.0 — Ecosystem integration — **NEXT**
+
+The last feature milestone before v1.0.0, and the theme is that Plumbline stops
+being a tool you read and starts being a tool other things consume. Everything
+here is about handing a verdict to something else — a CI platform, a colleague,
+an auditor — without losing what makes the verdict honest.
+
+**Exit criteria:** feature freeze. Everything after v0.5.0 is bug-fixing,
 documentation and fixture expansion.
+
+#### 1. SARIF export
+
+`--format sarif`, emitting SARIF 2.1.0 for GitHub Advanced Security and
+anything else that ingests it. Rule IDs are check IDs and `partialFingerprints`
+carries `finding.Fingerprint`, so GitHub's deduplication lines up with the
+suppression baseline rather than fighting it.
+
+**The whole design problem is `UNKNOWN`, and SARIF has no such level.** The
+levels are `error`, `warning`, `note` and `none`, and the obvious mappings are
+both wrong: `none` files an UNKNOWN as informational and `error` claims a
+failure that was never observed. Either way the security tab shows a cleaner or
+a falser host than the scan saw, which is the one thing this project does not
+do.
+
+The decision: **`UNKNOWN` maps to `level: "warning"`**, with the reason code in
+the message text and a `properties` bag carrying `plumbline/result: "UNKNOWN"`
+and the reason, so a consumer that cares can tell the two apart and one that
+does not still sees something it must look at. `FAIL` maps by severity —
+CRITICAL and HIGH to `error`, the rest to `warning`. `SKIPPED` from a
+suppression is emitted with `suppressions` (SARIF has a native concept, and it
+carries a justification), which is the one place the SARIF model matches ours
+exactly. `PASS` and `NOT_APPLICABLE` are not emitted as results at all; they
+belong in the run's `invocation` properties, not as findings.
+
+`schema/` gains no new file: SARIF is an external specification and validating
+against the published one in CI is the correct gate, not a copy of it here.
+
+#### 2. `plumbline explain CHECK-ID`
+
+Catalog legibility. Prints what a check asks, which facts it needs, what each
+result state means for it, and the remediation in full — the material that
+`docs/checks/<ID>.md` holds today and that nobody reads because it is not where
+they are. Offline, no host access, no bundle required: it is a question about
+the catalog, not about a machine.
+
+This is also the honest home for the remediation `steps` and `commands` that
+the terminal report deliberately omits. A block that runs to forty lines per
+finding is one an operator scrolls past; a command they asked for by ID is one
+they read.
+
+#### 3. Profile architecture and golden bundles
+
+`--profile cis-level-1`, `--profile stig`, and the machinery that makes a
+profile a *selection over the existing catalog* rather than a second catalog.
+A profile names check IDs and may tighten a parameter; it may never introduce a
+check the catalog does not have, because a finding that exists only under one
+profile is a finding nobody can reproduce.
+
+Golden bundles are the fixture half: recorded bundles from real distributions,
+committed, and re-evaluated in CI so that a catalog change which moves a
+verdict on a real host shows up as a diff in review rather than as a surprise
+in production. `docs/FIXTURES.md` §6 already reserves the concept.
 
 ---
 

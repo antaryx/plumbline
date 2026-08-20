@@ -11,8 +11,119 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-`v0.4.0` in progress. `docs/ROADMAP.md` carries the rest of the milestone:
-suppressions first, then `diff`, then the catalog-legibility commands.
+Nothing yet. `docs/ROADMAP.md` v0.5.0 is next: ecosystem integration — SARIF
+export, `plumbline explain`, and the profile architecture.
+
+---
+
+## [0.4.0] — 2026-08-20
+
+**A report a person reads, a finding a team can accept, and an answer to "what
+changed overnight".** Catalog version 13, 79 checks across nine modules, schema
+`findings-v1` — the same catalog `v0.3.1` shipped. Every verdict this release
+reaches about a host is one `v0.3.1` would have reached. What changed is what
+happens to that verdict afterwards.
+
+Three work packages, and the thread connecting them is that a finding must
+never go quiet. The report may reorganise it, an operator may accept it, and a
+diff may decide it did not move — but nothing here can make it disappear.
+
+**1 — The terminal report is laid out in the manner of `lynis` (WP-28).**
+A scan phase of one line per check under `[+] MODULE` headings, each carrying a
+bracketed verdict flush against a fixed 78-column grid — `[ OK ]`,
+`[ WARNING ]`, `[ UNKNOWN ]`, `[ SKIPPED ]`, `[ DISABLED ]` — and a
+`[=] Warnings and suggestions` phase at the bottom holding every detail,
+evidence excerpt and remediation. The previous layout interleaved the two,
+which put forty lines of advice between two check results and destroyed the
+column of verdicts the layout exists to provide.
+
+The grid is fixed rather than read from the terminal, because a report has to
+be byte-identical across two runs of an unchanged host or a nightly diff is
+noise. Only check titles are ever truncated; a check ID, a path or an evidence
+excerpt is a value an operator copies.
+
+**2 — Findings can be accepted, and acceptance is not concealment (WP-29).**
+`--suppress PATH` applies a `suppressions/v1` file mapping a finding
+fingerprint to a justification and an optional expiry. **There is no
+auto-discovered filename and no implicit default** — an explicit path is the
+deterministic design for a tool that decides whether a host is safe.
+
+A suppression never removes a finding. The result becomes `SKIPPED`, the
+finding carries a `suppression` object recording the justification and
+`original_result` — what the check actually reached — and accepted risks get
+their own `[=] Accepted risks` section and a distinct `[ SUPPRESSED ]` token.
+"We accepted this" can never render as "we never looked".
+
+A blank justification, an unknown field, a duplicate fingerprint or a
+`check_id`/`subject` label that fingerprints to something else are all parse
+errors, and a bad file aborts the scan rather than running with nothing
+suppressed. Expiry is measured against the scan's start time rather than the
+wall clock, so re-evaluating an archived bundle gives the same answer forever.
+
+**3 — `plumbline diff OLD NEW` (WP-30).** Compares two bundles and reports only
+what moved, in five categories: `NEW FAILURE`, `REGRESSED`, `VERDICT CHANGED`,
+`NEWLY SUPPRESSED`, `RESOLVED`. Each change shows both ends of its transition,
+and the summary carries a posture delta beside a coverage delta.
+
+Both sides are re-evaluated with today's catalog, so a check whose logic was
+corrected between the two collections cannot appear as the host having changed.
+A suppressed finding is compared by `original_result`, so accepting a risk
+diffs as an acceptance rather than as a fix — and a rule that lapsed between
+the two collections shows as `REGRESSED` rather than as somebody having broken
+something.
+
+### Added
+- `--suppress PATH` on `scan` and `eval` (WP-29).
+- `plumbline diff OLD NEW`, with `--suppress`, `--no-color` and `-o` (WP-30).
+- `[ SUPPRESSED ]` and `[ DISABLED ]` status tokens, distinct from
+  `[ SKIPPED ]`: an accepted risk, a check the profile did not run, and a check
+  whose subject is absent are three different facts.
+
+### Changed
+- **The default terminal layout (WP-28).** Breaking for anything parsing it —
+  which was already unsupported. `--json` emits `findings/v1`, which is the API.
+- Suppressed findings leave the posture denominator (a team is not scored down
+  for reviewing something) and reduce coverage, which is the existing
+  documented meaning of `SKIPPED`.
+
+### Schema
+- `findings-v1` gained an optional `suppression` object on a finding. Additive
+  within the major (`VERSIONING.md` §4.1); consumers written before it existed
+  ignore it and correctly see a `SKIPPED` finding. The `result` enum is
+  unchanged.
+- The constraint "a result other than `FAIL` carries no remediation" now
+  excepts suppressed findings, which keep the fix they would otherwise need so
+  the acceptance stays reviewable. This relaxes a rule — no previously valid
+  document becomes invalid.
+- A new constraint enforces that `suppression` appears only on `SKIPPED`.
+
+### Build
+- **Go 1.24 floor, 1.25 release toolchain.** `go.mod` declares the minimum a
+  source build needs; CI builds the release binaries with 1.25. Go supports
+  only its two newest majors, so 1.23 — which CI used until now — no longer
+  receives stdlib security fixes, in a tool that runs as root.
+- **golangci-lint moved to v2** (config migrated with `golangci-lint migrate`,
+  action v9, linter pinned v2.13.1). The same thirteen linters run. Three
+  findings the older pinned linter did not report were fixed.
+- `github.com/klauspost/compress` 1.18.0 → 1.19.2, which clears GO-2026-5841
+  (an out-of-bounds read in `compress/s2`). That package is not linked into
+  this binary — only `zstd` is — so the advisory was never reachable here;
+  `govulncheck` reported and still reports zero reachable vulnerabilities.
+
+### Fixed
+- The fixture corpus did not survive a `git checkout`: three FILESYS checks
+  returned `PASS` on a fresh clone because git cannot store an empty directory
+  and one fixture file had never been added. `TestEveryFixtureSurvivesACheckout`
+  now makes that class of defect impossible to reintroduce.
+- `cli-host` carried no `/etc/nsswitch.conf`, which made FILESYS-0010's verdict
+  depend on the uid of whoever cloned the repository.
+- Four CI steps parsed the terminal report as JSON after `v0.3.0` changed the
+  default output. (Both released in `v0.3.1`.)
+
+### Check corrections
+None. No check's verdict logic changed in this release, and the catalog version
+is deliberately unchanged at 13 — a bump would falsely signal that scores are
+no longer comparable with `v0.3.1`.
 
 ### Build
 - **The minimum Go version is now 1.24** (`go.mod`), and CI builds with 1.25.
