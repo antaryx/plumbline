@@ -141,6 +141,14 @@ func evaluate(
 	if !cfg.Installed {
 		return notApplicable()
 	}
+	// The syntax gate comes before everything, including the branch where the
+	// keyword *is* present, and that ordering is the whole point. sshd rejects
+	// a file with a syntax error as a unit — it does not skip the bad line and
+	// keep the good ones — so on such a host neither a value that is in the
+	// file nor a value that is absent from it describes what sshd is running.
+	if len(cfg.SyntaxErrors) > 0 {
+		return syntaxError(cfg, keyword)
+	}
 	d, ok := cfg.Effective(keyword)
 	if !ok {
 		if len(cfg.UnresolvedIncludes) > 0 {
@@ -149,6 +157,32 @@ func evaluate(
 		return onAbsent(cfg)
 	}
 	return onValue(cfg, d)
+}
+
+// syntaxError is the UNKNOWN for a configuration sshd would refuse to load.
+//
+// It is the unresolved-include argument applied one step earlier. There, the
+// keyword might be set in a file we never saw; here, the file we did see is
+// not the one in force, because sshd exits non-zero on it and keeps running
+// whatever last parsed. A tool that reported the compiled-in default from
+// these bytes would be describing a configuration that exists nowhere: not on
+// disk, and not in the running daemon.
+func syntaxError(cfg fact.SSHDConfig, keyword string) catalog.Outcome {
+	first := cfg.SyntaxErrors[0]
+	ev := make([]finding.Evidence, 0, len(cfg.SyntaxErrors))
+	for _, l := range cfg.SyntaxErrors {
+		ev = append(ev, finding.NewEvidence(l.File, l.Line,
+			l.Text+"  ← keyword with no argument; sshd -t rejects this", ""))
+	}
+	return catalog.Outcome{
+		Result:        finding.Unknown,
+		UnknownReason: finding.ReasonParse,
+		Subject:       keyword,
+		Detail: fmt.Sprintf(
+			"The effective value of %s cannot be determined: %s carries %d line(s) that sshd will not parse, the first at %s:%d (%q). sshd refuses a configuration file as a unit rather than skipping the bad line, so this file is not loaded — the daemon is running whatever configuration last parsed successfully, or is not running at all, and neither is visible from disk. Fix the syntax and re-scan; 'sshd -t' reports the same lines.",
+			keyword, first.File, len(cfg.SyntaxErrors), first.File, first.Line, first.Text),
+		Evidence: ev,
+	}
 }
 
 // ---------------------------------------------------------------------------

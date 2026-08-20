@@ -26,7 +26,7 @@ import (
 // (WP-21); 10 adds NETWORK and AUTH, completing the v0.2 catalog (WP-22,
 // WP-23); 11 adds FILESYS and wires the shared walker into the scan (WP-24),
 // completing the v0.2.0 catalog.
-const Version = 12
+const Version = 13
 
 // Outcome is what a check's Eval returns. The runner converts it into a
 // finding, filling in identity and fingerprint so a check cannot get those
@@ -216,6 +216,25 @@ func (c *Catalog) EvaluateOne(ck Check, facts *fact.Set) (f finding.Finding) {
 			f.Result = finding.Unknown
 			f.UnknownReason = finding.ReasonFactMissing
 			f.Detail = fmt.Sprintf("required fact %s was not collected", id)
+			return f
+		}
+		// Present is not the same as usable. A bundle written by a newer build
+		// carries facts this one cannot decode, and the reader keeps them
+		// verbatim so that forwarding the bundle loses nothing — but a check
+		// that ran anyway would read the zero value out of its typed accessor
+		// and report the host as having no sshd, no accounts and no firewall.
+		// That is a statement about the host manufactured from a decode
+		// failure, which is the worst thing this codebase can produce.
+		if op, opaque := facts.Opaque(id); opaque {
+			f.Result = finding.Unknown
+			f.UnknownReason = finding.ReasonFactVersion
+			f.Detail = fmt.Sprintf(
+				"required fact %s is present in this bundle at version %d, which this build of the catalog does not understand. Nothing may be concluded from it: the bundle was written by a different version of Plumbline, and re-evaluating it needs a build that knows this fact's shape.",
+				id, op.OpaqueFact())
+			f.Evidence = sanitizeEvidence([]finding.Evidence{
+				finding.NewEvidence(string(id), 0,
+					fmt.Sprintf("fact version %d is not decodable by this build", op.OpaqueFact()), ""),
+			})
 			return f
 		}
 	}

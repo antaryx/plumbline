@@ -47,6 +47,15 @@ const (
 // not an account database and must not be held in memory by a root process.
 const maxRead = 16 << 20 // 16 MiB
 
+// Field counts the formats define. A line with fewer is not an entry, and
+// treating it as one is how a damaged file becomes a set of confident findings
+// about accounts that do not exist.
+const (
+	passwdFields = 7 // passwd(5)
+	shadowFields = 9 // shadow(5)
+	groupFields  = 4 // group(5)
+)
+
 // Collector implements collect.Collector for the local account databases.
 type Collector struct{}
 
@@ -166,6 +175,14 @@ func readDatabase(s system.System, id fact.ID, path string) (system.ReadResult, 
 			Msg: "file exceeded the read cap; the account list is incomplete", Path: path,
 		}
 	}
+
+	// A file that is not text is not an account database, and parsing it
+	// anyway is worse than not reading it at all: 4 KiB of random bytes holds
+	// enough colons to yield a dozen plausible-looking accounts, and every
+	// check over them then reports findings about people who do not exist.
+	if why := collect.NotText(res.Data); why != "" {
+		return res, collect.MalformedError(id, path, why)
+	}
 	return res, nil
 }
 
@@ -191,7 +208,7 @@ func collectPasswd(s system.System, fs *fact.Set) {
 		}
 
 		f := strings.Split(line, ":")
-		if len(f) < 7 {
+		if len(f) < passwdFields {
 			p.Malformed = append(p.Malformed, n+1)
 			continue
 		}
@@ -226,8 +243,13 @@ func collectShadow(s system.System, fs *fact.Set) {
 		if skippable(line) {
 			continue
 		}
+		// shadow(5) defines nine colon-separated fields. Accepting a line
+		// with fewer was too permissive to be useful: it let arbitrary text
+		// containing a single colon become an account with a password state,
+		// so a damaged file produced confident findings instead of the
+		// malformed-line count that would have pushed them to UNKNOWN.
 		f := strings.Split(line, ":")
-		if len(f) < 2 {
+		if len(f) < shadowFields {
 			sh.Malformed = append(sh.Malformed, n+1)
 			continue
 		}
@@ -270,7 +292,7 @@ func collectGroup(s system.System, fs *fact.Set) {
 		}
 
 		f := strings.Split(line, ":")
-		if len(f) < 4 {
+		if len(f) < groupFields {
 			g.Malformed = append(g.Malformed, n+1)
 			continue
 		}

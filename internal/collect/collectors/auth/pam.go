@@ -42,6 +42,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path"
 	"strconv"
 	"strings"
@@ -370,9 +371,24 @@ func (c *collector) read(p string) (string, string, error) {
 	if err != nil {
 		return real, "", err
 	}
+	// One funnel for every PAM file this collector reads — the stacks, the
+	// symlink targets, pwquality.conf, faillock.conf — so the gate cannot be
+	// forgotten at one of them. A PAM file that is not text is the most
+	// dangerous of the lot: pam_unix's absence from a stack is what AUTH-0004
+	// reads as "no rule accepts an empty password", and concluding that from
+	// bytes libpam would refuse to load is a PASS invented out of nothing.
+	if why := collect.NotText(res.Data); why != "" {
+		return real, "", fmt.Errorf("%w: %s", errMalformed, why)
+	}
 	c.pam.Digests[real] = res.SHA256
 	return real, string(res.Data), nil
 }
+
+// errMalformed marks a PAM file that was read and is not text. It is a
+// package-local sentinel rather than a system error because it describes the
+// contents rather than the read, and every caller already has a branch for an
+// error it does not otherwise recognise.
+var errMalformed = errors.New("not a text configuration file")
 
 // readSettings reads a key=value file from /etc/security.
 func (c *collector) readSettings(p string) fact.SettingsFile {

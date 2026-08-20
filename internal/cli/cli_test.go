@@ -762,3 +762,171 @@ func collectTo(t *testing.T, fixture string) string {
 	}
 	return path
 }
+
+// ---------------------------------------------------------------------------
+// edge-case resilience (WP-27)
+// ---------------------------------------------------------------------------
+
+// TestACorruptedHostProducesNoConfidentVerdict is the work package's
+// acceptance criterion, asserted end to end through the real binary path.
+//
+// edge-binary-everything replaces every file the collectors parse with the
+// same kilobyte of pseudo-random bytes. That is not a contrived input: it is
+// what a failed restore, a filesystem that lost its journal, or a half-written
+// image looks like. Three things must hold, and the third is the one that
+// matters.
+//
+//  1. The scan completes. No panic, no hang, and an exit code that says
+//     something.
+//  2. Every fact the collectors could not parse is named in fact_errors, so an
+//     operator knows which files to go and look at.
+//  3. **No check reports PASS or FAIL from any of those files.** A parser that
+//     silently yields an empty configuration turns every negative assertion in
+//     the catalog into a false PASS, and that is the single failure mode this
+//     project exists to prevent.
+func TestACorruptedHostProducesNoConfidentVerdict(t *testing.T) {
+	const fixture = "../../testdata/fixtures/edge-binary-everything"
+
+	code, stdout, stderr := runJSON(t, "scan", "--root", fixture)
+	if code == cli.ExitInternal {
+		t.Fatalf("the scan exited %d (internal error): %s", code, stderr)
+	}
+	doc := parse(t, stdout)
+
+	var parsed struct {
+		Findings []struct {
+			CheckID       string `json:"check_id"`
+			Module        string `json:"module"`
+			Result        string `json:"result"`
+			UnknownReason string `json:"unknown_reason"`
+			Detail        string `json:"detail"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	var factErrors struct {
+		FactErrors []struct {
+			Fact string `json:"fact"`
+			Kind string `json:"kind"`
+			Path string `json:"path"`
+		} `json:"fact_errors"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &factErrors); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(factErrors.FactErrors) == 0 {
+		t.Fatal("a host whose every configuration file is binary produced no fact errors at all; every parser swallowed the garbage")
+	}
+	for _, e := range factErrors.FactErrors {
+		if e.Kind == "parse" && e.Path == "" {
+			t.Errorf("fact error for %s names no path", e.Fact)
+		}
+	}
+
+	// These modules read file *contents*. FILESYS, SERVICES and CRON read
+	// metadata — modes, ownership, symlinks — which the fixture's bytes cannot
+	// corrupt, so their verdicts are legitimate and are not listed here.
+	contentModules := map[string]bool{
+		"SSHD": true, "USERS": true, "AUTH": true, "LOGGING": true, "NETWORK": true,
+	}
+	for _, f := range parsed.Findings {
+		if !contentModules[f.Module] {
+			continue
+		}
+		if f.Result == "PASS" || f.Result == "FAIL" {
+			t.Errorf("%s = %s from a file of random bytes. A parser that yields an empty configuration turns every absence claim into a false verdict:\n  %s",
+				f.CheckID, f.Result, f.Detail)
+		}
+		if f.Result == "UNKNOWN" && f.UnknownReason == "" {
+			t.Errorf("%s is UNKNOWN with no reason code", f.CheckID)
+		}
+	}
+
+	if len(doc.Findings) == 0 {
+		t.Error("the document carries no findings at all")
+	}
+}
+
+// TestEveryEdgeFixtureScansWithoutCrashing. The blunt half of resilience: the
+// binary must come back. An auditing tool that panics on a damaged host has
+// told its operator nothing about the host and something alarming about
+// itself.
+func TestEveryEdgeFixtureScansWithoutCrashing(t *testing.T) {
+	entries, err := os.ReadDir("../../testdata/fixtures")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "edge-") {
+			continue
+		}
+		seen++
+		t.Run(e.Name(), func(t *testing.T) {
+			root := filepath.Join("../../testdata/fixtures", e.Name())
+			for _, format := range []string{"json", "terminal"} {
+				code, stdout, stderr := run(t, "scan", "--root", root, "--format", format)
+				if code == cli.ExitInternal {
+					t.Fatalf("--format %s exited %d (internal error): %s", format, code, stderr)
+				}
+				if stdout == "" {
+					t.Errorf("--format %s produced no output", format)
+				}
+			}
+		})
+	}
+	if seen == 0 {
+		t.Fatal("no edge-* fixture was found; this test would pass on an empty corpus")
+	}
+}
+
+// TestACorruptedBundleIsRefusedRatherThanEvaluated. A bundle is an archive with
+// an integrity manifest, and a damaged one must not become a report: nothing
+// can be said about a host from a file we cannot trust.
+func TestACorruptedBundleIsRefusedRatherThanEvaluated(t *testing.T) {
+	good := collectTo(t, hostFixture)
+	body, err := os.ReadFile(good)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		make func() []byte
+	}{
+		{"truncated to half", func() []byte { return body[:len(body)/2] }},
+		{"truncated to nothing", func() []byte { return nil }},
+		{"a flipped byte in the middle", func() []byte {
+			b := append([]byte(nil), body...)
+			b[len(b)/2] ^= 0xff
+			return b
+		}},
+		{"not an archive at all", func() []byte { return []byte("this is not a bundle\n") }},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "damaged.plb")
+			if err := os.WriteFile(path, tc.make(), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			code, stdout, stderr := run(t, "eval", path)
+			if code == cli.ExitOK {
+				t.Fatalf("a damaged bundle evaluated cleanly:\n%s", stdout)
+			}
+			if code != cli.ExitInternal {
+				t.Errorf("exit = %d, want %d: a bundle that will not open is an internal error, not a findings exit",
+					code, cli.ExitInternal)
+			}
+			if stdout != "" {
+				t.Errorf("a report was written from a bundle that could not be read:\n%s", stdout)
+			}
+			if stderr == "" {
+				t.Error("nothing was said about why the bundle was refused")
+			}
+		})
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/antaryx/plumbline/internal/collect"
 	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/system"
 )
@@ -48,6 +49,18 @@ func collectNSSwitch(s system.System, fs *fact.Set) {
 		// A partly-read routing table is worse than none: the line naming the
 		// directory service is as likely to be past the cap as before it.
 		n.State = fact.FileError
+		fs.Put(n)
+		return
+	}
+	if why := collect.NotText(res.Data); why != "" {
+		// Recorded as a state rather than a fact error, for the reason an
+		// absent file is: the routing table is only ever consulted to decide
+		// whether the local files are authoritative, and "we could not read
+		// the policy" already answers that with "no". A fact error here would
+		// take out FILESYS-0010 entirely instead of degrading its FAIL branch.
+		n.State = fact.FileError
+		n.Malformed = nil
+		n.Databases = nil
 		fs.Put(n)
 		return
 	}

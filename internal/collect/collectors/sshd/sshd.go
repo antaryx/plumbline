@@ -138,6 +138,17 @@ func collectConfig(ctx context.Context, s system.System) (fact.SSHDConfig, *fact
 		}
 	}
 
+	// A config file that is not text is the case that matters most in this
+	// collector, because of what the SSHD checks do when a keyword is absent:
+	// they report sshd's compiled-in default, which is the correct answer for
+	// a file that genuinely does not set the keyword and a confident wrong one
+	// for a file sshd would refuse to load at all. A host whose sshd_config
+	// contains a NUL is running the last configuration that parsed, or no sshd
+	// at all, and this scan cannot tell which — so it says so.
+	if why := collect.NotText(res.Data); why != "" {
+		return cfg, collect.MalformedError(fact.SSHDConfigID, DefaultConfigPath, why)
+	}
+
 	cfg.Installed = true
 	cfg.Digests = map[string]string{DefaultConfigPath: res.SHA256}
 	p := &parser{sys: s, cfg: &cfg, seen: map[string]bool{}}
@@ -172,6 +183,17 @@ func (p *parser) parseFile(ctx context.Context, path string, data []byte, depth 
 
 		keyword, value := splitDirective(line)
 		if keyword == "" {
+			continue
+		}
+		// A keyword with no argument is a fatal error for sshd, whatever the
+		// keyword is: sshd_config(5) defines none that takes zero arguments.
+		// Recording it is what lets a check tell "this file does not set the
+		// keyword" from "sshd would refuse to load this file at all", which
+		// are the same absence and opposite conclusions.
+		if strings.TrimSpace(value) == "" {
+			p.cfg.SyntaxErrors = append(p.cfg.SyntaxErrors, fact.ConfigLine{
+				File: path, Line: i + 1, Text: line,
+			})
 			continue
 		}
 
@@ -236,6 +258,15 @@ func (p *parser) expandInclude(ctx context.Context, patterns string, depth int) 
 				continue
 			}
 			res, err := p.sys.ReadFile(m, 0)
+			if err == nil && !res.Truncated && collect.NotText(res.Data) != "" {
+				// An include that is not text is recorded the same way an
+				// unreadable one is: the directives it would have contributed
+				// are unknown, and UnresolvedIncludes is what pushes a check
+				// asserting a keyword's absence to UNKNOWN rather than to the
+				// compiled default.
+				p.cfg.UnresolvedIncludes = append(p.cfg.UnresolvedIncludes, m)
+				continue
+			}
 			if err != nil || res.Truncated {
 				p.cfg.UnresolvedIncludes = append(p.cfg.UnresolvedIncludes, m)
 				continue

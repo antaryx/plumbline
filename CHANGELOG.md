@@ -11,7 +11,7 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-Catalog version **12**. Two pieces of v0.3.
+Catalog version **13**. Three pieces of v0.3.
 
 The engine work: the shared filesystem walker can now aggregate, which unlocks
 a class of check that was previously impossible to write without guessing.
@@ -22,7 +22,65 @@ the output into a parser** — add `--json`. It is called out again under
 *Changed* below, because a default that moves quietly is worse than one that
 moves loudly.
 
+The resilience work: a host whose configuration files are corrupted no longer
+produces confident verdicts about them. This changes verdicts on damaged hosts
+and is recorded in *Check corrections* below.
+
+### Check corrections
+- **Every check reading a configuration file now returns `UNKNOWN` where it
+  previously reported a verdict drawn from a file it could not really parse.**
+  A scan of a host with four kilobytes of random bytes in every config file
+  used to produce 22 `PASS` and 23 `FAIL` findings and **zero fact errors**;
+  it now produces five fact errors and no `PASS` or `FAIL` from any
+  content-reading module. Affected: anyone whose posture score was computed
+  over a host with a damaged `/etc/passwd`, `/etc/shadow`, `/etc/group`,
+  `sshd_config`, `rsyslog.conf`, `nsswitch.conf`, a PAM stack, a firewall
+  ruleset or a `sysctl.d` drop-in. Posture will move, and coverage will drop to
+  reflect what was actually readable — which is the correct figure and was not
+  being reported
+- **Every SSHD check now returns `UNKNOWN` over a configuration `sshd -t`
+  rejects**, including checks whose keyword the file appears to set. sshd
+  refuses a config file as a unit rather than skipping the bad line, so on such
+  a host the daemon runs whatever last parsed and the file on disk describes
+  nothing. Previously these reported sshd's compiled-in defaults, which is
+  correct for a valid file that omits a keyword and a confident wrong answer
+  for a file that never loads
+- **USERS-0006 no longer returns `PASS` over an `/etc/passwd` that is not an
+  account database.** It read the (true) observation "this file contains no NIS
+  import lines" off a file with no accounts in it at all. It now routes through
+  the module's `unknownIfIncomplete` gate like every other check here
+- **A required fact this build cannot decode is now `UNKNOWN(fact_version_mismatch)`
+  rather than a verdict.** Re-evaluating a bundle written by a newer Plumbline
+  reported `NOT_APPLICABLE: the SSH server is not configured on this host` —
+  a statement about the host manufactured from a decode failure
+
 ### Added
+- **`collect.NotText`, one gate on every collector's read path.** A NUL byte is
+  *proof* a file is not the text configuration it was read as — every consumer
+  of these files on Linux is C reading NUL-terminated strings, so the software
+  that acts on the file stops at that byte or refuses it, and any reading of
+  ours that continued past it would describe a configuration that is not in
+  force. Applied in the `users`, `sshd`, `logging`, `network`, `auth` and
+  `kernel` collectors. Invalid UTF-8 is deliberately **not** treated as
+  malformation: a GECOS field carries a Latin-1 name on older hosts, and
+  `sanitize` already handles those bytes correctly
+- **`fact.SSHDConfig.SyntaxErrors`** — non-blank, non-comment lines that are not
+  a keyword followed by an argument. `sshd_config(5)` defines no keyword taking
+  zero arguments, so each is fatal to `sshd -t`. Unrecognised keywords are
+  deliberately not recorded: the valid keyword set differs by OpenSSH release,
+  and calling a newer option a syntax error would report a fault on a host that
+  is merely more current than this build
+- **`fact.Opaque`** — the marker for a fact that is present, preserved, and not
+  interpretable by this build. An interface rather than a concrete type so that
+  `internal/catalog` need not import `internal/bundle` to evaluate anything.
+  `finding.ReasonFactVersion` was declared for this case and had never been
+  produced by anything
+- **Four `edge-*` fixtures** and module-wide tests over them. The tests are
+  module-wide rather than per-check on purpose: the per-check version of these
+  gates had already been forgotten three times — SSHD-0002 (the module's own
+  reference implementation), SSHD-0007 and USERS-0006 all read their fact
+  directly instead of through the shared funnel and so carried none of the
+  shared gates
 - **A human-readable terminal report, and it is now the default.** Running
   `plumbline scan` printed a `findings/v1` document, which is the right answer
   for a pipeline and the wrong one for the person who typed the command.
@@ -57,6 +115,17 @@ moves loudly.
   already named this file as a known limitation; it is now collected
 
 ### Changed
+- **`/etc/shadow` lines now require the nine fields `shadow(5)` defines.** The
+  parser accepted any line with two, which let arbitrary text containing a
+  single colon become an account with a password state — which is how four
+  kilobytes of random bytes produced ten accounts and a `FAIL` reporting weak
+  password hashes for people who do not exist
+- Firewall ruleset files containing a NUL are recorded as `SourceError` rather
+  than `SourcePresent`, so NETWORK-0001 no longer tells a host it has a
+  firewall configured when nftables would refuse to load the file
+- An unparseable rsyslog or journald drop-in is recorded as an unresolved
+  include rather than skipped, so one bad drop-in degrades the checks that
+  depend on it instead of reading as a file that configures nothing
 - **`--format` now defaults to `terminal` rather than `json` on `scan` and
   `eval`.** This is the one change in this release that can break a caller:
   anything piping `plumbline scan` into a JSON parser must add `--json` or
@@ -97,6 +166,11 @@ moves loudly.
   it is the same reconnaissance material the JSON is
 
 ### Documentation
+- `docs/DATA-MODEL.md` §3.1 documents what `parse` covers and, as importantly,
+  the three things deliberately *not* treated as malformation. §3.2 documents
+  `fact.Opaque` and the third state between present and missing
+- `docs/FIXTURES.md` describes the `edge-*` corpus and what each fixture
+  isolates
 - **`docs/ROADMAP.md` rewritten against reality.** It still described the
   project as pre-v0.1 with everything ahead of it. v0.1.0 and v0.2.0 are now
   marked complete with what each actually shipped, the v1 module table carries

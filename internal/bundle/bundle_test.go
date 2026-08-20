@@ -619,3 +619,46 @@ func TestRoundTripWalkerTallyFacts(t *testing.T) {
 		t.Errorf("KeysDropped = %d, want 11", gid.KeysDropped)
 	}
 }
+
+// TestAFactFromTheFutureIsUnknownRatherThanAbsent.
+//
+// A bundle written by a newer build carries facts this one cannot decode. The
+// reader preserves them verbatim, which is right — forwarding the bundle must
+// lose nothing. But a preserved fact still satisfies "the required fact is
+// present", so before WP-27 the check's Eval ran, its typed accessor returned
+// the zero value, and an sshd.config that could not be decoded was reported as
+// **NOT_APPLICABLE: the SSH server is not configured on this host** — a
+// statement about the host manufactured out of a decode failure.
+//
+// fact.Opaque is the marker that closes it, and finding.ReasonFactVersion is
+// the reason code that was declared for this case long before anything
+// produced it.
+func TestAFactFromTheFutureIsUnknownRatherThanAbsent(t *testing.T) {
+	u := bundle.UnknownFact{
+		ID:      fact.SSHDConfigID,
+		Version: 99,
+		Raw:     json.RawMessage(`{"installed":true,"directives":[]}`),
+	}
+
+	var op fact.Opaque = u
+	if op.OpaqueFact() != 99 {
+		t.Errorf("OpaqueFact = %d, want 99", op.OpaqueFact())
+	}
+
+	set := fact.NewSet()
+	set.Put(u)
+	got, isOpaque := set.Opaque(fact.SSHDConfigID)
+	if !isOpaque {
+		t.Fatal("a preserved undecodable fact does not report itself as opaque; a check would read the zero value out of it")
+	}
+	if got.OpaqueFact() != 99 {
+		t.Errorf("version = %d, want 99", got.OpaqueFact())
+	}
+
+	// A fact this build *can* decode must not be opaque, or every check on
+	// every host resolves to UNKNOWN.
+	set.Put(fact.SSHDConfig{Installed: true})
+	if _, isOpaque := set.Opaque(fact.SSHDConfigID); isOpaque {
+		t.Error("an ordinary decoded fact reports itself as opaque")
+	}
+}

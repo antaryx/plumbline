@@ -52,6 +52,15 @@ keyword is absent is prohibit-password: key-based root login remains possible.`,
 				Detail: "No sshd configuration found; the SSH server is not configured on this host.",
 			}
 		}
+		// This check reads the fact directly rather than through evaluate(),
+		// because its verdict depends on which of four values the keyword
+		// holds. That means the shared gates have to be repeated here, and
+		// forgetting one is silent — which is exactly what happened to this
+		// gate before there was a test asserting it for every check in the
+		// module (TestASyntaxErrorMakesEverySSHDCheckUnknown).
+		if len(cfg.SyntaxErrors) > 0 {
+			return syntaxError(cfg, "PermitRootLogin")
+		}
 
 		d, ok := cfg.Effective("PermitRootLogin")
 

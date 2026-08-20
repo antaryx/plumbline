@@ -56,6 +56,11 @@ sessions where no shell was ever started.`,
 		if !cfg.Installed {
 			return notApplicable()
 		}
+		// As in SSHD-0002: this check reads two keywords and so cannot use
+		// evaluate(), which means it carries the shared gates itself.
+		if len(cfg.SyntaxErrors) > 0 {
+			return syntaxError(cfg, "ClientAliveInterval")
+		}
 
 		interval, iOK := cfg.Effective("ClientAliveInterval")
 		count, cOK := cfg.Effective("ClientAliveCountMax")

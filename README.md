@@ -6,7 +6,7 @@ A deterministic, offline, evidence-first host security auditor for Linux.
 
 > **Status: v0.2.0 released; v0.3.0 in progress — pre-release, no stability
 > guarantees.** The catalog is the milestone: **79 checks across nine modules**
-> at catalog version 12, every one with PASS and FAIL fixtures enforced in CI,
+> at catalog version 13, every one with PASS and FAIL fixtures enforced in CI,
 > evaluated from a single filesystem traversal and a bounded set of
 > configuration reads.
 >
@@ -42,7 +42,7 @@ plumbline eval host.plb             # re-evaluate a bundle against today's catal
 The default output is a report for a person:
 
 ```
-plumbline 0.3.0-dev   catalog 12
+plumbline 0.3.0-dev   catalog 13
 
   host     auditbox   Debian GNU/Linux 12 (bookworm)
   root     /  (live host)
@@ -104,7 +104,7 @@ SUMMARY
   NOT_APPLICABLE     4
   SKIPPED            0
 
-  evaluated         79   checks in catalog 12
+  evaluated         79   checks in catalog 13
   posture         97.2   coverage 98.7% of applicable checks
 ```
 
@@ -165,6 +165,13 @@ That single decision buys things a live-evaluating scanner cannot have:
   hundreds of checks stays verifiable.
 
 And it says `UNKNOWN` when it cannot tell, instead of reporting `PASS`.
+
+That is load-bearing on damaged hosts, which is where scanners are least
+trustworthy and least tested. Point Plumbline at a machine whose configuration
+files are four kilobytes of random bytes each — a failed restore, a filesystem
+that lost its journal — and it names every file it could not parse and refuses
+to draw a verdict from any of them. It does not report that root login is
+disabled because the corrupted `sshd_config` "does not set" the keyword.
 
 Two examples of what that costs and what it buys. A filesystem walk that hits
 its inode budget makes every *absence* claim resolve to `UNKNOWN` while still

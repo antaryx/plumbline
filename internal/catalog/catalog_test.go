@@ -109,3 +109,59 @@ func TestOrdinaryTextIsUnchanged(t *testing.T) {
 		t.Errorf("ordinary evidence was altered: %+v", got.Evidence[0])
 	}
 }
+
+// TestAnOpaqueFactStopsTheCheckBeforeEval.
+//
+// The required-fact gate has three states to distinguish and had only two: a
+// fact that errored, and a fact that was never collected. The third — present,
+// preserved, and not interpretable by this build — passed the gate, and the
+// check then read the zero value out of its typed accessor and reported the
+// host as having no sshd at all.
+//
+// The gate is where this belongs rather than in each check, for the reason the
+// other two branches are there: a rule applied at every call site is a rule
+// that gets forgotten at one of them.
+func TestAnOpaqueFactStopsTheCheckBeforeEval(t *testing.T) {
+	evaluated := false
+	ck := catalog.Check{
+		ID: "TEST-0001", Module: "TEST", Title: "reads a fact",
+		BaseSeverity: finding.Medium,
+		Requires:     []fact.ID{fact.SSHDConfigID},
+		SinceCatalog: 1,
+		Eval: func(*fact.Set) catalog.Outcome {
+			evaluated = true
+			return catalog.Outcome{Result: finding.Pass, Detail: "nothing was wrong"}
+		},
+	}
+
+	set := fact.NewSet()
+	set.Put(opaqueFact{id: fact.SSHDConfigID, version: 99})
+
+	got := catalog.MustNew(ck).Evaluate(set)[0]
+	if evaluated {
+		t.Error("Eval ran over a fact this build cannot interpret")
+	}
+	if got.Result != finding.Unknown {
+		t.Fatalf("result = %s, want UNKNOWN: %s", got.Result, got.Detail)
+	}
+	if got.UnknownReason != finding.ReasonFactVersion {
+		t.Errorf("reason = %q, want %q", got.UnknownReason, finding.ReasonFactVersion)
+	}
+	if !strings.Contains(got.Detail, "99") {
+		t.Errorf("the detail does not name the version that could not be read: %s", got.Detail)
+	}
+	if len(got.Evidence) == 0 {
+		t.Error("UNKNOWN with no evidence")
+	}
+}
+
+// opaqueFact is a fact.Opaque that does not drag internal/bundle into this
+// package's imports. Evaluation must not depend on the serialisation layer.
+type opaqueFact struct {
+	id      fact.ID
+	version int
+}
+
+func (o opaqueFact) FactID() fact.ID  { return o.id }
+func (o opaqueFact) FactVersion() int { return o.version }
+func (o opaqueFact) OpaqueFact() int  { return o.version }

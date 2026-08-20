@@ -133,6 +133,15 @@ func read(s system.System, c candidate) fact.FirewallSource {
 
 	res, err := s.ReadFile(c.path, maxRead)
 	switch {
+	case err == nil && collect.NotText(res.Data) != "":
+		// A ruleset file that is not text is not a ruleset. SourceError rather
+		// than SourcePresent is the whole point: NETWORK-0001 counts present
+		// sources, and a file of random bytes reported as present would be a
+		// host told it has a firewall configured when nftables would refuse
+		// to load that file.
+		rec.State = fact.SourceError
+		rec.Msg = collect.NotText(res.Data)
+		return rec
 	case err == nil:
 		rec.State = fact.SourcePresent
 		rec.Digest = res.SHA256
@@ -161,7 +170,7 @@ func read(s system.System, c candidate) fact.FirewallSource {
 		parseUFW(&rec, lines)
 		// ufw's default policy lives in a second file, and a manager that is
 		// switched on with an accept default is the case this exists to catch.
-		if def, err := s.ReadFile(UFWDefaultPath, maxRead); err == nil {
+		if def, err := s.ReadFile(UFWDefaultPath, maxRead); err == nil && collect.NotText(def.Data) == "" {
 			parseUFWDefaults(&rec, strings.Split(string(def.Data), "\n"))
 		}
 	case fact.FirewallFirewalld:

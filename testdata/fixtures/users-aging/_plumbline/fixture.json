@@ -1,1 +1,3 @@
-{ "description": "Password aging policy in four states: root keeps shadow-utils' defaults (min 0, max 99999), alice has both fields empty, bob has a minimum greater than his maximum and is locked out by construction, and the locked system account daemon carries the same unbounded defaults but must be ignored because no password can authenticate it." }
+{
+  "description": "Password aging policy in four states: root keeps shadow-utils' defaults (min 0, max 99999), alice has both fields empty, bob has a minimum greater than his maximum and is locked out by construction, and the locked system account daemon carries the same unbounded defaults but must be ignored because no password can authenticate it. Every line carries the nine fields shadow(5) defines; a shorter line is recorded as malformed, which is what stops arbitrary text with a colon in it from being read as an account."
+}

@@ -121,6 +121,15 @@ func collectRsyslog(ctx context.Context, s system.System, fs *fact.Set) {
 
 	res, err := s.ReadFile(RsyslogPath, maxRead)
 	switch {
+	case err == nil && collect.NotText(res.Data) != "":
+		// rsyslog refuses to start on a configuration it cannot parse, so a
+		// file containing a NUL means the running daemon is using something
+		// other than what is on disk — or is not running. Reporting "no
+		// statement sets the log file mode" from those bytes would be the
+		// compiled-default problem in a second module.
+		fs.PutError(*collect.MalformedError(fact.RsyslogID, RsyslogPath, collect.NotText(res.Data)))
+		return
+
 	case err == nil:
 		p.cfg.Installed = true
 		p.cfg.Files = append(p.cfg.Files, RsyslogPath)
@@ -364,6 +373,14 @@ func (p *rsyslogParser) follow(ctx context.Context, pattern string, depth int) {
 			p.cfg.UnresolvedIncludes = append(p.cfg.UnresolvedIncludes, m+" ("+err.Error()+")")
 			continue
 		}
+		// One unparseable drop-in does not invalidate the main file, so it is
+		// recorded as unresolved rather than as a fact error: the statements
+		// it would have contributed are unknown, which is what a check
+		// asserting absence has to account for.
+		if why := collect.NotText(res.Data); why != "" {
+			p.cfg.UnresolvedIncludes = append(p.cfg.UnresolvedIncludes, m+" ("+why+")")
+			continue
+		}
 		p.cfg.Files = append(p.cfg.Files, m)
 		p.cfg.Digests[m] = res.SHA256
 		p.parse(ctx, m, string(res.Data), depth+1)
@@ -433,6 +450,11 @@ func collectJournald(s system.System, fs *fact.Set) {
 			continue
 		default:
 			j.UnresolvedIncludes = append(j.UnresolvedIncludes, f+" ("+err.Error()+")")
+			continue
+		}
+
+		if why := collect.NotText(res.Data); why != "" {
+			j.UnresolvedIncludes = append(j.UnresolvedIncludes, f+" ("+why+")")
 			continue
 		}
 

@@ -1,0 +1,6 @@
+# An edit interrupted halfway through. Every line here is plain text and the
+# file contains no NUL, so nothing about the bytes is suspicious.
+Port 22
+PermitRootLogin
+PasswordAuthentication no
+Match

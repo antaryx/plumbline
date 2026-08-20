@@ -656,6 +656,73 @@ type Error struct {
 Fact errors are stored in the bundle. A report six months later can still
 explain the gap, which is the difference between evidence and a screenshot.
 
+### 3.1 `parse` — a file that was read and is not what it claims to be
+
+`parse` covers two situations, and **there is deliberately no separate
+"malformed" kind for the second.** A reader could not act differently on the
+two, and `finding.UnknownReason` is part of `findings-v1`, so a second code
+meaning the same thing would be a permanent addition to a frozen public API
+that bought nothing.
+
+**Not text at all.** Every file this project parses is a line-oriented text
+configuration file, and every consumer of one on a Linux host — sshd, PAM,
+glibc's passwd and group parsers, rsyslog, systemd — is C reading
+NUL-terminated strings. So a NUL byte is *proof*, not a heuristic: the software
+that actually acts on the file stops at that byte or refuses the file, and any
+reading of ours that continued past it would describe a configuration that is
+not in force. `collect.NotText` is the single test, applied at each collector's
+read path, and it reports the offset because "somewhere in this file" is not
+something an operator can act on.
+
+Three things are deliberately **not** treated as malformation, because each
+would reject files that real hosts have:
+
+| Not rejected | Why |
+|---|---|
+| Invalid UTF-8 | A GECOS field on an older host carries a name in Latin-1. `internal/sanitize` already escapes such bytes on the way to a report, which is the correct handling; rejecting the file would report a broken account database on a host that merely has a European name in it |
+| A high proportion of control characters | That is a threshold, and a threshold is a guess. The NUL test needs none: one is enough |
+| An unrecognised keyword | Fatal to sshd, but the valid keyword set differs by OpenSSH release. Calling `SecurityKeyProvider` a syntax error reports a fault on a host that is merely more current than this build |
+
+**Read, parsed, and syntactically invalid.** A file can be perfectly good text
+and still not be the configuration in force. `SSHDConfig.SyntaxErrors` records
+non-blank, non-comment lines that are not a keyword followed by an argument —
+`sshd_config(5)` defines no keyword taking zero arguments, so each one is fatal
+to `sshd -t`. This matters because sshd rejects a configuration file **as a
+unit** rather than skipping the bad line: on such a host the daemon is running
+whatever configuration last parsed, or is not running at all, and neither is
+visible from disk. Every SSHD check therefore resolves to
+`UNKNOWN(unparseable_source)` — *including* the checks whose keyword the file
+does appear to set, because a correct directive two lines below a fatal error
+is not in force either.
+
+### 3.2 Present, preserved, and not interpretable
+
+There is a third state between "the fact is here" and "the fact is missing",
+and it had no representation until WP-27.
+
+A bundle written by a newer build carries facts this one cannot decode. The
+reader preserves them verbatim so that forwarding the bundle loses nothing,
+which is right. But a preserved fact satisfied "the required fact is present",
+so the check's `Eval` ran, its typed accessor returned the zero value, and an
+`sshd.config` that could not be decoded was reported as **`NOT_APPLICABLE`: the
+SSH server is not configured on this host** — a statement about the host
+manufactured out of a decode failure.
+
+`fact.Opaque` is the marker that closes it:
+
+```go
+type Opaque interface {
+    Fact
+    OpaqueFact() int // the version the producer declared
+}
+```
+
+It is an interface rather than a concrete type because the fact carrying it is
+produced by `internal/bundle`, and `internal/catalog` must not import the
+serialisation layer in order to evaluate anything. The required-fact gate tests
+for it and returns `UNKNOWN(fact_version_mismatch)` — a reason code that was
+declared for exactly this case long before anything produced it.
+
 ---
 
 ## 4. FactSet
@@ -671,6 +738,10 @@ f, nil, true   // present   → evaluate
 _, err, false  // failed    → UNKNOWN with err.Kind
 _, nil, false  // never run → UNKNOWN(fact_not_collected)
 ```
+
+A fourth state is handled by the gate rather than by `Get`: a fact that is
+present and **opaque** — see §3.2 — resolves to
+`UNKNOWN(fact_version_mismatch)` before `Eval` is entered.
 
 Collapsing the last two into "missing" is how scanners end up reporting `PASS`
 for things they never looked at. In practice the runner's required-fact gate

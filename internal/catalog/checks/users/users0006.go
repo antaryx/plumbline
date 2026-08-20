@@ -40,12 +40,19 @@ rather than reporting a PASS they cannot support.`,
 		p := passwdFact(fs)
 
 		if len(p.CompatEntries) == 0 {
-			return catalog.Outcome{
+			// Through the module's gate like every other PASS here. Without
+			// it, a file that is not an account database at all — an HTML
+			// error page written over /etc/passwd during a failed
+			// configuration-management run is the way this happens — parses
+			// into zero entries and zero compat lines, and this check reports
+			// that every account is defined locally. It is true of the file
+			// and false of the host.
+			return unknownIfIncomplete(p, catalog.Outcome{
 				Result: finding.Pass,
 				Detail: fmt.Sprintf(
 					"%s contains no NIS compatibility entries; every account it defines is defined locally.",
 					p.Path),
-			}
+			})
 		}
 
 		var (

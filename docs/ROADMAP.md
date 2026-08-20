@@ -4,11 +4,12 @@
 
 > **Where the project actually is — 2026-08-20.** `v0.2.0` is tagged and shipped
 > 78 checks across nine modules at catalog version 11. `main` is now ahead of
-> it at **79 checks, catalog version 12** (WP-25: walker aggregation and
-> FILESYS-0010), and the default output is a human-readable terminal report
-> with `--json` for pipelines (WP-26). The output schema is `findings-v1`, and
-> the tool runs offline with no network code path in any build. `v0.3.0` is
-> open; its scope is in the pre-1.0 section below.
+> it at **79 checks, catalog version 13**: walker aggregation and FILESYS-0010
+> (WP-25), a human-readable terminal report by default with `--json` for
+> pipelines (WP-26), and malformed-file handling across every parser (WP-27).
+> The output schema is `findings-v1`, and the tool runs offline with no network
+> code path in any build. `v0.3.0` is open; its scope is in the pre-1.0 section
+> below.
 >
 > This banner is updated by **every** work package that changes a module, a
 > check count or a catalog version. A roadmap that disagrees with `main` is
@@ -42,7 +43,7 @@ open and has begun. The schema is `findings-v1` throughout.
 |---|---|---|---|---|
 | v0.1.0 — walking skeleton | **complete** | 1 | 8 | tagged `v0.1.0` |
 | v0.2.0 — catalog machinery | **complete** | 11 | 78 | tagged `v0.2.0`, 2026-08-20 |
-| v0.3.0 — feature complete for v1 | **in progress** | 12 | 79 on `main` | — |
+| v0.3.0 — feature complete for v1 | **in progress** | 13 | 79 on `main` | — |
 
 ### v0.1.0 — Walking skeleton — **COMPLETE**
 
@@ -133,7 +134,7 @@ resilience work is only meaningful once there is a surface to be resilient at.
 
 #### 1. Engine maturation
 
-- ~~**Aggregating walker interests**~~ — **done, WP-25, catalog 12.** The walker
+- ~~**Aggregating walker interests**~~ — **done, WP-25.** The walker
   recorded rows: the first N inodes matching a pure predicate. That answers
   "show me the setuid binaries" and cannot answer "does every uid on disk
   resolve to an account", because the join is against a fact that does not
@@ -191,6 +192,14 @@ resilience work is only meaningful once there is a surface to be resilient at.
   neither is guaranteed to behave identically.
 - **Golden bundles for ≥6 distro/version combinations**, which is a v1 release
   criterion and cannot be back-filled quickly.
+- ~~**Malformed and corrupted input**~~ — **done, WP-27.** Every parser gates on
+  `collect.NotText` before parsing, so a file containing a NUL becomes
+  `fact.ErrParse` rather than an empty configuration; `SSHDConfig.SyntaxErrors`
+  records lines `sshd -t` rejects, so a config sshd would refuse to load no
+  longer reports compiled-in defaults; and `fact.Opaque` closes the gap where a
+  fact this build could not decode was read as the zero value and reported as
+  "not configured on this host". Four `edge-*` fixtures and module-wide tests
+  hold the rules.
 - **Determinism under adversarial ordering** — directory entries returned in a
   hostile order, duplicate mount points, `..` in mountinfo fields.
 - **Budget behaviour on a host that is genuinely large**: 2M+ inodes, and the
@@ -232,10 +241,10 @@ documentation and fixture expansion.
 | `SSHD` | 20 | **19** | Resolving `Include`, `Match` blocks and compiled defaults was the real work, and it is done |
 | `NETWORK` | 12 | **3** | Firewall state only so far. Listeners need a `/proc/net/*` collector, not a check |
 | `SERVICES` | 10 | **5** | systemd enablement symlinks read offline. OpenRC and sysvinit degrade gracefully but have no checks |
-| `FILESYS` | 14 | **9** | Consumes the shared walk. Unowned files needed walker aggregation and landed after the tag, at catalog 12 (WP-25) |
+| `FILESYS` | 14 | **9** | Consumes the shared walk. Unowned files needed walker aggregation and landed after the tag (WP-25) |
 | `LOGGING` | 8 | **5** | |
 | `CRON` | 8 | **5** | |
-| | **~120** | **78** | catalog version 11; `main` is at 79 / 12 |
+| | **~120** | **78** | catalog version 11; `main` is at 79 / 13 |
 
 **~120 checks was always a ceiling, not a target.** Cut to whatever fits the
 schedule; check count is the flex, correctness is not. The 42-check gap at

@@ -254,6 +254,11 @@ filesys-truncated          nothing wrong; driven with a tiny inode budget
 filesys-unowned            uid 4242 owns a tree no account claims → FAIL
 filesys-unowned-directory  the same disk, with nsswitch routing to SSSD → UNKNOWN
 
+edge-malformed-passwd      /etc/passwd is a saved HTML error page → UNKNOWN
+edge-binary-sshd           two good directives, then a NUL → fact error
+edge-sshd-syntax           valid text that sshd -t rejects → UNKNOWN
+edge-binary-everything     every parsed file is the same kilobyte of noise
+
 auth-rhel                  the good case, Red Hat layout, stacks reached by symlink
 auth-debian                the same host in the common-* layout — verdicts must match
 auth-weak                  every AUTH check fails
@@ -391,6 +396,39 @@ needed — without the first, a check that returned UNKNOWN unconditionally woul
 satisfy the second while being useless. This is the runbook's WP-23 rule
 mechanised: *a truncated walk can invalidate a negative result, never a
 positive one.*
+
+The four `edge-*` fixtures are the resilience corpus, and each isolates a
+different way a file can fail to mean what it appears to.
+
+`edge-binary-sshd` opens with `PermitRootLogin no` and `PasswordAuthentication
+no` and *then* a NUL. The ordering is the trap: a parser that reads past the
+NUL sees a hardened host, while sshd stops at that byte or refuses the file. A
+confident PASS drawn from bytes the system rejects is the worst outcome
+available in this module, which is why the good directives come first.
+
+`edge-sshd-syntax` contains no NUL at all. It is valid UTF-8, every line is
+readable, and `sshd -t` rejects it: `PermitRootLogin` carries no argument and
+`Match` carries no criteria. Two lines below the first error sits a perfectly
+correct `PasswordAuthentication no`, and it is **not in force** — sshd rejects a
+configuration file as a unit rather than skipping the bad line. Every SSHD
+check must be UNKNOWN over it, including that one.
+
+`edge-malformed-passwd` is the subtlest. `/etc/passwd` is a saved HTML 404 page
+— what a configuration-management run leaves behind when it fetches a template
+from a server that answered with an error and writes the body out anyway. It is
+text, it has no NUL, and every line simply fails to parse. The account list is
+therefore *empty*, and an empty account list satisfies every negative assertion
+the USERS module makes: only root has uid 0, no account has an empty password,
+no uid is duplicated. All true of the file; none true of the host.
+
+`edge-binary-everything` replaces every file the collectors parse with one
+kilobyte of pseudo-random bytes generated from a **fixed seed**, so the fixture
+is byte-identical on every checkout — a fixture that changes between clones
+cannot be the basis of an assertion. Its test asserts three things: the binary
+comes back, every unparseable fact is named in `fact_errors` with its path, and
+no check in a content-reading module reports PASS or FAIL. FILESYS, SERVICES and
+CRON legitimately still report: they read modes, ownership and symlinks, which
+these bytes cannot corrupt.
 
 `filesys-unowned` and `filesys-unowned-directory` are a matched pair, and the
 pair *is* the test. Their ownership is byte-for-byte identical: `/var/lib/oldapp`

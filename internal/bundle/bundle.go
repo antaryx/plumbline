@@ -218,6 +218,15 @@ type UnknownFact struct {
 func (u UnknownFact) FactID() fact.ID  { return u.ID }
 func (u UnknownFact) FactVersion() int { return u.Version }
 
+// OpaqueFact marks this as a fact that is present and not interpretable,
+// implementing fact.Opaque so that the catalog's required-fact gate refuses to
+// evaluate a check over it. Preserving an undecodable fact is what keeps a
+// bundle forwardable; letting a check read the zero value out of one is how a
+// decode failure became "the SSH server is not configured on this host".
+func (u UnknownFact) OpaqueFact() int { return u.Version }
+
+var _ fact.Opaque = UnknownFact{}
+
 // MarshalJSON returns the preserved bytes unaltered, so that writing a bundle
 // that was read is a faithful copy rather than a re-interpretation.
 func (u UnknownFact) MarshalJSON() ([]byte, error) {

@@ -735,3 +735,110 @@ func TestDeterminism(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// edge-case resilience (WP-27)
+// ---------------------------------------------------------------------------
+
+// TestAFileThatIsNotAnAccountDatabaseMakesEveryUsersCheckUnknown.
+//
+// This is the module-wide version of the rule, and it is written this way
+// because the per-check version had already been forgotten once: USERS-0006
+// returned PASS over an HTML error page saved as /etc/passwd, on the entirely
+// true observation that the file contains no NIS import lines.
+//
+// An empty account list satisfies every negative assertion this module makes —
+// only root has uid 0, no account has an empty password, no uid is duplicated
+// — and every one of those is a statement about a file rather than about the
+// host. A check added later that reads passwd and forgets unknownIfIncomplete
+// fails here on its first run.
+func TestAFileThatIsNotAnAccountDatabaseMakesEveryUsersCheckUnknown(t *testing.T) {
+	facts := collectFixture(t, "edge-malformed-passwd")
+
+	// The fact itself must have survived: the file is text and was read, so
+	// this is a parsed-into-nothing case rather than a fact error. If it were
+	// a fact error the runner's gate would produce the UNKNOWNs and this test
+	// would prove nothing about the checks.
+	p, ferr, ok := fact.Get[fact.Passwd](facts, fact.PasswdID)
+	if !ok {
+		t.Fatalf("users.passwd is a fact error (%v); this test is about a fact that parsed to nothing", ferr)
+	}
+	if len(p.Entries) != 0 {
+		t.Fatalf("the fixture parsed into %d account(s); it is supposed to parse into none", len(p.Entries))
+	}
+	if len(p.Malformed) == 0 {
+		t.Fatal("no line was recorded as malformed, so nothing would push a check to UNKNOWN")
+	}
+
+	for _, check := range all {
+		if !reads(check, fact.PasswdID) {
+			continue
+		}
+		got := catalog.MustNew(check).Evaluate(facts)[0]
+		if got.Result == finding.Pass || got.Result == finding.Fail {
+			t.Errorf("%s = %s over an /etc/passwd that is not an account database, want UNKNOWN. Every negative assertion in this module is satisfied by an empty account list, and none of them is true of the host:\n  %s",
+				check.ID, got.Result, got.Detail)
+		}
+	}
+}
+
+// TestBinaryAccountFilesBecomeFactErrors. Four kilobytes of random bytes holds
+// enough colons to parse into a dozen plausible accounts, and the module then
+// reports weak password hashes for people who do not exist.
+func TestBinaryAccountFilesBecomeFactErrors(t *testing.T) {
+	facts := collectFixture(t, "edge-binary-everything")
+
+	for _, id := range []fact.ID{fact.PasswdID, fact.ShadowID, fact.GroupID} {
+		e, bad := facts.Err(id)
+		if !bad {
+			t.Errorf("%s parsed a file of random bytes instead of recording a fact error", id)
+			continue
+		}
+		if e.Kind != fact.ErrParse {
+			t.Errorf("%s error kind = %q, want %q", id, e.Kind, fact.ErrParse)
+		}
+		if e.Path == "" {
+			t.Errorf("%s error names no path; an operator cannot act on it", id)
+		}
+	}
+
+	for _, check := range all {
+		got := catalog.MustNew(check).Evaluate(facts)[0]
+		if got.Result != finding.Unknown {
+			t.Errorf("%s = %s over binary account files, want UNKNOWN:\n  %s", check.ID, got.Result, got.Detail)
+		}
+		if got.UnknownReason != finding.ReasonParse {
+			t.Errorf("%s reason = %q, want %q", check.ID, got.UnknownReason, finding.ReasonParse)
+		}
+	}
+}
+
+// TestShadowRequiresTheFieldsTheFormatDefines. Accepting a line with two
+// fields let arbitrary text containing one colon become an account with a
+// password state, which is how a damaged file produced confident findings
+// instead of the malformed count that would have pushed them to UNKNOWN.
+func TestShadowRequiresTheFieldsTheFormatDefines(t *testing.T) {
+	facts := collectFixture(t, "users-malformed")
+	s, _, ok := fact.Get[fact.Shadow](facts, fact.ShadowID)
+	if !ok {
+		t.Fatal("users.shadow missing")
+	}
+	if len(s.Malformed) == 0 {
+		t.Error("the short line in the fixture was not recorded as malformed")
+	}
+	for _, e := range s.Entries {
+		if strings.Contains(e.Name, "garbage") {
+			t.Errorf("a line with one field became the account %q", e.Name)
+		}
+	}
+}
+
+// reads reports whether a check declares id among its required facts.
+func reads(c catalog.Check, id fact.ID) bool {
+	for _, r := range c.Requires {
+		if r == id {
+			return true
+		}
+	}
+	return false
+}

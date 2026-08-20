@@ -21,6 +21,14 @@ type Directive struct {
 	MatchCriteria string `json:"match_criteria,omitempty"`
 }
 
+// ConfigLine locates one line of a configuration file, with the text as read.
+// It is what lets a finding cite the line an operator has to go and fix.
+type ConfigLine struct {
+	File string `json:"file"`
+	Line int    `json:"line"`
+	Text string `json:"text"`
+}
+
 // SSHDConfig is the parsed, include-resolved sshd configuration.
 type SSHDConfig struct {
 	// Installed reports whether an sshd configuration was found at all. When
@@ -36,6 +44,25 @@ type SSHDConfig struct {
 	// could not be read. A check whose keyword might live in an unresolved
 	// include must resolve to UNKNOWN, not PASS.
 	UnresolvedIncludes []string `json:"unresolved_includes,omitempty"`
+
+	// SyntaxErrors records non-blank, non-comment lines that are not a
+	// keyword followed by an argument.
+	//
+	// **This is the field that decides whether the rest of the fact means
+	// anything.** sshd_config(5) defines every keyword as taking at least one
+	// argument, so a bare keyword on a line is a fatal error: `sshd -t` fails,
+	// sshd refuses to load the file, and the daemon is either still running
+	// the last configuration that parsed or is not running at all. Either way
+	// the file on disk is *not* the configuration in force, and reporting
+	// sshd's compiled-in default for a keyword the file does not set —
+	// correct for a valid file — becomes a confident wrong answer.
+	//
+	// Only the bare-keyword form is recorded, deliberately. An *unrecognised*
+	// keyword is also fatal to sshd, but the valid keyword set differs by
+	// OpenSSH release, and calling `SecurityKeyProvider` a syntax error would
+	// report a fault on a host that is merely more current than this build.
+	// The bare-keyword rule needs no such list and cannot drift.
+	SyntaxErrors []ConfigLine `json:"syntax_errors,omitempty"`
 	// Digests maps each file in Files to the sha256 of the bytes that were
 	// read from it. A check is a pure function and cannot hash anything
 	// itself, so this is the only way a finding can cite evidence an auditor

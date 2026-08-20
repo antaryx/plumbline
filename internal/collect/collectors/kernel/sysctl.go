@@ -343,6 +343,17 @@ func readConfigFile(s system.System, file string, sc *fact.Sysctl) {
 		})
 		return
 	}
+	// Recorded as unreadable rather than skipped, so that KERNEL-0007's
+	// running-versus-configured comparison keeps its "one of these is
+	// outstanding" state. Skipping it would let a sysctl.d file full of
+	// garbage read as a file that configures nothing, and a parameter set
+	// there would be reported as unconfigured drift.
+	if why := collect.NotText(res.Data); why != "" {
+		sc.UnreadableFiles = append(sc.UnreadableFiles, fact.SysctlUnreadableFile{
+			File: file, Kind: fact.ErrParse, Msg: why,
+		})
+		return
+	}
 
 	sc.Files = append(sc.Files, file)
 	sc.Digests[file] = res.SHA256

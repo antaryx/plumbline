@@ -2,6 +2,7 @@ package sshd_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -670,5 +671,129 @@ func TestModuleDeterminism(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// edge-case resilience (WP-27)
+// ---------------------------------------------------------------------------
+
+// TestASyntaxErrorMakesEverySSHDCheckUnknown.
+//
+// sshd rejects a configuration file **as a unit**. It does not skip the bad
+// line and honour the rest, so on a host whose sshd_config carries a syntax
+// error the daemon is running whatever configuration last parsed successfully,
+// or is not running at all — and neither of those is visible from disk.
+//
+// That makes both of this module's normal conclusions wrong at once. A keyword
+// the file does not set does *not* fall back to sshd's compiled-in default,
+// because the file was never loaded; and a keyword the file does set is not in
+// force either. `edge-sshd-syntax` is built to catch the second, which is the
+// easier one to get wrong: it contains a correct `PasswordAuthentication no`
+// two lines below a fatal error.
+//
+// The test is module-wide rather than per-check because the per-check version
+// was already forgotten twice — SSHD-0002 and SSHD-0007 read the fact directly
+// instead of through evaluate(), so they carried none of the shared gates.
+func TestASyntaxErrorMakesEverySSHDCheckUnknown(t *testing.T) {
+	facts := collectFixture(t, "edge-sshd-syntax")
+
+	cfg, ferr, ok := fact.Get[fact.SSHDConfig](facts, fact.SSHDConfigID)
+	if !ok {
+		t.Fatalf("sshd.config is a fact error (%v); this test is about a file that parsed", ferr)
+	}
+	if len(cfg.SyntaxErrors) == 0 {
+		t.Fatal("no syntax error was recorded, so nothing would push a check to UNKNOWN")
+	}
+	// The trap has to actually be present, or the interesting half of this
+	// test is vacuous.
+	if _, present := cfg.Effective("PasswordAuthentication"); !present {
+		t.Fatal("the fixture no longer sets PasswordAuthentication; the 'present but not in force' case is untested")
+	}
+
+	for _, check := range all {
+		got := catalog.MustNew(check).Evaluate(facts)[0]
+		if got.Result != finding.Unknown {
+			t.Errorf("%s = %s over a config sshd would refuse to load, want UNKNOWN. sshd rejects the file as a unit, so neither a value it sets nor a value it omits describes the running daemon:\n  %s",
+				check.ID, got.Result, got.Detail)
+			continue
+		}
+		if got.UnknownReason != finding.ReasonParse {
+			t.Errorf("%s reason = %q, want %q", check.ID, got.UnknownReason, finding.ReasonParse)
+		}
+		if len(got.Evidence) == 0 {
+			t.Errorf("%s: UNKNOWN with no evidence; the operator cannot see which line to fix", check.ID)
+		}
+		if !strings.Contains(got.Detail, "sshd -t") {
+			t.Errorf("%s does not tell the operator how to reproduce it:\n  %s", check.ID, got.Detail)
+		}
+	}
+}
+
+// TestBinaryConfigBecomesAFactError, and the whole module with it.
+//
+// edge-binary-sshd opens with two valid, secure directives and then a NUL.
+// That ordering is the point: a parser that reads past the NUL sees
+// `PermitRootLogin no` and reports a hardened host, while sshd stops at that
+// byte or refuses the file outright. A confident PASS drawn from bytes the
+// system rejects is the worst outcome available here.
+func TestBinaryConfigBecomesAFactError(t *testing.T) {
+	facts := collectFixture(t, "edge-binary-sshd")
+
+	e, bad := facts.Err(fact.SSHDConfigID)
+	if !bad {
+		t.Fatal("a config file containing a NUL was parsed instead of being recorded as a fact error")
+	}
+	if e.Kind != fact.ErrParse {
+		t.Errorf("kind = %q, want %q", e.Kind, fact.ErrParse)
+	}
+	if !strings.Contains(e.Msg, "NUL") {
+		t.Errorf("the message does not say what is wrong with the file: %q", e.Msg)
+	}
+	if e.Path == "" {
+		t.Error("the fact error names no path")
+	}
+
+	for _, check := range all {
+		got := catalog.MustNew(check).Evaluate(facts)[0]
+		if got.Result != finding.Unknown {
+			t.Errorf("%s = %s over a binary sshd_config, want UNKNOWN:\n  %s", check.ID, got.Result, got.Detail)
+		}
+		if got.UnknownReason != finding.ReasonParse {
+			t.Errorf("%s reason = %q, want %q", check.ID, got.UnknownReason, finding.ReasonParse)
+		}
+	}
+}
+
+// TestValidConfigsRecordNoSyntaxErrors is the other half of the rule, and the
+// half that would make the module useless if it broke. A gate that fires on
+// every host reports nothing about any of them.
+// It ranges over every sshd fixture in the corpus rather than a written-out
+// list, so a fixture added later is covered without anyone remembering to add
+// it here — which is the same reason the two tests above are module-wide.
+func TestValidConfigsRecordNoSyntaxErrors(t *testing.T) {
+	entries, err := os.ReadDir(fixtureRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() || !strings.HasPrefix(name, "sshd-") {
+			continue
+		}
+		facts := collectFixture(t, name)
+		cfg, _, ok := fact.Get[fact.SSHDConfig](facts, fact.SSHDConfigID)
+		if !ok || !cfg.Installed {
+			continue // unreadable or absent; a different test's subject
+		}
+		checked++
+		if len(cfg.SyntaxErrors) > 0 {
+			t.Errorf("%s: a valid configuration was reported as having %d syntax error(s): %+v. A gate that fires on ordinary hosts reports nothing about any of them",
+				name, len(cfg.SyntaxErrors), cfg.SyntaxErrors)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no sshd fixture was examined; this test would pass on an empty corpus")
 	}
 }
