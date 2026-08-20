@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/klauspost/compress/zstd"
 
@@ -1175,5 +1176,180 @@ func TestAStaleSuppressionIsReported(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "matched no failing finding") {
 		t.Errorf("a stale rule was not reported: %q", stderr)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// diff (WP-30)
+// ---------------------------------------------------------------------------
+
+// bundleOf collects a fixture into a bundle and returns the path.
+func bundleOf(t *testing.T, root string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "b.plb")
+	// The exit code is not asserted: several fixtures collect degraded (exit
+	// 4) because a collector cannot read something the fixture deliberately
+	// withholds, and a degraded collection still produces a bundle worth
+	// diffing. What matters is that the file exists.
+	run(t, "collect", "--root", root, "-o", path)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("collect %s produced no bundle: %v", root, err)
+	}
+	return path
+}
+
+// TestDiffReportsTheTransitionAndBothItsEnds is the acceptance criterion.
+// Comparing a hardened host to a broken one must name the checks that moved,
+// show what each was as well as what it became, and put a posture delta beside
+// a coverage delta.
+func TestDiffReportsTheTransitionAndBothItsEnds(t *testing.T) {
+	oldB := bundleOf(t, "../../testdata/fixtures/sshd-hardened")
+	newB := bundleOf(t, failFixture)
+
+	code, stdout, stderr := run(t, "diff", oldB, newB)
+	if code != cli.ExitOK {
+		t.Fatalf("exit = %d: %s", code, stderr)
+	}
+	for _, want := range []string{
+		"NEW FAILURE",
+		"SSHD-0002",
+		"PASS → FAIL", // both ends of the transition, not just the new one
+		"posture",
+		"coverage", // posture is never shown without it
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("the diff omits %q:\n%s", want, stdout)
+		}
+	}
+}
+
+// TestDiffOfABundleWithItselfIsEmpty. The strongest statement of determinism
+// available: the same facts through the same catalog must move nothing.
+func TestDiffOfABundleWithItselfIsEmpty(t *testing.T) {
+	b := bundleOf(t, hostFixture)
+
+	code, stdout, _ := run(t, "diff", b, b)
+	if code != cli.ExitOK {
+		t.Fatalf("exit = %d", code)
+	}
+	if !strings.Contains(stdout, "No change") {
+		t.Errorf("a bundle diffed against itself reported changes:\n%s", stdout)
+	}
+	for _, mustNot := range []string{"NEW FAILURE", "RESOLVED", "REGRESSED"} {
+		if strings.Contains(stdout, mustNot) {
+			t.Errorf("the diff of a bundle with itself contains %q:\n%s", mustNot, stdout)
+		}
+	}
+}
+
+// TestDiffIsDeterministic, end to end. A nightly job that produces a different
+// diff each run for an unchanged pair is a job people stop reading.
+func TestDiffIsDeterministic(t *testing.T) {
+	oldB := bundleOf(t, "../../testdata/fixtures/sshd-hardened")
+	newB := bundleOf(t, failFixture)
+
+	_, first, _ := run(t, "diff", oldB, newB)
+	for i := 0; i < 5; i++ {
+		if _, got, _ := run(t, "diff", oldB, newB); got != first {
+			t.Fatalf("run %d differs from the first", i)
+		}
+	}
+}
+
+// TestDiffRefusesAMissingBundle, and says which of the two it was. "no such
+// file" is not a useful message from a command that took two paths.
+func TestDiffRefusesAMissingBundle(t *testing.T) {
+	real := bundleOf(t, hostFixture)
+	missing := filepath.Join(t.TempDir(), "nope.plb")
+
+	for _, tc := range []struct{ name, a, b, want string }{
+		{"the old one", missing, real, "OLD"},
+		{"the new one", real, missing, "NEW"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, _, stderr := run(t, "diff", tc.a, tc.b)
+			if code != cli.ExitInternal {
+				t.Errorf("exit = %d, want %d", code, cli.ExitInternal)
+			}
+			if !strings.Contains(stderr, tc.want) {
+				t.Errorf("the error does not say which bundle was missing: %q", stderr)
+			}
+		})
+	}
+}
+
+// TestDiffNeedsExactlyTwoArguments.
+func TestDiffNeedsExactlyTwoArguments(t *testing.T) {
+	b := bundleOf(t, hostFixture)
+	for _, args := range [][]string{{"diff"}, {"diff", b}, {"diff", b, b, b}} {
+		if code, _, _ := run(t, args...); code != cli.ExitUsage {
+			t.Errorf("%v: exit = %d, want %d", args, code, cli.ExitUsage)
+		}
+	}
+}
+
+// TestDiffSeesASuppressionLapseBetweenTwoRuns is the transition that only
+// exists because expiry is measured against each bundle's own scan time. One
+// suppression file, two moments, two answers — and the diff shows the second
+// one as a regression rather than as somebody having broken something.
+func TestDiffSeesASuppressionLapseBetweenTwoRuns(t *testing.T) {
+	oldB := bundleOf(t, failFixture)
+	newB := bundleOf(t, failFixture)
+
+	// Rewrite the OLD bundle's scan time to before the expiry and the NEW
+	// bundle's to after it. Both bundles hold identical facts, so any change
+	// the diff reports can only have come from the acceptance lapsing.
+	rewriteScanTime(t, oldB, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	rewriteScanTime(t, newB, time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC))
+
+	fps, _ := failuresOf(t, failFixture)
+	path := suppressAll(t, fps, "accepted until the June window", "2026-06-30T00:00:00Z")
+
+	code, stdout, _ := run(t, "diff", oldB, newB, "--suppress", path)
+	if code != cli.ExitOK {
+		t.Fatalf("exit = %d", code)
+	}
+	if !strings.Contains(stdout, "REGRESSED") {
+		t.Errorf("a lapsed acceptance did not show as a regression:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "expired 2026-06-30T00:00:00Z") {
+		t.Errorf("the diff does not say the acceptance expired, so the change looks like a break:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "NEW FAILURE") {
+		t.Errorf("a lapsed acceptance was reported as a new failure:\n%s", stdout)
+	}
+}
+
+// TestDiffHasNoJsonOutputYet. Rendering the comparison as a document would be
+// a second public API, and findings/v1 does not describe one. Refusing beats
+// emitting a shape nothing has agreed to and that a pipeline would depend on.
+func TestDiffHasNoJsonOutputYet(t *testing.T) {
+	b := bundleOf(t, hostFixture)
+	if code, _, _ := run(t, "diff", b, b, "--json"); code != cli.ExitUsage {
+		t.Errorf("exit = %d, want %d", code, cli.ExitUsage)
+	}
+}
+
+// rewriteScanTime rewrites a bundle's recorded scan start, which is the moment
+// suppression expiry is measured against.
+//
+// It goes through bundle.Read and bundle.Write rather than editing bytes, so
+// the integrity digests are recomputed and the result is a bundle the reader
+// will accept. Two bundles that differ only in their timestamp is not a state
+// a test can reach by collecting twice — the clock does not cooperate — and it
+// is exactly the state the lapse transition needs.
+func rewriteScanTime(t *testing.T, path string, at time.Time) {
+	t.Helper()
+	b := readBundle(t, path)
+	b.Manifest.Scan.Started = at
+	b.Manifest.Scan.Finished = at.Add(time.Second)
+
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("reopening %s: %v", path, err)
+	}
+	defer f.Close()
+	if err := bundle.Write(f, b); err != nil {
+		t.Fatalf("rewriting %s: %v", path, err)
 	}
 }

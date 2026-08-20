@@ -15,6 +15,30 @@ explanation in this file is a defect.
 suppressions first, then `diff`, then the catalog-legibility commands.
 
 ### Added
+- **`plumbline diff OLD NEW` (WP-30).** Compares two bundles and reports only
+  what moved, in five categories: `NEW FAILURE`, `REGRESSED`,
+  `VERDICT CHANGED`, `NEWLY SUPPRESSED` and `RESOLVED`. Each change shows both
+  ends of its transition, and the summary carries a posture delta beside a
+  coverage delta.
+
+  **Both sides are re-evaluated with today's catalog**, so a check whose logic
+  was corrected between the two collections cannot appear as the host having
+  changed. There is consequently no catalog-drift flag.
+
+  A suppressed finding is compared by `suppression.original_result`, so
+  accepting a risk diffs as an acceptance rather than as a fix — and a rule that
+  lapsed between the two collections shows as `REGRESSED` rather than as
+  somebody having broken something.
+
+  `VERDICT CHANGED` (`FAIL` ↔ `UNKNOWN`) is not one of the four transitions the
+  work package named. It is here because `UNKNOWN` leaves the posture
+  denominator and `FAIL` does not, so without it a host could show a posture
+  delta with no change listed to explain it.
+
+  Terminal output only; `--json` is a usage error, because rendering a
+  comparison as a document would be a second public API and `findings/v1` does
+  not describe one.
+
 - **Acknowledgeable suppressions (WP-29).** `--suppress PATH` applies a
   `suppressions/v1` file mapping a finding fingerprint to a justification and an
   optional expiry.

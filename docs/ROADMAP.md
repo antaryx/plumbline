@@ -58,7 +58,7 @@ lynis-style CLI overhaul — and carries feature freeze. The schema is
 | v0.2.0 — catalog machinery | **complete** | 11 | 78 | tagged `v0.2.0`, 2026-08-20 |
 | v0.3.0 — engine maturation and resilience | **complete** | 13 | 79 | tagged `v0.3.0`, 2026-08-20 |
 | v0.3.1 — verification harness repairs | **complete** | 13 | 79 | tagged `v0.3.1`, 2026-08-20; no behaviour change |
-| v0.4.0 — feature complete for v1 | **in progress** | 13 | 79 | WP-28 lynis-style CLI overhaul; WP-29 suppressions |
+| v0.4.0 — feature complete for v1 | **in progress** | 13 | 79 | WP-28 lynis CLI; WP-29 suppressions; WP-30 `diff` |
 
 ### v0.1.0 — Walking skeleton — **COMPLETE**
 
@@ -241,7 +241,13 @@ moved, the emphasis did not. See `docs/CLI-SPEC.md` §Output.
   finding is how a finding gets lost, which is the same failure this project
   refuses everywhere else. De-risked by `finding.Fingerprint`, which is already
   stable and frozen.
-- **`plumbline diff`** — bundle to bundle. Bundles already exist and are
+- **`plumbline diff` — DONE (WP-30, 2026-08-20).** `plumbline diff OLD NEW`
+  re-evaluates both bundles with today's catalog and reports only what moved,
+  in five categories, with a posture delta beside a coverage delta. Suppression
+  state is part of the comparison: a lapsed acceptance shows as `REGRESSED`
+  rather than as a new failure. Specified in `CLI-SPEC.md` §4.
+
+  *Original scoping:* bundle to bundle. Bundles already exist and are
   already byte-deterministic, so this is the payoff of a design that is
   finished rather than new work on it.
 - **Exit code contract tested per branch.** Partly covered; the ladder needs a

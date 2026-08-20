@@ -302,24 +302,82 @@ with no network and no privileges, and CI asserts both.
 ## 4. `diff`
 
 ```
-plumbline diff OLD NEW [--format ...]
+plumbline diff OLD NEW [--suppress FILE] [--no-color] [-o PATH]
 ```
 
-Accepts two bundles or two findings documents. Reports four categories,
-**rendered separately and never merged**:
+Compares two **bundles** and reports only what moved. Unchanged findings are
+never printed: a diff that lists everything is a report.
 
-| Category | Meaning |
-|---|---|
-| Newly failing | Was `PASS`, now `FAIL` — the actionable one |
-| Resolved | Was `FAIL`, now `PASS` |
-| New checks | Did not exist in the old catalog version |
-| Retired checks | Present before, absent now |
+**Both sides are re-evaluated with today's catalog.** A bundle stores facts, not
+verdicts, so `diff` runs the current catalog over each one. A check whose logic
+was corrected between the two collections therefore cannot appear as the host
+having changed, because the same code judged both. This is also why there is no
+`--allow-catalog-drift` flag and no cross-catalog annotation: there is no drift
+to allow. (An earlier draft of this spec described such a flag, and described
+diffing two rendered findings documents. Both were dropped for this reason —
+comparing two documents means comparing verdicts from two possibly-different
+catalogs, which is precisely the confusion re-evaluation removes.)
 
-Matching is by fingerprint, which is stable across verdict changes by design.
+Findings are matched by **fingerprint**, which is stable across verdict changes
+by design. A suppressed finding is compared by `suppression.original_result` —
+the verdict the check actually reached — so accepting a risk diffs as an
+acceptance rather than as a fix.
 
-Comparing scores across catalog versions is **refused** unless
-`--allow-catalog-drift` is given, and even then the output is annotated:
-`posture 71 → 68 (catalog 16 → 17: +4 checks — not directly comparable)`.
+### Categories
+
+Reported in this order, most urgent first, each rendered separately and never
+merged:
+
+| Category | Meaning | Colour |
+|---|---|---|
+| `NEW FAILURE` | Was not failing, now `FAIL` or `UNKNOWN` | red |
+| `REGRESSED` | Was an accepted risk; the rule expired or was removed | yellow |
+| `VERDICT CHANGED` | Failing before and now, but `FAIL` ↔ `UNKNOWN` | dim |
+| `NEWLY SUPPRESSED` | Was failing; an operator has since accepted it | cyan |
+| `RESOLVED` | Was failing; now `PASS`, `NOT_APPLICABLE`, or gone | green |
+
+`VERDICT CHANGED` is not a transition anybody asks for, and it exists because
+without it the report contradicts itself: `UNKNOWN` leaves the posture
+denominator and `FAIL` does not, so a check sliding between them moves the score
+with no change listed to explain it. It is also the transition that matters most
+on its own terms — the tool has stopped being able to tell.
+
+Each change is shown with **both ends** of its transition
+(`[ PASS → FAIL ]`, `[ SUPPRESSED → FAIL ]`, `[ ABSENT → FAIL ]`), because
+"resolved" alone does not distinguish a check that started passing from one
+whose subject stopped existing.
+
+### Joining the two sets
+
+A fingerprint is `hash(check_id, subject)`, and several checks in the catalog
+set a subject only when they have something to point at — `SSHD-0003` reports
+subject `""` when it passes and `"PasswordAuthentication"` when it fails. The
+same check on the same host therefore fingerprints differently either side of a
+verdict change.
+
+`diff` joins by fingerprint first, then makes a second pass over what is left:
+when a check has **exactly one** unmatched finding on each side, the two are
+paired. That is precisely the host-wide case above. A check reporting several
+subjects at once is never paired this way, because guessing which path became
+which would invent a transition that did not happen.
+
+### Suppressions
+
+`--suppress` applies to both sides, with expiry measured against **each
+bundle's own scan time**. One file, two moments, two answers — which is what
+makes `REGRESSED` observable: a rule that lapsed between the two collections
+suppresses the older side and not the newer one.
+
+### Output
+
+Terminal only. `--json` is a **usage error**: rendering a comparison as a
+document would be a second public API and `findings/v1` does not describe one.
+Emitting an unagreed shape that a pipeline would then depend on is worse than
+refusing.
+
+`diff` exits `0` whatever it finds, and `70` if a bundle is missing or corrupt.
+It carries no gate flags — the gates live on `scan` and `eval`, which is where
+a verdict about a host belongs.
 
 ---
 

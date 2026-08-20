@@ -72,6 +72,7 @@ const (
 	ansiRed    = "\033[31m"
 	ansiGreen  = "\033[32m"
 	ansiYellow = "\033[33m"
+	ansiCyan   = "\033[36m"
 )
 
 // Tool identifies the binary that produced the report.
@@ -453,7 +454,7 @@ func (p *printer) scanPhase(findings []finding.Finding) {
 			title := truncate(cell(f.Title), titleWidth)
 			p.printf("  - %s%s%s\n",
 				pad(title, titleWidth),
-				strings.Repeat(" ", statusGap),
+				spaces(statusGap),
 				p.paint(findingColor(f), padLeft(statusToken(f), sw)))
 			// Line by line, so a slow terminal shows the audit progressing
 			// instead of sitting blank and then printing everything at once.
@@ -693,7 +694,7 @@ func (p *printer) field(label, value string) {
 // continuation is a value line with no label, aligned under the values above
 // it: 6 indent + 2 dash + label + 2 for ": ".
 func (p *printer) continuation(value string) {
-	p.line(strings.Repeat(" ", 6+2+fieldLabel+2) + value)
+	p.line(spaces(6+2+fieldLabel+2) + value)
 }
 
 func (p *printer) fieldWrapped(label, value string) {
@@ -1050,6 +1051,15 @@ func visibleWidth(s string) int {
 		}
 	}
 	return n
+}
+
+// spaces is strings.Repeat(" ", n) with a guard, because a negative width
+// computed from a grid is a panic rather than a misaligned line.
+func spaces(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strings.Repeat(" ", n)
 }
 
 // pad right-pads s to w visible columns. A string already at or over the width
