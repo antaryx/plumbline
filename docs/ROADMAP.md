@@ -2,12 +2,17 @@
 
 **Three stable majors.** Each is a complete, defensible product on its own. If development stops after any of them, what exists is still worth using.
 
-> **Where the project actually is — 2026-08-20.** `v0.3.0` is tagged: **79
+> **Where the project actually is — 2026-08-20.** `v0.3.1` is tagged: **79
 > checks across nine modules at catalog version 13**, a human-readable terminal
 > report by default with `--json` for pipelines, and a scanner that refuses to
 > draw a verdict from a file it could not really parse. The output schema is
 > `findings-v1`, and the tool runs offline with no network code path in any
 > build.
+>
+> `v0.3.1` changed no behaviour. It repaired the verification harness: `v0.3.0`
+> was tagged with a red pipeline, three fixtures whose FAIL case existed only
+> on the author's machine, and one whose verdict depended on the uid of
+> whoever cloned the repository. All twelve CI jobs now pass on `main`.
 >
 > **`v0.3.0` was re-scoped on the way to being tagged.** It was originally
 > "feature complete for v1" and shipped four of eighteen items; feature freeze
@@ -42,15 +47,16 @@ There were three until v0.3.0 was tagged. The fourth exists because v0.3.0 shipp
 Tagged and released as pre-releases so the pipeline gets exercised, but with an
 explicit "no stability guarantees" banner.
 
-**Status at 2026-08-20:** v0.1.0, v0.2.0 and v0.3.0 are complete and tagged.
-v0.4.0 is next and carries feature freeze. The schema is `findings-v1`
-throughout.
+**Status at 2026-08-20:** v0.1.0, v0.2.0, v0.3.0 and the v0.3.1 patch are
+complete and tagged. v0.4.0 is next and carries feature freeze. The schema is
+`findings-v1` throughout.
 
 | Milestone | State | Catalog | Checks | Shipped |
 |---|---|---|---|---|
 | v0.1.0 — walking skeleton | **complete** | 1 | 8 | tagged `v0.1.0` |
 | v0.2.0 — catalog machinery | **complete** | 11 | 78 | tagged `v0.2.0`, 2026-08-20 |
 | v0.3.0 — engine maturation and resilience | **complete** | 13 | 79 | tagged `v0.3.0`, 2026-08-20 |
+| v0.3.1 — verification harness repairs | **complete** | 13 | 79 | tagged `v0.3.1`, 2026-08-20; no behaviour change |
 | v0.4.0 — feature complete for v1 | next | 13+ | — | — |
 
 ### v0.1.0 — Walking skeleton — **COMPLETE**

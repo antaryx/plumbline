@@ -16,6 +16,84 @@ suppressions first, then `diff`, then the catalog-legibility commands.
 
 ---
 
+## [0.3.1] — 2026-08-20
+
+**Verification harness repairs. No change to the tool.** Catalog version 13
+unchanged, 79 checks unchanged, schema `findings-v1` unchanged, no check's
+verdict logic touched. A scan of your host produces byte-identical output to
+`v0.3.0`.
+
+This release exists because `v0.3.0` shipped with a red pipeline, and a
+security auditor whose own verification does not pass is not one you should
+trust. Everything below was a defect in the test corpus or the CI harness. Two
+of them had been failing on every CI run since the checks were written, and
+passing on every developer machine — which is the interesting part.
+
+### The fixture corpus did not survive a git checkout
+
+Three FILESYS checks returned `PASS` on a fresh clone and `FAIL` in the
+working tree that authored them. Git cannot store an empty directory and does
+not store files nobody added, so `filesys-sticky/var/spool/upload`,
+`filesys-system-dir/etc/cron.d` and `filesys-suid-writable/opt/vendor/helper`
+did not exist in the tree CI checks out. Each check correctly found nothing
+wrong with a subject that was not there. **The FAIL half of those fixtures
+existed only on one machine**, so rule 5 was satisfied on paper and not in
+fact.
+
+`TestEveryFixtureSurvivesACheckout` now asserts that every path a
+`fixture.json` names exists, that no fixture directory is empty, and that every
+fixture file is tracked by git. It caught an untracked file of its own within
+the hour.
+
+To be explicit, because it was the first hypothesis and it was wrong: **git
+stripping the SUID and SGID bits was not the cause.** Git records those
+fixtures as `0644` and always has; the manifests declare the modes and the fake
+seam applies them, so the checks never read the on-disk bits. No manifest
+needed a mode override added, and none was.
+
+### A fixture's verdict depended on who cloned the repository
+
+`scan --root` reads through the live seam, so a fixture tree carries the
+ownership of whoever checked it out — uid 1000 on a developer machine, 1001 on
+a GitHub runner, 0 in a container. `cli-host/etc/passwd` contains `alice:1000`,
+so on one of those three the owners resolved and FILESYS-0010 returned `PASS`.
+
+On the other two the owner did not resolve, and the check declined to call it
+stray without knowing the local files were the whole account database — it
+returned `UNKNOWN(ambiguous_system_state)`, which is rule 3 working exactly as
+intended. But an `UNKNOWN` is not an evaluated check, so coverage fell to 98.73
+and the `--min-coverage 100` gate failed. **The bug moved coverage rather than
+a verdict**, which is why it was invisible in a diff and green on the machine
+that wrote it.
+
+The check was right and is untouched. The fixture was wrong: a Debian 12 host
+with no `/etc/nsswitch.conf` does not exist. With the file present the check
+reaches a verdict under any ownership, and `docs/FIXTURES.md` §4.3 now states
+the rule that live-seam fixtures have to follow.
+
+### CI parsed a human report as JSON
+
+Four workflow steps grep a `findings/v1` document out of `scan` and `eval`.
+`v0.3.0` made the terminal report the default output and did not update them,
+so they failed while reporting a degraded exit code — a symptom of the parse,
+not of coverage. They pass `--json` now, and the distro step prints the summary
+and every non-`PASS` finding when an assertion fails instead of exiting 1 with
+no evidence.
+
+### Verified
+All twelve CI jobs pass on `main`: `verify`, `go test -race`, `golangci-lint`,
+schema validation, the hostile-input corpus, the zero-network namespace scan,
+both cross-compiles, and scans on `alpine:3.20`, `debian:13`, `fedora:latest`
+and `ubuntu:24.04`. The suite was additionally run as uid 1001 over a
+`git archive` of the release tree, which is what a runner actually receives.
+
+### Check corrections
+None. No check's verdict logic changed in this release, and the catalog version
+is deliberately unchanged at 13 — a bump would falsely signal that scores are
+no longer comparable with `v0.3.0`.
+
+---
+
 ## [0.3.0] — 2026-08-20
 
 **Engine maturation and resilience.** Catalog version 13, 79 checks across nine
