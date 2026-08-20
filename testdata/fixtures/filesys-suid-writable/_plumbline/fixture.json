@@ -1,0 +1,7 @@
+{
+  "description": "A vendor package shipped a setuid helper group-writable — mode 4775 — which is a root shell with a waiting period: anyone in that group rewrites the file and it executes as root the next time somebody runs it. FILESYS-0001 fails. The binary is under /opt, so FILESYS-0002 correctly does not fire; the two checks ask different questions about the same inode.",
+  "modes": {
+    "/usr/bin/passwd": "4755",
+    "/opt/vendor/helper": "4775"
+  }
+}

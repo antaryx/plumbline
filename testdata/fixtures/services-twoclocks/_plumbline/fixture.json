@@ -1,0 +1,8 @@
+{
+  "description": "chrony was installed on a host already running systemd-timesyncd, and installing it did not disable the other. Both are enabled, they compete for UDP/123 and for the clock, and which one wins depends on start order. SERVICES-0003 fails on the second branch.",
+  "symlinks": {
+    "/etc/systemd/system/multi-user.target.wants/sshd.service": "/usr/lib/systemd/system/sshd.service",
+    "/etc/systemd/system/multi-user.target.wants/chronyd.service": "/usr/lib/systemd/system/chronyd.service",
+    "/etc/systemd/system/sysinit.target.wants/systemd-timesyncd.service": "/usr/lib/systemd/system/systemd-timesyncd.service"
+  }
+}

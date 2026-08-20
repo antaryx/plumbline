@@ -1,0 +1,15 @@
+{
+  "description": "A stock distribution install, unhardened: crontab 0644, drop-in directories 0755, and neither access-control file. Nothing here is a mistake — these are the modes Debian, Ubuntu, RHEL and Fedora all ship — which is why CRON-0005 is LOW and CRON-0001/0002 pass. CRON-0003 fails because no allow list exists and what happens instead is a compile-time property of the cron package.",
+  "modes": {
+    "/etc/crontab": "0644",
+    "/etc/cron.d": "040755", "/etc/cron.hourly": "040755",
+    "/etc/cron.daily": "040755", "/etc/cron.weekly": "040755",
+    "/etc/cron.monthly": "040755"
+  },
+  "owners": {
+    "/etc/crontab": "0:0",
+    "/etc/cron.d": "0:0", "/etc/cron.hourly": "0:0",
+    "/etc/cron.daily": "0:0", "/etc/cron.weekly": "0:0",
+    "/etc/cron.monthly": "0:0"
+  }
+}

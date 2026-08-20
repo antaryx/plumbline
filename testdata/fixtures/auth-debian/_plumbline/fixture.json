@@ -1,0 +1,3 @@
+{
+  "description": "The same hardened host written for Debian: the shared rules live in common-* and are pulled into sshd with @include, which inlines the whole file rather than one management group. It also carries the bracketed control form — 'password [success=1 default=ignore] pam_unix.so ... yescrypt' — which a strings.Fields split reads as control '[success=1' and module 'default=ignore]', so a naive parser finds no pam_unix.so at all and reports UNKNOWN on a stock Debian host. Every AUTH check must reach the same verdict here as over auth-rhel."
+}

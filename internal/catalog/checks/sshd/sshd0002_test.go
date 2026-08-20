@@ -1,185 +1,82 @@
 package sshd_test
 
 import (
-	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/antaryx/plumbline/internal/catalog"
 	checks "github.com/antaryx/plumbline/internal/catalog/checks/sshd"
-	collector "github.com/antaryx/plumbline/internal/collect/collectors/sshd"
-	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/finding"
-	"github.com/antaryx/plumbline/internal/system/fake"
 )
 
-const fixtureRoot = "../../../../testdata/fixtures"
-
-// evalFixture runs the real collector against a fixture and then the real
-// check against the resulting facts. Tests exercise the whole vertical slice,
-// not the check in isolation, because most check bugs are actually collector
-// bugs.
-func evalFixture(t *testing.T, name string) finding.Finding {
-	t.Helper()
-
-	sys, err := fake.New(filepath.Join(fixtureRoot, name))
-	if err != nil {
-		t.Fatalf("load fixture %s: %v", name, err)
-	}
-
-	facts := fact.NewSet()
-	if err := collector.New().Collect(context.Background(), sys, facts); err != nil {
-		t.Fatalf("collect fixture %s: %v", name, err)
-	}
-
-	cat := catalog.MustNew(checks.Check0002)
-	got := cat.Evaluate(facts)
-	if len(got) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(got))
-	}
-	return got[0]
-}
+// SSHD-0002 keeps its own test file because it is the project's reference
+// check: its table is the one docs/CHECK-AUTHORING.md points at. The shared
+// helpers live in sshd_test.go, which every check in the module uses.
 
 func TestSSHD0002(t *testing.T) {
-	cases := []struct {
-		fixture  string
-		result   finding.Result
-		severity finding.Severity      // "" means: do not assert
-		reason   finding.UnknownReason // "" means: do not assert
-		// detailContains guards against a correct verdict with a misleading
-		// explanation, which is its own class of bug.
-		detailContains string
-	}{
-		{
-			fixture:        "sshd-hardened",
-			result:         finding.Pass,
-			detailContains: "no",
-		},
-		{
-			fixture:        "sshd-permit-yes",
-			result:         finding.Fail,
-			severity:       finding.High,
-			detailContains: "may log in directly",
-		},
-		{
-			fixture:        "sshd-default",
-			result:         finding.Fail,
-			severity:       finding.Medium,
-			detailContains: "built-in default",
-		},
+	run(t, checks.Check0002, []tc{
+		{fixture: "sshd-hardened", result: finding.Pass, detailContains: "no"},
+		{fixture: "sshd-permit-yes", result: finding.Fail, severity: finding.High, detailContains: "may log in directly"},
+		{fixture: "sshd-default", result: finding.Fail, severity: finding.Medium, detailContains: "built-in default"},
 		{
 			// The drop-in is included on line 1, so its value is obtained
 			// first and wins over the later "yes" in the main file. A tool
 			// that reads only sshd_config gets this backwards.
-			fixture:        "sshd-include",
-			result:         finding.Pass,
-			detailContains: "refused",
+			fixture: "sshd-include", result: finding.Pass, detailContains: "refused",
 		},
 		{
 			// The only "no" is Match-scoped and must not count.
-			fixture:        "sshd-match-trap",
-			result:         finding.Fail,
-			severity:       finding.High,
-			detailContains: "may log in directly",
+			fixture: "sshd-match-trap", result: finding.Fail,
+			severity: finding.High, detailContains: "may log in directly",
 		},
 		{
-			fixture:        "sshd-absent",
-			result:         finding.NotApplicable,
-			detailContains: "not configured",
+			// The mirror image of sshd-match-trap: the global value is "no"
+			// and the Match block re-enables root login, so the secure global
+			// is not the whole story either.
+			fixture: "sshd-match-loosened", result: finding.Fail,
+			severity: finding.Medium, detailContains: "Match Address 0.0.0.0/0",
 		},
-		{
-			fixture:        "sshd-unreadable",
-			result:         finding.Unknown,
-			reason:         finding.ReasonPermission,
-			detailContains: "unavailable",
-		},
-		{
-			fixture:        "sshd-unresolved-include",
-			result:         finding.Unknown,
-			reason:         finding.ReasonAmbiguousState,
-			detailContains: "could not be resolved",
-		},
-		{
-			fixture:        "sshd-bad-value",
-			result:         finding.Unknown,
-			reason:         finding.ReasonParse,
-			detailContains: "unrecognised value",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.fixture, func(t *testing.T) {
-			got := evalFixture(t, tc.fixture)
-
-			if got.Result != tc.result {
-				t.Errorf("result = %s, want %s\ndetail: %s", got.Result, tc.result, got.Detail)
-			}
-			if tc.severity != "" && got.Severity != tc.severity {
-				t.Errorf("severity = %s, want %s", got.Severity, tc.severity)
-			}
-			if tc.reason != "" && got.UnknownReason != tc.reason {
-				t.Errorf("unknown reason = %q, want %q", got.UnknownReason, tc.reason)
-			}
-			if !strings.Contains(strings.ToLower(got.Detail), strings.ToLower(tc.detailContains)) {
-				t.Errorf("detail %q does not contain %q", got.Detail, tc.detailContains)
-			}
-
-			// Invariants that hold for every check, asserted everywhere so
-			// that a violation is caught by whichever test runs first.
-			if got.CheckID != "SSHD-0002" || got.Module != "SSHD" {
-				t.Errorf("identity wrong: %s / %s", got.CheckID, got.Module)
-			}
-			if got.BaseSeverity != finding.High {
-				t.Errorf("base severity mutated: %s", got.BaseSeverity)
-			}
-			if got.Fingerprint == "" {
-				t.Error("fingerprint is empty")
-			}
-			if got.Result == finding.Unknown && got.UnknownReason == "" {
-				t.Error("UNKNOWN without a reason code")
-			}
-			if got.Result == finding.Fail && got.Remediation == nil {
-				t.Error("FAIL without remediation")
-			}
-			if got.Result != finding.Fail && got.Remediation != nil {
-				t.Error("remediation attached to a non-FAIL result")
-			}
-		})
-	}
-}
-
-// TestDeterminism asserts the property the whole architecture exists to
-// provide: the same facts always produce the same findings.
-func TestDeterminism(t *testing.T) {
-	first := evalFixture(t, "sshd-include")
-	for i := 0; i < 50; i++ {
-		got := evalFixture(t, "sshd-include")
-		if got.Result != first.Result || got.Detail != first.Detail || got.Fingerprint != first.Fingerprint {
-			t.Fatalf("non-deterministic on iteration %d", i)
-		}
-	}
+		{fixture: "sshd-absent", result: finding.NotApplicable, detailContains: "not configured"},
+		{fixture: "sshd-unreadable", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "unavailable"},
+		{fixture: "sshd-unresolved-include", result: finding.Unknown, reason: finding.ReasonAmbiguousState, detailContains: "could not be resolved"},
+		{fixture: "sshd-bad-value", result: finding.Unknown, reason: finding.ReasonParse, detailContains: "unrecognised value"},
+	})
 }
 
 // TestFingerprintStability guards the suppression and SARIF baseline contract:
 // a finding's identity must not change when its verdict does.
 func TestFingerprintStability(t *testing.T) {
-	pass := evalFixture(t, "sshd-hardened")
-	fail := evalFixture(t, "sshd-permit-yes")
+	pass := evalCheck(t, checks.Check0002, "sshd-hardened")
+	fail := evalCheck(t, checks.Check0002, "sshd-permit-yes")
 	if pass.Fingerprint != fail.Fingerprint {
 		t.Errorf("fingerprint changed with verdict: %s vs %s", pass.Fingerprint, fail.Fingerprint)
 	}
 }
 
-// TestNoPanicOnEmptyFacts asserts the runner's required-fact gate: a check
-// must never see a missing fact, and must never crash the scan.
-func TestNoPanicOnEmptyFacts(t *testing.T) {
-	cat := catalog.MustNew(checks.Check0002)
-	got := cat.Evaluate(fact.NewSet())
-	if got[0].Result != finding.Unknown {
-		t.Errorf("result = %s, want UNKNOWN", got[0].Result)
+// TestMatchScopedValueDoesNotSetTheGlobal is the classic sshd-auditing bug,
+// pinned in both directions. A tool that counted the Match-scoped "no" in
+// sshd-match-trap would report a host permitting root login as compliant; a
+// tool that ignored the Match-scoped "yes" in sshd-match-loosened would report
+// a host that permits it from anywhere as compliant too.
+func TestMatchScopedValueDoesNotSetTheGlobal(t *testing.T) {
+	trap := evalCheck(t, checks.Check0002, "sshd-match-trap")
+	if trap.Result != finding.Fail {
+		t.Fatalf("sshd-match-trap = %s, want FAIL: the only \"no\" is inside a Match block", trap.Result)
 	}
-	if got[0].UnknownReason != finding.ReasonFactMissing {
-		t.Errorf("reason = %q, want %q", got[0].UnknownReason, finding.ReasonFactMissing)
+	var sawScopedEvidence bool
+	for _, e := range trap.Evidence {
+		if strings.Contains(e.Excerpt, "does not set the global value") {
+			sawScopedEvidence = true
+		}
+	}
+	if !sawScopedEvidence {
+		t.Errorf("the Match-scoped directive is not cited, so the report contradicts what the operator can see in the file: %+v", trap.Evidence)
+	}
+
+	loosened := evalCheck(t, checks.Check0002, "sshd-match-loosened")
+	if loosened.Result != finding.Fail {
+		t.Fatalf("sshd-match-loosened = %s, want FAIL: the global \"no\" is overridden for every address", loosened.Result)
+	}
+	if loosened.Severity != finding.Medium {
+		t.Errorf("severity = %s, want MEDIUM: a conditional exposure steps down one class from the HIGH base", loosened.Severity)
 	}
 }

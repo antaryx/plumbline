@@ -22,6 +22,33 @@ type Fact interface {
 	FactVersion() int
 }
 
+// Opaque is implemented by a fact that is *present* and whose shape this build
+// cannot interpret — a fact ID it has never heard of, or a known ID at a
+// FactVersion it does not understand.
+//
+// It exists because "present" and "usable" are different states and the gap
+// between them was silently a third thing. A bundle written by a newer build
+// carries facts this one cannot decode; the reader preserves them verbatim so
+// that forwarding the bundle loses nothing, which is right. But a preserved
+// fact still satisfies "the required fact is present", so a check's Eval ran,
+// its typed accessor got the zero value, and an sshd.config it could not
+// decode was reported as **NOT_APPLICABLE: the SSH server is not configured on
+// this host** — a statement about the host manufactured out of a decode
+// failure.
+//
+// The marker is an interface rather than a concrete type because the fact that
+// carries it is produced by internal/bundle, and internal/catalog must not
+// import the serialisation layer to evaluate anything.
+//
+// finding.ReasonFactVersion is the reason code for it, and was declared for
+// this case before anything produced it.
+type Opaque interface {
+	Fact
+	// OpaqueFact reports the version the producer declared, which is the
+	// number an operator needs in order to know which build wrote the bundle.
+	OpaqueFact() int
+}
+
 // ErrorKind classifies why a fact is absent. Checks map these to UNKNOWN
 // reason codes, which is how ignorance stays visible instead of becoming a
 // false PASS.
@@ -94,6 +121,17 @@ func (s *Set) Errors() []Error {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Fact < out[j].Fact })
 	return out
+}
+
+// Opaque reports whether the fact stored under id is present but not
+// interpretable by this build. See the Opaque interface.
+func (s *Set) Opaque(id ID) (Opaque, bool) {
+	f, ok := s.facts[id]
+	if !ok {
+		return nil, false
+	}
+	op, ok := f.(Opaque)
+	return op, ok
 }
 
 // IDs returns the IDs of all present facts, sorted.

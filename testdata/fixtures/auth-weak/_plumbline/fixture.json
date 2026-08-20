@@ -1,0 +1,3 @@
+{
+  "description": "A host where nothing was configured. No quality module, no lockout counter, no history, nullok on the auth line and md5 hashing on the password line. Five of the six AUTH checks fail; AUTH-0002 is NOT_APPLICABLE because there is no quality module for its parameters to belong to, which is the split that keeps one missing thing from producing two findings."
+}

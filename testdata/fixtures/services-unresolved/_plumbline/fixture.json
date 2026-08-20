@@ -1,0 +1,11 @@
+{
+  "description": "An enablement symlink into /opt, where a parent directory refuses traversal. The link is readable and its target is not, so whether it dangles cannot be determined. SERVICES-0004 is UNKNOWN rather than PASS: a link that cannot be followed may be the broken one.",
+  "symlinks": {
+    "/etc/systemd/system/multi-user.target.wants/sshd.service": "/usr/lib/systemd/system/sshd.service",
+    "/etc/systemd/system/multi-user.target.wants/chronyd.service": "/usr/lib/systemd/system/chronyd.service",
+    "/etc/systemd/system/multi-user.target.wants/custom-agent.service": "/opt/vendor/units/custom-agent.service"
+  },
+  "unstattable": [
+    "/opt/vendor/units/custom-agent.service"
+  ]
+}

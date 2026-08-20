@@ -1,0 +1,1 @@
+{ "description": "A modern minimal host: systemd-journald only, no rsyslog at all. The three rsyslog checks are NOT_APPLICABLE — a host with no rsyslog has not failed to secure it — while the journald checks still answer for real. This is the fixture that proves the module degrades per daemon rather than as a unit." }

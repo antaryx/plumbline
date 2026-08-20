@@ -1,0 +1,7 @@
+# PAM configuration for the Secure Shell service
+
+@include common-auth
+account    required     pam_nologin.so
+@include common-account
+@include common-session
+@include common-password

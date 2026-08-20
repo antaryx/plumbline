@@ -16,6 +16,25 @@ import (
 	"github.com/antaryx/plumbline/internal/fact"
 )
 
+// hostFixture is a realistic checkout baseline rather than a clean host, and
+// the distinction matters for what the gate tests below may assert.
+//
+// Its files are read through the LIVE seam — `scan --root` does not use the
+// fake — so they carry the ownership of whoever checked the repository out.
+// Git cannot record ownership, so the CRON checks that require root-owned cron
+// files fail over it permanently and by construction. That is the fixture
+// being honest about a real host's files, not a defect.
+//
+// **"Clean" here means the scan exits 0**, not that it produces no findings.
+// Coverage is still 100 because a FAIL is an evaluated check, and posture stays
+// well above the threshold asserted below.
+//
+// That last sentence is only true because the fixture carries an
+// /etc/nsswitch.conf. FILESYS-0010 sees the same checkout ownership the CRON
+// checks do, but it may not call an unresolvable owner stray until it knows the
+// local files are the whole account database — so without that file it returns
+// UNKNOWN rather than FAIL, and an UNKNOWN is not an evaluated check.
+// TestTheHostFixtureCanReachAVerdictOnOwnership holds that property in place.
 const (
 	hostFixture    = "../../testdata/fixtures/cli-host"
 	includeFixture = "../../testdata/fixtures/sshd-include"
@@ -32,6 +51,16 @@ func run(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	var out, errOut bytes.Buffer
 	code = cli.Execute(args, &out, &errOut)
 	return code, out.String(), errOut.String()
+}
+
+// runJSON is run with --json, for the tests that parse the output.
+//
+// The flag is spelled out at every call site rather than defaulted in the
+// helper, because the default output format is now the terminal report and a
+// test that silently got JSON would stop noticing if that changed.
+func runJSON(t *testing.T, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	return run(t, append(args, "--json")...)
 }
 
 // document is the part of a findings document these tests reason about.
@@ -64,8 +93,8 @@ func TestScanEqualsCollectThenEval(t *testing.T) {
 			bundlePath := filepath.Join(t.TempDir(), "b.plb")
 
 			collectCode, _, _ := run(t, "collect", "--root", fixture, "-o", bundlePath)
-			evalCode, evalOut, _ := run(t, "eval", bundlePath)
-			scanCode, scanOut, _ := run(t, "scan", "--root", fixture)
+			evalCode, evalOut, _ := runJSON(t, "eval", bundlePath)
+			scanCode, scanOut, _ := runJSON(t, "scan", "--root", fixture)
 
 			piped := parse(t, evalOut)
 			fused := parse(t, scanOut)
@@ -154,7 +183,7 @@ func TestReportIsOwnerOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if code, _, stderr := run(t, "scan", "--root", hostFixture, "-o", path); code != cli.ExitOK {
+	if code, _, stderr := runJSON(t, "scan", "--root", hostFixture, "-o", path); code != cli.ExitOK {
 		t.Fatalf("scan exited %d: %s", code, stderr)
 	}
 
@@ -180,7 +209,7 @@ func TestReportIsOwnerOnly(t *testing.T) {
 		t.Fatal("collect failed")
 	}
 	evalReport := filepath.Join(dir, "eval.json")
-	if code, _, _ := run(t, "eval", bundlePath, "-o", evalReport); code != cli.ExitOK {
+	if code, _, _ := runJSON(t, "eval", bundlePath, "-o", evalReport); code != cli.ExitOK {
 		t.Fatal("eval failed")
 	}
 	info, err = os.Stat(evalReport)
@@ -201,14 +230,21 @@ func TestRepeatedEvaluationsAreByteIdentical(t *testing.T) {
 		t.Fatal("collect failed")
 	}
 
-	_, first, _ := run(t, "eval", bundlePath)
-	if first == "" {
-		t.Fatal("eval produced nothing; this test would prove nothing")
-	}
-	for i := 0; i < 10; i++ {
-		if _, got, _ := run(t, "eval", bundlePath); got != first {
-			t.Fatalf("evaluation %d differs from the first", i)
-		}
+	// Both renderers, because both are things a person diffs against last
+	// week's run. The terminal report is not the API and is still not allowed
+	// to be noisy: a nightly scan whose output churns is one nobody reads.
+	for _, format := range []string{"json", "terminal"} {
+		t.Run(format, func(t *testing.T) {
+			_, first, _ := run(t, "eval", bundlePath, "--format", format)
+			if first == "" {
+				t.Fatal("eval produced nothing; this test would prove nothing")
+			}
+			for i := 0; i < 10; i++ {
+				if _, got, _ := run(t, "eval", bundlePath, "--format", format); got != first {
+					t.Fatalf("evaluation %d differs from the first", i)
+				}
+			}
+		})
 	}
 }
 
@@ -267,12 +303,32 @@ func TestGatesDriveTheExitCode(t *testing.T) {
 		args []string
 		want int
 	}{
-		{"a clean host with no gates", []string{"scan", "--root", hostFixture}, cli.ExitOK},
+		// No gates were requested, so findings alone must not change the exit
+		// code — that is the whole point of --fail-on being opt-in.
+		{"a baseline host with no gates", []string{"scan", "--root", hostFixture}, cli.ExitOK},
 		{"a failing host with no gates is still 0", []string{"scan", "--root", failFixture}, cli.ExitOK},
 		{"--fail-on high catches a HIGH failure", []string{"scan", "--root", failFixture, "--fail-on", "high"}, 2},
-		{"--fail-on critical does not", []string{"scan", "--root", failFixture, "--fail-on", "critical"}, cli.ExitOK},
+		{"--fail-on critical catches a CRITICAL failure", []string{"scan", "--root", failFixture, "--fail-on", "critical"}, 2},
+		// The "does not fire" half of the gate needs a host whose worst
+		// failure is below the threshold. sshd-permit-yes stopped being that
+		// host when SSHD-0004 (PermitEmptyPasswords, CRITICAL) was added to
+		// the catalog, so this case moved to a fixture that fails at HIGH and
+		// no higher — which is the property the case is actually asserting.
+		{"--fail-on critical does not fire below it", []string{"scan", "--root", includeFixture, "--fail-on", "critical"}, cli.ExitOK},
+		// Measured at 91.96 on this fixture with catalog 7. 50 keeps a wide
+		// margin over the CRON failures that are structural here, so the case
+		// asserts the gate rather than tracking the catalog.
 		{"--threshold below posture", []string{"scan", "--root", hostFixture, "--threshold", "50"}, cli.ExitOK},
-		{"--threshold above posture", []string{"scan", "--root", failFixture, "--threshold", "50"}, 3},
+		// 100 rather than a middling number: posture is a ratio over the whole
+		// catalog, so any threshold below 100 stops discriminating as modules
+		// are added and the one FAIL on this fixture is diluted. A host with
+		// at least one FAIL can never reach 100, which makes this the only
+		// threshold that keeps asserting the gate rather than the size of the
+		// catalog.
+		{"--threshold above posture", []string{"scan", "--root", failFixture, "--threshold", "100"}, 3},
+		// 100 still holds despite the CRON failures: coverage counts checks
+		// that reached a verdict, and a FAIL is a verdict. It would only drop
+		// if a check went UNKNOWN or the collector could not see the host.
 		{"--min-coverage satisfied", []string{"scan", "--root", hostFixture, "--min-coverage", "100"}, cli.ExitOK},
 	}
 
@@ -430,7 +486,7 @@ func TestVersion(t *testing.T) {
 // nothing else. A JSON document with a progress line in it is not a JSON
 // document (CLI-SPEC.md §7).
 func TestOutputDiscipline(t *testing.T) {
-	_, stdout, _ := run(t, "scan", "--root", hostFixture)
+	_, stdout, _ := runJSON(t, "scan", "--root", hostFixture)
 	var v any
 	if err := json.Unmarshal([]byte(stdout), &v); err != nil {
 		t.Errorf("stdout is not pure JSON: %v\n%s", err, stdout)
@@ -451,7 +507,7 @@ func TestOutputDiscipline(t *testing.T) {
 // agrees with, which is what makes --save-bundle evidence rather than a copy.
 func TestSaveBundleFromScan(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "saved.plb")
-	code, scanOut, _ := run(t, "scan", "--root", hostFixture, "--save-bundle", path)
+	code, scanOut, _ := runJSON(t, "scan", "--root", hostFixture, "--save-bundle", path)
 	if code != cli.ExitOK {
 		t.Fatalf("scan exited %d", code)
 	}
@@ -463,7 +519,7 @@ func TestSaveBundleFromScan(t *testing.T) {
 		t.Errorf("saved bundle mode = %04o, want 0600", got)
 	}
 
-	_, evalOut, _ := run(t, "eval", path)
+	_, evalOut, _ := runJSON(t, "eval", path)
 	if !bytes.Equal(parse(t, scanOut).Findings, parse(t, evalOut).Findings) {
 		t.Error("re-evaluating a saved bundle disagrees with the scan that produced it")
 	}
@@ -502,4 +558,423 @@ func decompress(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// ---------------------------------------------------------------------------
+// output format (WP-26)
+// ---------------------------------------------------------------------------
+
+// TestTerminalIsTheDefaultFormat. The default is what an engineer gets when
+// they type the command they were going to type anyway, and a wall of JSON is
+// not a report. The JSON is still there, behind a flag, and it is still the
+// only thing anything may parse.
+func TestTerminalIsTheDefaultFormat(t *testing.T) {
+	for _, args := range [][]string{
+		{"scan", "--root", hostFixture},
+		{"eval", collectTo(t, hostFixture)},
+	} {
+		t.Run(args[0], func(t *testing.T) {
+			_, stdout, _ := run(t, args...)
+
+			if strings.HasPrefix(strings.TrimSpace(stdout), "{") {
+				t.Fatalf("the default output is still JSON:\n%s", stdout[:min(len(stdout), 200)])
+			}
+			for _, want := range []string{"CHECKS BY MODULE", "SUMMARY", "posture", "coverage"} {
+				if !strings.Contains(stdout, want) {
+					t.Errorf("the default report omits %q", want)
+				}
+			}
+		})
+	}
+}
+
+// TestJSONFlagAndFormatJSONAgree: --json is shorthand, so the two spellings
+// must produce the same bytes. A shorthand that renders differently is a
+// second code path wearing the first one's name.
+func TestJSONFlagAndFormatJSONAgree(t *testing.T) {
+	bundlePath := collectTo(t, hostFixture)
+
+	_, viaFlag, _ := run(t, "eval", bundlePath, "--json")
+	_, viaFormat, _ := run(t, "eval", bundlePath, "--format", "json")
+
+	if viaFlag != viaFormat {
+		t.Error("--json and --format json produced different documents")
+	}
+	parse(t, viaFlag)
+}
+
+// TestContradictoryFormatFlagsAreAUsageError.
+//
+// --json is shorthand over the *default*, not an override of an explicit
+// choice. Silently discarding a --format the operator typed is the same class
+// of bug as silently accepting `--fail-on hgih`: they stated something, the
+// tool did something else, and nothing said so.
+func TestContradictoryFormatFlagsAreAUsageError(t *testing.T) {
+	code, stdout, stderr := run(t, "scan", "--root", hostFixture, "--format", "terminal", "--json")
+	if code != cli.ExitUsage {
+		t.Errorf("exit = %d, want %d (usage)", code, cli.ExitUsage)
+	}
+	if stdout != "" {
+		t.Errorf("a usage error still wrote a report to stdout:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "contradict") {
+		t.Errorf("stderr does not explain the contradiction: %q", stderr)
+	}
+
+	// But --json alongside --format json is not a contradiction, and refusing
+	// it would break the obvious belt-and-braces invocation.
+	if code, _, _ := run(t, "eval", collectTo(t, hostFixture), "--format", "json", "--json"); code != cli.ExitOK {
+		t.Errorf("--format json --json exited %d, want 0", code)
+	}
+}
+
+func TestUnknownFormatIsRefusedByName(t *testing.T) {
+	for _, format := range []string{"yaml", "html", "TERMINAL!"} {
+		code, _, stderr := run(t, "scan", "--root", hostFixture, "--format", format)
+		if code != cli.ExitUsage {
+			t.Errorf("--format %s exited %d, want %d", format, code, cli.ExitUsage)
+		}
+		if !strings.Contains(stderr, "unknown --format") {
+			t.Errorf("--format %s: stderr does not name the problem: %q", format, stderr)
+		}
+	}
+
+	// sarif is refused too, but by a message that says it is coming rather
+	// than that it is nonsense. The two are different problems for a reader.
+	_, _, stderr := run(t, "scan", "--root", hostFixture, "--format", "sarif")
+	if !strings.Contains(stderr, "not implemented yet") {
+		t.Errorf("sarif is refused as though it were a typo: %q", stderr)
+	}
+}
+
+// TestFormatIsCaseInsensitive: an operator typing --format JSON has been
+// unambiguous, and rejecting them teaches nothing.
+func TestFormatIsCaseInsensitive(t *testing.T) {
+	if code, stdout, stderr := run(t, "eval", collectTo(t, hostFixture), "--format", "JSON"); code != cli.ExitOK {
+		t.Fatalf("--format JSON exited %d: %s", code, stderr)
+	} else {
+		parse(t, stdout)
+	}
+}
+
+// TestNoAnsiReachesANonTerminal is the rule that matters most in practice.
+//
+// Every one of these writes somewhere that is not a terminal — a test buffer,
+// a file — and an escape sequence in any of them is corruption of an artefact
+// somebody reads later in something that is not a terminal.
+func TestNoAnsiReachesANonTerminal(t *testing.T) {
+	dir := t.TempDir()
+	reportPath := filepath.Join(dir, "report.txt")
+
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"a buffer", []string{"scan", "--root", hostFixture}},
+		{"--no-color", []string{"scan", "--root", hostFixture, "--no-color"}},
+		{"-o a file", []string{"scan", "--root", hostFixture, "-o", reportPath}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, stdout, _ := run(t, tc.args...)
+			if strings.Contains(stdout, "\033") {
+				t.Errorf("an escape sequence reached stdout:\n%q", stdout)
+			}
+		})
+	}
+
+	body, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body) == 0 {
+		t.Fatal("-o wrote an empty file; the assertion below would prove nothing")
+	}
+	if bytes.Contains(body, []byte{0x1b}) {
+		t.Errorf("an escape sequence was written into --output:\n%s", body)
+	}
+	if !bytes.Contains(body, []byte("SUMMARY")) {
+		t.Errorf("--output did not receive the terminal report:\n%s", body)
+	}
+}
+
+// TestReportsWrittenWithOutputAreOwnerOnly. The terminal report names paths,
+// accounts and misconfigurations; it is the same reconnaissance material the
+// JSON is, and it goes through the same owner-only create.
+func TestReportsWrittenWithOutputAreOwnerOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "report.txt")
+	if err := os.WriteFile(path, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, stderr := run(t, "scan", "--root", hostFixture, "-o", path); code != cli.ExitOK {
+		t.Fatalf("scan exited %d: %s", code, stderr)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("report mode = %04o, want 0600", got)
+	}
+}
+
+// TestTheFormatDoesNotMoveTheExitCode.
+//
+// Rendering is display and gating is a verdict, and the two must not be able
+// to influence one another. If they could, `--json` would be a way to change
+// what CI concluded about a host.
+func TestTheFormatDoesNotMoveTheExitCode(t *testing.T) {
+	cases := [][]string{
+		{"scan", "--root", failFixture, "--fail-on", "high"},
+		{"scan", "--root", hostFixture, "--min-coverage", "100"},
+		{"scan", "--root", hostFixture},
+	}
+	for _, base := range cases {
+		t.Run(strings.Join(base[1:], " "), func(t *testing.T) {
+			terminal, _, _ := run(t, base...)
+			asJSON, _, _ := run(t, append(append([]string{}, base...), "--json")...)
+			if terminal != asJSON {
+				t.Errorf("exit code depends on the output format: terminal %d, json %d", terminal, asJSON)
+			}
+		})
+	}
+}
+
+// TestTheTerminalReportNamesWhatItCouldNotDetermine. A report that lists
+// failures and buries unknowns describes a cleaner host than the one it saw,
+// and this is the end-to-end assertion of that.
+func TestTheTerminalReportNamesWhatItCouldNotDetermine(t *testing.T) {
+	root := deniedRoot(t)
+
+	_, stdout, _ := run(t, "scan", "--root", root)
+	for _, want := range []string{
+		"COULD NOT DETERMINE",
+		"These are not passes",
+		"COLLECTION GAPS",
+		"/etc/ssh/sshd_config",
+		"degraded",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("a scan that could not read the host omits %q from its report:\n%s", want, stdout)
+		}
+	}
+}
+
+// collectTo runs collect against a fixture and returns the bundle path.
+func collectTo(t *testing.T, fixture string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "b.plb")
+	if code, _, stderr := run(t, "collect", "--root", fixture, "-o", path); code != cli.ExitOK {
+		t.Fatalf("collect exited %d: %s", code, stderr)
+	}
+	return path
+}
+
+// ---------------------------------------------------------------------------
+// edge-case resilience (WP-27)
+// ---------------------------------------------------------------------------
+
+// TestACorruptedHostProducesNoConfidentVerdict is the work package's
+// acceptance criterion, asserted end to end through the real binary path.
+//
+// edge-binary-everything replaces every file the collectors parse with the
+// same kilobyte of pseudo-random bytes. That is not a contrived input: it is
+// what a failed restore, a filesystem that lost its journal, or a half-written
+// image looks like. Three things must hold, and the third is the one that
+// matters.
+//
+//  1. The scan completes. No panic, no hang, and an exit code that says
+//     something.
+//  2. Every fact the collectors could not parse is named in fact_errors, so an
+//     operator knows which files to go and look at.
+//  3. **No check reports PASS or FAIL from any of those files.** A parser that
+//     silently yields an empty configuration turns every negative assertion in
+//     the catalog into a false PASS, and that is the single failure mode this
+//     project exists to prevent.
+func TestACorruptedHostProducesNoConfidentVerdict(t *testing.T) {
+	const fixture = "../../testdata/fixtures/edge-binary-everything"
+
+	code, stdout, stderr := runJSON(t, "scan", "--root", fixture)
+	if code == cli.ExitInternal {
+		t.Fatalf("the scan exited %d (internal error): %s", code, stderr)
+	}
+	doc := parse(t, stdout)
+
+	var parsed struct {
+		Findings []struct {
+			CheckID       string `json:"check_id"`
+			Module        string `json:"module"`
+			Result        string `json:"result"`
+			UnknownReason string `json:"unknown_reason"`
+			Detail        string `json:"detail"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	var factErrors struct {
+		FactErrors []struct {
+			Fact string `json:"fact"`
+			Kind string `json:"kind"`
+			Path string `json:"path"`
+		} `json:"fact_errors"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &factErrors); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(factErrors.FactErrors) == 0 {
+		t.Fatal("a host whose every configuration file is binary produced no fact errors at all; every parser swallowed the garbage")
+	}
+	for _, e := range factErrors.FactErrors {
+		if e.Kind == "parse" && e.Path == "" {
+			t.Errorf("fact error for %s names no path", e.Fact)
+		}
+	}
+
+	// These modules read file *contents*. FILESYS, SERVICES and CRON read
+	// metadata — modes, ownership, symlinks — which the fixture's bytes cannot
+	// corrupt, so their verdicts are legitimate and are not listed here.
+	contentModules := map[string]bool{
+		"SSHD": true, "USERS": true, "AUTH": true, "LOGGING": true, "NETWORK": true,
+	}
+	for _, f := range parsed.Findings {
+		if !contentModules[f.Module] {
+			continue
+		}
+		if f.Result == "PASS" || f.Result == "FAIL" {
+			t.Errorf("%s = %s from a file of random bytes. A parser that yields an empty configuration turns every absence claim into a false verdict:\n  %s",
+				f.CheckID, f.Result, f.Detail)
+		}
+		if f.Result == "UNKNOWN" && f.UnknownReason == "" {
+			t.Errorf("%s is UNKNOWN with no reason code", f.CheckID)
+		}
+	}
+
+	if len(doc.Findings) == 0 {
+		t.Error("the document carries no findings at all")
+	}
+}
+
+// TestEveryEdgeFixtureScansWithoutCrashing. The blunt half of resilience: the
+// binary must come back. An auditing tool that panics on a damaged host has
+// told its operator nothing about the host and something alarming about
+// itself.
+func TestEveryEdgeFixtureScansWithoutCrashing(t *testing.T) {
+	entries, err := os.ReadDir("../../testdata/fixtures")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "edge-") {
+			continue
+		}
+		seen++
+		t.Run(e.Name(), func(t *testing.T) {
+			root := filepath.Join("../../testdata/fixtures", e.Name())
+			for _, format := range []string{"json", "terminal"} {
+				code, stdout, stderr := run(t, "scan", "--root", root, "--format", format)
+				if code == cli.ExitInternal {
+					t.Fatalf("--format %s exited %d (internal error): %s", format, code, stderr)
+				}
+				if stdout == "" {
+					t.Errorf("--format %s produced no output", format)
+				}
+			}
+		})
+	}
+	if seen == 0 {
+		t.Fatal("no edge-* fixture was found; this test would pass on an empty corpus")
+	}
+}
+
+// TestACorruptedBundleIsRefusedRatherThanEvaluated. A bundle is an archive with
+// an integrity manifest, and a damaged one must not become a report: nothing
+// can be said about a host from a file we cannot trust.
+func TestACorruptedBundleIsRefusedRatherThanEvaluated(t *testing.T) {
+	good := collectTo(t, hostFixture)
+	body, err := os.ReadFile(good)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		make func() []byte
+	}{
+		{"truncated to half", func() []byte { return body[:len(body)/2] }},
+		{"truncated to nothing", func() []byte { return nil }},
+		{"a flipped byte in the middle", func() []byte {
+			b := append([]byte(nil), body...)
+			b[len(b)/2] ^= 0xff
+			return b
+		}},
+		{"not an archive at all", func() []byte { return []byte("this is not a bundle\n") }},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "damaged.plb")
+			if err := os.WriteFile(path, tc.make(), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			code, stdout, stderr := run(t, "eval", path)
+			if code == cli.ExitOK {
+				t.Fatalf("a damaged bundle evaluated cleanly:\n%s", stdout)
+			}
+			if code != cli.ExitInternal {
+				t.Errorf("exit = %d, want %d: a bundle that will not open is an internal error, not a findings exit",
+					code, cli.ExitInternal)
+			}
+			if stdout != "" {
+				t.Errorf("a report was written from a bundle that could not be read:\n%s", stdout)
+			}
+			if stderr == "" {
+				t.Error("nothing was said about why the bundle was refused")
+			}
+		})
+	}
+}
+
+// TestTheHostFixtureCanReachAVerdictOnOwnership guards the one property of
+// hostFixture that no other test can observe on the machine that runs it.
+//
+// `scan --root` uses the live seam, so every inode under the fixture carries
+// the uid of whoever checked the repository out. That uid is 1000 on the
+// author's machine, where it happens to match `alice` in the fixture's
+// /etc/passwd and FILESYS-0010 returns PASS. It is 1001 on a GitHub runner and
+// 0 in a container, where the owner does not resolve — and there the check must
+// decide whether the local files are the whole account database before it may
+// call that owner stray. Without /etc/nsswitch.conf it correctly refuses to
+// decide and returns UNKNOWN(ambiguous_system_state), which drops coverage
+// below 100 and fails the --min-coverage gate above on every machine except
+// the author's. That is exactly how it reached CI unnoticed.
+//
+// The gate below asserts the fixture's side of that, not the check's, because
+// the check is right either way. It fails on every machine if the file is
+// removed, rather than only on the machines the author does not use.
+func TestTheHostFixtureCanReachAVerdictOnOwnership(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(hostFixture, "etc", "nsswitch.conf"))
+	if err != nil {
+		t.Fatalf("hostFixture must carry /etc/nsswitch.conf so FILESYS-0010 can reach a verdict "+
+			"under any checkout ownership: %v", err)
+	}
+
+	ns := fact.NSSwitch{State: fact.FilePresent, Path: "/etc/nsswitch.conf"}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if db, sources, ok := fact.ParseNSSwitchLine(line); ok {
+			ns.Databases = append(ns.Databases, fact.NSSwitchDB{Name: db, Sources: sources})
+		}
+	}
+
+	for _, db := range []string{fact.NSSDBPasswd, fact.NSSDBGroup} {
+		if !ns.LocalFilesAuthoritative(db) {
+			sources, _ := ns.Sources(db)
+			t.Errorf("nsswitch routes %q to %v; the fixture needs local files to be authoritative, "+
+				"or FILESYS-0010 goes UNKNOWN on any checkout whose uid is absent from the fixture's passwd",
+				db, sources)
+		}
+	}
 }

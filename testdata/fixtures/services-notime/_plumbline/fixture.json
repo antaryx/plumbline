@@ -1,0 +1,7 @@
+{
+  "description": "No time synchronisation daemon is enabled. systemd-timesyncd and chronyd are both installed and neither is switched on, which is the state a minimal container image is usually in. SERVICES-0003 fails on the empty branch.",
+  "symlinks": {
+    "/etc/systemd/system/multi-user.target.wants/sshd.service": "/usr/lib/systemd/system/sshd.service",
+    "/etc/systemd/system/sysinit.target.wants/systemd-journald.service": "/usr/lib/systemd/system/systemd-journald.service"
+  }
+}

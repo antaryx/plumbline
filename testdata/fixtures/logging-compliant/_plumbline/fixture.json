@@ -1,0 +1,1 @@
+{ "description": "Both daemons configured correctly, in RainerScript throughout: a restrictive fileCreateMode, an omfwd action over TCP, a persistent journal and explicit forwarding to syslog. The journal directory exists, which is what makes Storage=auto resolvable." }

@@ -1,0 +1,7 @@
+{
+  "description": "A hardened Red Hat host. system-auth and password-auth are symlinks to the -ac files authselect generates, which is what every stock RHEL install looks like — the seam's ReadFile refuses a symlink with O_NOFOLLOW, so the collector resolves the chain explicitly through Readlink and reads the regular file at the end. Without that, this whole module would report UNKNOWN on the entire Red Hat family. Every AUTH check passes here.",
+  "symlinks": {
+    "/etc/pam.d/system-auth": "/etc/pam.d/system-auth-ac",
+    "/etc/pam.d/password-auth": "/etc/pam.d/password-auth-ac"
+  }
+}

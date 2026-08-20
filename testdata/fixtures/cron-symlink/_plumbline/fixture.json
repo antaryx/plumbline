@@ -1,0 +1,13 @@
+{
+  "description": "A redirection an attacker would install: /etc/crontab and /etc/cron.d are symbolic links out of /etc. Stat does not follow them, so their mode and owner describe the link rather than what cron reads through it. CRON-0001 says it cannot conclude; CRON-0002 reports the directory that is not a directory.",
+  "modes": {
+    "/etc/cron.allow": "0600", "/etc/cron.hourly": "040700",
+    "/etc/cron.daily": "040700", "/etc/cron.weekly": "040700",
+    "/etc/cron.monthly": "040700"
+  },
+  "owners": {
+    "/etc/cron.allow": "0:0", "/etc/cron.hourly": "0:0",
+    "/etc/cron.daily": "0:0", "/etc/cron.weekly": "0:0",
+    "/etc/cron.monthly": "0:0"
+  }
+}

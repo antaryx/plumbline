@@ -29,3 +29,6 @@ intact.
 | [0012](0012-fileinfo-inode-seam.md) | `FileInfo` carries device and inode, flattened to integers | accepted |
 | [0013](0013-fixture-inode-and-type-overrides.md) | Fixtures describe inode identity and file type in the manifest | accepted |
 | [0014](0014-walk-scope-is-not-truncation.md) | Declared scope is not truncation, and a partial walk returns facts | accepted |
+| [0015](0015-account-data-in-bundles.md) | Password hashes never enter a bundle; `--redact` does not anonymise account names | accepted |
+| [0016](0016-fileinfo-ownership-seam.md) | `FileInfo` ownership is a verdict input; a check gates on state before reading it | accepted |
+| [0017](0017-readlink-returns-unresolved-targets.md) | `Readlink` returns the target as written; resolution goes back through the seam | accepted |

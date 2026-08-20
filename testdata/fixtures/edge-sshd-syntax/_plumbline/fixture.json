@@ -1,0 +1,4 @@
+{
+  "description": "An sshd_config that is valid text and that sshd will not load. 'PermitRootLogin' carries no argument and 'Match' carries no criteria; sshd_config(5) defines no keyword that takes zero arguments, so both are fatal to sshd -t. The file therefore never becomes the running configuration: the daemon keeps whatever last parsed, or is not running. The trap is 'PasswordAuthentication no' on line 5 — it is present, it is correct, and it is not in force. Every SSHD check must be UNKNOWN, including the ones whose keyword the file does appear to set, because sshd rejects a configuration file as a unit rather than skipping the bad lines.",
+  "modes": { "/etc/ssh/sshd_config": "0600" }
+}

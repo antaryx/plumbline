@@ -1,1 +1,1 @@
-{"description":"Unrecognised value; sshd would refuse to start"}
+{"description":"Unrecognised values across every value shape the module parses — boolean, integer, time and enumeration. sshd would refuse to start, so no verdict about the running server can be drawn: all of these are UNKNOWN(unparseable_source)."}

@@ -1,0 +1,1 @@
+{ "description": "A stock host that has been left alone: rsyslog writes locally with nothing setting the file mode, no destination is configured, and journald has an empty [Journal] section. Every verdict here comes from a built-in default rather than from a written value, which is the case most hosts are actually in." }

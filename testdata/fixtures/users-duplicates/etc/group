@@ -1,0 +1,11 @@
+root:x:0:
+daemon:x:1:
+bin:x:2:
+www-data:x:33:
+nogroup:x:65534:
+alice:x:1000:
+sudo:x:27:alice
+staff:x:50:
+oldstaff:x:50:
+dev:x:1500:alice
+dev:x:1501:bob

@@ -1,0 +1,1 @@
+{ "description": "rsyslog includes a directory that matches nothing, and the statements the checks look for are absent from every file that could be read. The forwarding rule and the file mode may both be in the file the include was meant to reach, so a negative verdict is unsupportable — the same reasoning as sshd-unresolved-include." }

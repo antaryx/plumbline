@@ -1,0 +1,14 @@
+{
+  "description": "Byte-for-byte the ownership of filesys-unowned, with one word changed in /etc/nsswitch.conf: passwd and group are served by SSSD as well as by the local files. uid 4242 is now very likely a real directory account whose home this host mounts, and Plumbline opens no network socket, so it cannot ask. FILESYS-0010 must return UNKNOWN(ambiguous_system_state) here and cite the routing table. The pair with filesys-unowned is the whole test: identical disks, opposite verdicts, and the only difference is what the host says its account database is.",
+  "modes": {
+    "/usr/bin/passwd": "4755",
+    "/tmp": "041777"
+  },
+  "owners": {
+    "/var/lib/oldapp": "4242:4242",
+    "/var/lib/oldapp/state.db": "4242:4242",
+    "/var/lib/oldapp/cache.idx": "4242:4242",
+    "/home/alice": "1000:1000",
+    "/home/alice/notes.txt": "1000:4242"
+  }
+}

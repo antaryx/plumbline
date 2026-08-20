@@ -1,0 +1,3 @@
+{
+  "description": "A default-deny nftables ruleset, with the policy written on its own line under the hook declaration — the formatting a hand-maintained file usually has, and the one a parser that only read the hook's own line would miss. Every NETWORK check passes here."
+}

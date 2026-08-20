@@ -3,9 +3,12 @@ package main_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -49,6 +52,20 @@ func unshareAvailable(t *testing.T) bool {
 }
 
 // TestScanSucceedsWithNoNetwork is the acceptance criterion.
+//
+// It compares an online scan against an offline scan of the same fixture and
+// requires the two documents to be identical. That is the claim being made —
+// offline is not a degraded mode — asserted directly rather than through a
+// proxy.
+//
+// The assertion used to be "every finding over cli-host is PASS". That was
+// always a proxy, and it broke for a reason with nothing to do with
+// networking: the CLI fixtures are read through the *live* seam, so their
+// files carry the ownership of whoever checked the repository out, and git
+// cannot record ownership. A check that asserts root ownership therefore fails
+// over them permanently. Comparing the two runs against each other is immune
+// to that, and to every future module: whatever verdicts the catalog produces,
+// the network must not change them.
 func TestScanSucceedsWithNoNetwork(t *testing.T) {
 	if !unshareAvailable(t) {
 		t.Skip("cannot create a network namespace here (unshare -n -r is unavailable or blocked). " +
@@ -72,48 +89,140 @@ func TestScanSucceedsWithNoNetwork(t *testing.T) {
 			strings.TrimSpace(string(probeOut)))
 	}
 
+	// Both runs go through `unshare -r`, and only the offline one adds `-n`.
+	//
+	// The `-r` is what makes CLONE_NEWNET available without real privilege,
+	// and it necessarily maps the calling uid to 0 inside the namespace — so a
+	// bare online run would differ from the offline one in *identity* as well
+	// as in networking: scan.euid changes, and every check that reads file
+	// ownership sees different numbers. Wrapping both sides in `-r` leaves the
+	// network namespace as the only variable, which is the one thing this test
+	// is about.
+	// --json, because this test compares documents byte for byte and the
+	// document is the JSON one. The terminal report is not the API and is not
+	// what an offline guarantee is stated over.
+	online := scanDocument(t, []string{"unshare", "-r"}, bin, "scan", "--root", root, "--json")
+	offline := scanDocument(t, []string{"unshare", "-n", "-r"}, bin, "scan", "--root", root, "--json")
+
+	// The document must be complete before it is worth comparing: two empty
+	// documents are also identical.
+	if online["schema"] != "findings/v1" {
+		t.Errorf("schema = %v", online["schema"])
+	}
+	if n := len(findingsOf(t, online)); n == 0 {
+		t.Fatal("the online scan produced no findings; there is nothing to compare")
+	}
+
+	blankVolatile(online)
+	blankVolatile(offline)
+
+	if reflect.DeepEqual(online, offline) {
+		return
+	}
+
+	// Name the top-level keys that differ before dumping anything. A raw diff
+	// of two full findings documents is thousands of lines and tells the
+	// reader nothing about where to look.
+	var differing []string
+	for _, k := range topLevelKeys(online, offline) {
+		if !reflect.DeepEqual(online[k], offline[k]) {
+			differing = append(differing, k)
+		}
+	}
+	sort.Strings(differing)
+	t.Errorf("the offline scan produced a different document from the online scan; "+
+		"a scan must not depend on the network. Differing top-level key(s): %s",
+		strings.Join(differing, ", "))
+	for _, k := range differing {
+		t.Errorf("  %s online:  %s", k, mustJSON(t, online[k]))
+		t.Errorf("  %s offline: %s", k, mustJSON(t, offline[k]))
+	}
+}
+
+// scanDocument runs the binary, optionally under a wrapper such as unshare,
+// and returns the findings document as a generic map.
+//
+// A map rather than the renderer's own struct on purpose: this is asserting
+// something about the document a consumer receives, and decoding through the
+// producer's type would hide a field the producer stopped emitting.
+func scanDocument(t *testing.T, wrapper []string, bin string, args ...string) map[string]any {
+	t.Helper()
+
+	argv := append(append([]string{}, wrapper...), append([]string{bin}, args...)...)
 	var stdout, stderr bytes.Buffer
-	cmd := exec.Command("unshare", "-n", "-r", bin, "scan", "--root", root)
+	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	runErr := cmd.Run()
-
-	if runErr != nil {
-		t.Fatalf("scan failed with no network: %v\nstderr: %s", runErr, stderr.String())
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("%v failed: %v\nstderr: %s", argv, err, stderr.String())
 	}
 
-	// It did not merely exit 0 — it produced a complete document.
-	var doc struct {
-		Schema  string `json:"schema"`
-		Summary struct {
-			Counts struct {
-				Total int `json:"total"`
-				Pass  int `json:"pass"`
-			} `json:"counts"`
-			Coverage *float64 `json:"coverage"`
-		} `json:"summary"`
-		Findings []struct {
-			CheckID string `json:"check_id"`
-			Result  string `json:"result"`
-		} `json:"findings"`
-	}
+	var doc map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
 		t.Fatalf("output is not a findings document: %v\n%s", err, stdout.String())
 	}
-	if doc.Schema != "findings/v1" {
-		t.Errorf("schema = %q", doc.Schema)
+	return doc
+}
+
+// volatileScanFields are the fields that legitimately differ between two runs
+// of the same scan and are therefore excluded from the comparison.
+//
+// They are named individually rather than by dropping the whole scan object,
+// because the rest of it — euid, profile, the host block — is exactly the kind
+// of thing that must NOT change when the network goes away. A hostname that
+// resolves online and not offline would be a real failure of this claim, and
+// blanking the whole object would hide it.
+var volatileScanFields = []string{
+	// Wall-clock timestamps. Two runs are never simultaneous.
+	"started",
+	"finished",
+	// The absolute path of the fixture, which varies by checkout location.
+	// It is identical between these two particular runs, but blanking it keeps
+	// the test honest if the fixture is ever passed differently.
+	"root",
+}
+
+// blankVolatile removes the fields that cannot be equal between two runs.
+func blankVolatile(doc map[string]any) {
+	scan, ok := doc["scan"].(map[string]any)
+	if !ok {
+		return
 	}
-	if doc.Summary.Counts.Total == 0 {
-		t.Error("the offline scan evaluated nothing")
+	for _, f := range volatileScanFields {
+		delete(scan, f)
 	}
-	if doc.Summary.Coverage == nil || *doc.Summary.Coverage != 100 {
-		t.Errorf("coverage = %v, want 100: an offline scan of a readable host must be complete", doc.Summary.Coverage)
+}
+
+// findingsOf returns the findings array.
+func findingsOf(t *testing.T, doc map[string]any) []any {
+	t.Helper()
+	out, _ := doc["findings"].([]any)
+	return out
+}
+
+// topLevelKeys returns the union of both documents' keys, so a key present in
+// only one of them is still reported.
+func topLevelKeys(a, b map[string]any) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, m := range []map[string]any{a, b} {
+		for k := range m {
+			if !seen[k] {
+				seen[k] = true
+				out = append(out, k)
+			}
+		}
 	}
-	// The verdict is the same one the same fixture produces with a network,
-	// which is the real claim: offline is not a degraded mode.
-	if len(doc.Findings) != 1 || doc.Findings[0].CheckID != "SSHD-0002" || doc.Findings[0].Result != "PASS" {
-		t.Errorf("findings = %+v", doc.Findings)
+	return out
+}
+
+func mustJSON(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf("<unmarshalable: %v>", err)
 	}
+	return string(b)
 }
 
 // TestCollectAndEvalSucceedWithNoNetwork: the two-step path is the one an
@@ -133,7 +242,7 @@ func TestCollectAndEvalSucceedWithNoNetwork(t *testing.T) {
 
 	for _, step := range [][]string{
 		{"collect", "--root", root, "-o", bundlePath},
-		{"eval", bundlePath},
+		{"eval", bundlePath, "--json"},
 	} {
 		var stdout, stderr bytes.Buffer
 		cmd := exec.Command("unshare", append([]string{"-n", "-r", bin}, step...)...)

@@ -1,0 +1,4 @@
+{
+  "description": "Every file the collectors parse, replaced with the same kilobyte of pseudo-random bytes. It is the whole-scan resilience case: not one corrupted file but a host that is corrupted everywhere, which is what a failed restore or a filesystem that lost a journal actually looks like. The requirement is threefold — the binary must not panic, no check may report PASS or FAIL from any of these files, and the fact errors must name each one so an operator knows what to go and look at. The bytes are generated from a fixed seed rather than /dev/urandom so that the fixture is byte-identical on every checkout; a fixture that changes between clones cannot be the basis of an assertion.",
+  "modes": { "/etc/shadow": "0640" }
+}

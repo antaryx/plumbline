@@ -218,6 +218,15 @@ type UnknownFact struct {
 func (u UnknownFact) FactID() fact.ID  { return u.ID }
 func (u UnknownFact) FactVersion() int { return u.Version }
 
+// OpaqueFact marks this as a fact that is present and not interpretable,
+// implementing fact.Opaque so that the catalog's required-fact gate refuses to
+// evaluate a check over it. Preserving an undecodable fact is what keeps a
+// bundle forwardable; letting a check read the zero value out of one is how a
+// decode failure became "the SSH server is not configured on this host".
+func (u UnknownFact) OpaqueFact() int { return u.Version }
+
+var _ fact.Opaque = UnknownFact{}
+
 // MarshalJSON returns the preserved bytes unaltered, so that writing a bundle
 // that was read is a faithful copy rather than a re-interpretation.
 func (u UnknownFact) MarshalJSON() ([]byte, error) {
@@ -236,6 +245,126 @@ type decoder struct {
 }
 
 var registry = map[fact.ID]decoder{
+	fact.RsyslogID: {
+		version: fact.Rsyslog{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Rsyslog
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.JournaldID: {
+		version: fact.Journald{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Journald
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.MountsID: {
+		version: fact.Mounts{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Mounts
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.FirewallID: {
+		version: fact.Firewall{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Firewall
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.PAMID: {
+		version: fact.PAM{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.PAM
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.ServicesID: {
+		version: fact.Services{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Services
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.CronID: {
+		version: fact.Cron{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Cron
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.SysctlID: {
+		version: fact.Sysctl{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Sysctl
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.PasswdID: {
+		version: fact.Passwd{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Passwd
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.ShadowID: {
+		version: fact.Shadow{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Shadow
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.GroupID: {
+		version: fact.Group{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.Group
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
+	fact.NSSwitchID: {
+		version: fact.NSSwitch{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.NSSwitch
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
 	fact.SSHDConfigID: {
 		version: fact.SSHDConfig{}.FactVersion(),
 		decode: func(raw json.RawMessage) (fact.Fact, error) {
@@ -267,12 +396,38 @@ var fsMatchesDecoder = decoder{
 	},
 }
 
+// fsTallyDecoder handles the fs.tally.* namespace, for the reason
+// fsMatchesDecoder handles fs.*: there is one ID per registered walker tally
+// and the set is decided by which modules are compiled in, so the IDs cannot
+// be listed ahead of time.
+var fsTallyDecoder = decoder{
+	version: fact.FSTally{}.FactVersion(),
+	decode: func(raw json.RawMessage) (fact.Fact, error) {
+		var f fact.FSTally
+		if err := json.Unmarshal(raw, &f); err != nil {
+			return nil, err
+		}
+		return f, nil
+	},
+}
+
 // decoderFor resolves a fact ID to its decoder. Exact registrations win; the
-// fs.* namespace is matched by prefix. An ID matching neither is preserved
+// fs.* namespaces are matched by prefix. An ID matching neither is preserved
 // opaquely, never guessed at.
+//
+// **fs.tally. must be tested before fs.**, and the ordering is load bearing
+// rather than stylistic: fs.tally.owner_uid also has the fs. prefix, and
+// decoding it as an FSMatches would succeed — encoding/json ignores fields it
+// does not recognise — producing an empty, complete-looking match set instead
+// of the tally that was collected. Every check reading it would then get a
+// confident wrong answer from a bundle that was written correctly. The longer
+// prefix wins, and the test below proves it.
 func decoderFor(id fact.ID) (decoder, bool) {
 	if d, ok := registry[id]; ok {
 		return d, true
+	}
+	if strings.HasPrefix(string(id), fact.FSTallyPrefix) && len(id) > len(fact.FSTallyPrefix) {
+		return fsTallyDecoder, true
 	}
 	if strings.HasPrefix(string(id), fact.FSFactPrefix) && len(id) > len(fact.FSFactPrefix) {
 		return fsMatchesDecoder, true
@@ -475,12 +630,12 @@ func Read(r io.Reader) (Bundle, error) {
 		return b, fmt.Errorf("%w: no %s", ErrMalformed, manifestMember)
 	}
 	if err := json.Unmarshal(manifestJSON, &b.Manifest); err != nil {
-		return b, fmt.Errorf("%w: %s: %v", ErrMalformed, manifestMember, err)
+		return b, fmt.Errorf("%w: %s: %w", ErrMalformed, manifestMember, err)
 	}
 
 	if metaJSON, ok := members[metaMember]; ok {
 		if err := json.Unmarshal(metaJSON, &b.Meta); err != nil {
-			return b, fmt.Errorf("%w: %s: %v", ErrMalformed, metaMember, err)
+			return b, fmt.Errorf("%w: %s: %w", ErrMalformed, metaMember, err)
 		}
 	}
 
@@ -496,7 +651,7 @@ func Read(r io.Reader) (Bundle, error) {
 	if errorsJSON, ok := members[errorsMember]; ok {
 		var errs []fact.Error
 		if err := json.Unmarshal(errorsJSON, &errs); err != nil {
-			return b, fmt.Errorf("%w: %s: %v", ErrMalformed, errorsMember, err)
+			return b, fmt.Errorf("%w: %s: %w", ErrMalformed, errorsMember, err)
 		}
 		for _, e := range errs {
 			b.Facts.PutError(e)
@@ -528,7 +683,7 @@ func readArchive(r io.Reader) (map[string][]byte, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%w: reading tar: %v", ErrMalformed, err)
+			return nil, fmt.Errorf("%w: reading tar: %w", ErrMalformed, err)
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			return nil, fmt.Errorf("%w: member %q is not a regular file", ErrMalformed, hdr.Name)
@@ -548,7 +703,7 @@ func readArchive(r io.Reader) (map[string][]byte, error) {
 		var buf bytes.Buffer
 		n, err := io.Copy(&buf, io.LimitReader(tr, remaining+1))
 		if err != nil {
-			return nil, fmt.Errorf("%w: reading member %q: %v", ErrMalformed, hdr.Name, err)
+			return nil, fmt.Errorf("%w: reading member %q: %w", ErrMalformed, hdr.Name, err)
 		}
 		if n > remaining {
 			return nil, ErrTooLarge
@@ -579,7 +734,7 @@ func verifyIntegrity(members map[string][]byte) error {
 
 	var doc integrityDoc
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		return fmt.Errorf("%w: %s: %v", ErrMalformed, integrityMember, err)
+		return fmt.Errorf("%w: %s: %w", ErrMalformed, integrityMember, err)
 	}
 	if doc.Algorithm != hashAlgorithm {
 		return fmt.Errorf("%w: %s names algorithm %q, this build verifies %q only",
@@ -630,7 +785,7 @@ func readFacts(b *Bundle, members map[string][]byte) error {
 
 		var doc factDoc
 		if err := json.Unmarshal(raw, &doc); err != nil {
-			return fmt.Errorf("%w: %s: %v", ErrMalformed, ref.Member, err)
+			return fmt.Errorf("%w: %s: %w", ErrMalformed, ref.Member, err)
 		}
 		if doc.ID != ref.ID || doc.FactVersion != ref.FactVersion {
 			return fmt.Errorf("%w: %s declares %s v%d, manifest indexes it as %s v%d",
@@ -644,7 +799,7 @@ func readFacts(b *Bundle, members map[string][]byte) error {
 		}
 		f, err := d.decode(doc.Data)
 		if err != nil {
-			return fmt.Errorf("%w: decoding fact %s: %v", ErrMalformed, doc.ID, err)
+			return fmt.Errorf("%w: decoding fact %s: %w", ErrMalformed, doc.ID, err)
 		}
 		b.Facts.Put(f)
 	}

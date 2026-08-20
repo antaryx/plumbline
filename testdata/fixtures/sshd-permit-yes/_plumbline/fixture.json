@@ -1,1 +1,1 @@
-{"description":"Root login permitted with password"}
+{"description":"An unhardened host: every SSHD check's insecure value set explicitly, including weak crypto in all three algorithm lists. The module-wide invariant test asserts this fixture fails all of them."}

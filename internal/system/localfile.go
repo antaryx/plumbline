@@ -2,6 +2,7 @@ package system
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 )
@@ -65,4 +66,35 @@ func CreateLocal(path string) (*os.File, error) { return CreateBundle(path) }
 func LocalExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// IsTerminal reports whether w is a character device — a terminal rather than
+// a file, a pipe or a test buffer.
+//
+// It lives here for the reason CreateBundle does: this package is the only one
+// allowed to touch the operating system, and asking the kernel what an open
+// file descriptor is counts. It is deliberately *not* on the System interface,
+// because it is not an observation about the host being audited — it is a
+// property of this process's own output, and running it beneath --root would
+// be meaningless.
+//
+// It is the third and weakest of the three colour rules. --no-color and
+// NO_COLOR are statements of intent; this one is an inference, and it exists
+// so that `plumbline scan > report.txt` produces a file without escape
+// sequences in it without the operator having to remember a flag.
+//
+// Anything that is not an *os.File is not a terminal, which is the answer that
+// keeps a test buffer's output free of ANSI without the test having to say so.
+func IsTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	if err != nil {
+		// A descriptor we cannot describe is not one we should write escape
+		// sequences to.
+		return false
+	}
+	return info.Mode()&fs.ModeCharDevice != 0
 }

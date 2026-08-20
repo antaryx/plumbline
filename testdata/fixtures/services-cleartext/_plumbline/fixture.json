@@ -1,0 +1,9 @@
+{
+  "description": "telnet and rsh enabled through socket activation, which is how they are actually shipped: the .socket is enabled and the per-connection .service is never enabled at all. SERVICES-0001 fails; everything else passes.",
+  "symlinks": {
+    "/etc/systemd/system/multi-user.target.wants/sshd.service": "/usr/lib/systemd/system/sshd.service",
+    "/etc/systemd/system/multi-user.target.wants/chronyd.service": "/usr/lib/systemd/system/chronyd.service",
+    "/etc/systemd/system/sockets.target.wants/telnet.socket": "/usr/lib/systemd/system/telnet.socket",
+    "/etc/systemd/system/sockets.target.wants/rsh.socket": "/usr/lib/systemd/system/rsh.socket"
+  }
+}

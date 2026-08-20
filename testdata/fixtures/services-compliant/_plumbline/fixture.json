@@ -1,0 +1,8 @@
+{
+  "description": "A server as it should look: sshd and chronyd enabled, journald enabled, systemd-timesyncd installed but switched off, everything root-owned. Every SERVICES check passes here. It also carries the two awkward shapes a real host has and a naive fixture does not: /lib is the usr-merge symlink, so /lib/systemd/system and /usr/lib/systemd/system are one directory that the collector proves identical by inode rather than assuming a layout; and dbus.service is enabled through a real *relative* symlink, which is what an administrator running `ln -s` produces and which names a different file entirely if it is read as absolute.",
+  "symlinks": {
+    "/etc/systemd/system/multi-user.target.wants/sshd.service": "/usr/lib/systemd/system/sshd.service",
+    "/etc/systemd/system/multi-user.target.wants/chronyd.service": "/usr/lib/systemd/system/chronyd.service",
+    "/etc/systemd/system/sysinit.target.wants/systemd-journald.service": "/usr/lib/systemd/system/systemd-journald.service"
+  }
+}

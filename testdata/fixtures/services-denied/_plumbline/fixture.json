@@ -1,0 +1,6 @@
+{
+  "description": "An unprivileged scan of a host whose /etc/systemd/system a parent directory refuses to traverse. The vendor units are readable and nothing is enabled among them, but enablement lives in /etc and that was never seen \u2014 so every SERVICES check is UNKNOWN rather than reporting the host clean.",
+  "unstattable": [
+    "/etc/systemd/system"
+  ]
+}

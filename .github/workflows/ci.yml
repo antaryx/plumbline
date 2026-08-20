@@ -69,9 +69,14 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+      # Pinned rather than `latest`, and pinned to the last v1 release. The
+      # config in .golangci.yml is v1 format; golangci-lint v2 requires a
+      # `version: "2"` key and a restructured file, so `latest` would silently
+      # flip the linter to a major that cannot read the config — which is
+      # exactly how the G304 exclusion went missing once already.
       - uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.8
 
   build:
     name: build linux/${{ matrix.goarch }}
@@ -179,10 +184,16 @@ jobs:
 
       # And again from the outside, so the guarantee does not depend on the test
       # harness being correct about its own namespace.
+      #
+      # --json is required, not decorative: since v0.3.0 the default output is
+      # the human-readable terminal report, and every assertion below greps the
+      # findings document. A step that drops the flag does not fail loudly --
+      # it greps a report that never contained the string and reports a broken
+      # scanner.
       - name: A real scan in a namespace with no network
         run: |
           go build -trimpath -o /tmp/plumbline ./cmd/plumbline
-          sudo unshare -n -- /tmp/plumbline scan --root testdata/fixtures/cli-host > /tmp/findings.json
+          sudo unshare -n -- /tmp/plumbline scan --json --root testdata/fixtures/cli-host > /tmp/findings.json
           grep -q '"schema": "findings/v1"' /tmp/findings.json
           grep -q '"result": "PASS"' /tmp/findings.json
           echo "a full scan completed with no network interfaces present"
@@ -236,29 +247,60 @@ jobs:
       # A fixture root, so the verdict is identical on every distribution. If
       # this diverges, the difference is in the binary or the libc, not in the
       # host being scanned.
+      #
+      # --json is load-bearing, not decorative: since v0.3.0 the default output
+      # is the human-readable terminal report, and every grep below parses the
+      # document.
+      #
+      # Coverage must be 100, and that is a real assertion about the fixture,
+      # not a formality. The tree is read through the LIVE seam, so it carries
+      # the ownership of the checkout rather than the manifest's — uid 1001 on
+      # a runner, which is absent from the fixture's /etc/passwd. A check that
+      # cannot resolve that owner and is not told the local files are
+      # authoritative returns UNKNOWN, and coverage falls. See FIXTURES.md §4.3.
       - name: Deterministic scan of a fixture tree
         run: |
+          set -o pipefail
           docker run --rm -v "$PWD:/w" -w /w ${{ matrix.image }} \
-            /w/dist/plumbline-linux-amd64 scan --root testdata/fixtures/cli-host > /tmp/out.json
-          grep -q '"schema": "findings/v1"' /tmp/out.json
-          grep -q '"check_id": "SSHD-0002"' /tmp/out.json
-          grep -q '"result": "PASS"' /tmp/out.json
-          grep -q '"coverage": 100' /tmp/out.json
+            /w/dist/plumbline-linux-amd64 scan --json --root testdata/fixtures/cli-host > /tmp/out.json
+          assert() {
+            if ! grep -q "$1" /tmp/out.json; then
+              echo "::error::expected $1 in the scan document on ${{ matrix.image }}"
+              # A failed assertion here is almost always a verdict that moved,
+              # so print the verdicts rather than making the next person guess.
+              jq -r '.summary, (.findings[] | select(.result != "PASS")
+                    | {check_id, result, unknown_reason, detail})' /tmp/out.json || cat /tmp/out.json
+              exit 1
+            fi
+          }
+          assert '"schema": "findings/v1"'
+          assert '"check_id": "SSHD-0002"'
+          assert '"result": "PASS"'
+          assert '"coverage": 100'
           echo "identical verdict produced on ${{ matrix.image }}"
 
       # And the container's own filesystem, which is what an operator actually
-      # points this at. The verdict differs per image and that is fine; what
-      # must hold is that it runs, emits a valid document, and does not crash.
+      # points this at. The verdict differs per image and that is fine — that is
+      # the point of running four of them; what must hold is that it runs, emits
+      # a document that parses, and does not crash.
       - name: Scan the container's own root
         run: |
           docker run --rm -v "$PWD/dist:/dist:ro" ${{ matrix.image }} \
-            /dist/plumbline-linux-amd64 scan > /tmp/self.json
+            /dist/plumbline-linux-amd64 scan --json > /tmp/self.json
+          jq . /tmp/self.json > /dev/null
           grep -q '"schema": "findings/v1"' /tmp/self.json
           grep -q '"euid": 0' /tmp/self.json
-          # No sshd in a base image, so the only finding is NOT_APPLICABLE and
-          # both figures are undefined. null rather than 0 is the whole point of
-          # ADR-0010, and this is it happening in the shipped binary.
-          grep -q '"posture": null' /tmp/self.json
+          # This step deliberately asserts nothing about the verdict. It used to
+          # require '"posture": null' — true when SSHD was the only module, so a
+          # base image with no sshd produced NOT_APPLICABLE and nothing else. The
+          # KERNEL and USERS modules changed that: every base image has /proc/sys
+          # and /etc/passwd, so real checks now evaluate and posture is a real
+          # number (81-95 across this matrix). The assertion was pinned to a
+          # property of the catalog's size rather than to anything about the
+          # binary, which is why it broke on a change that was working correctly.
+          #
+          # ADR-0010's null-vs-zero distinction is still covered, in the place
+          # that can hold it steady: internal/score's unit tests.
 
       - name: version reports all three versions
         run: |
@@ -288,6 +330,6 @@ jobs:
           docker run --rm -v "$PWD:/w" -v /tmp/cross:/out -w /w ubuntu:24.04 \
             /w/dist/plumbline-linux-amd64 collect --root testdata/fixtures/cli-host -o /out/cross.plb
           docker run --rm -v /tmp/cross:/out:ro -v "$PWD/dist:/dist:ro" ${{ matrix.image }} \
-            /dist/plumbline-linux-amd64 eval /out/cross.plb > /tmp/cross.json
+            /dist/plumbline-linux-amd64 eval --json /out/cross.plb > /tmp/cross.json
           grep -q '"result": "PASS"' /tmp/cross.json
           echo "a bundle collected on ubuntu:24.04 evaluated cleanly on ${{ matrix.image }}"

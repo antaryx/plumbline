@@ -1,0 +1,42 @@
+# Globally correct. The exception at the bottom is the whole point.
+Port 22
+
+PermitRootLogin no
+PasswordAuthentication no
+PermitEmptyPasswords no
+HostbasedAuthentication no
+IgnoreRhosts yes
+StrictModes yes
+UsePAM yes
+MaxAuthTries 3
+LoginGraceTime 60
+
+X11Forwarding no
+AllowTcpForwarding no
+AllowAgentForwarding no
+PermitUserEnvironment no
+
+ClientAliveInterval 300
+ClientAliveCountMax 3
+
+LogLevel VERBOSE
+Banner /etc/issue.net
+
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes256-ctr
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+KexAlgorithms curve25519-sha256,diffie-hellman-group16-sha512
+
+# Only the keywords sshd_config actually permits inside a Match block.
+Match Address 0.0.0.0/0
+    PermitRootLogin yes
+    PasswordAuthentication yes
+    PermitEmptyPasswords yes
+    HostbasedAuthentication yes
+    IgnoreRhosts no
+    MaxAuthTries 10
+    X11Forwarding yes
+    AllowTcpForwarding yes
+    AllowAgentForwarding yes
+    ClientAliveCountMax 0
+    LogLevel ERROR
+    Banner none

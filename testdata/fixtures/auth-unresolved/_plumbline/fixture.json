@@ -1,0 +1,3 @@
+{
+  "description": "The password stack includes a file that does not exist. A PAM stack is a graph rather than a file, and an include that could not be followed may hold exactly the rule that decides a check — so every conclusion drawn from *not* finding a module is UNKNOWN here, while conclusions drawn from what was read survive. This is ADR-0014's asymmetry applied to an include graph."
+}

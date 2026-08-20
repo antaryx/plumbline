@@ -1,0 +1,4 @@
+{
+  "description": "A host where /etc/passwd is not an account database. It is a saved HTML error page — the way this happens in practice is a configuration-management run that fetched a template from a server which answered 404 and wrote the body out anyway. The file is valid UTF-8 text with no NUL byte, so the binary gate does not fire; every line simply fails to parse as a passwd entry. The account list is therefore empty, and the danger is that an empty list satisfies every negative assertion in the USERS module: 'only root has uid 0', 'no account has an empty password', 'no duplicate uids'. All of them are true of this file and none of them is true of the host. Every USERS check reading passwd must return UNKNOWN.",
+  "modes": { "/etc/shadow": "0640" }
+}

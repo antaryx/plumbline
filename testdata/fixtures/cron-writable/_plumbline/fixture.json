@@ -1,0 +1,15 @@
+{
+  "description": "The escalation case, reached both ways. /etc/crontab is root-owned but world-writable; /etc/cron.d is owned by an unprivileged service account; /etc/cron.hourly is group-writable; /etc/cron.allow is world-writable, so the allow list CRON-0003 reports as in force is one any user can add themselves to.",
+  "modes": {
+    "/etc/crontab": "0666", "/etc/cron.allow": "0666",
+    "/etc/cron.d": "040755", "/etc/cron.hourly": "040775",
+    "/etc/cron.daily": "040700", "/etc/cron.weekly": "040700",
+    "/etc/cron.monthly": "040700"
+  },
+  "owners": {
+    "/etc/crontab": "0:0", "/etc/cron.allow": "0:0",
+    "/etc/cron.d": "1001:1001", "/etc/cron.hourly": "0:50",
+    "/etc/cron.daily": "0:0", "/etc/cron.weekly": "0:0",
+    "/etc/cron.monthly": "0:0"
+  }
+}
