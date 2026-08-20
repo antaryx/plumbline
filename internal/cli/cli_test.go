@@ -1353,3 +1353,100 @@ func rewriteScanTime(t *testing.T, path string, at time.Time) {
 		t.Fatalf("rewriting %s: %v", path, err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// findings document handed to a command that wants a bundle
+// ---------------------------------------------------------------------------
+
+// TestAFindingsDocumentIsRejectedInTermsTheOperatorUsed is the fix for the
+// commonest mistake anyone makes with this tool. `scan --json > out.json` and
+// `scan --save-bundle out.plb` are both "the output of a scan" from the
+// outside, and handing the first to eval or diff used to produce
+// `malformed bundle: reading tar: invalid input: magic number mismatch` — an
+// accurate description of the sixth thing that went wrong and no help with the
+// first.
+func TestAFindingsDocumentIsRejectedInTermsTheOperatorUsed(t *testing.T) {
+	_, doc, _ := runJSON(t, "scan", "--root", hostFixture)
+	path := filepath.Join(t.TempDir(), "findings.json")
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, args := range [][]string{
+		{"eval", path},
+		{"diff", path, path},
+	} {
+		t.Run(args[0], func(t *testing.T) {
+			code, _, stderr := run(t, args...)
+			if code != cli.ExitInternal {
+				t.Errorf("exit = %d, want %d", code, cli.ExitInternal)
+			}
+			for _, want := range []string{
+				"findings/v1 document", // what it actually is
+				"not an evidence bundle",
+				"--save-bundle", // and how to make the right thing
+				"collect -o",
+			} {
+				if !strings.Contains(stderr, want) {
+					t.Errorf("the error omits %q:\n%s", want, stderr)
+				}
+			}
+			if strings.Contains(stderr, "magic number mismatch") {
+				t.Errorf("the tar error leaked to the operator:\n%s", stderr)
+			}
+		})
+	}
+}
+
+// TestABundleIsReadWhateverItIsNamed. The sniff is on content, not on the
+// file's extension: a bundle an operator chose to call .json is still a
+// bundle, and refusing it because of its name would replace one wrong answer
+// with another.
+func TestABundleIsReadWhateverItIsNamed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "misleading-name.json")
+	if code, _, stderr := run(t, "collect", "--root", hostFixture, "-o", path); code != cli.ExitOK {
+		t.Fatalf("collect: %s", stderr)
+	}
+	if code, _, stderr := run(t, "eval", path); code != cli.ExitOK {
+		t.Errorf("a bundle named .json was refused: exit %d, %s", code, stderr)
+	}
+}
+
+// TestAnEmptyFileIsNotMistakenForAFindingsDocument. The sniff must not fire on
+// anything that merely fails to be a bundle, or the advice it gives becomes
+// wrong for every other kind of broken input.
+func TestAnEmptyFileIsNotMistakenForAFindingsDocument(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body []byte
+	}{
+		{"empty", nil},
+		{"whitespace", []byte("   \n\t ")},
+		{"binary rubbish", []byte{0x00, 0x01, 0x02, 0x03, 0xff}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "broken.plb")
+			if err := os.WriteFile(path, tc.body, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			code, _, stderr := run(t, "eval", path)
+			if code != cli.ExitInternal {
+				t.Errorf("exit = %d, want %d", code, cli.ExitInternal)
+			}
+			if strings.Contains(stderr, "findings/v1 document") {
+				t.Errorf("a non-JSON file was reported as a findings document:\n%s", stderr)
+			}
+		})
+	}
+}
+
+// TestScanHelpNamesTheBundleFlag. The trap this fixes is one an operator falls
+// into while reading --help, so the answer has to be there too.
+func TestScanHelpNamesTheBundleFlag(t *testing.T) {
+	_, stdout, _ := run(t, "scan", "--help")
+	for _, want := range []string{"--save-bundle", "host.plb", "eval", "diff"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("scan --help does not mention %q", want)
+		}
+	}
+}

@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -154,7 +156,61 @@ func readBundle(path string) (bundle.Bundle, error) {
 		return bundle.Bundle{}, err
 	}
 	defer f.Close()
+	if err := rejectFindingsDocument(f, path); err != nil {
+		return bundle.Bundle{}, err
+	}
 	return bundle.Read(f)
+}
+
+// sniffLen is how much of a file is examined to tell a JSON document from a
+// bundle. A findings document opens with `{` and names its schema within the
+// first hundred bytes; a bundle opens with a zstd frame magic.
+const sniffLen = 512
+
+// rejectFindingsDocument catches the commonest mistake anyone makes with this
+// tool and answers it in the terms the operator was thinking in.
+//
+// `plumbline scan --json > out.json` produces a *findings document*: verdicts,
+// already evaluated. `eval` and `diff` want a *bundle*: the facts those
+// verdicts were derived from, which is what lets them re-evaluate with today's
+// catalog. The two are both "the output of a scan" from the outside, and
+// handing the wrong one over used to produce
+// `malformed bundle: reading tar: invalid input: magic number mismatch` —
+// an accurate description of the sixth thing that went wrong and no help at all
+// with the first.
+//
+// **The test is the file's first bytes, not its extension.** A bundle an
+// operator chose to name `.json` is still a bundle, and refusing to read it
+// because of its name would replace one wrong answer with another. Every
+// findings document this tool has ever written begins with `{`, so the content
+// answers the question the name only guesses at.
+func rejectFindingsDocument(f *os.File, path string) error {
+	prefix := make([]byte, sniffLen)
+	n, err := f.Read(prefix)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("reading %s: %w", path, err)
+	}
+	// Whatever happens next, the reader has to start from the beginning: this
+	// function is a look, not a consumption.
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("reading %s: %w", path, err)
+	}
+	prefix = prefix[:n]
+
+	if !bytes.HasPrefix(bytes.TrimLeft(prefix, " \t\r\n"), []byte("{")) {
+		return nil
+	}
+
+	what := "a JSON document"
+	if bytes.Contains(prefix, []byte(`"findings/v1"`)) {
+		what = "a findings/v1 document — the rendered verdicts of a scan"
+	}
+	return fmt.Errorf("%s is %s, not an evidence bundle.\n"+
+		"  A bundle holds the facts a scan observed, which is what lets them be re-evaluated;\n"+
+		"  a findings document holds verdicts that have already been drawn from those facts.\n"+
+		"  Write one with:  plumbline scan --save-bundle host.plb   (keeps the evidence a scan used)\n"+
+		"               or:  plumbline collect -o host.plb          (collects evidence and evaluates nothing)",
+		path, what)
 }
 
 // evaluate runs the catalog over collected facts.

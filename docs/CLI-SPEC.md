@@ -305,7 +305,15 @@ with no network and no privileges, and CI asserts both.
 plumbline diff OLD NEW [--suppress FILE] [--no-color] [-o PATH]
 ```
 
-Compares two **bundles** and reports only what moved. Unchanged findings are
+Compares two **bundles** and reports only what moved.
+
+Both arguments are evidence bundles (`plumbline scan --save-bundle host.plb`
+or `plumbline collect -o host.plb`), **not** findings documents. A findings
+document written with `--json` holds verdicts that have already been drawn; a
+bundle holds the facts they were drawn from, which is what lets `diff` judge
+both sides with one catalog. Handing a findings document to `eval` or `diff` is
+rejected by content — the file's first bytes, never its extension — with an
+error naming what it is and how to produce the right file. Unchanged findings are
 never printed: a diff that lists everything is a report.
 
 **Both sides are re-evaluated with today's catalog.** A bundle stores facts, not

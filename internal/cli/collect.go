@@ -73,7 +73,7 @@ today's checks in mind cannot answer tomorrow's question.`,
 
 	f := cmd.Flags()
 	f.StringVar(&root, "root", "", "scan root; paths are interpreted beneath it")
-	f.StringVarP(&output, "output", "o", "", "bundle to write (required)")
+	f.StringVarP(&output, "output", "o", "", "evidence bundle to write, e.g. host.plb (required)")
 	f.BoolVar(&redact, "redact", false, "omit hostname and non-loopback addresses at collection time")
 	f.StringVar(&profile, "profile", "default", "collection profile")
 	f.DurationVar(&timeout, "timeout", 30*time.Minute, "whole-scan budget")

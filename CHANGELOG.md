@@ -11,8 +11,21 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-Nothing yet. `docs/ROADMAP.md` v0.5.0 is next: ecosystem integration — SARIF
-export, `plumbline explain`, and the profile architecture.
+`docs/ROADMAP.md` v0.5.0 is next: ecosystem integration — SARIF export,
+`plumbline explain`, and the profile architecture.
+
+### Fixed
+- **`eval` and `diff` now say so when handed a findings document.** Passing
+  `scan --json > out.json` output to either produced
+  `malformed bundle: reading tar: invalid input: magic number mismatch`, which
+  described the sixth thing that went wrong and not the first. They now report
+  what the file actually is and how to write the file they wanted. The test is
+  the file's first bytes, never its extension — a bundle an operator chose to
+  name `.json` is still a bundle.
+- `scan --help`, `collect --help` and `diff --help` name `--save-bundle` and
+  `-o` explicitly, with the `.plb` extension and the reason the two artefacts
+  are not interchangeable. The trap was one an operator falls into while
+  reading `--help`, so the answer belongs there.
 
 ---
 

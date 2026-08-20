@@ -33,7 +33,14 @@ convenience over a pipeline, never a different code path: the same collectors
 produce the same facts and the same catalog evaluates them, so a scan and a
 collect-then-eval of one host give identical findings. A test asserts that.
 
-Use --save-bundle to keep the evidence a scan was derived from.`,
+Use --save-bundle to keep the evidence a scan was derived from:
+
+    plumbline scan --save-bundle host.plb
+
+That file is an evidence bundle — the facts observed, not the verdicts drawn
+from them — and it is what 'plumbline eval' and 'plumbline diff' take. A
+findings document written with '--json > out.json' holds verdicts and cannot be
+re-evaluated or diffed; the two are not interchangeable.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			gt.bind(cmd)
@@ -84,7 +91,7 @@ Use --save-bundle to keep the evidence a scan was derived from.`,
 
 	f := cmd.Flags()
 	f.StringVar(&root, "root", "", "scan root; paths are interpreted beneath it")
-	f.StringVar(&saveBundle, "save-bundle", "", "keep the bundle this scan produced")
+	f.StringVar(&saveBundle, "save-bundle", "", "write the evidence bundle this scan used to PATH (e.g. host.plb); required for later eval/diff")
 	f.BoolVar(&redact, "redact", false, "omit hostname and non-loopback addresses at collection time")
 	f.StringVar(&profile, "profile", "default", "collection profile")
 	f.DurationVar(&timeout, "timeout", 30*time.Minute, "whole-scan budget")

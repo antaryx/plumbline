@@ -27,6 +27,15 @@ func newDiffCmd(g *globals, stdout, stderr io.Writer) *cobra.Command {
 		Long: `diff re-evaluates two bundles with today's catalog and reports only what
 moved. Unchanged findings are not printed.
 
+Both arguments are evidence bundles, not findings documents. Write one with:
+
+    plumbline scan --save-bundle host.plb
+    plumbline collect -o host.plb
+
+A findings document ('--json > out.json') holds verdicts that have already been
+drawn; a bundle holds the facts they were drawn from, which is what lets diff
+judge both sides with the same catalog.
+
 Both sides are judged by the same code, which is what makes the comparison
 mean something: a check whose logic was corrected between the two collections
 cannot appear as the host having changed. There is consequently no
@@ -96,11 +105,15 @@ accepting a risk diffs as an acceptance rather than as a fix.`,
 
 // readBundleFor names which of the two arguments failed. "no such file" is not
 // a useful message when the command took two paths.
+//
+// The path is not repeated here: every error readBundle returns already names
+// the file it was reading, and "OLD bundle x.json: x.json is a findings
+// document" reads like a bug in the tool.
 func readBundleFor(which, path string) (bundle.Bundle, error) {
 	b, err := readBundle(path)
 	if err != nil {
 		return bundle.Bundle{}, exitError{code: ExitInternal,
-			message: fmt.Sprintf("%s bundle %s: %v", which, path, err)}
+			message: fmt.Sprintf("the %s argument: %v", which, err)}
 	}
 	return b, nil
 }
