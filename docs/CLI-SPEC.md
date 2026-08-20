@@ -59,7 +59,7 @@ the same.
 
 | Flag | Default | Meaning | Implemented |
 |---|---|---|---|
-| `--format NAME` | `terminal` | `terminal`, `json`. `sarif` is planned | **yes** (v0.3) |
+| `--format NAME` | `terminal` | `terminal`, `json`, `sarif` | **yes** |
 | `--json` | false | Shorthand for `--format json` | **yes** (v0.3) |
 | `--output PATH` | — | Output file; only valid with a single format | **yes** |
 | `--no-color` | false | Also honours `NO_COLOR` and non-TTY stdout | **yes** (v0.3) |
@@ -128,6 +128,35 @@ produces a diff every night and people stop reading it. Only check titles are
 ever truncated to fit; a check ID, a path or an evidence excerpt is a value an
 operator copies, and one silently shortened to make a column line up is worse
 than a ragged column.
+
+#### `--format sarif`
+
+SARIF 2.1.0, for GitHub Advanced Security and anything else that ingests it.
+The mapping is specified in `docs/adr/0018-sarif-mapping.md`; the parts an
+operator needs to know:
+
+| Plumbline | SARIF |
+|---|---|
+| `FAIL`, `CRITICAL`/`HIGH` | result, `level: error` |
+| `FAIL`, `MEDIUM`/`LOW`/`INFO` | result, `level: warning` |
+| `UNKNOWN` | result, `level: warning`, message opens `Could not determine (reason):` |
+| `SKIPPED` **with** a suppression | result with a `suppressions` array, `kind: external` |
+| `SKIPPED` without one | not a result |
+| `PASS`, `NOT_APPLICABLE` | not results; counted in `invocations[0].properties` |
+
+**`UNKNOWN` is a `warning`, never `none`.** `none` files it as informational,
+which reports a cleaner host than the scan found. The consequence of an
+`UNKNOWN` is a finding's consequence — somebody has to look — and
+`properties["plumbline/result"]` carries the literal state for a consumer that
+models it.
+
+**SARIF is a lossy projection and is not the API.** It carries what a consumer
+acts on; `findings/v1` carries everything observed. A pipeline that needs the
+passing checks reads `--json`.
+
+`partialFingerprints["plumblineFingerprint/v1"]` is `finding.Fingerprint` — the
+same string a suppression file matches on, so GitHub's dismissals and the
+suppression baseline stay aligned.
 
 #### What may be parsed
 

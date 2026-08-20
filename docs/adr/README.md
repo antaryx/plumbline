@@ -32,3 +32,4 @@ intact.
 | [0015](0015-account-data-in-bundles.md) | Password hashes never enter a bundle; `--redact` does not anonymise account names | accepted |
 | [0016](0016-fileinfo-ownership-seam.md) | `FileInfo` ownership is a verdict input; a check gates on state before reading it | accepted |
 | [0017](0017-readlink-returns-unresolved-targets.md) | `Readlink` returns the target as written; resolution goes back through the seam | accepted |
+| [0018](0018-sarif-mapping.md) | SARIF mapping: `UNKNOWN` is a warning, suppressions are SARIF suppressions, passes are counts | accepted |

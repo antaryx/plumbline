@@ -110,9 +110,11 @@ func TestResolveFormat(t *testing.T) {
 		{"both, agreeing", []string{"--format", "json", "--json"}, FormatJSON, false},
 		{"mixed case", []string{"--format", "JSON"}, FormatJSON, false},
 		{"surrounding space", []string{"--format", " json "}, FormatJSON, false},
+		{"--format sarif", []string{"--format", "sarif"}, FormatSARIF, false},
+		{"sarif, mixed case", []string{"--format", "SARIF"}, FormatSARIF, false},
 
 		{"both, contradicting", []string{"--format", "terminal", "--json"}, "", true},
-		{"sarif", []string{"--format", "sarif"}, "", true},
+		{"--json contradicts sarif", []string{"--format", "sarif", "--json"}, "", true},
 		{"nonsense", []string{"--format", "yaml"}, "", true},
 		{"empty", []string{"--format", ""}, "", true},
 	}

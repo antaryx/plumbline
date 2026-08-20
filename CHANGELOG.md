@@ -11,8 +11,41 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-`docs/ROADMAP.md` v0.5.0 is next: ecosystem integration — SARIF export,
-`plumbline explain`, and the profile architecture.
+**`v0.5.0` in progress — ecosystem integration.** `docs/ROADMAP.md` carries the
+rest: `plumbline explain` and the profile architecture.
+
+### Added
+- **`--format sarif` (WP-31).** SARIF 2.1.0 for GitHub Advanced Security and
+  anything else that ingests it, on both `scan` and `eval`. The full mapping is
+  `docs/adr/0018-sarif-mapping.md`; the decisions that matter:
+
+  `UNKNOWN` becomes `level: warning`, never `none`. `none` files it as
+  informational, which reports a cleaner host than the scan found; `error`
+  claims a failure nobody observed. The consequence of an `UNKNOWN` is a
+  finding's consequence — somebody has to look — and the message opens
+  `Could not determine (reason):` with the literal state in
+  `properties["plumbline/result"]`.
+
+  Accepted risks use SARIF's native `suppressions` array with
+  `kind: "external"` and the operator's justification, so a dismissal in GitHub
+  carries the reason a human wrote. The result keeps the level its original
+  verdict earned.
+
+  `PASS` and `NOT_APPLICABLE` are not results; they are counted in
+  `invocations[0].properties` alongside posture and coverage. Seventy-four
+  passing checks per run bury the three that matter.
+
+  `partialFingerprints["plumblineFingerprint/v1"]` is `finding.Fingerprint` —
+  the same string a suppression file matches on. **This raises the stakes on
+  fingerprint stability**: breaking the derivation would now also cost every
+  user their GitHub security-tab history, with no migration. ADR-0018 records
+  why, and `VERSIONING.md` §4.4 already forbids it outside a schema major.
+
+  No new dependency: the SARIF subset needed is structs and `encoding/json`.
+
+### Changed
+- `--format` now accepts `sarif`. It previously returned a usage error saying
+  the format was planned.
 
 ### Fixed
 - **`eval` and `diff` now say so when handed a findings document.** Passing

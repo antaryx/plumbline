@@ -415,7 +415,7 @@ func TestUsageErrors(t *testing.T) {
 		{"unknown flag", []string{"scan", "--make-it-green"}},
 		{"unknown command", []string{"audit"}},
 		{"a misspelled --fail-on level", []string{"scan", "--root", hostFixture, "--fail-on", "hgih"}},
-		{"an unimplemented format", []string{"scan", "--root", hostFixture, "--format", "sarif"}},
+		{"an unknown format", []string{"scan", "--root", hostFixture, "--format", "yaml"}},
 		{"--config that does not exist", []string{"version", "--config", "/nonexistent/plumbline.yaml"}},
 		{"eval with no bundle", []string{"eval"}},
 	}
@@ -641,11 +641,13 @@ func TestUnknownFormatIsRefusedByName(t *testing.T) {
 		}
 	}
 
-	// sarif is refused too, but by a message that says it is coming rather
-	// than that it is nonsense. The two are different problems for a reader.
-	_, _, stderr := run(t, "scan", "--root", hostFixture, "--format", "sarif")
-	if !strings.Contains(stderr, "not implemented yet") {
-		t.Errorf("sarif is refused as though it were a typo: %q", stderr)
+	// sarif is a real format as of WP-31, and the message for an unknown one
+	// has to name it so an operator who mistypes learns what is available.
+	if code, _, _ := run(t, "scan", "--root", hostFixture, "--format", "sarif"); code != cli.ExitOK {
+		t.Errorf("--format sarif exited %d, want %d", code, cli.ExitOK)
+	}
+	if _, _, stderr := run(t, "scan", "--root", hostFixture, "--format", "yaml"); !strings.Contains(stderr, "sarif") {
+		t.Errorf("the unknown-format message does not list sarif among the choices: %q", stderr)
 	}
 }
 
@@ -1448,5 +1450,102 @@ func TestScanHelpNamesTheBundleFlag(t *testing.T) {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("scan --help does not mention %q", want)
 		}
+	}
+}
+
+// TestSarifIsAvailableFromBothCommands. scan and eval share one render funnel;
+// a third format that only one of them could emit would mean the answer
+// depended on which command was typed.
+func TestSarifIsAvailableFromBothCommands(t *testing.T) {
+	bundlePath := bundleOf(t, failFixture)
+
+	for _, args := range [][]string{
+		{"scan", "--root", failFixture, "--format", "sarif"},
+		{"eval", bundlePath, "--format", "sarif"},
+	} {
+		t.Run(args[0], func(t *testing.T) {
+			code, stdout, stderr := run(t, args...)
+			if code != cli.ExitOK {
+				t.Fatalf("exit = %d: %s", code, stderr)
+			}
+			var d struct {
+				Version string `json:"version"`
+				Runs    []struct {
+					Results []struct {
+						RuleID              string            `json:"ruleId"`
+						Level               string            `json:"level"`
+						PartialFingerprints map[string]string `json:"partialFingerprints"`
+					} `json:"results"`
+				} `json:"runs"`
+			}
+			if err := json.Unmarshal([]byte(stdout), &d); err != nil {
+				t.Fatalf("output is not JSON: %v\n%s", err, stdout)
+			}
+			if d.Version != "2.1.0" {
+				t.Errorf("version = %q, want 2.1.0", d.Version)
+			}
+			if len(d.Runs) != 1 || len(d.Runs[0].Results) == 0 {
+				t.Fatalf("a failing fixture produced no SARIF results:\n%s", stdout)
+			}
+			for _, r := range d.Runs[0].Results {
+				if r.PartialFingerprints["plumblineFingerprint/v1"] == "" {
+					t.Errorf("%s carries no fingerprint", r.RuleID)
+				}
+			}
+		})
+	}
+}
+
+// TestSarifFingerprintsMatchTheFindingsDocument, end to end. The SARIF
+// fingerprint and the one a suppression file matches on are the same string,
+// or a team's GitHub dismissals and their suppression file drift apart.
+func TestSarifFingerprintsMatchTheFindingsDocument(t *testing.T) {
+	_, jsonOut, _ := runJSON(t, "scan", "--root", failFixture)
+	_, sarifOut, _ := run(t, "scan", "--root", failFixture, "--format", "sarif")
+
+	var findings struct {
+		Findings []struct {
+			Result      string `json:"result"`
+			Fingerprint string `json:"fingerprint"`
+			CheckID     string `json:"check_id"`
+		} `json:"findings"`
+	}
+	var sarifDoc struct {
+		Runs []struct {
+			Results []struct {
+				RuleID              string            `json:"ruleId"`
+				PartialFingerprints map[string]string `json:"partialFingerprints"`
+			} `json:"results"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &findings); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(sarifOut), &sarifDoc); err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]string{}
+	for _, f := range findings.Findings {
+		if f.Result == "FAIL" || f.Result == "UNKNOWN" {
+			want[f.CheckID] = f.Fingerprint
+		}
+	}
+	for _, r := range sarifDoc.Runs[0].Results {
+		if got := r.PartialFingerprints["plumblineFingerprint/v1"]; got != want[r.RuleID] {
+			t.Errorf("%s: SARIF %q != findings %q", r.RuleID, got, want[r.RuleID])
+		}
+	}
+}
+
+// TestSarifOmitsPassesThatTheFindingsDocumentCarries. The two formats are
+// deliberately not the same document: SARIF results are things to act on.
+func TestSarifOmitsPassesThatTheFindingsDocumentCarries(t *testing.T) {
+	_, sarifOut, _ := run(t, "scan", "--root", hostFixture, "--format", "sarif")
+	if strings.Contains(sarifOut, `"plumbline/result": "PASS"`) {
+		t.Error("a PASS was emitted as a SARIF result")
+	}
+	if !strings.Contains(sarifOut, `"plumbline/counts"`) {
+		t.Error("the passing checks were not counted in the invocation either — they vanished")
 	}
 }

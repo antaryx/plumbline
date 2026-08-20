@@ -17,6 +17,10 @@ const (
 	FormatTerminal = "terminal"
 	// FormatJSON is findings/v1, which is the actual public API (ADR-0007).
 	FormatJSON = "json"
+	// FormatSARIF is SARIF 2.1.0 for CI platforms that ingest it. The mapping
+	// is specified in ADR-0018; it is a lossy projection of findings/v1 by
+	// design — passing checks are counts, not results — and is not the API.
+	FormatSARIF = "sarif"
 )
 
 // outputFlags are the flags that decide what a command writes and where.
@@ -33,7 +37,7 @@ type outputFlags struct {
 
 func (o *outputFlags) register(cmd *cobra.Command) {
 	f := cmd.Flags()
-	f.StringVar(&o.format, "format", FormatTerminal, "output format: terminal, json")
+	f.StringVar(&o.format, "format", FormatTerminal, "output format: terminal, json, sarif")
 	f.StringVarP(&o.output, "output", "o", "", "write the document here instead of stdout")
 	f.BoolVar(&o.asJSON, "json", false, "shorthand for --format json")
 	f.BoolVar(&o.noColor, "no-color", false, "never emit ANSI colour; also honours NO_COLOR and a non-terminal stdout")
@@ -58,12 +62,10 @@ func (o *outputFlags) resolveFormat(cmd *cobra.Command) (string, error) {
 	}
 
 	switch format {
-	case FormatTerminal, FormatJSON:
+	case FormatTerminal, FormatJSON, FormatSARIF:
 		return format, nil
-	case "sarif":
-		return "", usageErrorf("--format sarif is not implemented yet; docs/ROADMAP.md v0.3 has it")
 	default:
-		return "", usageErrorf("unknown --format %q; want one of terminal, json", format)
+		return "", usageErrorf("unknown --format %q; want one of terminal, json, sarif", format)
 	}
 }
 

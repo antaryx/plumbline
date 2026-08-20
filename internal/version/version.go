@@ -15,7 +15,7 @@ const Schema = "findings/v1"
 // defaults are what a `go run` or a test binary reports, and they say so
 // rather than pretending to be a release.
 var (
-	Version = "0.4.0-dev"
+	Version = "0.5.0-dev"
 	Commit  = "none"
 	Date    = "unknown"
 )

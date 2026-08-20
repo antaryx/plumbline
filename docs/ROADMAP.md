@@ -59,7 +59,7 @@ v1.0.0. The schema is `findings-v1` throughout.
 | v0.3.0 — engine maturation and resilience | **complete** | 13 | 79 | tagged `v0.3.0`, 2026-08-20 |
 | v0.3.1 — verification harness repairs | **complete** | 13 | 79 | tagged `v0.3.1`, 2026-08-20; no behaviour change |
 | v0.4.0 — usable more than once | **complete** | 13 | 79 | tagged `v0.4.0`, 2026-08-20 |
-| v0.5.0 — ecosystem integration | next | 13+ | 79+ | — |
+| v0.5.0 — ecosystem integration | **in progress** | 13 | 79 | WP-31 SARIF export |
 
 ### v0.1.0 — Walking skeleton — **COMPLETE**
 
@@ -307,7 +307,11 @@ an auditor — without losing what makes the verdict honest.
 **Exit criteria:** feature freeze. Everything after v0.5.0 is bug-fixing,
 documentation and fixture expansion.
 
-#### 1. SARIF export
+#### 1. SARIF export — **DONE (WP-31, 2026-08-20)**
+
+Shipped. `--format sarif` emits SARIF 2.1.0 on both `scan` and `eval`; the
+mapping is fixed in **ADR-0018**. What follows is the reasoning that produced
+it, kept because it is the argument, not the implementation.
 
 `--format sarif`, emitting SARIF 2.1.0 for GitHub Advanced Security and
 anything else that ingests it. Rule IDs are check IDs and `partialFingerprints`

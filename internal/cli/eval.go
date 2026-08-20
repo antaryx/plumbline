@@ -9,6 +9,7 @@ import (
 	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/finding"
 	renderjson "github.com/antaryx/plumbline/internal/render/json"
+	rendersarif "github.com/antaryx/plumbline/internal/render/sarif"
 	rendertext "github.com/antaryx/plumbline/internal/render/text"
 	"github.com/antaryx/plumbline/internal/score"
 	"github.com/antaryx/plumbline/internal/suppress"
@@ -123,6 +124,8 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 	switch format {
 	case FormatJSON:
 		renderErr = renderJSON(w, b, sc, findings, factErrors)
+	case FormatSARIF:
+		renderErr = renderSARIF(w, b, sc, findings, len(factErrors) > 0)
 	default:
 		renderErr = renderTerminal(w, b, sc, findings, factErrors,
 			useColor(w, out.noColor, out.output != ""))
@@ -153,6 +156,27 @@ func renderJSON(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding
 		Findings:   findings,
 		FactErrors: factErrors,
 		Degraded:   len(factErrors) > 0,
+	})
+}
+
+// renderSARIF emits SARIF 2.1.0. The mapping lives in ADR-0018; this function
+// is only the wiring, and deliberately takes the same arguments as the other
+// two renderers so that a third output can never see a different finding set
+// from the first two.
+func renderSARIF(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, degraded bool) error {
+	return rendersarif.Render(w, rendersarif.Input{
+		Tool: rendersarif.Tool{Name: "plumbline", Version: version.Version, Commit: version.Commit},
+		Scan: rendersarif.Scan{
+			Started:  b.Manifest.Scan.Started,
+			Finished: b.Manifest.Scan.Finished,
+			Root:     b.Manifest.Scan.Root,
+			EUID:     b.Manifest.Scan.EUID,
+			Profile:  b.Manifest.Scan.Profile,
+			Hostname: b.Meta.Hostname,
+		},
+		Score:    sc,
+		Findings: findings,
+		Degraded: degraded,
 	})
 }
 

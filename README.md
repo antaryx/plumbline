@@ -33,11 +33,18 @@ A deterministic, offline, evidence-first host security auditor for Linux.
 ## Using it
 
 ```bash
-plumbline scan                      # audit this host, human-readable report
-plumbline scan --root /mnt/image    # audit a mounted image or container filesystem
-plumbline collect -o host.plb       # capture the evidence, evaluate it elsewhere
-plumbline eval host.plb             # re-evaluate a bundle against today's catalog
+plumbline scan                        # audit this host, human-readable report
+plumbline scan --root /mnt/image      # audit a mounted image or container filesystem
+plumbline scan --save-bundle host.plb # keep the evidence this scan used
+plumbline collect -o host.plb         # capture the evidence, evaluate it elsewhere
+plumbline eval host.plb               # re-evaluate a bundle against today's catalog
+plumbline diff march.plb today.plb    # what changed between two scans
 ```
+
+**`.plb` is an evidence bundle — the facts observed.** `eval` and `diff` take
+one. A findings document (`--json > out.json`) holds verdicts already drawn
+from those facts and cannot be re-evaluated or diffed; hand one to `eval` or
+`diff` and it says so, and tells you which flag writes the file it wanted.
 
 The default output is a report for a person:
 
@@ -120,6 +127,33 @@ plumbline scan --json | jq '.findings[] | select(.result == "FAIL")'
 plumbline scan --format json -o findings.json
 plumbline scan --fail-on high            # exit 2; the format does not move the exit code
 ```
+
+**For GitHub Advanced Security, ask for SARIF:**
+
+```bash
+plumbline scan --format sarif -o plumbline.sarif
+```
+
+SARIF 2.1.0. `UNKNOWN` becomes a `warning` rather than an informational
+`none` — a check that could not tell is not a check that passed, and a security
+tab that says otherwise is worse than no security tab. Accepted risks
+(`--suppress`) arrive as SARIF suppressions with their justification, so a
+dismissal in GitHub carries the reason a human wrote. `PASS` and
+`NOT_APPLICABLE` are counted in the run's invocation rather than emitted as
+results, because seventy-four passing checks bury the three that matter. The
+full mapping is `docs/adr/0018-sarif-mapping.md`.
+
+**Suppress an accepted risk, without hiding it:**
+
+```bash
+plumbline scan --suppress accepted.json
+```
+
+A suppressed finding becomes `SKIPPED`, keeps its severity, detail and
+evidence, records what it *would* have said, and appears under
+`[=] Accepted risks` with the justification. There is no auto-discovered
+filename: an explicit path is the deterministic choice for a tool that decides
+whether a host is safe.
 
 `findings/v1` is the public API and is schema-validated in CI. **The terminal
 report is not** — its layout may change in a patch release, so nothing should
