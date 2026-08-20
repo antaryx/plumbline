@@ -1,0 +1,10 @@
+#
+# /etc/pam.d/common-auth - authentication settings common to all services
+#
+# This file is managed by pam-auth-update; local changes will be overwritten.
+
+auth	required			pam_faillock.so preauth
+auth	[success=1 default=ignore]	pam_unix.so
+auth	[default=die]			pam_faillock.so authfail
+auth	requisite			pam_deny.so
+auth	required			pam_permit.so

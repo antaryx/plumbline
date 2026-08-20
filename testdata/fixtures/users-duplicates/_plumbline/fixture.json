@@ -1,0 +1,1 @@
+{ "description": "alice and bob share uid 1000, and carol appears twice with different uids -- the second is unreachable because name resolution returns the first" }

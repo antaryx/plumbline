@@ -1,0 +1,1 @@
+{ "description": "root is hashed with MD5-crypt and alice with the original DES crypt; both fall to offline cracking in minutes on commodity hardware" }

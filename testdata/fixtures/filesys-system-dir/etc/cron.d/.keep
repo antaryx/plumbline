@@ -1,0 +1,4 @@
+# Git cannot store an empty directory, and this fixture needs this one to
+# exist: a manifest may set a directory's mode but cannot create the directory.
+# Without this file the tree that reaches CI is not the tree the fixture describes,
+# and a check whose FAIL case lives here silently returns PASS instead.

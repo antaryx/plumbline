@@ -1,0 +1,9 @@
+{
+  "description": "Every cron path exists and none of it can be stat'ed, as it would be under a parent directory that refuses traversal. Nothing about the modes or the owners can be observed, so every check resolves to UNKNOWN(insufficient_privileges) rather than reporting on the paths it happened to reach. This is the fixture that proves the module degrades rather than guessing.",
+  "euid": 1000,
+  "unstattable": [
+    "/etc/crontab", "/etc/cron.allow", "/etc/cron.deny",
+    "/etc/cron.d", "/etc/cron.hourly", "/etc/cron.daily",
+    "/etc/cron.weekly", "/etc/cron.monthly"
+  ]
+}

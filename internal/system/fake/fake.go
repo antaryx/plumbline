@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -43,11 +44,43 @@ type Manifest struct {
 	Unreadable []string `json:"unreadable,omitempty"`
 	// Missing lists paths that must fail with ErrNotExist even if present.
 	Missing []string `json:"missing,omitempty"`
+	// Unstattable lists paths whose *metadata* must fail with ErrPermission.
+	//
+	// It is separate from Unreadable because the two are different situations
+	// on a real host and produce different verdicts. A file at mode 0640 that
+	// you do not own is unreadable but perfectly stat-able: `stat /etc/shadow`
+	// succeeds for any user. What defeats a stat is a *parent directory*
+	// without execute permission, and that is what this key simulates. Folding
+	// the two together would have made every unreadable-file fixture also
+	// claim its ownership was unknown, which is not what such a host looks
+	// like.
+	Unstattable []string `json:"unstattable,omitempty"`
 	// Modes overrides file modes, since git only preserves the execute bit.
 	// Keys are absolute simulated paths, values are octal strings ("0600").
 	Modes map[string]string `json:"modes,omitempty"`
 	// Owners overrides uid/gid, formatted "uid:gid".
 	Owners map[string]string `json:"owners,omitempty"`
+	// Symlinks declares a path to be a symbolic link and gives its target.
+	//
+	// Git stores symlinks natively, so this is not a capability gap the way
+	// Inodes is — it is a containment rule. A systemd enablement link points
+	// at an absolute path such as /usr/lib/systemd/system/sshd.service, and a
+	// real symlink committed with that target resolves against the *developer's*
+	// root, not the fixture's. On a machine that has that unit — every Linux
+	// workstation — anything that follows the link reads the real host, and a
+	// fixture that can read the real host has stopped being a fixture. Git on
+	// Windows compounds it: with core.symlinks off, the link is checked out as
+	// a text file and the scenario silently becomes a different one.
+	//
+	// Declaring the link here keeps the target inside the simulated filesystem
+	// where it belongs: no real link is ever created, so nothing can follow it,
+	// and Readlink hands the string back exactly as written.
+	//
+	// The tree still needs a placeholder file at the path — Stat and Readlink
+	// both check the tree first, so a typo here reports ErrNotExist from both
+	// rather than a link to nowhere. Relative targets are legal and are the
+	// caller's to resolve; see docs/FIXTURES.md §2.4.
+	Symlinks map[string]string `json:"symlinks,omitempty"`
 	// Inodes overrides device and inode identity, formatted "dev:ino". It is
 	// how a fixture simulates a bind mount: two paths reporting one identity
 	// is exactly what a bind-mount cycle is, and it is the only aspect of a
@@ -72,9 +105,11 @@ type System struct {
 	euid     int
 	deny     map[string]bool
 	missing  map[string]bool
+	denyStat map[string]bool
 	modes    map[string]fs.FileMode
 	owners   map[string][2]uint32
 	inodes   map[string][2]uint64
+	symlinks map[string]string
 }
 
 var _ system.System = (*System)(nil)
@@ -91,14 +126,16 @@ func New(dir string) (*System, error) {
 	}
 
 	s := &System{
-		dir:     abs,
-		now:     time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-		euid:    0,
-		deny:    map[string]bool{},
-		missing: map[string]bool{},
-		modes:   map[string]fs.FileMode{},
-		owners:  map[string][2]uint32{},
-		inodes:  map[string][2]uint64{},
+		dir:      abs,
+		now:      time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		euid:     0,
+		deny:     map[string]bool{},
+		missing:  map[string]bool{},
+		denyStat: map[string]bool{},
+		modes:    map[string]fs.FileMode{},
+		owners:   map[string][2]uint32{},
+		inodes:   map[string][2]uint64{},
+		symlinks: map[string]string{},
 	}
 
 	raw, err := os.ReadFile(filepath.Join(abs, filepath.FromSlash(ManifestPath)))
@@ -129,6 +166,9 @@ func New(dir string) (*System, error) {
 	for _, p := range s.manifest.Missing {
 		s.missing[path.Clean(p)] = true
 	}
+	for _, p := range s.manifest.Unstattable {
+		s.denyStat[path.Clean(p)] = true
+	}
 	for p, m := range s.manifest.Modes {
 		var mode uint32
 		if _, err := fmt.Sscanf(m, "%o", &mode); err != nil {
@@ -142,6 +182,26 @@ func New(dir string) (*System, error) {
 			return nil, fmt.Errorf("fixture owner %q for %s: %w", o, p, err)
 		}
 		s.owners[path.Clean(p)] = [2]uint32{uid, gid}
+	}
+	for p, target := range s.manifest.Symlinks {
+		if target == "" {
+			// os.Readlink can never return "" for a real link, so honouring
+			// this would give a check a value no host can produce.
+			return nil, fmt.Errorf("fixture symlink %s: target is empty", p)
+		}
+		s.symlinks[path.Clean(p)] = target
+	}
+	// A mode override may set the symlink type bit (0120000). On its own that
+	// would make Stat report a symlink whose Readlink says it is not one —
+	// two seam methods contradicting each other about the same inode, which no
+	// real filesystem does and no check should have to defend against.
+	for p, m := range s.modes {
+		if m&fs.ModeSymlink == 0 {
+			continue
+		}
+		if _, ok := s.symlinks[p]; !ok {
+			return nil, fmt.Errorf("fixture mode for %s declares a symlink but no \"symlinks\" entry gives its target", p)
+		}
 	}
 	for p, id := range s.manifest.Inodes {
 		var dev, ino uint64
@@ -183,6 +243,13 @@ func (s *System) Stat(p string) (system.FileInfo, error) {
 	clean, real, err := s.resolve(p)
 	if err != nil {
 		return system.FileInfo{}, err
+	}
+	// A parent directory that refuses traversal. Nothing about the path can be
+	// observed — not its mode, not its owner, not whether it exists at all —
+	// which is a materially different situation from a file we may stat and
+	// may not read.
+	if s.denyStat[clean] {
+		return system.FileInfo{}, system.ErrPermission
 	}
 	st, err := os.Lstat(real)
 	if err != nil {
@@ -234,6 +301,21 @@ func (s *System) infoFor(clean string, st os.FileInfo) system.FileInfo {
 	}
 	if id, ok := s.inodes[clean]; ok {
 		fi.Dev, fi.Ino = id[0], id[1]
+	}
+	// A declared symlink overrides the placeholder file standing in for it.
+	// Applied last so that it wins outright: whatever the tree holds at this
+	// path, the fixture said it is a link, and the derived booleans have to
+	// describe the link rather than the file git could actually store.
+	if _, ok := s.symlinks[clean]; ok {
+		if _, explicit := s.modes[clean]; !explicit {
+			// lstat on a real Linux symlink reports lrwxrwxrwx. The kernel
+			// ignores a symlink's own permission bits, so a fixture that says
+			// nothing about the mode should get the value a real host gives
+			// rather than the placeholder file's 0644.
+			fi.Mode = 0o777
+		}
+		fi.Mode = (fi.Mode &^ fs.ModeType) | fs.ModeSymlink
+		fi.IsDir, fi.IsRegular, fi.IsSymlink = false, false, true
 	}
 	return fi
 }
@@ -316,6 +398,39 @@ func (s *System) ReadFile(p string, maxBytes int64) (system.ReadResult, error) {
 	sum := sha256.Sum256(data)
 	res.SHA256 = hex.EncodeToString(sum[:])
 	return res, nil
+}
+
+// Readlink returns a declared target, or reads a real link from the tree.
+//
+// The tree is consulted first even for a declared link. Stat answers from the
+// tree too, so checking existence here is what keeps the two methods agreeing:
+// a path misspelled in the manifest reports ErrNotExist from both rather than
+// existing only as a link to nowhere.
+func (s *System) Readlink(p string) (string, error) {
+	clean, real, err := s.resolve(p)
+	if err != nil {
+		return "", err
+	}
+	if s.denyStat[clean] {
+		return "", system.ErrPermission
+	}
+	if _, err := os.Lstat(real); err != nil {
+		if os.IsNotExist(err) {
+			return "", system.ErrNotExist
+		}
+		return "", err
+	}
+	if target, ok := s.symlinks[clean]; ok {
+		return target, nil
+	}
+	target, err := os.Readlink(real)
+	if err != nil {
+		if errors.Is(err, syscall.EINVAL) {
+			return "", system.ErrNotSymlink
+		}
+		return "", err
+	}
+	return target, nil
 }
 
 func (s *System) ReadDir(p string, maxEntries int) (system.DirResult, error) {

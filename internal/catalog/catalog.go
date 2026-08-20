@@ -19,7 +19,14 @@ import (
 // monotonic integer, bumped by any change to the set of checks or their
 // metadata. Scores are comparable only within one catalog version
 // (05-VERSIONING.md §3).
-const Version = 1
+//
+// 2 adds the KERNEL module (WP-16); 3 completes it; 4 adds USERS (WP-17); 5
+// completes USERS with the group and password-aging checks; 6 completes SSHD
+// (WP-18); 7 adds CRON (WP-19); 8 adds LOGGING (WP-20); 9 adds SERVICES
+// (WP-21); 10 adds NETWORK and AUTH, completing the v0.2 catalog (WP-22,
+// WP-23); 11 adds FILESYS and wires the shared walker into the scan (WP-24),
+// completing the v0.2.0 catalog.
+const Version = 13
 
 // Outcome is what a check's Eval returns. The runner converts it into a
 // finding, filling in identity and fingerprint so a check cannot get those
@@ -193,12 +200,41 @@ func (c *Catalog) EvaluateOne(ck Check, facts *fact.Set) (f finding.Finding) {
 			f.Result = finding.Unknown
 			f.UnknownReason = reasonFor(e.Kind)
 			f.Detail = sanitize.Text(fmt.Sprintf("required fact %s unavailable: %s", id, e.Msg))
+			// A fact error that names a path is citable, and DATA-MODEL.md
+			// §5.5 requires every UNKNOWN to carry evidence. Without this the
+			// gate produced the one class of finding in the project that said
+			// "I do not know" and gave the reader nothing to look at — which
+			// is precisely the finding an auditor most needs to follow up.
+			if e.Path != "" {
+				f.Evidence = sanitizeEvidence([]finding.Evidence{
+					finding.NewEvidence(e.Path, 0, e.Msg, ""),
+				})
+			}
 			return f
 		}
 		if !containsID(facts.IDs(), id) {
 			f.Result = finding.Unknown
 			f.UnknownReason = finding.ReasonFactMissing
 			f.Detail = fmt.Sprintf("required fact %s was not collected", id)
+			return f
+		}
+		// Present is not the same as usable. A bundle written by a newer build
+		// carries facts this one cannot decode, and the reader keeps them
+		// verbatim so that forwarding the bundle loses nothing — but a check
+		// that ran anyway would read the zero value out of its typed accessor
+		// and report the host as having no sshd, no accounts and no firewall.
+		// That is a statement about the host manufactured from a decode
+		// failure, which is the worst thing this codebase can produce.
+		if op, opaque := facts.Opaque(id); opaque {
+			f.Result = finding.Unknown
+			f.UnknownReason = finding.ReasonFactVersion
+			f.Detail = fmt.Sprintf(
+				"required fact %s is present in this bundle at version %d, which this build of the catalog does not understand. Nothing may be concluded from it: the bundle was written by a different version of Plumbline, and re-evaluating it needs a build that knows this fact's shape.",
+				id, op.OpaqueFact())
+			f.Evidence = sanitizeEvidence([]finding.Evidence{
+				finding.NewEvidence(string(id), 0,
+					fmt.Sprintf("fact version %d is not decodable by this build", op.OpaqueFact()), ""),
+			})
 			return f
 		}
 	}

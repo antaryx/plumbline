@@ -1,0 +1,1 @@
+{"description":"Every global setting is the secure one and a single Match block reintroduces the insecure value for a subset of connections. Reporting PASS here would be false assurance — the insecure state is reachable — so the checks report FAIL one severity below a global misconfiguration, naming the Match criteria."}

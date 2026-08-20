@@ -1,0 +1,3 @@
+{
+  "description": "A ruleset that is a deny list: default accept, with blocks for the ports somebody thought of. It is a firewall by NETWORK-0001's measure and fails NETWORK-0002, which is exactly the split those two checks exist to draw — a host can have a carefully maintained ruleset and no protection against the service nobody decided to run."
+}

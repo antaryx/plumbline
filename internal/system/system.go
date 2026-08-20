@@ -37,6 +37,7 @@ var (
 	ErrNotExist    = errors.New("does not exist")
 	ErrPermission  = errors.New("permission denied")
 	ErrNotRegular  = errors.New("not a regular file")
+	ErrNotSymlink  = errors.New("not a symbolic link")
 	ErrEscapesRoot = errors.New("path escapes scan root")
 	ErrUnsupported = errors.New("unsupported on this system")
 )
@@ -45,16 +46,15 @@ var (
 // embed fs.FileInfo: everything a fact may carry has to survive a round trip
 // through a bundle on disk.
 type FileInfo struct {
-	Path       string      `json:"path"`
-	Mode       fs.FileMode `json:"mode"`
-	UID        uint32      `json:"uid"`
-	GID        uint32      `json:"gid"`
-	Size       int64       `json:"size"`
-	ModTime    time.Time   `json:"mod_time"`
-	IsDir      bool        `json:"is_dir"`
-	IsRegular  bool        `json:"is_regular"`
-	IsSymlink  bool        `json:"is_symlink"`
-	LinkTarget string      `json:"link_target,omitempty"`
+	Path      string      `json:"path"`
+	Mode      fs.FileMode `json:"mode"`
+	UID       uint32      `json:"uid"`
+	GID       uint32      `json:"gid"`
+	Size      int64       `json:"size"`
+	ModTime   time.Time   `json:"mod_time"`
+	IsDir     bool        `json:"is_dir"`
+	IsRegular bool        `json:"is_regular"`
+	IsSymlink bool        `json:"is_symlink"`
 
 	// Dev and Ino identify the inode. Together they are what lets the shared
 	// walker detect a bind-mount or hardlink cycle: a tree that contains itself
@@ -129,6 +129,24 @@ type System interface {
 	// examined. DirResult.Truncated is the caller's warning not to conclude
 	// absence.
 	ReadDir(path string, maxEntries int) (DirResult, error)
+
+	// Readlink returns the contents of a symbolic link without resolving it.
+	//
+	// The value is the target *as written*, which may be relative and may name
+	// a path that does not exist. Both are load-bearing: systemd's enablement
+	// symlinks are the record of what an administrator turned on, and a link
+	// pointing at a unit file that was uninstalled is a service the operator
+	// believes is running and which systemd silently never starts.
+	//
+	// Resolution is the caller's job, and it must go back through this
+	// interface — Stat on the resolved path — so that --root still applies.
+	// A seam method that returned a resolved absolute path would have
+	// dereferenced it against the real host, which is precisely what --root
+	// exists to prevent.
+	//
+	// A path that is not a symlink returns ErrNotSymlink rather than the
+	// platform's EINVAL, so that live and fake agree.
+	Readlink(path string) (string, error)
 
 	// Glob expands a shell-style pattern against the scan root. Used by
 	// sshd_config Include resolution. It never matches outside the root.

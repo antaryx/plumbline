@@ -1,1 +1,8 @@
+# Every value here is one sshd would refuse to start on.
 PermitRootLogin maybe
+PasswordAuthentication sometimes
+MaxAuthTries plenty
+ClientAliveInterval soon
+LoginGraceTime later
+LogLevel CHATTY
+AllowTcpForwarding maybe

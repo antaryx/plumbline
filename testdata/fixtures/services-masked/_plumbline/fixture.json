@@ -1,0 +1,9 @@
+{
+  "description": "telnet.socket has an enablement symlink AND a mask. systemd will not start it: a masked unit cannot be started by anything, enablement symlink or not. SERVICES-0001 must therefore pass, which is the one case where reading the .wants directory alone gives the wrong answer.",
+  "symlinks": {
+    "/etc/systemd/system/multi-user.target.wants/sshd.service": "/usr/lib/systemd/system/sshd.service",
+    "/etc/systemd/system/multi-user.target.wants/chronyd.service": "/usr/lib/systemd/system/chronyd.service",
+    "/etc/systemd/system/sockets.target.wants/telnet.socket": "/usr/lib/systemd/system/telnet.socket",
+    "/etc/systemd/system/telnet.socket": "/dev/null"
+  }
+}

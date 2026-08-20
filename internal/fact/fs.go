@@ -48,6 +48,16 @@ const (
 	// others it is per-interest: it truncates one fact and leaves the rest of
 	// the walk, and every other fact, complete.
 	TruncMaxHits TruncationReason = "max_hits"
+	// TruncMaxKeys means an aggregating tally reached its keyspace cap and
+	// discarded a key it had never seen before. Like TruncMaxHits it is
+	// per-fact rather than per-walk.
+	//
+	// It is a separate reason from TruncMaxHits because the two mean opposite
+	// things about how much was examined. A row cap means the walk stopped
+	// *recording* after N matches; a key cap means the walk kept counting
+	// every inode it met and only stopped admitting new buckets. An operator
+	// raising the wrong limit fixes neither.
+	TruncMaxKeys TruncationReason = "max_keys"
 )
 
 // FSRow is one inode a walker interest matched.

@@ -1,0 +1,5 @@
+{
+  "description": "An unprivileged scan: /etc/passwd and /etc/group are world-readable and parse normally, /etc/shadow is not readable at all. The two checks that need shadow must resolve to UNKNOWN while the four that do not must return real verdicts.",
+  "euid": 1000,
+  "unreadable": ["/etc/shadow"]
+}

@@ -1,0 +1,3 @@
+{
+  "description": "No firewall configuration of any kind. NETWORK-0001 fails; the other two are NOT_APPLICABLE, because 'the default policy denies' and 'exactly one is in force' are sentences with no subject on a host with no firewall — and a module that failed three times for one missing thing would bury the finding that matters under two that repeat it."
+}

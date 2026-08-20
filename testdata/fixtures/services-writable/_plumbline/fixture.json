@@ -1,0 +1,13 @@
+{
+  "description": "A deployment script chowned the unit directory to its service account so it could drop a unit file in, and left /etc/systemd/system group-writable. Either fault alone is root at the next reboot. SERVICES-0005 fails on both a directory and a file.",
+  "symlinks": {
+    "/etc/systemd/system/multi-user.target.wants/sshd.service": "/usr/lib/systemd/system/sshd.service",
+    "/etc/systemd/system/multi-user.target.wants/chronyd.service": "/usr/lib/systemd/system/chronyd.service"
+  },
+  "modes": {
+    "/etc/systemd/system": "040775"
+  },
+  "owners": {
+    "/usr/lib/systemd/system/deploy-agent.service": "1001:1001"
+  }
+}

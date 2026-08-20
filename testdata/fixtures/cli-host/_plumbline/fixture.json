@@ -1,1 +1,21 @@
-{"description":"Host with an identity and a hardened sshd; used by the CLI tests for --redact and meta"}
+{
+  "description": "A realistic checkout baseline, not a clean host. sshd, the kernel, the account databases, both logging daemons and systemd service enablement are hardened and pass; the CRON and SERVICES *ownership* checks fail permanently and by construction, because these files are read through the LIVE seam and carry the ownership of whoever checked the repository out \u2014 git cannot record ownership, and the modes/owners overrides below only apply under the fake. For the same reason /etc/nsswitch.conf is load-bearing here and must not be deleted: the checkout uid is 1000 on the author's machine (matching alice), 1001 on a GitHub runner and 0 in a container, and only with the local files declared authoritative can FILESYS-0010 reach a verdict on an owner it cannot resolve instead of UNKNOWN(ambiguous_system_state) \u2014 which is what coverage counts, and what the --min-coverage gate asserts. The systemd enablement symlinks here are real links written relative to their own directory, which is what keeps them resolving inside this tree no matter who follows them; see docs/FIXTURES.md \u00a72.4. Used by the CLI tests for --redact, meta, and the coverage and threshold gates. \"Clean\" for this fixture means the scan exits 0, not that it produces no findings.",
+  "modes": {
+    "/etc/crontab": "0600",
+    "/etc/cron.allow": "0600",
+    "/etc/cron.d": "040700",
+    "/etc/cron.hourly": "040700",
+    "/etc/cron.daily": "040700",
+    "/etc/cron.weekly": "040700",
+    "/etc/cron.monthly": "040700"
+  },
+  "owners": {
+    "/etc/crontab": "0:0",
+    "/etc/cron.allow": "0:0",
+    "/etc/cron.d": "0:0",
+    "/etc/cron.hourly": "0:0",
+    "/etc/cron.daily": "0:0",
+    "/etc/cron.weekly": "0:0",
+    "/etc/cron.monthly": "0:0"
+  }
+}

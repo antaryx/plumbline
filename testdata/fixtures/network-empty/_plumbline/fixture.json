@@ -1,0 +1,3 @@
+{
+  "description": "Debian's stock /etc/nftables.conf: the file the package installs whether or not anybody has written a rule in it. Nothing but comments. This is why NETWORK-0001 counts statements rather than testing for the file's existence — treating presence as protection would report every Debian host with the nftables package installed as firewalled."
+}

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"syscall"
@@ -580,41 +581,63 @@ func TestParseMountInfoLine(t *testing.T) {
 		name          string
 		line          string
 		point, fstype string
+		options       []string
+		superOpts     []string
 		ok            bool
 	}{
 		{
 			name: "no optional fields",
 			line: "21 1 8:1 / / rw,relatime - ext4 /dev/sda1 rw",
-			// The separator can appear at index 6, which is why the fstype
-			// cannot be read at a fixed offset.
-			point: "/", fstype: "ext4", ok: true,
+			// The separator can appear at index 6, which is why neither the
+			// fstype nor the superblock options can be read at a fixed offset.
+			point: "/", fstype: "ext4",
+			options: []string{"rw", "relatime"}, superOpts: []string{"rw"}, ok: true,
 		},
 		{
 			name:  "several optional fields",
 			line:  "24 21 0:23 / /mnt/nfs rw shared:4 master:2 propagate_from:1 - nfs4 srv:/e rw",
-			point: "/mnt/nfs", fstype: "nfs4", ok: true,
+			point: "/mnt/nfs", fstype: "nfs4",
+			options: []string{"rw"}, superOpts: []string{"rw"}, ok: true,
 		},
 		{
 			name: "octal-escaped mount point",
 			line: `26 21 0:25 / /mnt/my\040share rw - cifs //srv/share rw`,
 			// A skip list that compared the escaped form would fail to match
 			// and would walk into the filesystem it meant to avoid.
-			point: "/mnt/my share", fstype: "cifs", ok: true,
+			point: "/mnt/my share", fstype: "cifs",
+			options: []string{"rw"}, superOpts: []string{"rw"}, ok: true,
+		},
+		{
+			// The hardening options the FILESYS mount checks read live in
+			// field 5, which is the *per-mount* option list. The superblock
+			// list after the fstype is a different set and answering from it
+			// would be right often enough to look correct.
+			name:  "hardened tmpfs",
+			line:  "31 21 0:26 / /dev/shm rw,nosuid,nodev,noexec shared:5 - tmpfs tmpfs rw,inode64",
+			point: "/dev/shm", fstype: "tmpfs",
+			options:   []string{"rw", "nosuid", "nodev", "noexec"},
+			superOpts: []string{"rw", "inode64"}, ok: true,
 		},
 		{name: "truncated line", line: "21 1 8:1 / /", ok: false},
 		{name: "no separator", line: "21 1 8:1 / / rw,relatime ext4 /dev/sda1 rw x", ok: false},
 		{name: "empty", line: "", ok: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			point, fstype, ok := parseMountInfoLine(tc.line)
+			point, e, ok := parseMountInfoLine(tc.line)
 			if ok != tc.ok {
 				t.Fatalf("ok = %v, want %v", ok, tc.ok)
 			}
 			if !ok {
 				return
 			}
-			if point != tc.point || fstype != tc.fstype {
-				t.Errorf("got (%q, %q), want (%q, %q)", point, fstype, tc.point, tc.fstype)
+			if point != tc.point || e.fstype != tc.fstype {
+				t.Errorf("got (%q, %q), want (%q, %q)", point, e.fstype, tc.point, tc.fstype)
+			}
+			if !reflect.DeepEqual(e.options, tc.options) {
+				t.Errorf("options = %v, want %v", e.options, tc.options)
+			}
+			if !reflect.DeepEqual(e.superOpts, tc.superOpts) {
+				t.Errorf("superOpts = %v, want %v", e.superOpts, tc.superOpts)
 			}
 		})
 	}
@@ -1062,7 +1085,10 @@ func TestCollectorProducesOneFactPerInterest(t *testing.T) {
 	Register(Interest{Name: "world_writable", Match: worldWritable})
 
 	c := New()
-	want := []fact.ID{"fs.suid", "fs.world_writable"}
+	// fs.mounts is produced unconditionally: the walk reads the mount table to
+	// decide where not to descend, so it is available whether or not any
+	// interest was registered.
+	want := []fact.ID{"fs.suid", "fs.world_writable", fact.MountsID}
 	got := c.Produces()
 	if len(got) != len(want) {
 		t.Fatalf("Produces = %v, want %v", got, want)
@@ -1078,7 +1104,7 @@ func TestCollectorProducesOneFactPerInterest(t *testing.T) {
 	if err := c.Collect(context.Background(), s, set); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
-	for _, id := range want {
+	for _, id := range []fact.ID{"fs.suid", "fs.world_writable"} {
 		f, ferr, ok := fact.Get[fact.FSMatches](set, id)
 		if !ok {
 			t.Fatalf("fact %s missing after Collect (err=%v)", id, ferr)
@@ -1087,11 +1113,20 @@ func TestCollectorProducesOneFactPerInterest(t *testing.T) {
 			t.Errorf("fact %s reports ID %s", id, f.FactID())
 		}
 	}
+	if _, ferr, ok := fact.Get[fact.Mounts](set, fact.MountsID); !ok {
+		t.Fatalf("fact %s missing after Collect (err=%v)", fact.MountsID, ferr)
+	}
 }
 
-// TestCollectWithNoInterestsWalksNothing: walking a production filesystem to
-// answer no questions is pure cost on the host being audited.
-func TestCollectWithNoInterestsWalksNothing(t *testing.T) {
+// TestCollectWithNoInterestsWalksNothingButStillPublishesMounts.
+//
+// Walking a production filesystem to answer no questions is pure cost on the
+// host being audited, so no directory is read. The mount table is a different
+// matter: it is not a product of the traversal — the walk reads it to decide
+// where *not* to descend — and making it conditional on some unrelated module
+// having registered an interest would leave the FILESYS mount checks resolving
+// to UNKNOWN for a reason that has nothing to do with the host.
+func TestCollectWithNoInterestsWalksNothingButStillPublishesMounts(t *testing.T) {
 	t.Cleanup(resetRegistry)
 	resetRegistry()
 
@@ -1103,8 +1138,11 @@ func TestCollectWithNoInterestsWalksNothing(t *testing.T) {
 	if got := s.totalReadDirs(); got != 0 {
 		t.Errorf("walked %d directories with no interests registered", got)
 	}
-	if got := len(set.IDs()); got != 0 {
-		t.Errorf("wrote %d facts with no interests registered: %v", got, set.IDs())
+	if got := set.IDs(); len(got) != 1 || got[0] != fact.MountsID {
+		t.Errorf("facts = %v, want just %s", got, fact.MountsID)
+	}
+	if _, _, ok := fact.Get[fact.Mounts](set, fact.MountsID); !ok {
+		t.Error("the mount table was not published")
 	}
 }
 

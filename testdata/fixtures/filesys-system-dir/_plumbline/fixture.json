@@ -1,0 +1,7 @@
+{
+  "description": "A container build ran 'chmod -R 777 /etc' to make an application work. /etc/cron.d is world-writable AND sticky, so FILESYS-0004 passes over it — and that is the whole reason FILESYS-0005 exists. The sticky bit restricts deleting existing entries and says nothing about creating new ones, and creating one file in /etc/cron.d is a root shell on a schedule.",
+  "modes": {
+    "/tmp": "041777",
+    "/etc/cron.d": "041777"
+  }
+}

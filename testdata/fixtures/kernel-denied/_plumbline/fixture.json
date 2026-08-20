@@ -1,0 +1,28 @@
+{
+  "description": "An unprivileged scan: the parameters exist and cannot be read, and one configuration file is unreadable too",
+  "euid": 1000,
+  "unreadable": [
+    "/etc/sysctl.d/60-hardening.conf",
+    "/proc/sys/fs/protected_fifos",
+    "/proc/sys/fs/protected_hardlinks",
+    "/proc/sys/fs/protected_regular",
+    "/proc/sys/fs/protected_symlinks",
+    "/proc/sys/fs/suid_dumpable",
+    "/proc/sys/kernel/core_pattern",
+    "/proc/sys/kernel/dmesg_restrict",
+    "/proc/sys/kernel/kptr_restrict",
+    "/proc/sys/kernel/perf_event_paranoid",
+    "/proc/sys/kernel/randomize_va_space",
+    "/proc/sys/kernel/unprivileged_bpf_disabled",
+    "/proc/sys/kernel/yama/ptrace_scope",
+    "/proc/sys/net/ipv4/conf/all/accept_source_route",
+    "/proc/sys/net/ipv4/conf/all/rp_filter",
+    "/proc/sys/net/ipv4/conf/default/accept_source_route",
+    "/proc/sys/net/ipv4/conf/default/rp_filter",
+    "/proc/sys/net/ipv4/conf/eth0/accept_source_route",
+    "/proc/sys/net/ipv4/conf/eth0/rp_filter",
+    "/proc/sys/net/ipv4/conf/lo/accept_source_route",
+    "/proc/sys/net/ipv4/conf/lo/rp_filter",
+    "/proc/sys/net/ipv4/tcp_syncookies"
+  ]
+}

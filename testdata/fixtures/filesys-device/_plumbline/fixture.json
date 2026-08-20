@@ -1,0 +1,8 @@
+{
+  "description": "A block device node in /var/tmp with the same major and minor numbers as /dev/sda. The kernel resolves a device by its numbers, not by its path, so reading this node reads the raw disk and bypasses every file permission on the filesystem stored there. Creating it needed root; the node is the artifact, not the cause. FILESYS-0006 fails on it and correctly ignores the two legitimate nodes in /dev.",
+  "modes": {
+    "/dev/null": "020666",
+    "/dev/sda": "060660",
+    "/var/tmp/.hidden-disk": "060444"
+  }
+}

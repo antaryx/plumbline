@@ -1,0 +1,1 @@
+{ "description": "The same correct configuration as logging-compliant, written entirely in the sysklogd/legacy syntax: '$FileCreateMode', '$IncludeConfig' and a '*.* @@host' forwarding rule. Both fixtures must reach identical verdicts — that is what proves the collector reads both of rsyslog's languages rather than one." }

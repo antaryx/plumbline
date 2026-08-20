@@ -1,0 +1,1 @@
+{ "description": "The main journald.conf sets Storage=persistent and a drop-in overrides it to volatile. systemd applies the LAST occurrence, the opposite of sshd_config — a check that took the first match would report the value the operator's drop-in was written to replace." }

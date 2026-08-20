@@ -1,0 +1,1 @@
+{ "description": "Two drop-in files set kernel.kptr_restrict to different values; which one wins depends on the sysctl implementation, so no verdict may be reached" }

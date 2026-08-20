@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/system"
 )
 
@@ -67,23 +68,62 @@ func SkippedFSType(fstype string) bool {
 	return false
 }
 
-// mountTable maps a mount point to the type of the filesystem mounted there.
+// mountEntry is one mount point's type and the options it was mounted with.
+//
+// Options and SuperOptions are separate because mountinfo reports them
+// separately and they are not the same thing. The per-mount options are
+// properties of *this* mount of the filesystem — nodev, nosuid, noexec, ro —
+// and are what a bind mount can differ in. The superblock options belong to
+// the filesystem itself and are shared by every mount of it. A check asking
+// "is /tmp nosuid" is asking about the first; reading the second instead would
+// answer a different question and be right often enough to look correct.
+type mountEntry struct {
+	fstype    string
+	options   []string
+	superOpts []string
+}
+
+// mountTable maps a mount point to what is mounted there.
 type mountTable struct {
-	// byPoint is the fstype at each mount point. When a path is mounted over
+	// byPoint is the entry at each mount point. When a path is mounted over
 	// more than once, the last entry wins, because that is the one the kernel
 	// resolves through — mountinfo is in mount order.
-	byPoint map[string]string
+	byPoint map[string]mountEntry
+	// order preserves mountinfo's order, so the fact this table becomes is
+	// deterministic without anything downstream having to sort.
+	order []string
 	// known is false when the table could not be read. A caller must not treat
 	// an unknown table as an empty one: "nothing is mounted here" and "we
 	// could not find out what is mounted here" lead to opposite decisions
-	// about whether it is safe to descend.
+	// about whether it is safe to descend, and to opposite verdicts about
+	// whether /tmp is hardened.
 	known bool
 }
 
 // fstypeAt returns the filesystem type mounted exactly at dir.
 func (t mountTable) fstypeAt(dir string) (string, bool) {
-	ft, ok := t.byPoint[path.Clean(dir)]
-	return ft, ok
+	e, ok := t.byPoint[path.Clean(dir)]
+	return e.fstype, ok
+}
+
+// asFact converts the table into the fact the FILESYS mount checks read.
+//
+// It is derived from the table the walk already built rather than from a
+// second read of mountinfo. That is the one-traversal rule applied to a file
+// rather than to a tree: two reads of the same kernel table could disagree,
+// and the disagreement would be invisible.
+func (t mountTable) asFact() fact.Mounts {
+	m := fact.Mounts{Known: t.known}
+	for _, point := range t.order {
+		e := t.byPoint[point]
+		m.Entries = append(m.Entries, fact.Mount{
+			Point:     point,
+			FSType:    e.fstype,
+			Options:   e.options,
+			SuperOpts: e.superOpts,
+		})
+	}
+	return m
 }
 
 // readMountTable parses /proc/self/mountinfo through the seam.
@@ -93,7 +133,7 @@ func (t mountTable) fstypeAt(dir string) (string, bool) {
 // not a reason to abandon a traversal that is still perfectly able to stay on
 // one device.
 func readMountTable(s system.System) mountTable {
-	t := mountTable{byPoint: map[string]string{}}
+	t := mountTable{byPoint: map[string]mountEntry{}}
 
 	res, err := s.ReadFile(MountInfoPath, 4<<20)
 	if err != nil {
@@ -107,28 +147,35 @@ func readMountTable(s system.System) mountTable {
 	}
 
 	for _, line := range strings.Split(string(res.Data), "\n") {
-		point, fstype, ok := parseMountInfoLine(line)
+		point, e, ok := parseMountInfoLine(line)
 		if !ok {
 			continue
 		}
-		t.byPoint[point] = fstype
+		if _, seen := t.byPoint[point]; !seen {
+			t.order = append(t.order, point)
+		}
+		t.byPoint[point] = e
 	}
 	t.known = true
 	return t
 }
 
-// parseMountInfoLine extracts the mount point and filesystem type from one
-// line of mountinfo(5):
+// parseMountInfoLine extracts one line of mountinfo(5):
 //
-//	36 35 98:0 /mnt1 /mnt2 rw,noatime shared:1 - ext3 /dev/root rw
-//	                       ^ point                    ^ fstype
+//	36 35 98:0 /mnt1 /mnt2 rw,noatime shared:1 - ext3 /dev/root rw,errors=continue
+//	 0  1   2    3     4       5          6    ^     ^      ^            ^
+//	                   |       |               sep  type  source   superblock opts
+//	                 point   options
 //
 // Field 7 onwards is a variable number of optional fields terminated by a
-// single "-", which is why the type cannot be read at a fixed index.
-func parseMountInfoLine(line string) (point, fstype string, ok bool) {
+// single "-", which is why neither the type nor the superblock options can be
+// read at a fixed index. That variability is the whole reason this parser
+// exists rather than a Fields() call at a constant offset: the optional fields
+// are present on any host using shared subtrees, which is every systemd host.
+func parseMountInfoLine(line string) (point string, e mountEntry, ok bool) {
 	fields := strings.Fields(line)
 	if len(fields) < 10 {
-		return "", "", false
+		return "", mountEntry{}, false
 	}
 	sep := -1
 	for i := 6; i < len(fields); i++ {
@@ -137,10 +184,37 @@ func parseMountInfoLine(line string) (point, fstype string, ok bool) {
 			break
 		}
 	}
-	if sep < 0 || sep+1 >= len(fields) {
-		return "", "", false
+	// The separator must be followed by at least the type and the source, and
+	// the superblock options come after those.
+	if sep < 0 || sep+2 >= len(fields) {
+		return "", mountEntry{}, false
 	}
-	return path.Clean(unescapeMountField(fields[4])), fields[sep+1], true
+
+	e.fstype = fields[sep+1]
+	e.options = splitOptions(fields[5])
+	if sep+3 < len(fields) {
+		e.superOpts = splitOptions(fields[sep+3])
+	}
+	return path.Clean(unescapeMountField(fields[4])), e, true
+}
+
+// splitOptions turns "rw,nosuid,nodev,relatime" into its parts, dropping
+// empties so that a trailing comma cannot produce a nameless option.
+func splitOptions(in string) []string {
+	if in == "" {
+		return nil
+	}
+	parts := strings.Split(in, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // unescapeMountField undoes the octal escaping the kernel applies to mount

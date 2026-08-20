@@ -4,17 +4,149 @@
 
 A deterministic, offline, evidence-first host security auditor for Linux.
 
-> **Status: v0.1.0 — pre-release, no stability guarantees.** The walking
-> skeleton is complete: the OS seam, facts, bundles, the collector runner,
-> scoring, the JSON renderer and the CLI, with one collector and one check
-> proving the shape end to end. Offline operation and hostile-input survival
-> are tests rather than promises.
+> **Status: v0.3.0 — pre-release, no stability guarantees.** **79 checks across
+> nine modules** at catalog version 13, every one with PASS and FAIL fixtures
+> enforced in CI, evaluated from a single filesystem traversal and a bounded
+> set of configuration reads.
 >
 > `findings/v1`, flag names, exit codes and check IDs are contracts from here.
 > Everything in Go stays `internal/` and may change without notice (ADR-0007).
 >
-> Next: `docs/BUILD-RUNBOOK-v0.2.md`, work package WP-15 — the shared
-> filesystem walker, which blocks the `FILESYS` module.
+> Next: `docs/ROADMAP.md` v0.4.0, which carries feature freeze — suppressions
+> first, then `plumbline diff`, then the commands that make the catalog legible
+> without reading Go.
+
+## What it checks
+
+| Module | Checks | Reads |
+|---|---|---|
+| **SSHD** | 19 | `sshd_config` and its includes, `Match` block scoping |
+| **KERNEL** | 16 | `/proc/sys` and the `sysctl.d` files, separately |
+| **USERS** | 10 | `passwd`, `shadow`, `group`, `nsswitch.conf` — four facts, four readabilities |
+| **FILESYS** | 10 | one shared traversal: setuid, world-writable, device nodes, unowned files, mount options |
+| **AUTH** | 6 | the PAM stack as a graph, `pwquality.conf`, `faillock.conf` |
+| **CRON** | 5 | who may write the schedule — metadata only, never a crontab |
+| **LOGGING** | 5 | rsyslog in all three of its syntaxes, journald with drop-ins |
+| **SERVICES** | 5 | systemd enablement recovered from symlinks |
+| **NETWORK** | 3 | nftables, iptables, ufw, firewalld — configured, not loaded |
+
+## Using it
+
+```bash
+plumbline scan                      # audit this host, human-readable report
+plumbline scan --root /mnt/image    # audit a mounted image or container filesystem
+plumbline collect -o host.plb       # capture the evidence, evaluate it elsewhere
+plumbline eval host.plb             # re-evaluate a bundle against today's catalog
+```
+
+The default output is a report for a person:
+
+```
+plumbline 0.3.0   catalog 13
+
+  host     auditbox   Debian GNU/Linux 12 (bookworm)
+  root     /  (live host)
+  started  2026-08-20 09:14:02 UTC   elapsed 3.1s
+  euid     0  (root)
+  profile  default
+
+CHECKS BY MODULE
+───────────────────────────────────────────────────────────────────────────
+
+  CRON  · 5 checks, 1 failing
+    PASS     CRON-0001      The system crontab is owned by root and writable only by root
+    PASS     CRON-0002      The cron drop-in directories are owned by root and writable only by root
+    FAIL     CRON-0003      Access to crontab is restricted by an allow list
+    PASS     CRON-0004      The cron access-control files are owned by root and writable only by root
+    PASS     CRON-0005      The cron schedule is not readable by unprivileged accounts
+
+  FILESYS  · 10 checks, 1 unknown
+    ...
+    UNKNOWN  FILESYS-0010   Every uid and gid owning a file resolves to a local account or group
+
+FAILING — 1
+───────────────────────────────────────────────────────────────────────────
+
+  FAIL  CRON-0003  Access to crontab is restricted by an allow list
+      HIGH  ·  subject /etc/cron.deny
+      Access is governed by /etc/cron.deny, which fails open: every account not
+      named in it may schedule jobs, including accounts created after the file
+      was last edited.
+
+      evidence
+        /etc/cron.deny
+          file: mode 0644, uid 0, gid 0
+
+      remediation  ·  effort LOW
+        Replace cron.deny with a cron.allow naming the accounts that need cron.
+
+COULD NOT DETERMINE — 1
+───────────────────────────────────────────────────────────────────────────
+
+  These are not passes. Each one is a question this scan could not answer,
+  with the reason it could not. Treat them as findings until they are resolved.
+
+  UNKNOWN  FILESYS-0010  Every uid and gid owning a file resolves to a local account or group
+      MEDIUM  ·  reason ambiguous_system_state  ·  subject /etc/nsswitch.conf
+      2 owners on this filesystem do not resolve in the local files — uid 4242
+      owns 3 inodes (for example /var/lib/oldapp) — but the local files are not
+      this host's whole account database: /etc/nsswitch.conf routes "passwd" to
+      files, sss. An identity absent from /etc/passwd may still be a real account
+      served from somewhere this scan cannot ask, because Plumbline never opens a
+      network socket.
+
+SUMMARY
+───────────────────────────────────────────────────────────────────────────
+
+  PASS              73
+  FAIL               1
+  UNKNOWN            1   ← not passes; the scan could not tell
+  NOT_APPLICABLE     4
+  SKIPPED            0
+
+  evaluated         79   checks in catalog 13
+  posture         97.2   coverage 98.7% of applicable checks
+```
+
+`FAIL` is red, `PASS` green, `UNKNOWN` yellow. Colour is suppressed by
+`--no-color`, by `NO_COLOR` in the environment, when stdout is not a terminal,
+and always when writing to `--output`.
+
+**For pipelines, ask for JSON:**
+
+```bash
+plumbline scan --json | jq '.findings[] | select(.result == "FAIL")'
+plumbline scan --format json -o findings.json
+plumbline scan --fail-on high            # exit 2; the format does not move the exit code
+```
+
+`findings/v1` is the public API and is schema-validated in CI. **The terminal
+report is not** — its layout may change in a patch release, so nothing should
+parse it. That is the whole reason there are two renderers rather than one with
+a flag.
+
+## Offline by construction
+
+Plumbline talks to no daemon. There is no dbus connection, no `systemctl`, no
+`nft list ruleset`, no `iptables -S`, and no network call of any kind — the
+offline test runs a scan inside `unshare -n` and asserts it produces a
+byte-identical document to an online one.
+
+That is not asceticism; it is what makes the other properties possible:
+
+- **Service enablement is recovered from the filesystem.** `systemctl enable`
+  creates a symlink in `<target>.wants/` and nothing else — so reading those
+  directories recovers exactly what `systemctl is-enabled` would report,
+  without a running init system.
+- **A mounted image audits like a live host.** `--root /mnt` works because
+  nothing asks the kernel about itself.
+- **A bundle collected months ago re-evaluates today.** There is no live state
+  to have gone stale.
+
+The cost is stated rather than hidden: this reports what is **configured**, not
+what is loaded. A host with a perfect `nftables.conf` and a disabled
+`nftables.service` has no firewall, and the two halves are reported by two
+modules that each decline to claim the other's.
 
 ## What makes it different
 
@@ -33,6 +165,22 @@ That single decision buys things a live-evaluating scanner cannot have:
   hundreds of checks stays verifiable.
 
 And it says `UNKNOWN` when it cannot tell, instead of reporting `PASS`.
+
+That is load-bearing on damaged hosts, which is where scanners are least
+trustworthy and least tested. Point Plumbline at a machine whose configuration
+files are four kilobytes of random bytes each — a failed restore, a filesystem
+that lost its journal — and it names every file it could not parse and refuses
+to draw a verdict from any of them. It does not report that root login is
+disabled because the corrupted `sshd_config` "does not set" the keyword.
+
+Two examples of what that costs and what it buys. A filesystem walk that hits
+its inode budget makes every *absence* claim resolve to `UNKNOWN` while still
+reporting the setuid binary it did find — a truncated walk can invalidate a
+negative result and never a positive one. And FILESYS-0010, which reports files
+owned by accounts that no longer exist, reads `/etc/nsswitch.conf` first: on a
+host joined to Active Directory an unresolved uid is very likely a real user
+this offline scan simply cannot ask about, so the check declines rather than
+accusing a correctly configured machine.
 
 ## Development
 
@@ -89,6 +237,10 @@ are.
 `internal/collect/collectors/sshd/sshd.go` and
 `internal/catalog/checks/sshd/sshd0002.go`, with nine fixtures under
 `testdata/fixtures/`. Deliberately over-commented. Copy their shape.
+
+For a module that reads the filesystem rather than a config file, copy
+`internal/catalog/checks/filesys/` instead — in particular `mustBeComplete`,
+which is where the asymmetric truncation rule is applied.
 
 ## Licence
 

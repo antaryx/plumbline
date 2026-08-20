@@ -1,0 +1,4 @@
+{
+  "description": "A host whose sshd_config has had binary content written into it. The first two lines are valid and secure, which is the trap: a parser that reads past the NUL sees PermitRootLogin no and reports a hardened host. sshd does not — it stops at the NUL or refuses the file, so the daemon is running whatever configuration last loaded, and that is not visible from disk. The collector must record a fact error rather than a configuration, and every SSHD check must be UNKNOWN(unparseable_source). Reporting the two good lines would be the most dangerous possible outcome: a confident PASS drawn from a file the system rejects.",
+  "modes": { "/etc/ssh/sshd_config": "0600" }
+}

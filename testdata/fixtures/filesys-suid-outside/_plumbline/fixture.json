@@ -1,0 +1,8 @@
+{
+  "description": "The classic persistence artifact: a setuid root shell in a home directory and another in /var/tmp. Both are owned by root and mode 4755, so FILESYS-0001 passes — they are not writable by anyone but root, and that is exactly the point. Only their location gives them away, which is why FILESYS-0002 is a location rule rather than a name allowlist.",
+  "modes": {
+    "/usr/bin/passwd": "4755",
+    "/home/alice/.cache-helper": "4755",
+    "/var/tmp/sh": "4755"
+  }
+}

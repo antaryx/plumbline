@@ -105,6 +105,31 @@ func infoFor(clean string, st os.FileInfo) system.FileInfo {
 	return fi
 }
 
+// Readlink returns a symlink's target as written, without resolving it.
+//
+// os.Readlink does not follow anything: it reads the link's own contents, so
+// there is no TOCTOU window here and no risk of a hostile chain being walked
+// by a root process. A relative target stays relative; the caller resolves it
+// against the link's directory and back through this seam, so that --root
+// still governs what gets looked at.
+func (s *System) Readlink(p string) (string, error) {
+	_, real, err := s.resolve(p)
+	if err != nil {
+		return "", err
+	}
+	target, err := os.Readlink(real)
+	if err != nil {
+		// EINVAL from readlink means "this is not a symlink", which is a
+		// different fact about the host from "it is not there" or "you may not
+		// look". Translating it here is what lets fake and live agree.
+		if errors.Is(err, syscall.EINVAL) {
+			return "", system.ErrNotSymlink
+		}
+		return "", translate(err)
+	}
+	return target, nil
+}
+
 func (s *System) ReadFile(p string, maxBytes int64) (system.ReadResult, error) {
 	clean, real, err := s.resolve(p)
 	if err != nil {
@@ -232,6 +257,12 @@ func (s *System) Exec(ctx context.Context, argv []string) (system.ExecResult, er
 	if len(argv) == 0 {
 		return system.ExecResult{}, errors.New("empty argv")
 	}
+	// G204 is the whole point of this function rather than a defect in it: the
+	// seam exists so that everything above it can run a command without ever
+	// building one. argv arrives already split, it is never assembled from a
+	// string, and CLAUDE.md rule 8 forbids `sh -c` anywhere in the tree — so
+	// there is no shell to inject into. The environment is fixed above.
+	//nolint:gosec // execution of parameterized argv is safe by design and required by the seam
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Env = execEnv
 	var stdout, stderr bytes.Buffer

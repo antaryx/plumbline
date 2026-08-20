@@ -1,0 +1,15 @@
+{
+  "description": "The good case: crontab 0600 root:root, every drop-in directory 0700 root:root, and an allow list. cron.deny is deliberately absent — with cron.allow present it would be ignored, and CRON-0003 says so.",
+  "modes": {
+    "/etc/crontab": "0600", "/etc/cron.allow": "0600",
+    "/etc/cron.d": "040700", "/etc/cron.hourly": "040700",
+    "/etc/cron.daily": "040700", "/etc/cron.weekly": "040700",
+    "/etc/cron.monthly": "040700"
+  },
+  "owners": {
+    "/etc/crontab": "0:0", "/etc/cron.allow": "0:0",
+    "/etc/cron.d": "0:0", "/etc/cron.hourly": "0:0",
+    "/etc/cron.daily": "0:0", "/etc/cron.weekly": "0:0",
+    "/etc/cron.monthly": "0:0"
+  }
+}

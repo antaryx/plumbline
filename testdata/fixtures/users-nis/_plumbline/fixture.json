@@ -1,0 +1,1 @@
+{ "description": "NIS compatibility entries import accounts from a directory service, so the local file is explicitly not the whole account list and no negative assertion over it can be confirmed" }
