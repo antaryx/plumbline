@@ -107,6 +107,32 @@ check-check-purity:
 check-fixture-coverage:
 	@go run ./tools/fixturegate
 
+.PHONY: golden-diff
+## golden-diff: report which golden bundles no longer evaluate to their
+## expectation. Read-only — it writes nothing and names the first check that
+## moved on each bundle. Run it after any catalog change: a change that moves a
+## verdict on eight recorded distributions when you expected one is telling you
+## something before your users do (docs/FIXTURES.md §6).
+golden-diff:
+	go test ./internal/cli/ -run TestGolden -count=1
+
+.PHONY: golden-update
+## golden-update: rewrite testdata/bundles/*.expected.json from the current
+## catalog, then show what changed.
+##
+## **This is a reviewed act, not a convenience.** A PR that runs it without
+## explaining every moved verdict in the description should be refused: this is
+## the one command that can silently rewrite the definition of PASS across the
+## whole recorded corpus. The hand-typed counts in internal/cli/golden_test.go
+## are not regenerated, and are what force somebody to state the new numbers.
+##
+## Re-recording the bundles themselves is testdata/bundles/record.sh, which
+## needs docker and is never run by CI.
+golden-update:
+	go test ./internal/cli/ -run TestGolden -count=1 -update
+	@git --no-pager diff --stat -- testdata/bundles || true
+	@echo "read the diff: git diff testdata/bundles"
+
 .PHONY: docs
 docs:
 	@echo "regenerate MODULE-CATALOG.md and CHECK-REFERENCE.md (v0.3 WP)"

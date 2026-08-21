@@ -276,7 +276,7 @@ v1 release criterion.
   is a week of accumulating glibc assumptions.
 - **`--root` against a real mounted image and a container filesystem.** The
   escape-refusal rule has unit tests and has never met a real overlayfs.
-- **Golden bundles for ≥6 distro/version combinations.**
+- **Golden bundles for ≥6 distro/version combinations.** ✅ Done in WP-34; see `testdata/bundles/README.md`.
 - **Determinism under adversarial ordering** — hostile directory-entry order,
   duplicate mount points, `..` in mountinfo fields.
 - **Budget behaviour on a genuinely large host** — 2M+ inodes, asserting that a
@@ -351,7 +351,7 @@ the terminal report deliberately omits. A block that runs to forty lines per
 finding is one an operator scrolls past; a command they asked for by ID is one
 they read.
 
-#### 3. Profile architecture and golden bundles — **PROFILES DONE (WP-33, 2026-08-20); golden bundles outstanding**
+#### 3. Profile architecture and golden bundles — **DONE (WP-33 and WP-34, 2026-08-21)**
 
 `--profile cis-level-1`, `--profile stig`, and the machinery that makes a
 profile a *selection over the existing catalog* rather than a second catalog.
@@ -362,7 +362,19 @@ profile is a finding nobody can reproduce.
 Golden bundles are the fixture half: recorded bundles from real distributions,
 committed, and re-evaluated in CI so that a catalog change which moves a
 verdict on a real host shows up as a diff in review rather than as a surprise
-in production. `docs/FIXTURES.md` §6 already reserves the concept.
+in production. `docs/FIXTURES.md` §6 reserved the concept; WP-34 implemented it.
+
+Six bundles ship in `testdata/bundles/`, covering glibc and musl, dpkg and rpm,
+systemd and OpenRC: Ubuntu 24.04 stock and hardened, Debian 13, Fedora 44,
+Rocky 9 and Alpine 3.20. `TestGolden` re-evaluates all six on every
+`make verify`, against per-check expectation files and against posture and
+counts typed out by hand — the second gate exists because the first can be
+satisfied by running the same command that reports it.
+
+The hardened bundle is the one that carries the catalog: **every check in the
+catalog reaches a real verdict on it**, which no fixture and no stock base image
+manages alone. It also closes the v1.0.0 criterion below, three milestones
+early.
 
 ---
 
@@ -412,7 +424,7 @@ of it is work that was forgotten.
 - [ ] Zero panics across the full fixture and hostile corpus
 - [ ] Determinism test green: same bundle → byte-identical findings, 100 consecutive runs
 - [ ] Offline test green: full scan succeeds in a network-less namespace
-- [ ] Golden bundles for ≥6 distro/version combinations
+- [x] Golden bundles for ≥6 distro/version combinations *(WP-34, 2026-08-21: six in `testdata/bundles/`)*
 - [ ] `findings-v1.schema.json` published, validated in CI, and frozen
 - [ ] Scan of a reference host completes within the published budget
 - [ ] Signed release artifacts + SBOM + provenance, and documented verification steps a user can follow

@@ -10,9 +10,14 @@ coverage.html
 vendor/
 
 # Bundles and reports — these contain host inventory and must never be
-# committed by accident. Fixtures live under testdata/ and are exempt.
+# committed by accident.
 *.plb
 *.plb.sig
+# The golden bundles are the one exception, and they are exempt by name rather
+# than by living under testdata/: they are recorded from stock container images,
+# scrubbed by tools/goldenrecord, and committed on purpose (docs/FIXTURES.md §6).
+# A bundle that lands anywhere else is still an accident.
+!testdata/bundles/*.plb
 plumbline-report-*.json
 plumbline-report-*.sarif
 

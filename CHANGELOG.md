@@ -11,10 +11,47 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-**`v0.5.0` in progress — ecosystem integration.** `docs/ROADMAP.md` carries the
-rest: `plumbline explain` and the profile architecture.
+**`v0.5.0` is feature-complete — ecosystem integration.** All four items ship
+here: SARIF export, `plumbline explain`, the profile architecture, and the
+golden-bundle corpus. What remains before the tag is the release itself.
 
 ### Added
+- **Golden bundles (WP-34).** Six real collections from six real Linux
+  userlands — Ubuntu 24.04 stock and hardened, Debian 13, Fedora 44, Rocky 9
+  and Alpine 3.20 — recorded once into `testdata/bundles/` and re-evaluated by
+  `TestGolden` on every `make verify`. `make golden-diff` reports which bundles
+  no longer match; `make golden-update` rewrites the expectations.
+
+  **This is a different question from the one the fixture corpus answers.**
+  A fixture asks whether a check reaches the right verdict on a tree built to
+  provoke it, and it is written by the same person, at the same time, with the
+  same misconception. A golden bundle asks whether anything moved on a host
+  nobody was thinking about when the change was written.
+
+  `ubuntu-2404-hardened` is the one that carries the catalog: **every check
+  reaches a real verdict on it** — no `NOT_APPLICABLE` at all — which no fixture
+  and no stock base image manages alone. Its recipe was written from the
+  remediation this tool prints, and doing that caught a wrong hardening setting
+  on the first pass: `ClientAliveCountMax 0` looks stricter than 3 and disables
+  idle disconnection entirely, which is exactly what SSHD-0007 said.
+
+  Two gates, deliberately different in kind. Per-check expectations regenerate
+  with `make golden-update` so a PR shows which checks moved on which
+  distribution; posture and counts are typed by hand in
+  `internal/cli/golden_test.go` and are not regenerated, because a gate that can
+  be silenced by the same command that runs it will eventually be silenced by
+  habit.
+
+  Recording is a deliberate act — `testdata/bundles/record.sh`, needs docker,
+  never run by CI — and two tests hold the corpus safe to publish:
+  `TestGoldenBundlesCarryNothingOfTheRecordingHost` and
+  `TestGoldenBundlesCarryNoCredentialMaterial`. Both read the raw archive rather
+  than the decoded facts, because the failure being guarded against is a value
+  arriving somewhere nobody thought to look.
+
+  This closes the v1.0.0 release criterion of golden bundles for ≥6
+  distribution/version combinations, three milestones early.
+
 - **Profile architecture (WP-33).** `--profile` on `scan` and `eval` scopes an
   evaluation to a declared baseline, and `plumbline profiles` lists the
   built-ins with the count each selects. Two are embedded: `default` (the whole

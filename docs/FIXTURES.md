@@ -675,26 +675,86 @@ Rules for recorded fixtures:
 
 ## 6. Golden bundles
 
-A tier above fixtures. A golden bundle is a recorded bundle plus the complete
-expected findings JSON. Any catalog change immediately shows its blast radius
-as a findings diff across every recorded distro.
+A tier above fixtures. A golden bundle is a recorded bundle plus the expected
+findings for it. Any catalog change immediately shows its blast radius as a
+findings diff across every recorded distro.
+
+Implemented in WP-34. Six bundles live in `testdata/bundles/`, each with a
+recipe naming exactly what it was recorded from, and `TestGolden` in
+`internal/cli/` re-evaluates all of them on every `make verify`.
 
 ```
 testdata/bundles/
+├── README.md                       the corpus, what is in it and what is not
+├── record.sh                       re-records the bundles; needs docker
+├── recipes/
+│   ├── ubuntu-2404-stock.dockerfile
+│   └── ubuntu-2404-hardened.dockerfile
 ├── ubuntu-2404-stock.plb
 ├── ubuntu-2404-stock.expected.json
-├── debian-13-hardened.plb
-└── debian-13-hardened.expected.json
+├── ubuntu-2404-hardened.plb
+└── ubuntu-2404-hardened.expected.json
 ```
+
+Names carry the distribution, its version, and whether the host was stock or
+hardened. At least one bundle must be hardened enough that no check in the
+catalog reaches `NOT_APPLICABLE` on it: a golden bundle that never evaluates a
+check cannot notice when that check's verdict moves, and a corpus of stock base
+images leaves the whole of SSHD and LOGGING uncovered.
 
 The workflow: change a check → `make golden-diff` → read what moved. A change
 that alters findings on eight distros when you expected one is telling you
 something before your users do.
 
-**Regenerating expected output is a reviewed act, not a convenience.**
+### What the expectation file holds
+
+Every field of a finding that is a claim about **this host** — the verdict, both
+severities, the reason an UNKNOWN is unknown, the subject, the fingerprint a
+suppression file keys on, the detail that quotes the observed value, and the
+evidence cited for it — plus the summary, the catalog version, and the scan's
+own record of where and as whom it ran.
+
+Not the title, remediation, references or framework mappings. Those are catalog
+metadata, identical on every host, already covered by `plumbline explain` and
+its own sweep test; six copies of forty lines of remediation prose would bury
+the one line that matters on the day a verdict moves. Not the tool version or
+commit either: those come from `-ldflags` and would pin the build rather than
+the finding.
+
+### Regenerating is a reviewed act, not a convenience
+
 `make golden-update` exists, and a PR that runs it without explaining every
 changed line in the description gets rejected. This is where a "quick fix"
 silently rewrites the definition of PASS for the whole corpus.
+
+Because that gate can be satisfied by running the same command that reports it,
+there is a second one that cannot: the counts and posture for every bundle are
+typed out by hand in `internal/cli/golden_test.go` and are not regenerated.
+Changing a number there is the moment somebody claims a new verdict is correct.
+
+### Recording
+
+`testdata/bundles/record.sh` builds each recipe over its base image, collects
+inside the container with `--redact`, and passes the result through
+`tools/goldenrecord`, which removes what a containerised recording leaks through
+the kernel mount table. Nothing in CI runs it and `make verify` never does.
+
+Two rules the recording obeys, both learned the hard way and both enforced by a
+test rather than by memory:
+
+- **Nothing of the recording machine reaches the bundle.** No bind mounts — a
+  bind mount lands in `/proc/self/mountinfo`, which the walker reads into the
+  mounts fact, so the first recording shipped a developer's home directory
+  inside a committed artifact. The binary goes in as an image layer, which also
+  makes it root-owned; `docker cp` preserves the host's uid, and uid 1000 in an
+  image that has no such account produced a `FILESYS-0010` UNKNOWN about the
+  recording laptop's account.
+- **No credential material reaches the bundle.** The hardened bundle is recorded
+  from a host with a real login account, because three USERS checks only apply
+  to an account that can authenticate. What makes that safe is that
+  `/etc/shadow` is never stored as evidence and the shadow fact records only the
+  properties of a hash. `TestGoldenBundlesCarryNoCredentialMaterial` is that
+  decision's alarm.
 
 ---
 

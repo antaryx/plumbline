@@ -5,7 +5,14 @@
 # them: the CRLF fixture exists precisely to test CRLF handling, and
 # normalising it would silently delete the test.
 testdata/fixtures/** -text
-testdata/bundles/**  binary
+
+# Golden bundles are zstd archives; everything else beside them is text that has
+# to stay diffable. The whole review workflow for the corpus is "regenerate the
+# expectations and read the diff" (docs/FIXTURES.md §6), and a blanket `binary`
+# over testdata/bundles/ — which is what this file carried from the initial
+# commit, before there was anything in that directory — would have told git to
+# print "Binary files differ" for exactly the file a reviewer needs to read.
+testdata/bundles/*.plb binary
 
 # Binary artifacts
 *.plb binary

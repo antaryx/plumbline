@@ -1,0 +1,1013 @@
+{
+  "bundle": "debian-13-stock.plb",
+  "schema": "findings/v1",
+  "catalog_version": 13,
+  "scan": {
+    "started": "2026-08-21T04:37:11.029041142Z",
+    "finished": "2026-08-21T04:37:11.086287048Z",
+    "root": "",
+    "euid": 0,
+    "profile": "default"
+  },
+  "summary": {
+    "counts": {
+      "pass": 34,
+      "fail": 12,
+      "not_applicable": 33,
+      "skipped": 0,
+      "unknown": 0,
+      "total": 79
+    },
+    "by_severity": {
+      "HIGH": 3,
+      "LOW": 4,
+      "MEDIUM": 5
+    },
+    "posture": 78.89908256880734,
+    "coverage": 100
+  },
+  "findings": [
+    {
+      "check_id": "AUTH-0001",
+      "module": "AUTH",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "pam_pwquality.so",
+      "fingerprint": "b3d91d425b9d86f87f1ccc229a1f8379",
+      "detail": "No password quality module is in the password stack (/etc/pam.d/common-password). Nothing checks a password on this host: passwd accepts any string a user offers, including their own username and including a single character. There is no warning and nothing in the logs — the only way to observe it is to look here.",
+      "evidence": [
+        {
+          "source": "/etc/pam.d/common-password",
+          "excerpt": "3 rule(s) read"
+        }
+      ]
+    },
+    {
+      "check_id": "AUTH-0002",
+      "module": "AUTH",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "b7bb756ffbaa4fd1a43c806d3b382b9a",
+      "detail": "No password quality module is in the password stack (/etc/pam.d/common-password), so its parameters have no subject. AUTH-0001 reports the absence itself."
+    },
+    {
+      "check_id": "AUTH-0003",
+      "module": "AUTH",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "pam_faillock.so",
+      "fingerprint": "69f4956d9440001711ebd19b224f8936",
+      "detail": "No failed-attempt counter is in the auth stack (/etc/pam.d/common-auth), so an account may be guessed at without limit. sshd counts failures per connection and gives up, which makes remote brute force expensive; su, sudo and console login have no counter of their own, so an attacker who already has a shell may guess at the next account as fast as the hardware allows.",
+      "evidence": [
+        {
+          "source": "/etc/pam.d/common-auth",
+          "excerpt": "3 rule(s) read"
+        }
+      ]
+    },
+    {
+      "check_id": "AUTH-0004",
+      "module": "AUTH",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "pam_unix.so",
+      "fingerprint": "f77617b26dd9ffc42e88009b5e2f1a9a",
+      "detail": "pam_unix.so accepts an empty password in 3 rules (/etc/pam.d/common-auth:17). An account whose password field in /etc/shadow is empty can then be logged into by anyone who knows its name, with no credential at all. USERS-0003 reports whether any account is currently in that state; this is the half that decides what happens when one is.",
+      "evidence": [
+        {
+          "source": "/etc/pam.d/common-auth",
+          "line": 17,
+          "excerpt": "auth [success=1 default=ignore] pam_unix.so nullok",
+          "sha256": "b787b01c7e71c658fa9acb84cbe153f71786cf380af4b01ae9135210cdc0154d"
+        },
+        {
+          "source": "/etc/pam.d/common-auth",
+          "line": 17,
+          "excerpt": "auth [success=1 default=ignore] pam_unix.so nullok",
+          "sha256": "b787b01c7e71c658fa9acb84cbe153f71786cf380af4b01ae9135210cdc0154d"
+        },
+        {
+          "source": "/etc/pam.d/common-auth",
+          "line": 17,
+          "excerpt": "auth [success=1 default=ignore] pam_unix.so nullok",
+          "sha256": "b787b01c7e71c658fa9acb84cbe153f71786cf380af4b01ae9135210cdc0154d"
+        }
+      ]
+    },
+    {
+      "check_id": "AUTH-0005",
+      "module": "AUTH",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "pam_unix.so",
+      "fingerprint": "e204673a36ef2a05f883c55ac1d87c1e",
+      "detail": "pam_unix.so hashes passwords with yescrypt, so a stolen /etc/shadow is expensive to attack. What is already in the file is USERS-0006's question — the algorithm applies when a password is set, not retroactively.",
+      "evidence": [
+        {
+          "source": "/etc/pam.d/common-password",
+          "line": 25,
+          "excerpt": "password [success=1 default=ignore] pam_unix.so obscure yescrypt",
+          "sha256": "a76bcfdcb12436297ccf72a0d63daed8d9761d8e92996eb08295b81be32567d7"
+        }
+      ]
+    },
+    {
+      "check_id": "AUTH-0006",
+      "module": "AUTH",
+      "result": "FAIL",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "subject": "pam_pwhistory.so",
+      "fingerprint": "2e7e9662a3e532a17479a845466e7fb0",
+      "detail": "No password history is kept: neither pam_pwhistory.so nor pam_unix.so carries a 'remember' argument in the password stack (/etc/pam.d/common-password). A user required to change their password may set it to the one they are replacing, which makes an expiry policy a recurring inconvenience that produces no security, and makes a post-compromise forced reset a no-op for exactly the account whose old password is already known. NIST SP 800-63B would not require this control; CIS and DISA do, and the finding is LOW because of that disagreement.",
+      "evidence": [
+        {
+          "source": "/etc/pam.d/common-password",
+          "excerpt": "3 rule(s) read"
+        }
+      ]
+    },
+    {
+      "check_id": "CRON-0001",
+      "module": "CRON",
+      "result": "NOT_APPLICABLE",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "bc3f2bb23cb85c137d13106c65198b9f",
+      "detail": "/etc/crontab does not exist. Cron is installed but no system crontab is present, which is normal on a host that schedules everything through /etc/cron.d, /etc/cron.hourly, /etc/cron.daily, /etc/cron.weekly, /etc/cron.monthly."
+    },
+    {
+      "check_id": "CRON-0002",
+      "module": "CRON",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "bb0f50a46cd7b379c36f630609312854",
+      "detail": "All 1 cron drop-in director(ies) present on this host are owned by root and writable only by root: /etc/cron.daily.",
+      "evidence": [
+        {
+          "source": "/etc/cron.daily",
+          "excerpt": "directory: mode 0755, uid 0, gid 0"
+        }
+      ]
+    },
+    {
+      "check_id": "CRON-0003",
+      "module": "CRON",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "/etc/cron.allow",
+      "fingerprint": "ea3e915433e811d617bceab1dad4f9f9",
+      "detail": "Neither /etc/cron.allow nor /etc/cron.deny exists, so no access-control file governs who may schedule jobs. What happens instead is decided by how this host's cron package was built rather than by anything on the filesystem — Debian's cron and Red Hat's cronie document it as site-dependent and choose differently — so the exposure cannot even be bounded from here. Creating /etc/cron.allow resolves both problems at once.",
+      "evidence": [
+        {
+          "source": "/etc/cron.allow",
+          "excerpt": "does not exist"
+        },
+        {
+          "source": "/etc/cron.deny",
+          "excerpt": "does not exist"
+        }
+      ]
+    },
+    {
+      "check_id": "CRON-0004",
+      "module": "CRON",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "cfe63d3a95a89f6b1904717a21a989ba",
+      "detail": "Neither /etc/cron.allow nor /etc/cron.deny exists, so there is no access-control file whose permissions could be wrong. CRON-0003 reports the absence itself."
+    },
+    {
+      "check_id": "CRON-0005",
+      "module": "CRON",
+      "result": "FAIL",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "subject": "/etc/cron.daily",
+      "fingerprint": "16ea734e54355ec74cc181ff163f3b12",
+      "detail": "1 of the 1 cron path(s) present on this host can be read by accounts other than root: /etc/cron.daily (mode 0755). That discloses what runs as root, from where, and at what time — which is the information an attacker needs to place a file into a job they cannot otherwise reach. This is a disclosure finding at LOW severity, not an escalation one: 0644 and 0755 are the values every mainstream distribution ships, and CRON-0001 and CRON-0002 cover who may write these paths.",
+      "evidence": [
+        {
+          "source": "/etc/cron.daily",
+          "excerpt": "directory: mode 0755, uid 0, gid 0"
+        }
+      ]
+    },
+    {
+      "check_id": "FILESYS-0001",
+      "module": "FILESYS",
+      "result": "PASS",
+      "severity": "CRITICAL",
+      "base_severity": "CRITICAL",
+      "fingerprint": "6b5ab5627dca89091607116aa6b65f7f",
+      "detail": "All 11 setuid and setgid executables are writable by their owner alone, so nothing but root decides what they run."
+    },
+    {
+      "check_id": "FILESYS-0002",
+      "module": "FILESYS",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "585b1e4fafe54b642d2c58505c9e46c9",
+      "detail": "All 11 setuid and setgid executables are in the directories a package manager installs into. Whether each of them should carry the bit is a question this check does not answer — it needs package metadata Plumbline does not collect."
+    },
+    {
+      "check_id": "FILESYS-0003",
+      "module": "FILESYS",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "9421474ec860fd25f4a57334c2180529",
+      "detail": "No world-writable file was found in 5436 inode(s) examined. Every regular file on this host is writable only by its owner or its group."
+    },
+    {
+      "check_id": "FILESYS-0004",
+      "module": "FILESYS",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "f5af461bfc7deaeddb8d39f2a0a1765c",
+      "detail": "All 3 world-writable directories carry the sticky bit, so only a file's own owner may delete or rename it. Whether these directories should be world-writable at all is FILESYS-0005's question.",
+      "evidence": [
+        {
+          "source": "/run/lock",
+          "excerpt": "directory: mode 0777, sticky, uid 0, gid 0"
+        },
+        {
+          "source": "/tmp",
+          "excerpt": "directory: mode 0777, sticky, uid 0, gid 0"
+        },
+        {
+          "source": "/var/tmp",
+          "excerpt": "directory: mode 0777, sticky, uid 0, gid 0"
+        }
+      ]
+    },
+    {
+      "check_id": "FILESYS-0005",
+      "module": "FILESYS",
+      "result": "PASS",
+      "severity": "CRITICAL",
+      "base_severity": "CRITICAL",
+      "fingerprint": "3f4b0c92a361d3fcf45ce3fc77c67d5b",
+      "detail": "No directory the operating system depends on is world-writable: nothing under /usr, /etc, /bin, /sbin, /lib, /boot, /opt, /root or /var/lib may be added to by an unprivileged account."
+    },
+    {
+      "check_id": "FILESYS-0006",
+      "module": "FILESYS",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "99a1571d4463cf06c6e03c766f203e97",
+      "detail": "No block or character device node exists outside /dev in 5436 inode(s) examined."
+    },
+    {
+      "check_id": "FILESYS-0007",
+      "module": "FILESYS",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "/tmp",
+      "fingerprint": "670c43ee7092d888ef9d6a1aa1e0de4a",
+      "detail": "/tmp is not a separate mount: it is part of the filesystem mounted at / and inherits its options. nodev, nosuid and noexec are per-mount properties, so a directory that is merely a subdirectory of another filesystem cannot carry them — and /tmp is where anything an unprivileged account brings to the host lands, so it is the one filesystem where removing the ability to execute, to escalate through setuid and to reach a device is worth the inconvenience",
+      "evidence": [
+        {
+          "source": "/proc/self/mountinfo",
+          "excerpt": "no entry for /tmp; the governing mount is / (rw,relatime)"
+        }
+      ]
+    },
+    {
+      "check_id": "FILESYS-0008",
+      "module": "FILESYS",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "/dev/shm",
+      "fingerprint": "40bb1f94f0f5720f855b6da6c090999b",
+      "detail": "/dev/shm is a separate tmpfs mount carrying nodev, nosuid, noexec (mounted rw,nosuid,nodev,noexec,relatime).",
+      "evidence": [
+        {
+          "source": "/proc/self/mountinfo",
+          "excerpt": "tmpfs on /dev/shm (rw,nosuid,nodev,noexec,relatime)"
+        }
+      ]
+    },
+    {
+      "check_id": "FILESYS-0009",
+      "module": "FILESYS",
+      "result": "FAIL",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "subject": "/home",
+      "fingerprint": "2e88c44671d35b4dc487a9aa74121794",
+      "detail": "/home is not a separate mount: it is part of the filesystem mounted at / and inherits its options. nodev, nosuid and noexec are per-mount properties, so a directory that is merely a subdirectory of another filesystem cannot carry them — and home directories are writable by the people who own them, so /home is where a setuid binary or a device node an attacker leaves behind would sit — and nosuid and nodev make both inert without costing any user anything",
+      "evidence": [
+        {
+          "source": "/proc/self/mountinfo",
+          "excerpt": "no entry for /home; the governing mount is / (rw,relatime)"
+        }
+      ]
+    },
+    {
+      "check_id": "FILESYS-0010",
+      "module": "FILESYS",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "1e5a8074d70586dc7a1c69669de6b124",
+      "detail": "Every owner on this filesystem resolves: 1 distinct uid and 4 distinct gids across 5436 inode(s) examined, and each one is present in /etc/passwd or /etc/group. No file is waiting to be inherited by the next account that takes its number."
+    },
+    {
+      "check_id": "KERNEL-0001",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "kernel.randomize_va_space",
+      "fingerprint": "244e104b77ba7c7e9db8f954616e8722",
+      "detail": "kernel.randomize_va_space is 2; the stack, heap, shared libraries and mmap base are all randomised.",
+      "evidence": [
+        {
+          "source": "/proc/sys/kernel/randomize_va_space",
+          "excerpt": "kernel.randomize_va_space = 2"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0002",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "kernel.kptr_restrict",
+      "fingerprint": "afd0dc943023c4519bdd5d621ddec534",
+      "detail": "kernel.kptr_restrict is 1; kernel pointers are hidden from processes without CAP_SYSLOG.",
+      "evidence": [
+        {
+          "source": "/proc/sys/kernel/kptr_restrict",
+          "excerpt": "kernel.kptr_restrict = 1"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0003",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "kernel.yama.ptrace_scope",
+      "fingerprint": "5d173fde651978c0ee5008ec9b03a9b9",
+      "detail": "kernel.yama.ptrace_scope is 1; a process may only attach to its own descendants.",
+      "evidence": [
+        {
+          "source": "/proc/sys/kernel/yama/ptrace_scope",
+          "excerpt": "kernel.yama.ptrace_scope = 1"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0004",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "subject": "kernel.dmesg_restrict",
+      "fingerprint": "7b91daf5d698ef6802c1d7ca526b75f9",
+      "detail": "kernel.dmesg_restrict is 0; any user may read the kernel ring buffer, which exposes kernel addresses and hardware detail useful for building an exploit.",
+      "evidence": [
+        {
+          "source": "/proc/sys/kernel/dmesg_restrict",
+          "excerpt": "kernel.dmesg_restrict = 0"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0005",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "fs.suid_dumpable",
+      "fingerprint": "f22fe1b0855cb209b98a79c59abb2d61",
+      "detail": "fs.suid_dumpable is 0; setuid and setgid programs do not produce core dumps.",
+      "evidence": [
+        {
+          "source": "/proc/sys/fs/suid_dumpable",
+          "excerpt": "fs.suid_dumpable = 0"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0006",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "kernel.unprivileged_bpf_disabled",
+      "fingerprint": "0d52f6c94bb1a2741723d790e230bb87",
+      "detail": "kernel.unprivileged_bpf_disabled is 2; unprivileged bpf() is refused, and the setting may still be raised to 1 to lock it.",
+      "evidence": [
+        {
+          "source": "/proc/sys/kernel/unprivileged_bpf_disabled",
+          "excerpt": "kernel.unprivileged_bpf_disabled = 2"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0007",
+      "module": "KERNEL",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "e5a4134804971639d52d79e259e2722d",
+      "detail": "No sysctl configuration file sets any of the kernel parameters this module probes, so there is no configured value to compare the running kernel against."
+    },
+    {
+      "check_id": "KERNEL-0008",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "a31a4884d88f394b0646a4d58d489595",
+      "detail": "Reverse-path filtering is enabled on all 1 non-loopback interface(s); packets with unroutable source addresses are dropped. eth0 in loose mode (value 2), which accepts a source routable via any interface — correct for asymmetric routing, weaker than strict mode."
+    },
+    {
+      "check_id": "KERNEL-0009",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "fs.protected_symlinks",
+      "fingerprint": "21d53bd66a87f70485487fb99aba17bb",
+      "detail": "fs.protected_symlinks is 1; symlinks in world-writable sticky directories are only followed when the follower or the directory owner owns the link.",
+      "evidence": [
+        {
+          "source": "/proc/sys/fs/protected_symlinks",
+          "excerpt": "fs.protected_symlinks = 1"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0010",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "fs.protected_hardlinks",
+      "fingerprint": "31dab1e7a56f14a790f9f394e605e9b6",
+      "detail": "fs.protected_hardlinks is 1; a hardlink may only be created to a file the user owns or can read and write.",
+      "evidence": [
+        {
+          "source": "/proc/sys/fs/protected_hardlinks",
+          "excerpt": "fs.protected_hardlinks = 1"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0011",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "fs.protected_fifos",
+      "fingerprint": "3db19cb82852a2a1fe9f4642e924e0b6",
+      "detail": "fs.protected_fifos is 1; an O_CREAT open of another user's FIFO in a world-writable sticky directory is refused.",
+      "evidence": [
+        {
+          "source": "/proc/sys/fs/protected_fifos",
+          "excerpt": "fs.protected_fifos = 1"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0012",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "fs.protected_regular",
+      "fingerprint": "a2e8d597e49f86d3cb846399bcdd1d45",
+      "detail": "fs.protected_regular is 2; the restriction covers group-writable sticky directories as well as world-writable ones.",
+      "evidence": [
+        {
+          "source": "/proc/sys/fs/protected_regular",
+          "excerpt": "fs.protected_regular = 2"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0013",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "kernel.perf_event_paranoid",
+      "fingerprint": "3577874b4af804678353cd1c5ddc36de",
+      "detail": "kernel.perf_event_paranoid is 2; unprivileged users may not profile the kernel, take CPU-wide measurements, or read raw tracepoints.",
+      "evidence": [
+        {
+          "source": "/proc/sys/kernel/perf_event_paranoid",
+          "excerpt": "kernel.perf_event_paranoid = 2"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0014",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "kernel.core_pattern",
+      "fingerprint": "5f91637b99efcfdacf7eecb57d635eaa",
+      "detail": "kernel.core_pattern is \"core\", which is a relative path, so a core dump is written into the crashing process's current working directory. A process that can be induced to run in a writable directory will drop its memory — including credentials and keys — where another user can read it.",
+      "evidence": [
+        {
+          "source": "/proc/sys/kernel/core_pattern",
+          "excerpt": "kernel.core_pattern = core"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0015",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "83407dddd85ae60299462976af03bc9a",
+      "detail": "net.ipv4.conf.all.accept_source_route is 0, and an interface accepts source routing only when conf.all and its own setting are both non-zero, so source-routed packets are refused on every interface.",
+      "evidence": [
+        {
+          "source": "/proc/sys/net/ipv4/conf/all/accept_source_route",
+          "excerpt": "net.ipv4.conf.all.accept_source_route = 0"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0016",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "subject": "net.ipv4.tcp_syncookies",
+      "fingerprint": "c1df8e11739a55c1a8c889c5f2184e22",
+      "detail": "net.ipv4.tcp_syncookies is 1; the kernel falls back to SYN cookies when a listening socket's backlog overflows.",
+      "evidence": [
+        {
+          "source": "/proc/sys/net/ipv4/tcp_syncookies",
+          "excerpt": "net.ipv4.tcp_syncookies = 1"
+        }
+      ]
+    },
+    {
+      "check_id": "LOGGING-0001",
+      "module": "LOGGING",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "4abaa7590d9dcc177d9fbb6035d7cf7e",
+      "detail": "No rsyslog configuration found; this host does not run rsyslog. Where journald is the only log daemon, LOGGING-0003 and LOGGING-0004 are the checks that apply."
+    },
+    {
+      "check_id": "LOGGING-0002",
+      "module": "LOGGING",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "74a41ddf2440c74c4da948573bce92ff",
+      "detail": "No rsyslog configuration found; this host does not run rsyslog. Where journald is the only log daemon, LOGGING-0003 and LOGGING-0004 are the checks that apply."
+    },
+    {
+      "check_id": "LOGGING-0003",
+      "module": "LOGGING",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "35d2e2ad1bbad289ff7d4b6cba54414e",
+      "detail": "No journald configuration or journal directory found; this host does not appear to run systemd-journald."
+    },
+    {
+      "check_id": "LOGGING-0004",
+      "module": "LOGGING",
+      "result": "NOT_APPLICABLE",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "fingerprint": "782804ed011ac8965708b1d3ad3bc82e",
+      "detail": "rsyslog is not configured on this host, so there is no syslog daemon for journald to forward to. LOGGING-0003 covers whether the journal itself is durable."
+    },
+    {
+      "check_id": "LOGGING-0005",
+      "module": "LOGGING",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "7dee6bdb162eeed7f6cfd808a7aee971",
+      "detail": "No rsyslog configuration found; this host does not run rsyslog. Where journald is the only log daemon, LOGGING-0003 and LOGGING-0004 are the checks that apply."
+    },
+    {
+      "check_id": "NETWORK-0001",
+      "module": "NETWORK",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "/etc/nftables.conf",
+      "fingerprint": "098a3e7505a79f6d84180800109bb7dc",
+      "detail": "No host firewall configuration was found. None of the files a firewall is restored from exists — nftables.conf, an iptables-save file, ufw.conf, firewalld.conf — so every port on this host that something is listening on is reachable from anywhere that can route to it, including the services no one decided to run.",
+      "evidence": [
+        {
+          "source": "/etc/nftables.conf",
+          "excerpt": "does not exist"
+        },
+        {
+          "source": "/etc/sysconfig/nftables.conf",
+          "excerpt": "does not exist"
+        },
+        {
+          "source": "/etc/sysconfig/iptables",
+          "excerpt": "does not exist"
+        },
+        {
+          "source": "/etc/sysconfig/ip6tables",
+          "excerpt": "does not exist"
+        },
+        {
+          "source": "/etc/iptables/rules.v4",
+          "excerpt": "does not exist"
+        },
+        {
+          "source": "/etc/iptables/rules.v6",
+          "excerpt": "does not exist"
+        },
+        {
+          "source": "/etc/ufw/ufw.conf",
+          "excerpt": "does not exist"
+        },
+        {
+          "source": "/etc/firewalld/firewalld.conf",
+          "excerpt": "does not exist"
+        }
+      ]
+    },
+    {
+      "check_id": "NETWORK-0002",
+      "module": "NETWORK",
+      "result": "NOT_APPLICABLE",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "5334898dff650b9e3b845453979d6f0e",
+      "detail": "No host firewall configuration was found on this host, so a default inbound policy has no subject. NETWORK-0001 reports the absence itself."
+    },
+    {
+      "check_id": "NETWORK-0003",
+      "module": "NETWORK",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "dd910fdff9eee44e19216e9f8e60d09e",
+      "detail": "No host firewall configuration was found on this host, so having exactly one firewall configuration has no subject. NETWORK-0001 reports the absence itself."
+    },
+    {
+      "check_id": "SERVICES-0001",
+      "module": "SERVICES",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "baf8a6828926d178f97c4c1f0a9f764f",
+      "detail": "None of the 23 cleartext-credential units this check knows about is enabled. 23 of them have no unit file on this host."
+    },
+    {
+      "check_id": "SERVICES-0002",
+      "module": "SERVICES",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "7ab3aff79702aed1a96804d4acc43970",
+      "detail": "Neither the mDNS responder, the printer browser nor the RPC portmapper is enabled. 5 of them have no unit file on this host."
+    },
+    {
+      "check_id": "SERVICES-0003",
+      "module": "SERVICES",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "systemd-timesyncd.service",
+      "fingerprint": "b9e17d8b2676be90293a7964c54a571f",
+      "detail": "No time synchronisation daemon is enabled; none of the 8 units this check knows about will start at boot. The clock will drift with the hardware, which puts this host's log timestamps out of step with every other host's, and eventually fails Kerberos, TLS and any short-lived credential that carries an expiry. 8 of them have no unit file on this host.",
+      "evidence": [
+        {
+          "source": "/etc/systemd/system",
+          "excerpt": "no .wants symlink names any time synchronisation unit"
+        }
+      ]
+    },
+    {
+      "check_id": "SERVICES-0004",
+      "module": "SERVICES",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "286b60687a6a0a1493f9149542bb7ae7",
+      "detail": "All 4 enablement symlinks resolve to a unit file that exists, so every service an administrator enabled on this host has something for systemd to start."
+    },
+    {
+      "check_id": "SERVICES-0005",
+      "module": "SERVICES",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "2723a481302af6f3044c11208e17c65a",
+      "detail": "All 3 unit directories and 9 unit files are owned by root and writable by root alone, so nothing but root decides what starts at boot."
+    },
+    {
+      "check_id": "SSHD-0002",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "29e459e1d06a989920b36fe648ccaf2f",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0003",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "ec4f5445f946588762a5bd47c2775f94",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0004",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "CRITICAL",
+      "base_severity": "CRITICAL",
+      "fingerprint": "8bd690503980aa748faf8ff294c537e3",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0005",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "ae9186ced7f04ec41e6c526a9711c64f",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0006",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "0a405357ac26bdabbeab985d40e9563c",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0007",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "a2c64d5258c12caee097a3a83d5a9c10",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0008",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "3fe4f9a5e4c864e251302e961824d5d2",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0009",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "a06344b845d6203485632ef9f5422871",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0010",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "b63a3753dbadee21bc9f4de7e8dbb4dc",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0011",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "fcbc7597c9ff2632ea438e1e306f2e6b",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0012",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "38d1325fd4d95abc4e5b2af53b25a331",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0013",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "8588510d4c195587c384eaf27949d328",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0014",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "731ee422826074169dff444402403eaa",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0015",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "ec81723c7dc26abfc84d87472fe798f0",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0016",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "fingerprint": "99d8e7b179647c7680ed34c593e0f97e",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0017",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "fingerprint": "3fdaa0131ab797b22b41502d6bc37207",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0018",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "fingerprint": "2a273d06700541c8cee3a5eb3c11d7e8",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0019",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "a389ce40f6a5dad173a35f1558326841",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "SSHD-0020",
+      "module": "SSHD",
+      "result": "NOT_APPLICABLE",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "f24fb29cc00e419d99ee20ff92bd9a61",
+      "detail": "No sshd configuration found; the SSH server is not configured on this host."
+    },
+    {
+      "check_id": "USERS-0001",
+      "module": "USERS",
+      "result": "PASS",
+      "severity": "CRITICAL",
+      "base_severity": "CRITICAL",
+      "fingerprint": "caca709fc349c31fffd88674b1e533bc",
+      "detail": "uid 0 is held by the root account and by no other account in /etc/passwd.",
+      "evidence": [
+        {
+          "source": "/etc/passwd",
+          "line": 1,
+          "excerpt": "root:x:0:0:...:/root:/bin/bash",
+          "sha256": "21352194cc533bc5878721507450d867d28ccb1c2f5cd773c792251fa1e63185"
+        }
+      ]
+    },
+    {
+      "check_id": "USERS-0002",
+      "module": "USERS",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "50aee2fc78562812ce908deb76f904a6",
+      "detail": "All 16 system account(s) (uid 1-999) have a shell that cannot open a session."
+    },
+    {
+      "check_id": "USERS-0003",
+      "module": "USERS",
+      "result": "PASS",
+      "severity": "CRITICAL",
+      "base_severity": "CRITICAL",
+      "fingerprint": "6a06d51912b9ab0b7c97ccbd12d6ecde",
+      "detail": "None of the 18 account(s) in /etc/shadow has an empty password field."
+    },
+    {
+      "check_id": "USERS-0004",
+      "module": "USERS",
+      "result": "NOT_APPLICABLE",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "4b3f71175737f670062445167e44ebfa",
+      "detail": "No account in /etc/shadow stores a password hash; every entry is locked or has no password, so there is no hashing algorithm in use to assess."
+    },
+    {
+      "check_id": "USERS-0005",
+      "module": "USERS",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "7d72ef999e8442dfc3ca16f49a3edbbb",
+      "detail": "Every one of the 18 account(s) in /etc/passwd has a distinct uid and a distinct name."
+    },
+    {
+      "check_id": "USERS-0006",
+      "module": "USERS",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "a5734698c42b30d4ac6eb9d1ad8ae17d",
+      "detail": "/etc/passwd contains no NIS compatibility entries; every account it defines is defined locally."
+    },
+    {
+      "check_id": "USERS-0007",
+      "module": "USERS",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "f2de2dfffecce7ead5bf89b7a1d51dab",
+      "detail": "root holds primary group 0, no ordinary account in /etc/passwd does, and the gid 0 group in /etc/group lists no supplementary members.",
+      "evidence": [
+        {
+          "source": "/etc/passwd",
+          "line": 1,
+          "excerpt": "root:x:0:0:...:/root:/bin/bash",
+          "sha256": "21352194cc533bc5878721507450d867d28ccb1c2f5cd773c792251fa1e63185"
+        },
+        {
+          "source": "/etc/group",
+          "line": 1,
+          "excerpt": "root:x:0:",
+          "sha256": "74842904631a5088b134a25257b8180367913d2b64cf1e3fed061db5fcbd8379"
+        }
+      ]
+    },
+    {
+      "check_id": "USERS-0008",
+      "module": "USERS",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "135b47440a0438f6a5f2de111e48e2db",
+      "detail": "Every one of the 38 group(s) in /etc/group has a distinct gid and a distinct name."
+    },
+    {
+      "check_id": "USERS-0009",
+      "module": "USERS",
+      "result": "NOT_APPLICABLE",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "fingerprint": "47bdcd8b3d6d5f89bc3494fc667e9cf2",
+      "detail": "No account in /etc/shadow can authenticate with a password — every entry is locked, empty or without a stored hash — so there is no password lifetime to bound."
+    },
+    {
+      "check_id": "USERS-0010",
+      "module": "USERS",
+      "result": "NOT_APPLICABLE",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "fingerprint": "c48205d3fd9adca2329ffd71eccfc4fe",
+      "detail": "No account in /etc/shadow can authenticate with a password — every entry is locked, empty or without a stored hash — so there is no password change interval to govern."
+    }
+  ]
+}
