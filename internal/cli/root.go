@@ -7,6 +7,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -23,13 +24,31 @@ import (
 // Nothing here calls os.Exit: the code is returned so that a test can assert
 // on it, which is the only way to test an exit-code ladder that matters as much
 // as this one does.
+//
+// It runs against a background context, which is what every test wants: a test
+// that installed a signal handler would be a test that can be killed by another
+// test's Ctrl-C. The process entry point uses ExecuteContext instead.
 func Execute(args []string, stdout, stderr io.Writer) int {
+	return ExecuteContext(context.Background(), args, stdout, stderr)
+}
+
+// ExecuteContext is Execute with a caller-supplied context, which is how the
+// signal handler reaches the collectors.
+//
+// main builds that context with system.WithInterrupt and passes it here.
+// Everything below is unchanged by it: cobra hands the context to each
+// command, scan and collect derive their --timeout context from it, and the
+// collector runner already selects on Done at every point it could block. The
+// signal therefore reaches the bottom of the pipeline through the mechanism
+// that was already there, rather than through a package-level variable that
+// each layer would have to remember to consult.
+func ExecuteContext(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	root := newRoot(stdout, stderr)
 	root.SetArgs(args)
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 
-	err := root.Execute()
+	err := root.ExecuteContext(ctx)
 	if err == nil {
 		return ExitOK
 	}

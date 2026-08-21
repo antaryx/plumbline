@@ -49,6 +49,26 @@ today's checks in mind cannot answer tomorrow's question.`,
 				return exitError{code: ExitInternal, message: err.Error()}
 			}
 
+			// Checked before the bundle is written, and it is the whole point
+			// of checking here rather than at the bottom with the other exits.
+			//
+			// A bundle assembled from a collection that stopped half way is a
+			// file with no mark on it saying so: the manifest lists the facts
+			// that made it and says nothing about the ones that did not, and
+			// six months later it re-evaluates to a posture score drawn from
+			// half a host. An operator who pressed Ctrl-C did not ask for a
+			// file, and the safest artifact is the one that was never written.
+			//
+			// This is deliberately stricter than the --timeout path below,
+			// which does keep its bundle. A budget is a decision to accept
+			// whatever fits inside it; an interrupt is a decision to stop.
+			if got.interrupted {
+				return exitError{
+					code:    ExitInterrupted,
+					message: fmt.Sprintf("interrupted; %s was not written", output),
+				}
+			}
+
 			if err := writeBundle(output, got.bundle); err != nil {
 				return exitError{code: ExitInternal, message: err.Error()}
 			}

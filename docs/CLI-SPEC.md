@@ -573,7 +573,7 @@ because silently ignoring `fail_on: hgih` is how a gate stops gating.
 | 10 | Insufficient privileges with `--strict-privileges` |
 | 11 | Timeout exceeded |
 | 70 | Internal error — panic escaped, bundle corrupt |
-| 130 | Interrupted (SIGINT) |
+| 130 | Interrupted — `SIGINT` or `SIGTERM` (§6.1) |
 
 **Precedence, evaluated top-down:**
 
@@ -589,6 +589,39 @@ Code 4 is the one that matters most and the one the source design lacked
 entirely: it distinguishes *"your host is misconfigured"* from *"the scanner
 could not see your host"*. Codes 5–9, 12–19 and 71–79 are reserved for
 expansion.
+
+### 6.1 Interruption
+
+`SIGINT` and `SIGTERM` cancel the collection and exit 130. The handler is
+installed once, at the process entry point, and cancels the context every
+command already derives its `--timeout` from; the collector runner selects on
+that context at every point it could block, so the cancellation reaches the
+bottom of the pipeline through the mechanism that was already there.
+
+**An interrupted run produces no artifact.**
+
+| Command | On interrupt |
+|---|---|
+| `scan` | No findings document on stdout, and `--save-bundle` writes nothing |
+| `collect` | No bundle; stderr names the file that was not written |
+
+This is deliberately stricter than the `--timeout` path, which does keep what it
+collected. A budget is a decision to accept whatever fits inside it. An
+interrupt is a decision to stop, and a bundle assembled from half a collection
+carries no mark saying so — the manifest lists the facts that made it and is
+silent about the ones that did not, so months later it re-evaluates to a
+posture score drawn from half a host.
+
+Interruption outranks everything in the ladder above, including a `--timeout`
+that expired in the same run: an operator who pressed Ctrl-C is told they
+stopped it, not that a budget they never reached had expired. The cancellation
+carries its reason with it, so the two cannot be confused by a caller that
+checks in the wrong order.
+
+**The second signal kills.** The handler is uninstalled the moment the first
+one arrives, restoring the default disposition, so a second Ctrl-C terminates
+the process immediately. That is the safety valve for the one case a handler
+cannot cover: a collector wedged in a syscall that never returns.
 
 ---
 
@@ -637,9 +670,9 @@ It is drawn only when all four of these hold, and the default is off:
 the indicator emits none, and widening somebody else's standard to also mean
 "stop moving" is how a well-known variable stops meaning one predictable thing.
 
-**Known limitation:** interrupting a scan with Ctrl-C leaves the last frame on
-screen. Nothing installs a signal handler yet — exit code 130 is reserved in §6
-and not yet produced — and erasing on a signal is that work, not this.
+Interrupting a scan erases the indicator like any other ending: `SIGINT`
+cancels the collection context, the collection phase returns, and the deferred
+stop clears the line before the exit message is printed (§6.1).
 
 ---
 

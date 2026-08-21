@@ -8,9 +8,11 @@
 package main
 
 import (
+	"context"
 	"os"
 
 	"github.com/antaryx/plumbline/internal/cli"
+	"github.com/antaryx/plumbline/internal/system"
 	"github.com/antaryx/plumbline/internal/version"
 )
 
@@ -25,5 +27,16 @@ var (
 
 func main() {
 	version.Set(buildVersion, commit, date)
-	os.Exit(cli.Execute(os.Args[1:], os.Stdout, os.Stderr))
+
+	// The signal handler is installed here rather than inside cli.Execute
+	// because this is the only place in the program that is a process. A test
+	// calling Execute must not divert SIGINT away from `go test`, and a
+	// package that installed a handler as a side effect of being called would
+	// do exactly that. What the handler produces — a cancelled context — is
+	// ordinary data, and every decision made from it is in internal/cli where
+	// it can be tested without sending anyone a signal.
+	ctx, stop := system.WithInterrupt(context.Background())
+	code := cli.ExecuteContext(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
 }

@@ -76,6 +76,19 @@ re-evaluated or diffed; the two are not interchangeable.`,
 				return exitError{code: ExitInternal, message: err.Error()}
 			}
 
+			// Before --save-bundle and before rendering, because both would
+			// otherwise produce an artifact that looks like a finished answer.
+			//
+			// A findings document from a half-finished collection is the worst
+			// output this tool can emit: every check whose facts never arrived
+			// resolves to UNKNOWN or NOT_APPLICABLE, the posture score is
+			// computed over whatever did, and nothing on the page says that a
+			// human stopped it. ExitCode's ladder already puts 130 above
+			// everything, so returning here cannot contradict it.
+			if got.interrupted {
+				return exitError{code: ExitInterrupted, message: "interrupted; no report was produced"}
+			}
+
 			if saveBundle != "" {
 				if err := writeBundle(saveBundle, got.bundle); err != nil {
 					return exitError{code: ExitInternal, message: err.Error()}

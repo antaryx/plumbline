@@ -19,7 +19,21 @@ vendor/
 # A bundle that lands anywhere else is still an accident.
 !testdata/bundles/*.plb
 plumbline-report-*.json
-plumbline-report-*.sarif
+
+# Any SARIF, wherever it lands. `plumbline scan --format sarif -o out.sarif` is
+# the first thing anyone tries when wiring up code scanning, and the file it
+# writes is a report about a real host — the same reconnaissance a bundle is.
+# No .sarif is checked in and none should be; the corpus that CI re-evaluates
+# is testdata/bundles.
+*.sarif
+
+# Suppression files. These name check IDs, subjects and fingerprints from a
+# real host, and the justification field is free text somebody wrote about
+# their own infrastructure. An operator keeps theirs in their own repository,
+# not in this one.
+suppress.json
+suppressions.json
+plumbline-suppress*.json
 
 # Editors
 .vscode/

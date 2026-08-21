@@ -26,6 +26,12 @@ import (
 type collected struct {
 	bundle   bundle.Bundle
 	timedOut bool
+
+	// interrupted: the operator stopped the run with a signal. It is separate
+	// from timedOut because the two arrive identically — a cancelled context —
+	// and mean opposite things to whoever reads the exit code. 11 says raise
+	// the budget; 130 says you already know why.
+	interrupted bool
 }
 
 // collectFacts runs every registered collector against s and assembles a
@@ -64,6 +70,12 @@ func collectFacts(ctx context.Context, s system.System, opts collectOptions) (co
 
 	out := collected{
 		timedOut: errors.Is(ctx.Err(), context.DeadlineExceeded),
+		// Asked of the context rather than of a flag this function sets,
+		// because the cancellation may have been noticed several layers down —
+		// a collector waiting on the expensive slot, a walk part-way through a
+		// directory — and context.Cause walks up to the one that carries the
+		// reason.
+		interrupted: system.Interrupted(ctx),
 		bundle: bundle.Bundle{
 			Manifest: bundle.Manifest{
 				BundleID:       id,

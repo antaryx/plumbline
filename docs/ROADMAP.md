@@ -396,12 +396,19 @@ drawn: stderr is a character device, `PLUMBLINE_NO_PROGRESS` is unset, `TERM`
 is set and not `dumb`, and no CI marker is present. CLI-SPEC.md §7 carries the
 contract.
 
+#### RC-2. Graceful signal handling — **DONE (2026-08-21)**
+
+`SIGINT` and `SIGTERM` cancel the collection context, the collection phase
+unwinds, the RC-1 indicator erases itself, and the run exits 130 — the code
+CLI-SPEC.md §6 reserved from the beginning and nothing produced. A Ctrl-C
+part-way through a walk of `/` unwinds in about 30ms.
+
+An interrupted run produces no artifact: no findings document, no
+`--save-bundle`, no bundle from `collect`. Stricter than the `--timeout` path,
+which keeps what it collected, and CLI-SPEC.md §6.1 says why.
+
 #### Still open in the RC phase
 
-- **Signal handling.** Ctrl-C leaves the last indicator frame on screen, and
-  exit code 130 is reserved in CLI-SPEC.md §6 without anything producing it. A
-  handler that cancels the collection context, unwinds, erases and exits 130 is
-  one change covering both.
 - **`meta.os_release` is empty on Ubuntu, Fedora and Rocky**, because
   `/etc/os-release` is a symlink on all three and the live seam opens privileged
   reads with `O_NOFOLLOW`. The seam is right; `hostMeta` does not handle the

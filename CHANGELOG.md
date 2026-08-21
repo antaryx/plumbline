@@ -17,6 +17,41 @@ corpus) and the work from here is polish, stability and documentation. No new
 checks, no new output formats, no new schema fields.
 
 ### Added
+- **Graceful `SIGINT` and `SIGTERM` handling (RC-2).** Exit code 130 was
+  reserved in CLI-SPEC.md §6 from the beginning and produced by nothing. It is
+  now produced by the thing it was reserved for.
+
+  The handler is installed once, at the process entry point, and cancels the
+  context every command already derives its `--timeout` from. Nothing else
+  changed: the collector runner has always selected on that context at every
+  point it could block, so the cancellation reaches the bottom of the pipeline
+  through the mechanism that was already there rather than through a new one.
+  A Ctrl-C part-way through a walk of `/` now unwinds in about 30ms.
+
+  **An interrupted run produces no artifact.** `scan` writes no findings
+  document and honours no `--save-bundle`; `collect` writes no bundle and names
+  on stderr the file it did not write. This is deliberately stricter than the
+  `--timeout` path, which keeps what it collected: a budget is a decision to
+  accept whatever fits inside it, while an interrupt is a decision to stop. A
+  bundle assembled from half a collection carries no mark saying so — the
+  manifest lists the facts that made it and is silent about the ones that did
+  not, so months later it re-evaluates to a posture score drawn from half a
+  host.
+
+  The cancellation carries its reason with it (`context.WithCancelCause`),
+  which is what keeps 130 and 11 apart. Both arrive as a cancelled context, and
+  inferring which from a flag set elsewhere is how a Ctrl-C ends up telling an
+  operator to raise a budget they never reached. The reason survives the two
+  levels of derivation a scan puts beneath the process context, and there is a
+  test for each level.
+
+  **The second signal kills.** The handler is uninstalled the moment the first
+  one arrives, restoring the default disposition — the safety valve for a
+  collector wedged in a syscall that never returns.
+
+  The RC-1 progress indicator now erases on interrupt like any other ending,
+  which closes the known limitation noted there.
+
 - **A progress indicator for `scan` and `collect` (RC-1).** Collection is the
   slow half of a scan and it used to be the silent half — tens of seconds of a
   blank terminal on a real server, which looks exactly like a hang. A transient
@@ -50,9 +85,8 @@ checks, no new output formats, no new schema fields.
   and `PLUMBLINE_NO_PROGRESS` — reserved in CLI-SPEC.md §8 long before there
   was anything to suppress — is the control for this.
 
-  Interrupting with Ctrl-C still leaves the last frame on screen. Nothing
-  installs a signal handler yet; exit code 130 is reserved and not yet
-  produced, and erasing on a signal is that work.
+  Interrupting with Ctrl-C left the last frame on screen when this shipped;
+  RC-2 fixed it.
 
 - **Version is now `1.0.0-rc1`.** It appears in every findings document, every
   SARIF run and every bundle manifest, so a report says which candidate
@@ -173,6 +207,11 @@ checks, no new output formats, no new schema fields.
   longer than one line.
 
 ### Changed
+- **`.gitignore` now covers `*.sarif` and suppression files.** Both are reports
+  about a real host — the same reconnaissance a bundle is — and both are the
+  first thing anyone writes to the repository root while wiring up code
+  scanning. Nothing of either kind is checked in; the corpus CI re-evaluates is
+  `testdata/bundles`.
 - `--format` now accepts `sarif`. It previously returned a usage error saying
   the format was planned.
 
