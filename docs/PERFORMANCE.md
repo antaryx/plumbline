@@ -34,7 +34,7 @@ appropriately rather than treated as universal:
 | Memory | 9 GB |
 | Kernel | 6.6.87 (WSL2) |
 | Filesystem | ext4 on NVMe, **731,571 inodes** below `/` |
-| Build | `v1.0.0-rc1`, `CGO_ENABLED=0`, catalog 13, 79 checks |
+| Build | `v1.0.0`, `CGO_ENABLED=0`, catalog 13, 79 checks |
 
 WSL2 is not a clean reference platform — its filesystem layer adds overhead a
 bare-metal host does not have — so treat the absolute numbers as an upper bound

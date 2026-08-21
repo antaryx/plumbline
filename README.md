@@ -22,11 +22,11 @@
 
 ---
 
-> **Status: `v1.0.0-rc1` — release candidate.** `findings/v1`, flag names, exit
-> codes and check IDs are contracts from here. Everything in Go stays
-> `internal/` and may change without notice (ADR-0007). What remains before
-> `v1.0.0` is documentation and a measured performance baseline; see
-> [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> **Status: `v1.0.0` — released.** `findings/v1`, flag names, exit codes and
+> check IDs are contracts from here (see [`docs/VERSIONING.md`](docs/VERSIONING.md)).
+> Everything in Go stays `internal/` and may change without notice
+> ([ADR-0007](docs/adr/0007-json-schema-is-the-api.md)). Known gaps are recorded
+> rather than reclassified; see [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Table of contents
 
@@ -123,7 +123,7 @@ Every release carries `.deb`, `.rpm` and `.tar.gz` for `linux/amd64` and
 `linux/arm64`, each with an SPDX SBOM, plus a signed checksum file.
 
 ```bash
-VERSION=1.0.0-rc1
+VERSION=1.0.0
 BASE=https://github.com/antaryx/plumbline/releases/download/v$VERSION
 
 curl -fsSLO $BASE/plumbline_${VERSION}_linux_amd64.tar.gz
@@ -365,6 +365,16 @@ hang the scan. See [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
 
 ## Documentation
 
+| Using it | |
+|---|---|
+| [`docs/QUICKSTART.md`](docs/QUICKSTART.md) | Zero to a useful scan, one page |
+| [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Verified install, packages, air-gap, uninstall |
+| [`docs/USAGE.md`](docs/USAGE.md) | Every command, with realistic examples |
+| [`docs/CI-INTEGRATION.md`](docs/CI-INTEGRATION.md) | GitHub Actions, GitLab, Jenkins — and what to gate on |
+| [`docs/FALSE-POSITIVES.md`](docs/FALSE-POSITIVES.md) | Why they happen, the known ones, how to report one |
+| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Permissions, slow scans, container and distro quirks |
+| [`docs/FAQ.md`](docs/FAQ.md) | How it differs from Lynis, why no compliance score, why no `--fix` |
+
 | Start here | |
 |---|---|
 | [`docs/CHECK-REFERENCE.md`](docs/CHECK-REFERENCE.md) | Every check in full — *generated from the catalog* |
@@ -377,6 +387,10 @@ hang the scan. See [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Layers, the OS seam, collection, evaluation, safety |
 | [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | Facts, findings, bundles — normative |
 | [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Plumbline's own attack surface — gates running as root |
+| [`docs/PRIVACY.md`](docs/PRIVACY.md) | Exactly what a bundle contains, and the no-telemetry commitment |
+| [`docs/SUPPLY-CHAIN.md`](docs/SUPPLY-CHAIN.md) | Dependencies, signing, SBOMs, independent verification |
+| [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) | Measured budgets, and why the sweep is disk-bound |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Build, sign, publish, install, upgrade, rollback |
 | [`docs/adr/`](docs/adr/) | Decisions that would be expensive to reverse |
 | [`schema/findings-v1.schema.json`](schema/findings-v1.schema.json) | The public API |
 
@@ -387,6 +401,16 @@ hang the scan. See [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
 | [`docs/FIXTURES.md`](docs/FIXTURES.md) | Fixture format, the test corpus, golden bundles |
 | [`docs/VERSIONING.md`](docs/VERSIONING.md) | Four version numbers and their contracts |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Three stable majors, and the graveyard of rejected ideas |
+| [`SUPPORT.md`](SUPPORT.md) | Where to ask, and what is and is not supported |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · [`MAINTAINERS.md`](MAINTAINERS.md) | Conduct, and who decides |
+
+**Background**
+
+| Document | Purpose |
+|---|---|
+| [`docs/PROJECT-BRIEF.md`](docs/PROJECT-BRIEF.md) | Identity, scope, non-goals, differentiation |
+| [`docs/DOCUMENT-MAP.md`](docs/DOCUMENT-MAP.md) | Which documents exist, which are missing, and why |
+| [`docs/audit/argus-design-audit.md`](docs/audit/argus-design-audit.md) | The audit of the predecessor design that produced this project — useful context for why several things are the way they are |
 
 ## Development
 
