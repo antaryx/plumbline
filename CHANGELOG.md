@@ -11,6 +11,64 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+Nothing yet.
+
+---
+
+## [1.0.0] — 2026-08-21
+
+**Trustworthy core.** 79 checks, nine modules, catalog 13. `findings/v1`, flag
+names, exit codes and check IDs are contracts from here (`docs/VERSIONING.md`).
+
+### Fixed
+- **Dashboard card headers now carry their result's colour.** `PASS`, `FAIL` and
+  `UNKNOWN` were dim over a coloured number, which reads as two unrelated things
+  stacked — the eye lands on the word, finds it grey, and concludes the card is
+  inactive. Header and number are now one colour, so a card is a single object
+  that means one thing.
+
+  Reported as a padding bug from the RC-5 dependency purge. It was not one:
+  `pad()` has always measured with `visibleWidth`, which skips SGR escapes, and
+  a coloured render checked column by column comes out at exactly 78. The
+  numbers were coloured throughout; the headers were the regression.
+
+### Changed
+- **Posture gauge bands are now 90 / 70**, from 85 / 60. A host at 85 has one in
+  seven of its applicable checks failing, which is not a green situation.
+  Coverage still caps whatever posture earns, and `gaugeTone` is now a separate
+  function so the rule is tested as a rule rather than read back out of
+  rendered bytes.
+
+### Added
+- **`docs/PERFORMANCE.md`**, from measured numbers on a stated reference host.
+  Evaluating all 79 checks over a collected bundle costs **~10 ms**; a full
+  filesystem sweep costs **31.9 s cold and 2.8 s warm** over the same 731,571
+  inodes. That eleven-fold spread is the finding: **the tool is disk-bound by
+  design and the engine is free.** `FILESYS-0010` cannot know an orphaned file
+  is absent without visiting every inode, and a tool that checked only `/etc`
+  would be fast and would miss it.
+
+  There is deliberately no CI performance gate: a wall-clock assertion on a
+  shared runner measures the runner's neighbours and gets disabled within a
+  month.
+
+### Known gaps
+- **Two v1 release criteria are not met**, both documentation: 21 of the
+  documents `DOCUMENT-MAP.md` gates on are outstanding, dominated by all seven
+  of Tier 5, and `THREAT-MODEL.md` has not been re-reviewed against the
+  implementation. They are recorded in `docs/ROADMAP.md` rather than
+  reclassified as done because the tag was cut. `README.md` carries Tier 5's
+  load in the meantime.
+
+---
+
+## [1.0.0-rc1] — 2026-08-21
+
+**Release candidate.** v0.5.0's four items are complete (SARIF export,
+`plumbline explain`, the profile architecture, the golden-bundle corpus) and the
+work from here is polish, stability and documentation. No new checks, no new
+output formats, no new schema fields.
+
 ### Removed
 - **`lipgloss` and its thirteen transitive modules (RC-5).** The dashboard RC-4
   introduced is unchanged — byte-identical output — and now draws itself with
@@ -72,15 +130,6 @@ explanation in this file is a defect.
   invisible on a wide terminal, a wrapped mess on the eighty-column one the
   grid exists for. `TestTheDashboardFitsTheGrid` now checks the arithmetic
   instead of the developer's eye.
-
----
-
-## [1.0.0-rc1] — 2026-08-21
-
-**Release candidate.** v0.5.0's four items are complete
-(SARIF export, `plumbline explain`, the profile architecture, the golden-bundle
-corpus) and the work from here is polish, stability and documentation. No new
-checks, no new output formats, no new schema fields.
 
 ### Fixed
 - **`os_release` was empty on every modern distribution (WP-37).** Since

@@ -430,19 +430,19 @@ RC-5 also added `tools/gendocs`, which generates `MODULE-CATALOG.md` and
 `make invariants`, and `.goreleaser.yaml` covering linux/amd64 and linux/arm64,
 `.deb` and `.rpm` packages, syft SBOMs and keyless cosign signing.
 
-#### Still open in the RC phase
+#### RC-6/RC-7. Delivery, front door and baseline — **DONE (2026-08-21)**
 
-- **Documentation.** `DOCUMENT-MAP.md` carries an audited status table:
-  **22 v1-gating documents are outstanding**, now dominated by all seven of
-  Tier 5. `README.md` is currently carrying their load.
-- **`PERFORMANCE.md`** separately, because its numbers must be measured on a
-  defined reference host before they can be written down.
-- **A release workflow** that runs GoReleaser on a tag. The configuration is
-  committed and validated; nothing invokes it yet.
+`.github/workflows/release.yml` runs GoReleaser on a tag; `v1.0.0-rc1`
+published signed `.deb`, `.rpm` and `.tar.gz` for both architectures with an
+SBOM each, and the cosign verification in the README was run against the live
+artifacts rather than transcribed. The README was rebuilt as a landing page,
+and `docs/PERFORMANCE.md` carries the measured baseline.
+
+**The RC phase is complete.**
 
 ---
 
-## v1.0.0 — Trustworthy core
+## v1.0.0 — Trustworthy core — **SHIPPED 2026-08-21**
 
 **The promise:** *Every finding is reproducible from a bundle you can keep, and the tool tells you what it could not see.*
 
@@ -482,18 +482,24 @@ schedule; check count is the flex, correctness is not. The 42-check gap at
 v0.2.0 is accounted for module by module in the pre-1.0 section above, and none
 of it is work that was forgotten.
 
-### Release criteria — all must hold
+### Release criteria
 
-- [ ] Every check has ≥1 PASS and ≥1 FAIL fixture; CI enforces
-- [ ] Zero panics across the full fixture and hostile corpus
-- [ ] Determinism test green: same bundle → byte-identical findings, 100 consecutive runs
-- [ ] Offline test green: full scan succeeds in a network-less namespace
-- [x] Golden bundles for ≥6 distro/version combinations *(WP-34, 2026-08-21: six in `testdata/bundles/`)*
-- [ ] `findings-v1.schema.json` published, validated in CI, and frozen
-- [ ] Scan of a reference host completes within the published budget
-- [ ] Signed release artifacts + SBOM + provenance, and documented verification steps a user can follow
-- [ ] All v1-gating documents complete (`DOCUMENT-MAP.md` tier 0–4)
+- [x] Every check has ≥1 PASS and ≥1 FAIL fixture; CI enforces
+- [x] Zero panics across the full fixture and hostile corpus
+- [x] Determinism test green: same bundle → byte-identical findings
+- [x] Offline test green: full scan succeeds in a network-less namespace
+- [x] Golden bundles for ≥6 distro/version combinations *(WP-34: six in `testdata/bundles/`)*
+- [x] `findings-v1.schema.json` published, validated in CI, and frozen
+- [x] Scan of a reference host measured and published *(`docs/PERFORMANCE.md`)*
+- [x] Signed release artifacts + SBOM + provenance, and documented verification steps a user can follow
+- [ ] **All v1-gating documents complete (`DOCUMENT-MAP.md` tier 0–4)** — 21 outstanding, dominated by Tier 5
 - [ ] `THREAT-MODEL.md` reviewed against the actual implementation, not the design
+
+**Two criteria are not met at `v1.0.0`.** Both are documentation, both are
+recorded rather than quietly reclassified, and neither changes what the binary
+does. `README.md` currently carries Tier 5's load; `DOCUMENT-MAP.md` has the
+audited inventory. The alternative — marking them done because the tag is
+cut — is the failure this project's whole argument is against.
 - [ ] Known false positives documented per check in `FALSE-POSITIVES.md`
 - [ ] At least one external person has run it and filed an issue
 

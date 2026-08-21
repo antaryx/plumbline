@@ -96,6 +96,21 @@ const (
 	barWidth = gaugeWidth - padCols
 )
 
+// Gauge colour bands. Named rather than inline because they are a claim about
+// what a number means, and a claim like that should be findable and testable
+// rather than buried in a switch. TestTheGaugeColoursItsBands pins them.
+const (
+	postureGreen = 90.0
+	postureAmber = 70.0
+
+	// Coverage caps the colour posture is allowed to wear, whatever the
+	// posture is. A score of 95 over 40% coverage is not a host that is nearly
+	// perfect, it is a host that was nearly not examined, and painting it green
+	// is a lie an operator will act on.
+	coverageRed   = 50.0
+	coverageAmber = 90.0
+)
+
 // style is a colour, applied or not. It is the same switch paint() uses; the
 // type exists so the dashboard reads as a set of named styles rather than as a
 // scatter of escape constants.
@@ -273,29 +288,15 @@ func (p *printer) gauge(s *styles, sc score.Score) string {
 				"          which is not the same as zero"))
 	}
 
-	tone, fill := s.pass, s.filled
-	switch {
-	case posture < 60:
-		tone, fill = s.fail, style{code: ansiRed, color: s.color}
-	case posture < 85:
-		tone, fill = s.unknown, style{code: ansiYellow, color: s.color}
-	}
+	tone := gaugeTone(s, posture, coverage)
+	fill := style{code: tone.code, color: s.color}
 
-	// **Coverage caps the colour posture is allowed to wear.** A posture of 86
-	// over 17% coverage is arithmetically correct and, painted green, is a lie
-	// an operator will act on: that is not a host which is mostly fine, it is a
-	// host which was mostly not examined.
 	coverTone := s.muted
 	switch {
-	case coverage < 50:
-		coverTone, tone = s.fail, s.fail
-		fill = style{code: ansiRed, color: s.color}
-	case coverage < 90:
+	case coverage < coverageRed:
+		coverTone = s.fail
+	case coverage < coverageAmber:
 		coverTone = s.unknown
-		if posture >= 85 {
-			tone = s.unknown
-			fill = style{code: ansiYellow, color: s.color}
-		}
 	}
 
 	head := s.label.Render("posture") + "  " +
@@ -304,6 +305,40 @@ func (p *printer) gauge(s *styles, sc score.Score) string {
 		s.muted.Render(" of applicable checks")
 
 	return s.gauge.Render(head + "\n" + bar(s, fill, posture))
+}
+
+// gaugeTone is the colour the posture number and its bar are drawn in.
+//
+// Green at 90 and above, amber from 70, red below it. The bands are a judgement
+// about what an operator should feel on seeing the number, and they are
+// deliberately harsh: a host at 85 has one in seven of its applicable checks
+// failing, which is not a green situation.
+//
+// **Coverage then caps whatever posture earned.** A score of 95 over 40%
+// coverage is arithmetically correct and, painted green, is a lie an operator
+// will act on: that is not a host which is nearly perfect, it is a host which
+// was nearly not examined. The cap only ever moves the colour downward.
+//
+// It is a separate function from the box it is drawn in so the rule can be
+// tested as a rule, rather than by reading colours back out of rendered bytes.
+func gaugeTone(s *styles, posture, coverage float64) style {
+	tone := s.pass
+	switch {
+	case posture < postureAmber:
+		tone = s.fail
+	case posture < postureGreen:
+		tone = s.unknown
+	}
+
+	switch {
+	case coverage < coverageRed:
+		return s.fail
+	case coverage < coverageAmber:
+		if tone == s.pass {
+			return s.unknown
+		}
+	}
+	return tone
 }
 
 // bar draws the filled proportion. The two block characters are full and light
@@ -352,7 +387,11 @@ func (p *printer) cards(s *styles, c score.Counts, findings []finding.Finding) s
 
 	boxes := make([]string, 0, len(cards))
 	for _, cd := range cards {
-		body := s.label.Render(cd.label) + "\n" + cd.style.Render(strconv.Itoa(cd.n))
+		// Header and number in one colour. They were a dim header over a
+		// coloured number, which reads as two unrelated things stacked: the eye
+		// lands on the word, finds it grey, and concludes the card is inactive.
+		// One colour makes the card a single object that means one thing.
+		body := cd.style.Render(cd.label) + "\n" + cd.style.Render(strconv.Itoa(cd.n))
 		if hasNotes {
 			body += "\n" + s.muted.Render(cd.note)
 		}

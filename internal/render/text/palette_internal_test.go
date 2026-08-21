@@ -163,3 +163,39 @@ func TestTheDashboardFitsTheGrid(t *testing.T) {
 		t.Errorf("four cards plus their gaps are %d columns; the grid is %d", row, reportWidth)
 	}
 }
+
+// TestTheGaugeColoursItsBands pins the claim the posture gauge makes about
+// what a number means: green from 90, amber from 70, red below it.
+//
+// And the rule that overrides all three — **coverage caps the colour posture is
+// allowed to wear.** A score of 95 over 40% coverage is arithmetically correct
+// and, painted green, is a lie an operator will act on: that is not a host
+// which is nearly perfect, it is a host which was nearly not examined. The cap
+// is the reason this is a test rather than three constants nobody reads.
+func TestTheGaugeColoursItsBands(t *testing.T) {
+	s := newStyles(true)
+
+	for _, c := range []struct {
+		what     string
+		posture  float64
+		coverage float64
+		want     style
+	}{
+		{"a clean host", 96.6, 100, s.pass},
+		{"exactly at the green band", 90, 100, s.pass},
+		{"just below green", 89.9, 100, s.unknown},
+		{"exactly at the amber band", 70, 100, s.unknown},
+		{"just below amber", 69.9, 100, s.fail},
+		{"a poor host", 12, 100, s.fail},
+
+		// The cap. Each of these would be green or amber on posture alone.
+		{"a high score over thin coverage", 99, 40, s.fail},
+		{"a high score over partial coverage", 99, 75, s.unknown},
+	} {
+		got := gaugeTone(s, c.posture, c.coverage)
+		if got != c.want {
+			t.Errorf("%s (posture %.1f, coverage %.1f): tone %q, want %q",
+				c.what, c.posture, c.coverage, got.code, c.want.code)
+		}
+	}
+}

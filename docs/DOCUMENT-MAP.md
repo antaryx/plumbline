@@ -156,12 +156,12 @@ release.
 |---|---|---|---|
 | Tier 0 | 8 | 9 | `SUPPORT.md` |
 | Tier 1 | 5 | 6 | `REQUIREMENTS.md` |
-| Tier 2 | 7 | 13 | `DESIGN.md`, `COLLECTORS.md`, `CONFIG-REFERENCE.md`, `OUTPUT-FORMATS.md`, `PLATFORM-SUPPORT.md`, `PERFORMANCE.md` |
+| Tier 2 | 8 | 13 | `DESIGN.md`, `COLLECTORS.md`, `CONFIG-REFERENCE.md`, `OUTPUT-FORMATS.md`, `PLATFORM-SUPPORT.md` |
 | Tier 3 | 3 | 5 | `SUPPLY-CHAIN.md`, `PRIVACY.md` |
 | Tier 4 | 2 | 7 | `RELEASE-PROCESS.md`, `TESTING.md`, `CI-CD.md`, `SUPPORT-POLICY.md`, `runbooks` |
 | Tier 5 | 0 | 7 | `INSTALLATION.md`, `QUICKSTART.md`, `USAGE.md`, `CI-INTEGRATION.md`, `FALSE-POSITIVES.md`, `TROUBLESHOOTING.md`, `FAQ.md` |
 
-**22 documents outstanding.** The four the RC touches — `README.md`,
+**21 documents outstanding.** The four the RC touches — `README.md`,
 `CLI-SPEC.md`, `DATA-MODEL.md`, `CHANGELOG.md` — are current with every shipped
 feature through `v1.0.0-rc1`: suppressions, `diff`, SARIF, `explain`, profiles,
 golden bundles, the progress indicator and signal handling.
@@ -175,7 +175,7 @@ faked from the source:
 - **Tier 5 user documentation.** Seven documents, none started. `README.md`
   currently carries their load, which is why it is 330 lines and still growing.
 
-`PERFORMANCE.md` is called out separately because it is the one that cannot be
-written at a desk: its numbers appear only after being measured on a defined
-reference host, and inventing them would be the same class of error as a check
-reporting `PASS` from a documented default.
+~~`PERFORMANCE.md` is called out separately~~ — written in v1.0.0 from measured
+numbers on a stated reference host, as the rule requires. Its finding is that
+evaluation costs ~10 ms and a cold full-disk sweep costs ~32 s on 731k inodes,
+warm 2.8 s: the tool is disk-bound by design and the engine is free.
