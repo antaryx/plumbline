@@ -43,6 +43,7 @@ today's checks in mind cannot answer tomorrow's question.`,
 			sys := live.New(root)
 			got, err := collectFacts(ctx, sys, collectOptions{
 				redact: redact, profile: profile, perCollector: perCollector,
+				progress: stderr,
 			})
 			if err != nil {
 				return exitError{code: ExitInternal, message: err.Error()}

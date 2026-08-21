@@ -599,9 +599,47 @@ expansion.
 | stdout | The requested output, and nothing else. Machine-consumable when `--format json`. |
 | stderr | Progress, warnings, deprecations, debug |
 
-Progress is suppressed automatically when stdout is not a TTY. `--format json`
-never writes a byte of anything else to stdout — a JSON document with a
-progress spinner in it is not a JSON document.
+`--format json` never writes a byte of anything else to stdout — a JSON
+document with a progress spinner in it is not a JSON document. That holds by
+construction rather than by care: the indicator's only writer is stderr, so no
+format can put one on stdout.
+
+### The progress indicator
+
+`scan` and `collect` draw a transient one-line indicator on **stderr** while
+the collectors run, erased before anything else is written:
+
+```
+⠹ Collecting host evidence (12s)
+```
+
+Collection is the slow half of a scan, and it used to be the silent half — tens
+of seconds of nothing on a real server, which looks exactly like a hang. The
+elapsed time appears only after three seconds, because "0s" answers nothing
+while "47s" distinguishes a large filesystem from a wedged one.
+
+**Keyed off stderr, not stdout.** An earlier revision of this section said
+stdout, which is the wrong descriptor for something stderr draws:
+`plumbline scan > report.txt` leaves stderr on the terminal, and that is
+precisely the run where an operator most wants to see that something is
+happening. The file stays clean either way.
+
+It is drawn only when all four of these hold, and the default is off:
+
+| Condition | Why |
+|---|---|
+| stderr is a character device | A pipe, a file or a captured log cannot show an animation, only accumulate it. This is what keeps every CI harness clean, named or not. |
+| `PLUMBLINE_NO_PROGRESS` is unset | The operator said no. §8 reserved the variable before there was anything to suppress. |
+| `TERM` is set and is not `dumb` | A terminal that will not identify itself cannot be assumed to understand `CSI K`, and an indicator that can move the cursor but not erase itself is the one failure mode this must not have. |
+| No CI marker in the environment | Several CI systems allocate a pty, which defeats the first condition while the output still goes to a log nobody is watching live. Presence of the variable is the signal, not its value. |
+
+`NO_COLOR` is deliberately **not** consulted. That convention governs colour,
+the indicator emits none, and widening somebody else's standard to also mean
+"stop moving" is how a well-known variable stops meaning one predictable thing.
+
+**Known limitation:** interrupting a scan with Ctrl-C leaves the last frame on
+screen. Nothing installs a signal handler yet — exit code 130 is reserved in §6
+and not yet produced — and erasing on a signal is that work, not this.
 
 ---
 
@@ -611,7 +649,7 @@ progress spinner in it is not a JSON document.
 |---|---|
 | `PLUMBLINE_CONFIG` | Config path (below `--config`) |
 | `NO_COLOR` | Any value disables colour |
-| `PLUMBLINE_NO_PROGRESS` | Disables progress output |
+| `PLUMBLINE_NO_PROGRESS` | Any value disables the progress indicator (§7) |
 
 No environment variable may enable a behaviour that a flag cannot, and none may
 weaken a security control. Configuration surface is attack surface.

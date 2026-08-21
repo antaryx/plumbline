@@ -378,6 +378,39 @@ early.
 
 ---
 
+## v1.0.0-rc — Release candidates
+
+**The promise:** *no new capability, only the polish that decides whether the
+capability is usable.*
+
+The catalog, the schema and the output formats are frozen from `rc1`. What
+changes is what an operator experiences, what a maintainer can rely on, and
+what the documentation actually says.
+
+#### RC-1. A progress indicator for `scan` and `collect` — **DONE (2026-08-21)**
+
+Collection is the slow half of a scan and it was the silent half. A transient
+one-line indicator now runs on stderr while the collectors do, and erases
+itself before the report starts. Four conditions must all hold or nothing is
+drawn: stderr is a character device, `PLUMBLINE_NO_PROGRESS` is unset, `TERM`
+is set and not `dumb`, and no CI marker is present. CLI-SPEC.md §7 carries the
+contract.
+
+#### Still open in the RC phase
+
+- **Signal handling.** Ctrl-C leaves the last indicator frame on screen, and
+  exit code 130 is reserved in CLI-SPEC.md §6 without anything producing it. A
+  handler that cancels the collection context, unwinds, erases and exits 130 is
+  one change covering both.
+- **`meta.os_release` is empty on Ubuntu, Fedora and Rocky**, because
+  `/etc/os-release` is a symlink on all three and the live seam opens privileged
+  reads with `O_NOFOLLOW`. The seam is right; `hostMeta` does not handle the
+  symlink case, so the report says nothing about the OS on a modern distribution.
+- **Documentation sweep** against `DOCUMENT-MAP.md` tier 0–4, which is a v1.0.0
+  release criterion in its own right.
+
+---
+
 ## v1.0.0 — Trustworthy core
 
 **The promise:** *Every finding is reproducible from a bundle you can keep, and the tool tells you what it could not see.*

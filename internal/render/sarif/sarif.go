@@ -520,8 +520,9 @@ func automationID(s Scan) string {
 }
 
 // semanticVersion emits the version only when it is one. SARIF's
-// semanticVersion field is specified as semver, and "0.5.0-dev" qualifies
-// while "none" or "" does not.
+// semanticVersion field is specified as semver, and a development or
+// release-candidate version such as "1.0.0-rc1" qualifies while "none" or ""
+// does not.
 func semanticVersion(v string) string {
 	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
 	if v == "" || v == "dev" || v == "unknown" {

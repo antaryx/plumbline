@@ -70,6 +70,7 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			sys := live.New(root)
 			got, err := collectFacts(ctx, sys, collectOptions{
 				redact: redact, profile: pf.name, perCollector: perCollector,
+				progress: stderr,
 			})
 			if err != nil {
 				return exitError{code: ExitInternal, message: err.Error()}

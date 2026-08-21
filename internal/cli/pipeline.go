@@ -37,6 +37,17 @@ func collectFacts(ctx context.Context, s system.System, opts collectOptions) (co
 		return collected{}, err
 	}
 
+	// The progress indicator is started here rather than at the two call
+	// sites for the same reason renderAndGate is one function: this is the
+	// collection phase, both commands have one, and a gate applied at every
+	// call site is a gate somebody eventually forgets at a third.
+	//
+	// Deferred rather than stopped after Run, so that a panic escaping a
+	// collector cannot leave a half-drawn line on the operator's terminal.
+	// What follows Run is assembling a struct, which costs nothing worth
+	// stopping the indicator early for.
+	defer startProgress(opts.progress, "Collecting host evidence").Stop()
+
 	facts := fact.NewSet()
 	evidence := bundle.NewEvidenceStore()
 	started := time.Now().UTC()
@@ -83,6 +94,12 @@ type collectOptions struct {
 	redact       bool
 	profile      string
 	perCollector time.Duration
+
+	// progress is the stream a transient indicator is drawn on while the
+	// collectors run, or nil for no indicator. It is always stderr in
+	// practice; whether anything is actually drawn on it is progress.go's
+	// decision, not the caller's.
+	progress io.Writer
 }
 
 // hostMeta describes the host being scanned, read through the seam so that

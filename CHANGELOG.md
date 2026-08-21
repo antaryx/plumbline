@@ -11,11 +11,53 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-**`v0.5.0` is feature-complete — ecosystem integration.** All four items ship
-here: SARIF export, `plumbline explain`, the profile architecture, and the
-golden-bundle corpus. What remains before the tag is the release itself.
+**`v1.0.0-rc1` — release-candidate phase.** v0.5.0's four items are complete
+(SARIF export, `plumbline explain`, the profile architecture, the golden-bundle
+corpus) and the work from here is polish, stability and documentation. No new
+checks, no new output formats, no new schema fields.
 
 ### Added
+- **A progress indicator for `scan` and `collect` (RC-1).** Collection is the
+  slow half of a scan and it used to be the silent half — tens of seconds of a
+  blank terminal on a real server, which looks exactly like a hang. A transient
+  one-line indicator now runs while the collectors do, and erases itself before
+  the report starts:
+
+  ```
+  ⠹ Collecting host evidence (12s)
+  ```
+
+  The elapsed time appears only after three seconds. "0s" answers nothing;
+  "47s" distinguishes a walk over a large filesystem from a wedged one, which
+  is the actual question behind "is this hung".
+
+  **It writes to stderr and only to stderr**, so `--format json` cannot put a
+  frame in a findings document — by construction rather than by care. It is
+  keyed off stderr rather than stdout, which corrects what CLI-SPEC.md §7 used
+  to say: `plumbline scan > report.txt` leaves stderr on the terminal, and that
+  is exactly the run where an operator most wants to see something happening.
+
+  **Four conditions must all hold or nothing is drawn**, because the two
+  answers do not cost the same. A missing indicator is a cosmetic loss on one
+  run; an indicator somewhere it cannot be erased is thousands of lines of
+  half-drawn braille in a CI log somebody has to read months later. stderr must
+  be a character device, `PLUMBLINE_NO_PROGRESS` must be unset, `TERM` must be
+  set and not `dumb`, and no CI marker may be present — that last one because
+  several CI systems allocate a pty, which defeats the terminal check while the
+  output still goes to a log nobody is watching.
+
+  `NO_COLOR` is deliberately not consulted: it governs colour, this emits none,
+  and `PLUMBLINE_NO_PROGRESS` — reserved in CLI-SPEC.md §8 long before there
+  was anything to suppress — is the control for this.
+
+  Interrupting with Ctrl-C still leaves the last frame on screen. Nothing
+  installs a signal handler yet; exit code 130 is reserved and not yet
+  produced, and erasing on a signal is that work.
+
+- **Version is now `1.0.0-rc1`.** It appears in every findings document, every
+  SARIF run and every bundle manifest, so a report says which candidate
+  produced it.
+
 - **Golden bundles (WP-34).** Six real collections from six real Linux
   userlands — Ubuntu 24.04 stock and hardened, Debian 13, Fedora 44, Rocky 9
   and Alpine 3.20 — recorded once into `testdata/bundles/` and re-evaluated by
