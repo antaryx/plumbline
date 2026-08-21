@@ -21,6 +21,22 @@ Nothing yet.
 names, exit codes and check IDs are contracts from here (`docs/VERSIONING.md`).
 
 ### Fixed
+- **Escape sequences no longer print as literal text in a finding's `Subject`.**
+  A coloured report showed `Subject : \x1b[2m/etc/crontab\x1b[0m`, with the
+  escape rendered as four characters beside the path it was meant to colour.
+
+  The cause was an ordering one, introduced in RC-4. `wrap()` sanitises every
+  line it produces, `sanitize.Text` escapes C0 control characters, and `ESC` is
+  one — so a value painted *before* reaching the wrapper arrives at the terminal
+  as text. Both orders look equally reasonable at the call site and only one
+  works, so the colour is now applied by `fieldWrappedIn` *after* wrapping, and
+  `fieldWrapped` carries the rule in its doc comment.
+
+  The guard is `TestNoEscapeSequenceIsPrintedAsText`, which asserts the symptom
+  rather than the call site: nowhere in a coloured report may `\x1b` appear as
+  text. That covers every field and every renderer, including ones not yet
+  written. It was confirmed to fail against the defect before being kept.
+
 - **Dashboard card headers now carry their result's colour.** `PASS`, `FAIL` and
   `UNKNOWN` were dim over a coloured number, which reads as two unrelated things
   stacked — the eye lands on the word, finds it grey, and concludes the card is

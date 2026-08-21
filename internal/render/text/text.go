@@ -637,7 +637,7 @@ func (p *printer) accepted(findings []finding.Finding) {
 		p.field("Would be", p.paint(resultColor(s.OriginalResult), string(s.OriginalResult)))
 		p.field("Severity", p.severityLabel(f))
 		if subject := cell(f.Subject); subject != "" {
-			p.fieldWrapped("Subject", p.paint(ansiDim, f.Subject))
+			p.fieldWrappedIn(ansiDim, "Subject", f.Subject)
 		}
 		p.fieldWrapped("Accepted", s.Justification)
 		if s.ExpiresAt != "" {
@@ -672,7 +672,7 @@ func (p *printer) entry(f finding.Finding) {
 	if f.UnknownReason != "" {
 		p.field("Reason", p.paint(ansiYellow, string(f.UnknownReason)))
 	}
-	p.fieldWrapped("Subject", p.paint(ansiDim, f.Subject))
+	p.fieldWrappedIn(ansiDim, "Subject", f.Subject)
 	p.fieldWrapped("Detail", f.Detail)
 
 	if len(f.Evidence) > 0 {
@@ -715,9 +715,31 @@ func (p *printer) continuation(value string) {
 	p.line(spaces(6+2+fieldLabel+2) + value)
 }
 
+// fieldWrapped writes a labelled value, reflowed to the field column.
+//
+// **The value handed in must not already be painted.** wrap() sanitises every
+// line it produces, sanitize.Text escapes C0 control characters, and ESC is
+// one — so a value coloured before it gets here arrives at the terminal as the
+// four literal characters \x1b followed by the rest of the escape sequence,
+// printed as text beside the path it was meant to colour.
+//
+// That is not a hypothetical: it shipped in v1.0.0 as
+// `Subject : \x1b[2m/etc/crontab\x1b[0m`. Use fieldWrappedIn to colour a
+// wrapped value; it paints after the wrap, which is the only order that works.
 func (p *printer) fieldWrapped(label, value string) {
+	p.fieldWrappedIn("", label, value)
+}
+
+// fieldWrappedIn is fieldWrapped with a colour applied to each line *after*
+// wrapping and sanitising, which is the order the sanitiser requires.
+//
+// Per line rather than around the whole block, because each line is written
+// separately and a sequence opened on one line and closed three lines later
+// bleeds through whatever the terminal draws in between.
+func (p *printer) fieldWrappedIn(colour, label, value string) {
 	lines := wrap(value, fieldWidth)
 	for i, l := range lines {
+		l = p.paint(colour, l)
 		if i == 0 {
 			p.field(label, l)
 			continue

@@ -2,6 +2,7 @@ package text_test
 
 import (
 	"bytes"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -697,4 +698,56 @@ func TestSuppressionDoesNotPenalisePosture(t *testing.T) {
 	if cov, _ := suppressed(t).Score.Coverage(); cov >= 100 {
 		t.Errorf("coverage = %.2f; a suppressed check has not produced a verdict and must reduce it", cov)
 	}
+}
+
+// TestNoEscapeSequenceIsPrintedAsText is the guard for the bug that shipped in
+// v1.0.0: `Subject : \x1b[2m/etc/crontab\x1b[0m`, with the escape rendered as
+// four literal characters beside the path it was meant to colour.
+//
+// The cause was an ordering one and it is easy to reintroduce. wrap() sanitises
+// every line it produces, sanitize.Text escapes C0 control characters, and ESC
+// is one — so a value coloured *before* it reaches the wrapper comes out as
+// text. Both orders look equally reasonable at the call site, and only one
+// works.
+//
+// So this asserts the symptom rather than the call sites: nowhere in a coloured
+// report may the four characters \x1b appear as text. It covers every field,
+// every renderer and every future one, which a test naming Subject would not.
+func TestNoEscapeSequenceIsPrintedAsText(t *testing.T) {
+	const escapedESC = `\x1b`
+
+	in := sample(t)
+	in.Color = true
+	out := render(t, in)
+
+	// The fixture has to actually exercise the path, or this passes for the
+	// wrong reason.
+	if !strings.Contains(out, "Subject") {
+		t.Fatal("the sample renders no Subject field; this test would prove nothing")
+	}
+
+	if strings.Contains(out, escapedESC) {
+		t.Errorf("an escape sequence was sanitised into the text of the report.\n"+
+			"Something was painted before it reached wrap(); paint after wrapping.\n"+
+			"first occurrence: %s", excerptAround(out, escapedESC))
+	}
+
+	// And with colour off, where nothing should be painted at all.
+	plain := render(t, sample(t))
+	if strings.Contains(plain, escapedESC) || strings.Contains(plain, "\033") {
+		t.Error("an uncoloured report carries escape sequences")
+	}
+}
+
+// excerptAround returns a little context around the first match, because a
+// failure that says only "found it" leaves the reader grepping a 200-line
+// report by hand.
+func excerptAround(s, want string) string {
+	i := strings.Index(s, want)
+	if i < 0 {
+		return ""
+	}
+	start := max(0, i-60)
+	end := min(len(s), i+len(want)+40)
+	return strconv.Quote(s[start:end])
 }
