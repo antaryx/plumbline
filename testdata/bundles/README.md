@@ -59,6 +59,12 @@ leaks through the kernel mount table: the runtime's overlay directories and the
 per-container bind paths behind `/etc/hostname`, `/etc/hosts` and
 `/etc/resolv.conf`. Every substitution it makes is printed when it runs.
 
+Every committed bundle has an empty `meta`, and that is a fossil rather than a
+choice: they were recorded before WP-37, when `/etc/os-release` being a symlink
+on every systemd distribution meant the read silently failed. `--redact` drops
+the hostname regardless; the next re-recording will pick up `os_release`. No
+check reads `meta`, so no expectation depends on it.
+
 Timestamps, `bundle_id` and `tool.version` are left alone. They are the
 provenance of the recording and they name a commit in this repository, not a
 person; normalising them would make the artifact prettier and less true.

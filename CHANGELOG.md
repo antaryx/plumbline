@@ -11,10 +11,42 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-**`v1.0.0-rc1` — release-candidate phase.** v0.5.0's four items are complete
+Nothing yet. The next change lands here.
+
+---
+
+## [1.0.0-rc1] — 2026-08-21
+
+**Release candidate.** v0.5.0's four items are complete
 (SARIF export, `plumbline explain`, the profile architecture, the golden-bundle
 corpus) and the work from here is polish, stability and documentation. No new
 checks, no new output formats, no new schema fields.
+
+### Fixed
+- **`os_release` was empty on every modern distribution (WP-37).** Since
+  systemd moved the file to `/usr/lib`, `/etc/os-release` is a symlink on
+  Ubuntu, Debian, Fedora and RHEL alike. The seam opens privileged reads with
+  `O_NOFOLLOW` and correctly refused it, `hostMeta` discarded the error, and
+  every report from those four carried a blank field with nothing anywhere
+  saying why. A field that is silently empty on the four most common Linux
+  distributions is worse than one that is absent everywhere: it reads as a host
+  that had nothing to say.
+
+  **The seam is not weakened.** Resolution is explicit and bounded — Stat,
+  Readlink, resolve, Stat again, capped at eight hops — with every hop going
+  back through the seam, so the scan root, the escape refusal and the final
+  refusal of anything that is not a regular file all still apply. A loop ends
+  in an error rather than a hang; a link to a FIFO is refused rather than
+  waited on. The same walk already existed inside the AUTH collector for Red
+  Hat's PAM stacks and is now one shared function, `collect.ResolveLinks`,
+  with the reasoning in one place. The golden corpus confirmed that extraction
+  changed no verdict on any of the six recorded distributions.
+
+  Lookup now follows the order `os-release(5)` specifies: `/etc/os-release`,
+  then `/usr/lib/os-release`. `/etc/hostname` is deliberately *not* resolved
+  the same way — no distribution ships it as a link, so one found there was put
+  there by somebody, and following it would put the first line of whatever it
+  points at into a field labelled "hostname".
 
 ### Added
 - **Graceful `SIGINT` and `SIGTERM` handling (RC-2).** Exit code 130 was

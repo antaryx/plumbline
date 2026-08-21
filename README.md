@@ -51,7 +51,7 @@ from those facts and cannot be re-evaluated or diffed; hand one to `eval` or
 The default output is a report for a person:
 
 ```
-plumbline 0.4.0   catalog 13
+plumbline 1.0.0-rc1   catalog 13
 
   host     auditbox   Debian GNU/Linux 12 (bookworm)
   root     /  (live host)
@@ -121,6 +121,25 @@ plumbline 0.4.0   catalog 13
 `FAIL` is red, `PASS` green, `UNKNOWN` yellow. Colour is suppressed by
 `--no-color`, by `NO_COLOR` in the environment, when stdout is not a terminal,
 and always when writing to `--output`.
+
+Collection is the slow part, so while it runs there is a transient indicator on
+**stderr** — never stdout, so it cannot reach a findings document:
+
+```
+⠹ Collecting host evidence (12s)
+```
+
+It erases itself before the report starts, and is drawn only when stderr is a
+terminal, `TERM` is set and is not `dumb`, `PLUMBLINE_NO_PROGRESS` is unset, and
+no CI marker is in the environment. The elapsed time appears after three
+seconds, because "0s" answers nothing and "47s" distinguishes a large
+filesystem from a wedged one.
+
+Ctrl-C stops a scan and exits **130**. An interrupted run writes no findings
+document and no bundle — not even with `--save-bundle`. A bundle assembled from
+half a collection carries no mark saying so, and would re-evaluate months later
+to a posture score drawn from half a host. A second Ctrl-C terminates
+immediately.
 
 **For pipelines, ask for JSON:**
 
@@ -254,7 +273,13 @@ make verify      # fmt, vet, tests, architectural invariants
 make test-race
 ```
 
-Go 1.23+. No other tooling needed to run the tests.
+Go 1.24 is the floor `go.mod` states; CI builds the release binaries with
+1.25, because Go supports only its two newest majors and this binary runs as
+root. No other tooling is needed to run the tests.
+
+`make golden-diff` reports whether any of the six recorded distribution bundles
+under `testdata/bundles/` has changed its verdicts — run it after touching the
+catalog, and read `testdata/bundles/README.md` before regenerating anything.
 
 ## Documentation
 

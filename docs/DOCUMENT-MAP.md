@@ -142,3 +142,42 @@ The last one before check #1 because the first check that maps to a framework is
 3. **Docs ship in the repository**, versioned with the code. A website, if one ever exists, renders the repository.
 4. **A feature is not done until its doc is.** Enforced by the PR checklist, not by good intentions.
 5. **Say what is not supported**, in the same document and the same font size as what is.
+
+---
+
+## Status — audited 2026-08-21 (WP-37)
+
+Counted mechanically against this map, not asserted. `v1.0.0`'s release
+criterion *"All v1-gating documents complete (Tier 0–4)"* is **not met**, and
+this table is here so that stays visible rather than being discovered during a
+release.
+
+| Tier | Present | Required | Missing |
+|---|---|---|---|
+| Tier 0 | 8 | 9 | `SUPPORT.md` |
+| Tier 1 | 5 | 6 | `REQUIREMENTS.md` |
+| Tier 2 | 5 | 13 | `DESIGN.md`, `COLLECTORS.md`, `CONFIG-REFERENCE.md`, `OUTPUT-FORMATS.md`, `PLATFORM-SUPPORT.md`, `PERFORMANCE.md`, `MODULE-CATALOG.md`, `CHECK-REFERENCE.md` |
+| Tier 3 | 3 | 5 | `SUPPLY-CHAIN.md`, `PRIVACY.md` |
+| Tier 4 | 2 | 7 | `RELEASE-PROCESS.md`, `TESTING.md`, `CI-CD.md`, `SUPPORT-POLICY.md`, `runbooks` |
+| Tier 5 | 0 | 7 | `INSTALLATION.md`, `QUICKSTART.md`, `USAGE.md`, `CI-INTEGRATION.md`, `FALSE-POSITIVES.md`, `TROUBLESHOOTING.md`, `FAQ.md` |
+
+**24 documents outstanding.** The four the RC touches — `README.md`,
+`CLI-SPEC.md`, `DATA-MODEL.md`, `CHANGELOG.md` — are current with every shipped
+feature through `v1.0.0-rc1`: suppressions, `diff`, SARIF, `explain`, profiles,
+golden bundles, the progress indicator and signal handling.
+
+The gap is dominated by two clusters, and neither is a writing job that can be
+faked from the source:
+
+- **Tier 2 generated references.** `MODULE-CATALOG.md` and `CHECK-REFERENCE.md`
+  are marked *generated* by this map and must stay that way. `plumbline explain`
+  already renders exactly this material for one check; the remaining work is a
+  generator over the whole catalog plus a CI check that the committed output
+  matches, not prose.
+- **Tier 5 user documentation.** Seven documents, none started. `README.md`
+  currently carries their load, which is why it is 330 lines and still growing.
+
+`PERFORMANCE.md` is called out separately because it is the one that cannot be
+written at a desk: its numbers appear only after being measured on a defined
+reference host, and inventing them would be the same class of error as a check
+reporting `PASS` from a documented default.

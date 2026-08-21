@@ -910,6 +910,24 @@ integrity.json    sha256 of every member; detached signature sits alongside
 
 `*` subject to `--redact`.
 
+**`meta.json` is descriptive and no check reads it.** It labels a report for a
+human — which host, which distribution — and nothing in the catalog consumes it.
+That is what makes silence the right answer when a field cannot be read: an
+absent `os_release` costs a label, while an invented one would put a fact into
+a bundle that nobody observed.
+
+`os_release` is the `PRETTY_NAME` from `os-release(5)`, looked up in the order
+that specification gives: `/etc/os-release` first, because a local override goes
+there, then `/usr/lib/os-release`. **Both are read through an explicit, bounded
+symlink resolution** (`collect.ResolveLinks`), because every systemd
+distribution ships the `/etc` path as a link into `/usr/lib` and the seam opens
+privileged reads with `O_NOFOLLOW`. `hostname` is deliberately *not* resolved
+that way: no distribution ships it as a link, so one found there was put there
+by somebody.
+
+`kernel` and `arch` are reserved and not yet produced — no collector reads
+them. They are absent rather than empty.
+
 ### 6.1 Guarantees
 
 | Guarantee | Detail |

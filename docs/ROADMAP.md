@@ -407,14 +407,23 @@ An interrupted run produces no artifact: no findings document, no
 `--save-bundle`, no bundle from `collect`. Stricter than the `--timeout` path,
 which keeps what it collected, and CLI-SPEC.md §6.1 says why.
 
+#### RC-3. `os_release` symlink resolution — **DONE (WP-37, 2026-08-21)**
+
+`/etc/os-release` is a symlink on every systemd distribution, the seam refused
+it under `O_NOFOLLOW`, and the field was silently blank on the four most common
+Linux distributions. Resolved explicitly and bounded, without weakening the
+seam, through one shared `collect.ResolveLinks` that the AUTH collector's Red
+Hat PAM walk now uses too.
+
 #### Still open in the RC phase
 
-- **`meta.os_release` is empty on Ubuntu, Fedora and Rocky**, because
-  `/etc/os-release` is a symlink on all three and the live seam opens privileged
-  reads with `O_NOFOLLOW`. The seam is right; `hostMeta` does not handle the
-  symlink case, so the report says nothing about the OS on a modern distribution.
-- **Documentation sweep** against `DOCUMENT-MAP.md` tier 0–4, which is a v1.0.0
-  release criterion in its own right.
+- **Documentation.** `DOCUMENT-MAP.md` now carries an audited status table:
+  **24 v1-gating documents are outstanding**, dominated by the Tier 2 generated
+  references (`MODULE-CATALOG.md`, `CHECK-REFERENCE.md` — a generator over the
+  catalog plus a CI freshness check, not prose) and all seven of Tier 5.
+  `README.md` is currently carrying Tier 5's load.
+- **`PERFORMANCE.md`** separately, because its numbers must be measured on a
+  defined reference host before they can be written down.
 
 ---
 

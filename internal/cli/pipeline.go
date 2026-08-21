@@ -129,15 +129,70 @@ func hostMeta(s system.System, redact bool) bundle.Meta {
 	// (docs/DATA-MODEL.md §6.1). Redacting at render time would leave the
 	// identity on disk, which is where it matters.
 	if !redact {
+		// Read directly, without symlink resolution, on purpose. No
+		// distribution ships /etc/hostname as a link, so one found there was
+		// put there by somebody, and following it would put the first line of
+		// whatever it points at into a field labelled "hostname".
 		if res, err := s.ReadFile("/etc/hostname", 4096); err == nil {
 			m.Hostname = sanitize.Text(strings.TrimSpace(string(res.Data)))
 		}
 	}
 
-	if res, err := s.ReadFile("/etc/os-release", 64<<10); err == nil {
-		m.OSRelease = sanitize.Text(osRelease(string(res.Data)))
-	}
+	m.OSRelease = sanitize.Text(readOSRelease(s))
 	return m
+}
+
+// osReleasePaths is the lookup order os-release(5) specifies: the /etc copy
+// first, because that is where a local override goes, then the vendor copy in
+// /usr/lib.
+//
+// Both are tried rather than only the first, because on a distribution that
+// ships only the /usr/lib file — or one where /etc has been emptied — the
+// answer is still knowable and the alternative is a report that says nothing
+// about the operating system it audited.
+var osReleasePaths = []string{"/etc/os-release", "/usr/lib/os-release"}
+
+// maxOSRelease bounds the read. os-release is a dozen short lines; anything
+// approaching this is not one, and the process reading it may be root.
+const maxOSRelease = 64 << 10
+
+// readOSRelease returns the contents of the first os-release file it can read,
+// resolving the symlink that /etc/os-release is on most modern distributions.
+//
+// **This is the bug WP-37 fixes and it was invisible.** Since systemd moved the
+// file to /usr/lib, /etc/os-release is a relative symlink on Ubuntu, Debian,
+// Fedora and RHEL alike. The seam opens privileged reads with O_NOFOLLOW and
+// correctly refused it, hostMeta discarded the error, and every report from
+// every one of those distributions carried an empty os_release — with nothing
+// anywhere saying why. A field that is silently blank on the four most common
+// Linux distributions is worse than one that is absent everywhere: it looks
+// like the host had nothing to say.
+//
+// The resolution is explicit and bounded (collect.ResolveLinks). The seam is
+// not weakened: every hop is a separate Stat and Readlink through it, the scan
+// root still applies, and the final open still refuses anything that is not a
+// regular file.
+//
+// A failure is silence rather than an error, which is right for this field and
+// only for this field. Every other read in this program feeds a check, and a
+// check that cannot read what it needs must say UNKNOWN. meta is descriptive:
+// it labels the report for a human, no check consumes it, and a host that will
+// not say what it is has not produced a wrong verdict about anything.
+func readOSRelease(s system.System) string {
+	for _, p := range osReleasePaths {
+		real, err := collect.ResolveLinks(s, p)
+		if err != nil {
+			continue
+		}
+		res, err := s.ReadFile(real, maxOSRelease)
+		if err != nil {
+			continue
+		}
+		if text := osRelease(string(res.Data)); text != "" {
+			return text
+		}
+	}
+	return ""
 }
 
 // osRelease extracts a human identifier from /etc/os-release. PRETTY_NAME is

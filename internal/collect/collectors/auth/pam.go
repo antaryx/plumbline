@@ -44,7 +44,6 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 
@@ -93,9 +92,6 @@ const (
 	// freely and a self-including file is a loop that a depth limit terminates
 	// without needing to detect it.
 	maxIncludeDepth = 8
-	// maxLinkHops bounds symlink resolution. Red Hat's chain is one hop; eight
-	// is far beyond anything legitimate and terminates a loop.
-	maxLinkHops = 8
 )
 
 // Collector implements collect.Collector for the PAM configuration.
@@ -333,38 +329,16 @@ func (c *collector) follow(ctx context.Context, svc *fact.PAMService, directive 
 // read resolves a path through any symlink chain and reads the regular file at
 // the end, returning the real path so evidence cites what an operator edits.
 //
-// The seam's ReadFile opens with O_NOFOLLOW, which is what stops a hostile
-// symlink at a config path from redirecting a root process into /etc/shadow or
-// a FIFO (T-01, T-02). That protection is not given up here. The chain is
-// walked one *observed* hop at a time — Stat, Readlink, resolve, Stat again —
-// bounded at maxLinkHops, with every hop staying inside the scan root because
-// resolution goes back through the seam; and the final open still refuses a
-// symlink, a FIFO or a device. What is gained is that Red Hat's
-// /etc/pam.d/system-auth, a symlink on every stock install, is readable at
-// all. Without this the module would report UNKNOWN on the entire Red Hat
-// family.
+// The chain is walked by collect.ResolveLinks, one observed hop at a time and
+// bounded, which is what keeps the O_NOFOLLOW protection intact while making
+// Red Hat's /etc/pam.d/system-auth — a symlink on every stock install —
+// readable at all. Without it the module reports UNKNOWN on the entire Red Hat
+// family. The reasoning is on ResolveLinks; the final open here still refuses
+// a symlink, a FIFO or a device.
 func (c *collector) read(p string) (string, string, error) {
-	real := p
-	for hop := 0; ; hop++ {
-		fi, err := c.sys.Stat(real)
-		if err != nil {
-			return real, "", err
-		}
-		if !fi.IsSymlink {
-			break
-		}
-		if hop >= maxLinkHops {
-			return real, "", errors.New("symlink chain exceeded " + strconv.Itoa(maxLinkHops) + " hops")
-		}
-		target, err := c.sys.Readlink(real)
-		if err != nil {
-			return real, "", err
-		}
-		if path.IsAbs(target) {
-			real = path.Clean(target)
-		} else {
-			real = path.Clean(path.Join(path.Dir(real), target))
-		}
+	real, err := collect.ResolveLinks(c.sys, p)
+	if err != nil {
+		return real, "", err
 	}
 
 	res, err := c.sys.ReadFile(real, maxRead)
