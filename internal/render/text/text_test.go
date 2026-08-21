@@ -179,18 +179,56 @@ func TestColourOnMarksEachResultWithItsOwnColour(t *testing.T) {
 	in.Color = true
 	out := render(t, in)
 
-	for _, c := range []struct {
-		result string
-		code   string
-	}{
-		{"PASS", "\033[32m"},
-		{"FAIL", "\033[31m"},
-		{"UNKNOWN", "\033[33m"},
-	} {
-		if !strings.Contains(out, c.code+c.result) {
-			t.Errorf("%s is not painted %q", c.result, c.code)
+	// The status tokens, not the enum words: the tokens are what a reader's eye
+	// lands on, and they are the thing the colour has to distinguish.
+	//
+	// Asserted as "each token carries a colour, and no two carry the same one"
+	// rather than by matching the escape bytes. Which byte means red is an
+	// implementation detail that gets tuned; that UNKNOWN does not look like
+	// PASS is a promise. The exact state-to-colour mapping is pinned in
+	// palette_internal_test.go, which is inside the package and can compare the
+	// constants themselves instead of copies of them.
+	seen := map[string]string{}
+	for _, token := range []string{"[ OK ]", "[ WARNING ]", "[ UNKNOWN ]"} {
+		code := sgrBefore(out, token)
+		if code == "" {
+			t.Errorf("%s is not painted at all", token)
+			continue
 		}
+		if other, dup := seen[code]; dup {
+			t.Errorf("%s and %s are painted identically (%q)", token, other, code)
+		}
+		seen[code] = token
 	}
+}
+
+// sgrBefore returns the colour in force at the first occurrence of token: the
+// last complete SGR sequence before it, or "" if that sequence is a reset and
+// the token is therefore unpainted.
+//
+// It looks for the last sequence rather than requiring one to be flush against
+// the token, because a status token is padded inside its paint call — the
+// escape opens, then the padding spaces, then the word. Insisting on adjacency
+// made this return "" for every painted token, which is a test that fails on
+// correct output.
+func sgrBefore(out, token string) string {
+	i := strings.Index(out, token)
+	if i < 0 {
+		return ""
+	}
+	head := out[:i]
+	start := strings.LastIndex(head, "\033[")
+	if start < 0 {
+		return ""
+	}
+	end := strings.Index(head[start:], "m")
+	if end < 0 {
+		return ""
+	}
+	if seq := head[start : start+end+1]; seq != "\033[0m" {
+		return seq
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------------------

@@ -51,7 +51,6 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -65,14 +64,28 @@ import (
 // ANSI escape sequences. Deliberately the plain SGR set: these are what every
 // terminal emulator written since 1979 understands, and a report an operator
 // cannot read on a serial console is not a better report for being prettier.
+// One palette for the whole report, in 24-bit colour, matching the hex
+// constants the dashboard in summary.go uses. The two halves of the report
+// must not disagree about what green is.
+//
+// **Hex rather than the sixteen ANSI names**, because the sixteen are whatever
+// the user's theme says they are: "red" in one Solarized variant is a brown
+// that vanishes against the background, and a FAIL an operator cannot see is a
+// FAIL that does not exist. A terminal that cannot show 24-bit colour maps
+// these to its nearest available; one that ignores them entirely still gets
+// the bracketed word, which is why the token says WARNING rather than relying
+// on the colour to carry the meaning.
+//
+// Bold is folded into the three verdict colours rather than applied
+// separately, so a status token is one escape sequence and not two.
 const (
 	ansiReset  = "\033[0m"
 	ansiBold   = "\033[1m"
 	ansiDim    = "\033[2m"
-	ansiRed    = "\033[31m"
-	ansiGreen  = "\033[32m"
-	ansiYellow = "\033[33m"
-	ansiCyan   = "\033[36m"
+	ansiRed    = "\033[1;38;2;239;68;68m"  // #EF4444
+	ansiGreen  = "\033[1;38;2;34;197;94m"  // #22C55E
+	ansiYellow = "\033[1;38;2;245;158;11m" // #F59E0B
+	ansiCyan   = "\033[38;2;96;165;250m"   // #60A5FA
 )
 
 // Tool identifies the binary that produced the report.
@@ -624,7 +637,7 @@ func (p *printer) accepted(findings []finding.Finding) {
 		p.field("Would be", p.paint(resultColor(s.OriginalResult), string(s.OriginalResult)))
 		p.field("Severity", p.severityLabel(f))
 		if subject := cell(f.Subject); subject != "" {
-			p.fieldWrapped("Subject", f.Subject)
+			p.fieldWrapped("Subject", p.paint(ansiDim, f.Subject))
 		}
 		p.fieldWrapped("Accepted", s.Justification)
 		if s.ExpiresAt != "" {
@@ -647,14 +660,19 @@ func (p *printer) entry(f finding.Finding) {
 	// part that gives, so the title absorbs the whole shortfall.
 	id := "[" + f.CheckID + "]"
 	title := truncate(cell(f.Title), reportWidth-4-1-visibleWidth(id))
+	// The title is the heading and carries the emphasis; the ID beside it and
+	// the paths below it are auxiliary and are dimmed out of its way. Before
+	// this the ID was bold and the title was plain, which put the weight on the
+	// one part of the line an operator does not read — they read the sentence,
+	// then copy the ID.
 	p.line("  " + p.paint(resultColor(f.Result), "*") + " " +
-		title + " " + p.paint(ansiBold, id))
+		p.paint(ansiBold, title) + " " + p.paint(ansiDim, id))
 
 	p.field("Severity", p.severityLabel(f))
 	if f.UnknownReason != "" {
 		p.field("Reason", p.paint(ansiYellow, string(f.UnknownReason)))
 	}
-	p.fieldWrapped("Subject", f.Subject)
+	p.fieldWrapped("Subject", p.paint(ansiDim, f.Subject))
 	p.fieldWrapped("Detail", f.Detail)
 
 	if len(f.Evidence) > 0 {
@@ -879,137 +897,6 @@ func (p *printer) factErrors(errs []fact.Error) {
 // column is the mixed-colour case: PASS is green, FAIL is red, SKIPPED is dim.
 // Uniform colouring is what makes a tabwriter column safe, and this column is
 // not uniform.
-const (
-	summaryLabel = 15
-	summaryCount = 5
-)
-
-func (p *printer) summary(in Input) {
-	c := in.Score.Counts()
-	p.section("Scan summary")
-	p.blank()
-
-	row := func(colour, label string, n int, note string) {
-		line := "  " + p.paint(colour, pad(label, summaryLabel)) + padLeft(strconv.Itoa(n), summaryCount)
-		if note != "" {
-			line += "   " + p.paint(ansiDim, note)
-		}
-		p.line(line)
-	}
-
-	row(ansiGreen, "PASS", c.Pass, "")
-	row(ansiRed, "FAIL", c.Fail, "")
-	row(ansiYellow, "UNKNOWN", c.Unknown, unknownNote(c.Unknown))
-	row(ansiDim, "NOT_APPLICABLE", c.NotApplicable, "")
-	row(ansiDim, "SKIPPED", c.Skipped, suppressedNote(in.Findings))
-
-	p.blank()
-	p.line("  " + pad("evaluated", summaryLabel) + padLeft(strconv.Itoa(c.Total), summaryCount) +
-		p.paint(ansiDim, "   checks in catalog "+strconv.Itoa(in.Score.CatalogVersion())))
-	p.line("  " + pad("posture", summaryLabel) + p.postureLine(in.Score))
-	if n := in.Score.Counts().OutOfProfile; n > 0 {
-		p.blank()
-		for _, l := range wrap(fmt.Sprintf(
-			"Coverage is measured against profile %q, which selects %d of the %d checks in this "+
-				"catalog. The %d outside it were not evaluated and are not counted against this host.",
-			in.Scan.Profile, in.Score.Counts().Applicable(), in.Score.Counts().Total, n), detailWidth) {
-			p.line("  " + p.paint(ansiDim, l))
-		}
-	}
-
-	if in.Degraded {
-		p.blank()
-		for _, l := range wrap("This scan completed degraded: a collector could not gather a fact it was asked for, so part of this host was never examined. The verdicts above are about what could be seen.", detailWidth) {
-			p.line("  " + p.paint(ansiYellow, l))
-		}
-	}
-	p.blank()
-}
-
-// suppressedNote says how much of the SKIPPED count is accepted risk rather
-// than a check the profile never ran. Without it the two are one number, and a
-// team that suppressed twenty findings reads the same as a team that filtered
-// twenty out.
-func suppressedNote(in []finding.Finding) string {
-	var accepted, outOfProfile int
-	for _, f := range in {
-		switch {
-		case f.Suppression != nil:
-			accepted++
-		case f.SkippedBy != "":
-			outOfProfile++
-		}
-	}
-	var parts []string
-	if accepted > 0 {
-		parts = append(parts, fmt.Sprintf("%d accepted risk(s)", accepted))
-	}
-	if outOfProfile > 0 {
-		// Said explicitly because coverage will read 100% beneath it. A
-		// profile takes its excluded checks out of the denominator, so a
-		// narrow baseline reports full coverage of a narrow question — true,
-		// and misleading to anyone who does not know the question narrowed.
-		parts = append(parts, fmt.Sprintf("%d outside the profile", outOfProfile))
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return "← " + strings.Join(parts, ", ")
-}
-
-func unknownNote(n int) string {
-	if n == 0 {
-		return ""
-	}
-	return "← not passes; the scan could not tell"
-}
-
-// postureLine renders posture and coverage together, or explains why there is
-// no number.
-//
-// **Posture is never printed without coverage**, which is the same invariant
-// the JSON renderer enforces and for the same reason: a posture with no scale
-// beside it is a number that flatters an unexamined host. Here it is enforced
-// by there being exactly one function that can print the word "posture", and
-// by every branch of it either printing both or printing neither.
-func (p *printer) postureLine(sc score.Score) string {
-	posture, hasPosture := sc.Posture()
-	coverage, hasCoverage := sc.Coverage()
-
-	if !hasPosture || !hasCoverage {
-		return p.paint(ansiDim, "undefined — nothing that carries weight was evaluated, which is not the same as zero")
-	}
-
-	colour := ansiGreen
-	switch {
-	case posture < 60:
-		colour = ansiRed
-	case posture < 85:
-		colour = ansiYellow
-	}
-
-	// **Coverage caps the colour posture is allowed to wear.** A posture of
-	// 86 over 17% coverage is arithmetically correct and, painted green, is a
-	// lie an operator will act on: it is not a host that is mostly fine, it is
-	// a host that was mostly not examined. Low coverage therefore takes green
-	// off the table no matter how well the handful of evaluated checks did.
-	coverageColour := ansiDim
-	switch {
-	case coverage < 50:
-		coverageColour = ansiRed
-		colour = ansiRed
-	case coverage < 90:
-		coverageColour = ansiYellow
-		if colour == ansiGreen {
-			colour = ansiYellow
-		}
-	}
-
-	return p.paint(colour, padLeft(fmt.Sprintf("%.1f", posture), summaryCount)) +
-		"   " + p.paint(coverageColour, fmt.Sprintf("coverage %.1f%%", coverage)) +
-		p.paint(ansiDim, " of applicable checks")
-}
-
 // ---------------------------------------------------------------------------
 // width, padding and wrapping
 // ---------------------------------------------------------------------------

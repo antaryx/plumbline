@@ -11,7 +11,33 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-Nothing yet. The next change lands here.
+### Changed
+- **The scan summary is a dashboard (RC-4).** A posture gauge across the grid
+  and PASS / FAIL / UNKNOWN / SKIPPED cards beneath it, drawn with
+  `charmbracelet/lipgloss`, plus a 24-bit hex palette shared by the dashboard
+  and the check lines. Titles are now bold and paths, IDs and labels dimmed, so
+  the sentence an operator reads carries the weight rather than the identifier
+  they copy.
+
+  **The grid did not move.** Everything is still 78 columns, derived from
+  `reportWidth` and never from `$COLUMNS`, so two scans of an unchanged host
+  stay byte-identical. lipgloss is driven by a renderer built over `io.Discard`
+  with its colour profile passed in explicitly, so it never probes a terminal,
+  never touches `os.Stdout`, and emits bytes that are a pure function of the
+  colour decision `useColor` already made. With colour off it is given the
+  Ascii profile: the boxes still draw and nothing is painted.
+
+  **This adds 13 modules to a binary that runs as root**, taking the dependency
+  count from 4 to 17, two of them untagged pseudo-versions. That is a real
+  supply-chain expansion for a presentation-layer feature and is recorded here
+  rather than buried in `go.mod`.
+
+### Fixed
+- **`lipgloss.Width` is the inner width, not the total.** The first draft of
+  the dashboard assumed otherwise and every box ran two columns past the grid —
+  invisible on a wide terminal, a wrapped mess on the eighty-column one the
+  grid exists for. `TestTheDashboardFitsTheGrid` now checks the arithmetic
+  instead of the developer's eye.
 
 ---
 

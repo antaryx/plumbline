@@ -85,15 +85,22 @@ func TestCategoriesCarryTheColoursWP30Specified(t *testing.T) {
 	in.Color = true
 	out := renderDiff(t, in)
 
-	for _, c := range []struct{ category, code string }{
-		{"RESOLVED", "\033[32m"},         // green
-		{"NEW FAILURE", "\033[31m"},      // red
-		{"NEWLY SUPPRESSED", "\033[36m"}, // cyan
-		{"REGRESSED", "\033[33m"},        // yellow
-	} {
-		if !strings.Contains(out, c.code+c.category) {
-			t.Errorf("%s is not painted %q", c.category, c.code)
+	// WP-30 specified four categories, each with its own colour. The colour
+	// itself is not on the heading — it is on the transition token beside every
+	// change — so that the eye tracks the movement rather than the label. Which
+	// hue each category gets is asserted in palette_internal_test.go, where
+	// diffColor can be called directly instead of being read back out of
+	// rendered bytes.
+	//
+	// What belongs here is that all four headings are present and that the
+	// report is carrying colour at all.
+	for _, category := range []string{"RESOLVED", "NEW FAILURE", "NEWLY SUPPRESSED", "REGRESSED"} {
+		if !strings.Contains(out, "[+] "+category) {
+			t.Errorf("the diff omits the %s heading", category)
 		}
+	}
+	if !strings.Contains(out, "\033[") {
+		t.Error("a diff rendered with Color=true carries no escape sequences at all")
 	}
 }
 

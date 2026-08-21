@@ -108,15 +108,26 @@ plumbline 1.0.0-rc1   catalog 13
 [=] Scan summary
 ──────────────────────────────────────────────────────────────────────────────
 
-  PASS              73
-  FAIL               1
-  UNKNOWN            1   ← not passes; the scan could not tell
-  NOT_APPLICABLE     4
-  SKIPPED            0
+  ╭──────────────────────────────────────────────────────────────────────────╮
+  │ posture   97.2   coverage 98.7% of applicable checks                     │
+  │ ████████████████████████████████████████████████████████████████████░░░░ │
+  ╰──────────────────────────────────────────────────────────────────────────╯
 
-  evaluated         79   checks in catalog 13
-  posture         97.2   coverage 98.7% of applicable checks
+  ╭────────────────╮ ╭────────────────╮ ╭────────────────╮ ╭────────────────╮
+  │ PASS           │ │ FAIL           │ │ UNKNOWN        │ │ SKIPPED        │
+  │ 73             │ │ 1              │ │ 1              │ │ 0              │
+  │                │ │                │ │ not passes     │ │                │
+  ╰────────────────╯ ╰────────────────╯ ╰────────────────╯ ╰────────────────╯
+    NOT_APPLICABLE   4   the subject is not on this host
+    UNKNOWN is not a pass; the scan could not tell
+
+  79 checks evaluated · catalog 13
 ```
+
+The bar and the boxes are drawn at a fixed 78 columns, never from `$COLUMNS`,
+so two scans of an unchanged host stay byte-identical and a nightly diff shows
+nothing. With colour off the boxes are still drawn and nothing is painted —
+losing the colour is the degradation, losing the layout is not.
 
 `FAIL` is red, `PASS` green, `UNKNOWN` yellow. Colour is suppressed by
 `--no-color`, by `NO_COLOR` in the environment, when stdout is not a terminal,
