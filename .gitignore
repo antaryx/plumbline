@@ -40,6 +40,18 @@ plumbline-suppress*.json
 # a repository.
 *:Zone.Identifier
 
+# Local AI/agent session state. Ignored here rather than in .git/info/exclude,
+# which is where this rule used to live: that file is local to one clone, is
+# never committed and never reaches a contributor, so the protection existed on
+# exactly one machine and was invisible to everyone else. A session transcript
+# is a working note about this repository and sometimes about the operator's
+# own host; it is not a project artifact.
+.claude/
+.claude.json
+.cursor/
+.aider*
+.continue/
+
 # Editors
 .vscode/
 .idea/

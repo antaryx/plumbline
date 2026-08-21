@@ -24,6 +24,25 @@ Answer these four questions. If you cannot, the check is not ready.
 
 ---
 
+### Start from the template
+
+Copy [`checks/_TEMPLATE.md`](checks/_TEMPLATE.md) to `docs/checks/<ID>.md` and
+fill it in **before** writing Go:
+
+```bash
+cp docs/checks/_TEMPLATE.md docs/checks/SSHD-0021.md
+```
+
+The four questions above are the ones it makes you answer in writing, and
+answering them in prose first is the cheapest place to discover that a check is
+really two checks, or that the daemon's default is not what you assumed. A spec
+that cannot be written is a check that should not be.
+
+Every check in `docs/checks/` was written this way, and the file becomes the
+per-check reference that ships with the tool.
+
+---
+
 ## 2. Allocate an ID
 
 `MODULE-NNNN`, four digits, next free number in the module. IDs are permanent
@@ -243,3 +262,5 @@ Checklist before you call it done:
 - [ ] PASS and FAIL fixtures exist; NOT_APPLICABLE and UNKNOWN where reachable
 - [ ] `make verify` output pasted
 - [ ] `catalog.Version` bumped
+- [ ] `docs/checks/<ID>.md` written from
+      [`checks/_TEMPLATE.md`](checks/_TEMPLATE.md)
