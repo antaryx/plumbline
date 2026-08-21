@@ -415,21 +415,33 @@ The golden-bundle corpus is the highest-leverage asset in the repository. Once ~
 
 ## 11. Dependencies
 
-Kept deliberately small; every dependency in a root-privileged security tool is supply-chain surface.
+Kept deliberately small; every dependency in a root-privileged security tool is
+supply-chain surface (`CLAUDE.md` rule 7).
+
+**Four, as shipped at v1.0.0:**
 
 | Need | Choice | Note |
 |---|---|---|
-| CLI | `spf13/cobra` | Standard |
-| Config | Hand-rolled over `gopkg.in/yaml.v3` | Viper pulls a large tree for little benefit here |
-| Terminal styling | `charmbracelet/lipgloss` | Styling only |
-| Progress | `charmbracelet/bubbles` (spinner/progress) | **No full Bubbletea TUI in v1** — an interactive result browser is a v2 nice-to-have, not a v1 requirement, and it is a surprisingly large time sink |
-| Compression | `klauspost/compress/zstd` | Pure Go |
-| Testing | stdlib + `google/go-cmp` | `testify` optional |
-| Build | `goreleaser`, `syft`, `cosign` | See `DEPLOYMENT.md` |
+| CLI | `spf13/cobra` (+ `spf13/pflag`) | Standard |
+| Compression | `klauspost/compress/zstd` | Pure Go; the bundle format |
+| Schema validation | `santhosh-tekuri/jsonschema/v5` | Test-time, validates `findings-v1` |
+| Build and release | `goreleaser`, `syft`, `cosign` | Tooling, not linked in — see `SUPPLY-CHAIN.md` |
 
-`CGO_ENABLED=0` throughout. No chromedp, no headless browser, no PDF library in v1 (audit A-28) — HTML renders in v2 and the user's browser prints it.
+Everything else is the standard library. Config parsing is hand-rolled, tests
+use `testing` and nothing else, and the terminal report — grid, colour, box
+drawing, ANSI-aware padding — is this project's own code in
+`internal/render/text`.
 
----
+**This table previously listed `charmbracelet/lipgloss`, `charmbracelet/bubbles`,
+`gopkg.in/yaml.v3`, `google/go-cmp` and `testify`.** None of them is in
+`go.mod`; the list described an intention from the design phase that the
+implementation never took up, except for lipgloss, which was added during the
+release candidates and removed before GA when it proved to cost thirteen
+transitive modules for a box border. Corrected in the v1.0.0 documentation
+review (WP-38); the history is in `CHANGELOG.md` under `v1.0.0-rc1`.
+
+The dependency count is itself a control, and the SBOM published with every
+release is what makes it checkable rather than a claim.
 
 ## 12. What is explicitly deferred
 

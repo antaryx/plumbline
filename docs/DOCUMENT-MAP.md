@@ -145,37 +145,44 @@ The last one before check #1 because the first check that maps to a framework is
 
 ---
 
-## Status — audited 2026-08-21 (WP-37)
+## Status — audited 2026-08-21 (WP-38)
 
-Counted mechanically against this map, not asserted. `v1.0.0`'s release
-criterion *"All v1-gating documents complete (Tier 0–4)"* is **not met**, and
-this table is here so that stays visible rather than being discovered during a
-release.
+Counted mechanically against this map, not asserted.
 
 | Tier | Present | Required | Missing |
 |---|---|---|---|
-| Tier 0 | 8 | 9 | `SUPPORT.md` |
+| Tier 0 | 9 | 9 | — |
 | Tier 1 | 5 | 6 | `REQUIREMENTS.md` |
 | Tier 2 | 8 | 13 | `DESIGN.md`, `COLLECTORS.md`, `CONFIG-REFERENCE.md`, `OUTPUT-FORMATS.md`, `PLATFORM-SUPPORT.md` |
-| Tier 3 | 3 | 5 | `SUPPLY-CHAIN.md`, `PRIVACY.md` |
-| Tier 4 | 2 | 7 | `RELEASE-PROCESS.md`, `TESTING.md`, `CI-CD.md`, `SUPPORT-POLICY.md`, `runbooks` |
-| Tier 5 | 0 | 7 | `INSTALLATION.md`, `QUICKSTART.md`, `USAGE.md`, `CI-INTEGRATION.md`, `FALSE-POSITIVES.md`, `TROUBLESHOOTING.md`, `FAQ.md` |
+| Tier 3 | 5 | 5 | — |
+| Tier 4 | 2 | 7 | `RELEASE-PROCESS.md`, `TESTING.md`, `CI-CD.md`, `SUPPORT-POLICY.md`, `runbooks/` |
+| Tier 5 | 7 | 7 | — |
 
-**21 documents outstanding.** The four the RC touches — `README.md`,
-`CLI-SPEC.md`, `DATA-MODEL.md`, `CHANGELOG.md` — are current with every shipped
-feature through `v1.0.0-rc1`: suppressions, `diff`, SARIF, `explain`, profiles,
-golden bundles, the progress indicator and signal handling.
+**Tier 5 is complete**, and so are Tiers 0 and 3. WP-38 added all seven
+user-facing documents, plus `SUPPORT.md`, `PRIVACY.md` and `SUPPLY-CHAIN.md` —
+ten in total. `README.md` no longer carries a load it was never shaped for.
 
-The gap is dominated by two clusters, and neither is a writing job that can be
-faked from the source:
+**Eleven gating documents remain, so the v1.0.0 criterion "all v1-gating
+documents complete (Tier 0–4)" is still NOT met.** It was 14 before WP-38.
+Recording that plainly is the point of this table: a project whose entire
+argument is that an unverified thing must not be reported as verified does not
+get an exception for its own checklist.
 
-- ~~**Tier 2 generated references.**~~ Done in RC-5: `tools/gendocs` writes both
-  from `cli.Catalog()`, and `make invariants` fails if the committed output has
-  drifted from the catalog. Neither file is ever hand-edited.
-- **Tier 5 user documentation.** Seven documents, none started. `README.md`
-  currently carries their load, which is why it is 330 lines and still growing.
+What is left divides into two kinds, and neither is a writing job that can be
+done from the source alone:
 
-~~`PERFORMANCE.md` is called out separately~~ — written in v1.0.0 from measured
-numbers on a stated reference host, as the rule requires. Its finding is that
-evaluation costs ~10 ms and a cold full-disk sweep costs ~32 s on 731k inodes,
-warm 2.8 s: the tool is disk-bound by design and the engine is free.
+- **Reference documents that should be generated, not written** —
+  `COLLECTORS.md` and `CONFIG-REFERENCE.md` enumerate things the code already
+  knows (`collect.Default()`, the flag set). `tools/gendocs` is the precedent:
+  generate them and gate freshness in `make invariants`, rather than writing
+  prose that drifts within a month.
+- **Process documents that describe habits not yet settled** —
+  `RELEASE-PROCESS.md`, `TESTING.md`, `CI-CD.md`, `SUPPORT-POLICY.md` and the
+  runbooks. Writing these before the practice exists produces a document
+  describing a process nobody follows, which is worse than an absent one.
+  `RELEASE-PROCESS.md` is the most valuable of them and now has real material:
+  three tag mints, one of them a re-cut after a shipped defect, and a flaky
+  module-proxy failure that starved the jobs carrying the evidence.
+
+`DESIGN.md`, `PLATFORM-SUPPORT.md` and `REQUIREMENTS.md` are genuine writing
+tasks and are the honest v1.1 backlog.

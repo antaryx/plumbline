@@ -492,14 +492,36 @@ of it is work that was forgotten.
 - [x] `findings-v1.schema.json` published, validated in CI, and frozen
 - [x] Scan of a reference host measured and published *(`docs/PERFORMANCE.md`)*
 - [x] Signed release artifacts + SBOM + provenance, and documented verification steps a user can follow
-- [ ] **All v1-gating documents complete (`DOCUMENT-MAP.md` tier 0–4)** — 21 outstanding, dominated by Tier 5
-- [ ] `THREAT-MODEL.md` reviewed against the actual implementation, not the design
+- [ ] **All v1-gating documents complete (`DOCUMENT-MAP.md` tier 0–4)** — 11 outstanding, down from 14 (WP-38)
+- [x] `THREAT-MODEL.md` reviewed against the actual implementation, not the design *(WP-38, 2026-08-21)*
 
-**Two criteria are not met at `v1.0.0`.** Both are documentation, both are
-recorded rather than quietly reclassified, and neither changes what the binary
-does. `README.md` currently carries Tier 5's load; `DOCUMENT-MAP.md` has the
-audited inventory. The alternative — marking them done because the tag is
-cut — is the failure this project's whole argument is against.
+**One criterion remains unmet at `v1.0.0`**, and it is documentation rather than
+behaviour. WP-38 closed the threat-model review and completed Tiers 0, 3 and 5 —
+ten documents, including all seven user-facing ones. Eleven gating documents
+remain, and `DOCUMENT-MAP.md` names each with the reason it is still open.
+
+**The threat-model review was not a formality.** It found two places where the
+document claimed a mitigation the code does not have: `openat2` described as
+"scheduled for v1.0" when v1.0 shipped without it, and SLSA provenance, a
+double-build reproducibility check and a verifying installer that do not exist
+at all. Both entries are corrected rather than dropped, and the missing controls
+are v1.1 work. A threat model that overstates its own coverage is worse than one
+that admits a gap, because a reader plans around it.
+
+Recording the remaining gap plainly, rather than marking it done because the tag
+is cut, is the same discipline the tool applies to a host.
+
+#### v1.1 — the controls v1.0.0 claimed and did not have
+
+- **`openat2(RESOLVE_NO_SYMLINKS|RESOLVE_BENEATH)`** for atomic path
+  resolution, closing the T-01 residual — the highest-priority residual risk in
+  the threat model.
+- **SLSA provenance** in the release workflow.
+- **A double-build reproducibility check.** The build is deterministic by
+  construction and verified by nothing.
+- **An installer that refuses on a bad signature**, rather than verification
+  steps a human is trusted to run.
+
 - [ ] Known false positives documented per check in `FALSE-POSITIVES.md`
 - [ ] At least one external person has run it and filed an issue
 
