@@ -1,0 +1,107 @@
+name: Release
+
+# The delivery half of CI. ci.yml decides whether the tree is fit to ship; this
+# decides what shipping means, and the two are separate files because they
+# answer to different triggers and need very different permissions.
+#
+# Everything this workflow does that matters is a claim a user can check
+# afterwards without trusting this project's infrastructure:
+#
+#   the checksums file   says what the bytes are
+#   the cosign signature says this repository's release workflow produced them
+#   the SBOM             says what is inside them
+#
+# The configuration is `.goreleaser.yaml`; this file only supplies the tools
+# and the credentials. Where the two appear to disagree, the yaml is what runs.
+
+on:
+  push:
+    tags: ["v*"]
+
+# Read-only by default, as ci.yml is. The job below widens it for itself and
+# for nothing else.
+permissions:
+  contents: read
+
+env:
+  # The same toolchain ci.yml builds with, and for the reason stated there: Go
+  # supports only its two newest majors, so 1.24 — the floor go.mod states for
+  # a source build — no longer receives stdlib security fixes. A release binary
+  # that runs as root is the last artifact to build with an unmaintained
+  # toolchain, so the floor and the build toolchain are deliberately different
+  # numbers.
+  GO_VERSION: "1.25"
+
+jobs:
+  release:
+    name: build, sign and publish
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Create the release and upload artifacts to it.
+      contents: write
+      # Mint the OIDC token cosign exchanges for a short-lived certificate.
+      # **Keyless signing does not work without this**, and the failure is a
+      # confusing one: cosign reports an authentication error rather than a
+      # missing permission.
+      id-token: write
+      # Not used today. It is here because the alternative — discovering it is
+      # missing halfway through adding a container image — is a failed release
+      # rather than a failed build.
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # GoReleaser derives the version from the tag and needs the tags and
+          # the history to do it. A shallow clone produces a release numbered
+          # after a commit hash, which is the kind of thing nobody notices
+          # until it is published.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # syft generates the SBOM the sboms block asks for. Pinned to a major
+      # rather than floating on latest: a release pipeline that silently
+      # changes what it runs is one that cannot be reproduced afterwards.
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      # cosign signs the checksum file. Keyless: no private key exists to leak,
+      # rotate or lose, and the certificate records the workflow, repository
+      # and commit that produced the artifact — a stronger statement than
+      # "somebody with the key signed this".
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      # A release must not be the one build nobody checked. `.goreleaser.yaml`
+      # runs `make verify` as a before-hook, so this is belt and braces rather
+      # than the only gate — but it fails in seconds and with a readable error,
+      # where a before-hook failure arrives wrapped in GoReleaser's output.
+      - name: Verify before shipping
+        run: make verify
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # What was published, in the log, so a failure to sign or to generate an
+      # SBOM is visible here rather than by someone noticing an absence on the
+      # release page weeks later.
+      - name: Summarise the artifacts
+        if: always()
+        run: |
+          {
+            echo "### Artifacts"
+            echo
+            echo '```'
+            ls -1 dist/ 2>/dev/null | grep -Ev '^(config.yaml|artifacts.json|metadata.json|plumbline_linux)' || echo "none"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
