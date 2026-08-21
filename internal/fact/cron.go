@@ -122,7 +122,7 @@ func (c Cron) Select(paths ...string) []CronPath {
 //
 // A check calls this before drawing any negative conclusion: a path whose
 // metadata was refused could be the one violating the rule, and reporting PASS
-// over the paths that happened to be readable is the false assurance CLAUDE.md
+// over the paths that happened to be readable is the false assurance CONTRIBUTING.md
 // rule 3 forbids.
 func (c Cron) Unreadable(paths ...CronPath) []CronPath {
 	var out []CronPath

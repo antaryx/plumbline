@@ -28,7 +28,7 @@ means the protection disappears at the next reboot, silently, possibly months
 later during an unrelated maintenance window.
 
 This is the check the runbook requires the module to carry
-(`BUILD-RUNBOOK-v0.2.md`, WP-16: "Record both, and make at least one check
+(the v0.2 work plan (WP-16): "Record both, and make at least one check
 compare them"). Reporting either number alone hides the state that is actually
 dangerous.
 

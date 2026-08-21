@@ -63,7 +63,7 @@ const (
 // FSRow is one inode a walker interest matched.
 //
 // It is a trimmed copy of system.FileInfo rather than the type itself, because
-// a check may not import internal/system (CLAUDE.md rule 2) and would
+// a check may not import internal/system (CONTRIBUTING.md rule 2) and would
 // therefore have no way to read a field typed from that package. Everything
 // here is plain data that survives a bundle round trip.
 type FSRow struct {
@@ -115,7 +115,7 @@ func (FSMatches) FactVersion() int { return 1 }
 // Complete reports whether absence may be concluded from this fact.
 //
 // This is the asymmetric truncation rule, mechanised so that a check cannot
-// forget it (BUILD-RUNBOOK-v0.2.md, WP-15):
+// forget it (docs/adr/0014-walk-scope-is-not-truncation.md):
 //
 //	A truncated walk can invalidate a negative result. It can never
 //	invalidate a positive one.

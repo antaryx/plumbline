@@ -48,7 +48,7 @@ func servicesFact(fs *fact.Set) fact.Services {
 // statement about a host running OpenRC, SysVinit or runit — it is a sentence
 // with no subject, and the service it names may well be running under a
 // mechanism this module cannot see. Reporting PASS would be the exact false
-// assurance CLAUDE.md rule 3 forbids, dressed as a compliment.
+// assurance CONTRIBUTING.md rule 3 forbids, dressed as a compliment.
 func notSystemd() catalog.Outcome {
 	return catalog.Outcome{
 		Result: finding.NotApplicable,

@@ -416,7 +416,7 @@ The golden-bundle corpus is the highest-leverage asset in the repository. Once ~
 ## 11. Dependencies
 
 Kept deliberately small; every dependency in a root-privileged security tool is
-supply-chain surface (`CLAUDE.md` rule 7).
+supply-chain surface (`CONTRIBUTING.md` rule 7).
 
 **Four, as shipped at v1.0.0:**
 

@@ -51,7 +51,7 @@ vet:
 
 .PHONY: invariants
 ## invariants: architectural rules that a compiler cannot enforce but that the
-## whole test strategy depends on. See CLAUDE.md.
+## whole test strategy depends on. See CONTRIBUTING.md.
 invariants: check-system-seam check-check-purity check-fixture-coverage check-docs-current
 
 .PHONY: check-system-seam

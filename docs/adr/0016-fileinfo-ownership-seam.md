@@ -4,7 +4,7 @@
 
 ## Context
 
-`BUILD-RUNBOOK-v0.2.md` WP-19 anticipated that the CRON module would need the
+the v0.2 work plan (WP-19) anticipated that the CRON module would need the
 seam extended with file ownership:
 
 > To evaluate CRON security (e.g. verifying `/etc/crontab` is owned by root and
@@ -31,7 +31,7 @@ harmless while nothing depended on the answer.
 
 `UID` and `GID` are numbers. Nothing outside `internal/system` may import
 `syscall`, `os/user`, or anything else that resolves a number to a name — that
-is the seam rule (CLAUDE.md rule 1), and it is also correct on the merits:
+is the seam rule (CONTRIBUTING.md rule 1), and it is also correct on the merits:
 resolving a uid means reading `/etc/passwd` **as it exists during the scan**,
 which is a different question from what it contained when the file was created,
 and on a bundle evaluated later it is a different host's `/etc/passwd`

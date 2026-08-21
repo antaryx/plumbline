@@ -128,7 +128,7 @@ identity rather than by giving up at a depth limit (ADR-0012).
 
 - **Check count came in at 78 against a v1 ceiling of ~110.** The gap is
   entirely checks that would have needed an allowlist of blessed binaries,
-  package names or service names. `docs/BUILD-RUNBOOK-v0.2.md` forbids a name
+  package names or service names. The v0.2 work plan forbade a name
   list that "silently excuses a real finding", and the substitute — asserting a
   property no legitimate subject has — does not exist for every rule. Correctness
   is not the flex; check count is.

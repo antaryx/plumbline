@@ -93,7 +93,7 @@ func evalCheckWith(t *testing.T, check catalog.Check, name string, cfg walker.Co
 }
 
 // ---------------------------------------------------------------------------
-// the truncation rule — written first, per BUILD-RUNBOOK-v0.2.md WP-23
+// the truncation rule — docs/adr/0014-walk-scope-is-not-truncation.md
 // ---------------------------------------------------------------------------
 
 // TestTruncatedWalkMakesEveryAbsenceClaimUnknown is the acceptance criterion

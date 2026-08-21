@@ -1,4 +1,4 @@
-// Command fixturegate enforces CLAUDE.md rule 5 and docs/FIXTURES.md §4: every
+// Command fixturegate enforces CONTRIBUTING.md rule 5 and docs/FIXTURES.md §4: every
 // check in the catalog demonstrates at least one fixture yielding PASS and one
 // yielding FAIL.
 //
@@ -79,7 +79,7 @@ func main() {
 		}
 		fmt.Fprintf(os.Stderr, "ERROR: %d of %d check(s) lack a PASS or a FAIL fixture.\n", len(gaps), len(checks))
 		fmt.Fprint(os.Stderr, "Every check needs at least one test-table case expecting finding.Pass and\n")
-		fmt.Fprint(os.Stderr, "one expecting finding.Fail. See CLAUDE.md rule 5 and docs/FIXTURES.md §4.\n")
+		fmt.Fprint(os.Stderr, "one expecting finding.Fail. See CONTRIBUTING.md rule 5 and docs/FIXTURES.md §4.\n")
 		os.Exit(1)
 	}
 

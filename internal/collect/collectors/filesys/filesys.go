@@ -23,7 +23,7 @@
 //     is registered; and deferring the join by recording every owned inode as
 //     a row would overflow the interest cap in the first populated directory
 //     of any host that has users. A uid threshold instead of a join would be a
-//     guess, and CLAUDE.md rule 3 forbids guessing. The tally counts owners
+//     guess, and CONTRIBUTING.md rule 3 forbids guessing. The tally counts owners
 //     during the walk and lets FILESYS-0010 do the join where facts live
 //     (WP-25).
 package filesys

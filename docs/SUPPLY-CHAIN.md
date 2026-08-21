@@ -13,7 +13,7 @@ exists so that a user does not have to take that on trust.
 | `klauspost/compress` | zstd for the bundle format |
 | `santhosh-tekuri/jsonschema/v5` | Schema validation, test-time |
 
-`CLAUDE.md` rule 7 requires a stated reason for every addition. During the
+`CONTRIBUTING.md` rule 7 requires a stated reason for every addition. During the
 release candidates a terminal-styling library was added and then removed when it
 turned out to cost thirteen transitive modules — including two pinned to
 untagged commits — for a box border and a colour downsample. The dashboard was

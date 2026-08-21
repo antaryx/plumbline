@@ -139,7 +139,7 @@ const (
 // The aging fields are recorded selectively: MinDays and MaxDays, because
 // USERS-0009 and USERS-0010 read them. The remaining four — last change, warn,
 // inactive, expire — are parsed and discarded, and will be added when a check
-// needs them. A fact field is permanent output surface (CLAUDE.md §7), and the
+// needs them. A fact field is permanent output surface (CONTRIBUTING.md, "Working style"), and the
 // cheap direction is to add one later as an optional field that does not bump
 // the version, not to carry six on the chance that something reads them.
 type ShadowEntry struct {

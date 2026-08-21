@@ -9,7 +9,7 @@ import (
 
 // Local files are the ones the operator named on the command line: the bundle
 // a scan writes, the bundle an evaluation reads. They live here because this
-// package is the only place allowed to touch the operating system (CLAUDE.md
+// package is the only place allowed to touch the operating system (CONTRIBUTING.md
 // rule 1) and that rule is enforced mechanically over every other directory.
 //
 // They are deliberately *not* part of the System interface. System is the

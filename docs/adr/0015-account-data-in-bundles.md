@@ -4,7 +4,7 @@
 
 ## Context
 
-`BUILD-RUNBOOK-v0.2.md` WP-17 requires this decision before the USERS module
+the v0.2 work plan (WP-17) requires this decision before the USERS module
 ships:
 
 > **Redaction interacts here.** `--redact` currently drops the hostname; a user

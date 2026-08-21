@@ -1,7 +1,24 @@
 # Contributing to Plumbline
 
-Thanks for considering it. This document is the human counterpart to
-`CLAUDE.md`, which is the agent-facing version of the same rules.
+Thanks for considering it. **This document is the working agreement for this
+repository, and it is not optional reading.** The rules below are cited by name
+from the source — a comment saying *"enforced by rule 3"* means rule 3 of this
+document — because they are cheap to violate, expensive to discover, and fatal
+to the project if they erode.
+
+---
+
+## The one-paragraph model
+
+Plumbline splits auditing into two halves. **Collectors** touch the operating
+system and produce typed **facts**. **Checks** are pure functions from facts to
+**findings**. Nothing else touches the OS; nothing in a check is allowed to be
+non-deterministic.
+
+This is what makes 79 checks testable from fixtures instead of from a thousand
+virtual machines, and every rule below protects it. **If a task seems to require
+breaking that split, the task has been misunderstood** — say so rather than
+working around it.
 
 ---
 
@@ -9,7 +26,7 @@ Thanks for considering it. This document is the human counterpart to
 
 Read, in order:
 
-1. `CLAUDE.md` — the invariants, and why they are not negotiable
+1. This document — the invariants, and why they are not negotiable
 2. `docs/DATA-MODEL.md` — facts, findings, bundles
 3. `docs/CHECK-AUTHORING.md` — if you are adding a check
 4. `internal/catalog/checks/sshd/sshd0002.go` — the reference implementation
@@ -29,25 +46,68 @@ make verify     # fmt, vet, tests, architectural invariants
 make test-race
 ```
 
-Go 1.23+. No other tooling required to run the tests.
+Go 1.24 is the floor `go.mod` states; releases are built with 1.25, because Go
+supports only its two newest majors and a binary that runs as root is the last
+one to build with an unmaintained toolchain. No other tooling is required.
 
 ---
 
-## The two invariants
+## The hard rules
 
-Both are enforced by `make invariants`, and CI blocks on them.
+These are not style preferences. **Violating any of them is a defect even if the
+code compiles and the tests pass.** They are numbered, the numbers are stable,
+and source comments cite them by number.
 
-**1. Only `internal/system` touches the OS.** No `os.ReadFile`, `os.Stat`,
-`exec.Command`, `/proc` reads or network calls anywhere else. Every check
-becomes untestable the moment this erodes, and untestable checks are how a
-security tool starts shipping confident wrong answers.
+**1. Only `internal/system` touches the OS.** No `os.Open`, `os.ReadFile`,
+`os.Stat`, `exec.Command`, `/proc` reads or network calls anywhere else. Every
+check becomes untestable the moment this erodes, and untestable checks are how a
+security tool starts shipping confident wrong answers. *Enforced by
+`make check-system-seam`.*
 
 **2. Checks are pure.** A check may not import `context`, `time`, `net`,
-`math/rand` or `internal/system`. It takes a `*fact.Set` and returns an
-`Outcome`. Purity is what makes findings deterministic and fixture-testable.
+`math/rand` or `internal/system`. It receives a `*fact.Set` and returns a
+`catalog.Outcome`. Purity is what makes findings deterministic and
+fixture-testable. *Enforced by `make check-check-purity`.*
 
-If a change seems to require breaking either rule, that is a design
-conversation, not a workaround. Open an issue.
+**3. A check never guesses.** If the required facts do not determine the answer,
+return `UNKNOWN` with a reason code. Returning `PASS` when you could not verify
+something is the single worst bug this codebase can contain — it converts
+ignorance into false assurance, and the user has no way to detect it. See
+*[The rule behind the rules](#the-rule-behind-the-rules)* below.
+
+**4. Check IDs are permanent.** Never renumber, never reuse a retired ID, never
+change what an existing ID means. They appear in users' suppression files and in
+bundles on disk. Allocate the next free number in the module.
+
+**5. Every check needs fixtures.** At minimum one producing `PASS` and one
+producing `FAIL`. Add `NOT_APPLICABLE` and `UNKNOWN` cases wherever the check can
+reach them. A check without both is not done. *Enforced by
+`make check-fixture-coverage`.*
+
+**6. Never invent a schema.** `internal/finding` and `internal/fact` define the
+output contract, mirrored in `schema/findings-v1.schema.json`. Adding a field is
+a schema change: raise it, do not do it silently.
+
+**7. No new dependencies without asking.** This binary runs as root. Every
+import is supply-chain surface. Standard library unless there is a stated
+reason. The dependency count is a published control — see
+`docs/SUPPLY-CHAIN.md`.
+
+**8. No shell.** `Exec` takes `argv []string`. Never construct a command string,
+never invoke `sh -c`.
+
+**9. Never claim a task is done without running `make verify`** and pasting its
+output. "It should work" is not a status report.
+
+**10. No auto-remediation.** Plumbline generates fix instructions. It never
+applies them. There is no `--fix` flag and there never will be
+(`docs/adr/0006-no-auto-remediation.md`).
+
+Rules 1, 2 and 5 are enforced by `make invariants` and CI blocks on them. The
+rest are enforced by review, which is why they are written down.
+
+If a change seems to require breaking one, that is a design conversation, not a
+workaround. Open an issue.
 
 ---
 
@@ -82,6 +142,53 @@ Full procedure in `docs/CHECK-AUTHORING.md`. In brief:
    a correct verdict with a misleading explanation is its own bug.
 6. Bump `catalog.Version`.
 7. `make verify`, paste the output in the pull request.
+
+---
+
+## Result states — when to use which
+
+| State | Use when | Never use when |
+|---|---|---|
+| `PASS` | You read the value and it meets the requirement | You could not read it |
+| `FAIL` | You read the value and it does not meet the requirement | The subject does not exist |
+| `NOT_APPLICABLE` | The subject genuinely is not present (no sshd installed) | You merely could not find it |
+| `SKIPPED` | Deliberately not run — profile, filter, privilege policy | Anything the runner decides; checks rarely emit this |
+| `UNKNOWN` | Permission denied, unparseable, truncated, ambiguous, contradictory | As a lazy default — always attach a reason code |
+
+---
+
+## Working style
+
+- **Do not scaffold ahead.** No empty packages, TODO stubs, or files for work
+  that has not started. An empty `internal/report/` is worse than nothing: it
+  looks like a decision that was never made.
+- **Do not add flags, config keys or output fields that nobody asked for.**
+  Surface area is permanent; `docs/VERSIONING.md` explains why.
+- **When a spec is ambiguous, stop and ask.** Do not resolve ambiguity by
+  choosing. A wrong guess in a security check ships a wrong verdict, and it will
+  survive review because it looks confident.
+- **When you disagree with the design, say so before implementing it.** The
+  design has been audited once already and was wrong in six places; it can be
+  wrong again.
+- **Read before writing.** `docs/DATA-MODEL.md` and `docs/FIXTURES.md` are
+  normative. If your code disagrees with them, your code is wrong until the
+  document is changed deliberately.
+
+---
+
+## What "done" means
+
+A change is done when all of the following are true and you have said so
+explicitly in the pull request:
+
+- [ ] `make verify` passes; output pasted
+- [ ] New checks have `PASS` and `FAIL` fixtures at minimum
+- [ ] `catalog.Version` bumped if the catalog changed
+- [ ] No new dependencies, or the addition was agreed in advance
+- [ ] No new files outside the change's stated scope
+- [ ] The stated acceptance criteria, quoted and each marked
+
+Anything less is "in progress", and saying otherwise wastes a review cycle.
 
 ---
 

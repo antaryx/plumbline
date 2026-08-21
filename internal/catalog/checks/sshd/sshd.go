@@ -21,7 +21,7 @@ import (
 //   - Protocol 1 was removed entirely in 7.4 (2016)
 //
 // Plumbline does not read the sshd binary's version — that needs `sshd -T`,
-// which is an Exec through the seam and is deferred (BUILD-RUNBOOK WP-18). So
+// which is an Exec through the seam and is deferred (see algorithms.go). So
 // where a default has been stable for a decade the checks encode it and say so
 // in the finding; where the effective value is a version-dependent *list*, the
 // checks refuse to assume and return UNKNOWN. See algorithms.go.
@@ -69,7 +69,7 @@ func notApplicable() catalog.Outcome {
 // The keyword is absent from every file we could read, but an Include matched
 // nothing — so the value may be sitting in a file this scan never saw. A
 // lesser tool reports the documented default here. That would be a guess
-// dressed as an observation, and CLAUDE.md rule 3 exists to forbid exactly it.
+// dressed as an observation, and CONTRIBUTING.md rule 3 exists to forbid exactly it.
 func unresolvedInclude(cfg fact.SSHDConfig, keyword string) catalog.Outcome {
 	return catalog.Outcome{
 		Result:        finding.Unknown,
@@ -130,7 +130,7 @@ func matchScopedEvidence(cfg fact.SSHDConfig, keyword string) []finding.Evidence
 // It exists because that sequence is identical in eighteen checks and the
 // failure mode of getting it wrong is silent — a check that forgot the
 // unresolved-include branch would report the built-in default as though it had
-// been observed, which is the one bug CLAUDE.md rule 3 singles out as fatal.
+// been observed, which is the one bug CONTRIBUTING.md rule 3 singles out as fatal.
 func evaluate(
 	fs *fact.Set,
 	keyword string,

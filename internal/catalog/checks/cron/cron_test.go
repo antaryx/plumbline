@@ -143,7 +143,7 @@ func TestAbsentCronIsNotApplicableEverywhere(t *testing.T) {
 // directory that refuses traversal. No check may report on the paths it
 // happened to reach: a path whose owner and mode are unknown could be the one
 // violating the rule, and a PASS drawn from the rest is the false assurance
-// CLAUDE.md rule 3 forbids.
+// CONTRIBUTING.md rule 3 forbids.
 func TestUnstattablePathsDegradeRatherThanGuess(t *testing.T) {
 	for _, check := range all {
 		got := evalCheck(t, check, "cron-denied")

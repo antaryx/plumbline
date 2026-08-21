@@ -173,7 +173,7 @@ in `tool.driver.rules`, referenced by `ruleIndex`. Each carries:
 ## Alternatives considered
 
 **`UNKNOWN` → `none`.** Rejected: it is exactly "report a cleaner host than you
-saw", which rule 3 of `CLAUDE.md` exists to prevent.
+saw", which rule 3 of `CONTRIBUTING.md` exists to prevent.
 
 **`UNKNOWN` → `error`.** Rejected: it claims a verdict the scan did not reach,
 and it would make an unprivileged scan look catastrophic rather than partial.
@@ -181,6 +181,6 @@ and it would make an unprivileged scan look catastrophic rather than partial.
 **Emit `PASS` as `level: "none"`.** Rejected: 74 informational results per host
 per run, burying the three that matter.
 
-**Use a SARIF library.** Rejected under rule 7 of `CLAUDE.md` — this binary runs
+**Use a SARIF library.** Rejected under rule 7 of `CONTRIBUTING.md` — this binary runs
 as root and every import is supply-chain surface. The subset of SARIF needed
 here is about 120 lines of structs.

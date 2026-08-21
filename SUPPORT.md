@@ -45,6 +45,6 @@ from a branch other than a release tag.
 ## Contributing
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) has the workflow.
-[`CLAUDE.md`](CLAUDE.md) has the working agreement, and it is not optional
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has the working agreement, and it is not optional
 reading — the invariants in it are cheap to violate and expensive to discover.
 Every check needs PASS and FAIL fixtures; CI blocks without them.

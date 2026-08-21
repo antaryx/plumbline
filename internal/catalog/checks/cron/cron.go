@@ -97,7 +97,7 @@ func observed(ps []fact.CronPath) []fact.CronPath {
 //
 // It is a helper rather than a convention because every check in this module
 // needs it and the failure mode of forgetting is silent: a PASS meaning "the
-// paths we could see are fine", which is exactly the false assurance CLAUDE.md
+// paths we could see are fine", which is exactly the false assurance CONTRIBUTING.md
 // rule 3 exists to prevent. The same shape as the USERS module's
 // unknownIfIncomplete, arrived at for the same reason.
 func unknownIfUnreadable(c fact.Cron, considered []fact.CronPath, pass catalog.Outcome) catalog.Outcome {

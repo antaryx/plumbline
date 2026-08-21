@@ -21,7 +21,7 @@ const fixtureRoot = "../../../../testdata/fixtures"
 //
 // SSHD-0001 is deliberately absent and must stay absent. It was never
 // allocated — the module has started at 0002 since the walking skeleton — and
-// CLAUDE.md rule 4 makes IDs permanent identifiers rather than a dense
+// CONTRIBUTING.md rule 4 makes IDs permanent identifiers rather than a dense
 // sequence. Filling the gap now would produce a 0001 newer than 0002, which
 // would be indistinguishable in a suppression file from a reused retired ID.
 var all = []catalog.Check{
@@ -179,7 +179,7 @@ func TestAbsentServerIsNotApplicableEverywhere(t *testing.T) {
 // fixture. The keyword is absent from every file we could read, but an Include
 // matched nothing — so the value may be in a file this scan never saw. A
 // lesser tool reports the documented default. That is a guess dressed as an
-// observation, and it is the single failure mode CLAUDE.md rule 3 names.
+// observation, and it is the single failure mode CONTRIBUTING.md rule 3 names.
 func TestUnresolvedIncludeIsUnknownEverywhere(t *testing.T) {
 	for _, check := range all {
 		got := evalCheck(t, check, "sshd-unresolved-include")

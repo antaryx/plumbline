@@ -5,7 +5,7 @@
 // directories. Nine independent walks of a production host is the design
 // mistake this package exists to prevent, so consumers register their
 // questions up front and the walker answers every one of them per inode in
-// one pass (ARCHITECTURE.md §3.2, BUILD-RUNBOOK-v0.2.md WP-15).
+// one pass (docs/ARCHITECTURE.md §3.2).
 //
 // There are two kinds of question, and the difference is memory, not taste:
 //

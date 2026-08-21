@@ -8,7 +8,7 @@ WP-12 gave the CLI two jobs that touch the filesystem for reasons that have
 nothing to do with auditing: `collect -o bundle.plb` writes a bundle, and
 `eval bundle.plb` reads one back.
 
-CLAUDE.md rule 1 says only `internal/system` touches the operating system, and
+CONTRIBUTING.md rule 1 says only `internal/system` touches the operating system, and
 `make check-system-seam` enforces it over every other directory mechanically.
 The first implementation of `--config` called `os.Stat` from `internal/cli` and
 the gate failed the build, which is precisely what it is for.

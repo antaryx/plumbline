@@ -23,13 +23,14 @@ import (
 // default KexAlgorithms list in 8.2 — and they differ between distributions,
 // because Red Hat's crypto-policies subsystem rewrites them at build and at
 // runtime. Plumbline does not read the sshd binary's version: that needs
-// `sshd -T`, which is an Exec through the seam and is deferred (BUILD-RUNBOOK
-// WP-18 hazards).
+// `sshd -T`, which is an Exec through the seam and is deferred: running the
+// daemon's own binary to ask what it thinks is a different trust model from
+// reading its configuration, and it is not one this tool has taken on.
 //
 // So when the keyword is absent, the honest answer is that we do not know what
 // is enabled. That is UNKNOWN, not PASS. Reporting PASS would be asserting the
 // contents of a list we never saw, on a version we never read — which is
-// precisely the false assurance CLAUDE.md rule 3 exists to forbid, and it would
+// precisely the false assurance CONTRIBUTING.md rule 3 exists to forbid, and it would
 // be wrong on any host still running a pre-7.6 build.
 //
 // The same logic applies to the relative forms. sshd_config lets a value begin

@@ -14,7 +14,7 @@ having one.
 
 This is the project's **first external dependency**. Everything to date is
 standard library, and that is not an accident: this binary runs as root, so
-every import is supply-chain surface (CLAUDE.md rule 7). The bar for adding one
+every import is supply-chain surface (CONTRIBUTING.md rule 7). The bar for adding one
 is therefore "the standard library cannot do this and the cost of doing it
 ourselves is worse than the cost of the dependency".
 

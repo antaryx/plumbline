@@ -1,7 +1,7 @@
 // Package system is the single seam between Plumbline and the operating
 // system. Nothing outside this package may call os.Open, os.ReadFile,
 // exec.Command, or read /proc directly. That rule is what makes every check
-// testable against fixtures; see CLAUDE.md and docs/FIXTURES.md.
+// testable against fixtures; see CONTRIBUTING.md and docs/FIXTURES.md.
 //
 // This is the v0.1 subset of the interface described in ARCHITECTURE.md §2.1.
 // Methods are added as collectors need them, never speculatively.

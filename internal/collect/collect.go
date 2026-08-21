@@ -1,7 +1,7 @@
 // Package collect owns the collector half of the architecture: the code that
 // touches the operating system, through system.System and nothing else, and
 // turns it into typed facts. Checks never appear here; collectors never make a
-// judgement. See CLAUDE.md §1.
+// judgement. See CONTRIBUTING.md, "The one-paragraph model".
 //
 // This file defines what a collector is and how collectors are ordered. The
 // runner that executes them is in runner.go.

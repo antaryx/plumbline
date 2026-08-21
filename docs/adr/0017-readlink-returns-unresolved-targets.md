@@ -4,7 +4,7 @@
 
 ## Context
 
-`BUILD-RUNBOOK-v0.2.md` WP-21 requires evaluating systemd service state
+the v0.2 work plan (WP-21) requires evaluating systemd service state
 offline. Plumbline never talks to dbus and never runs `systemctl`, so the
 question "is this service enabled" has to be answered from the filesystem.
 
@@ -73,7 +73,7 @@ in code that compiles, passes review and is wrong.
 Removing it is not a schema change. `system.FileInfo` never reaches a fact or a
 bundle; `fact.FSRow`, `fact.CronPath` and `fact.UnitFile` are each a trimmed
 copy carrying only what a check may read, because a check may not import
-`internal/system` at all (CLAUDE.md rule 2).
+`internal/system` at all (CONTRIBUTING.md rule 2).
 
 Populating it instead was rejected: it would put a `readlink` syscall behind
 every `Stat` and every `ReadDir` entry, including the shared filesystem walker,

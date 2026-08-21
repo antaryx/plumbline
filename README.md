@@ -382,7 +382,7 @@ hang the scan. See [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
 
 | Contributing | |
 |---|---|
-| [`CLAUDE.md`](CLAUDE.md) | The working agreement — read before any change |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | The working agreement — read before any change |
 | [`docs/CHECK-AUTHORING.md`](docs/CHECK-AUTHORING.md) | How to add a check, end to end |
 | [`docs/FIXTURES.md`](docs/FIXTURES.md) | Fixture format, the test corpus, golden bundles |
 | [`docs/VERSIONING.md`](docs/VERSIONING.md) | Four version numbers and their contracts |

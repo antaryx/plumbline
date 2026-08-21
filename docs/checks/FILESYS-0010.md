@@ -53,7 +53,7 @@ predicate. That shape cannot answer this question, for two independent reasons:
    users.
 
 A uid threshold instead of a join — "anything above 1000 that is not in passwd"
-— would be a guess, and CLAUDE.md rule 3 forbids guessing.
+— would be a guess, and CONTRIBUTING.md rule 3 forbids guessing.
 
 WP-25 added a second kind of registered question, the **`Tally`**. It maps each
 inode to a key, counts the keys, and keeps one exemplar per key. Memory is

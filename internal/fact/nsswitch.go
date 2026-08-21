@@ -12,7 +12,7 @@ const NSSwitchID ID = "users.nsswitch"
 // They govern what happens *between* two sources, and no check in this project
 // asks about them; what every caller wants is the set of places an identity
 // could come from. Recording them and never reading them would be output
-// surface bought for nothing (CLAUDE.md §7).
+// surface bought for nothing (CONTRIBUTING.md, "Working style").
 type NSSwitchDB struct {
 	Name string `json:"name"`
 	// Sources are the service names in the order glibc consults them:

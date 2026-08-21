@@ -29,7 +29,7 @@
 // that matter, and a security tab that is mostly noise is one nobody opens.
 //
 // No SARIF library is imported. The binary runs as root and every import is
-// supply-chain surface (CLAUDE.md rule 7); the subset needed here is structs
+// supply-chain surface (CONTRIBUTING.md rule 7); the subset needed here is structs
 // and encoding/json.
 package sarif
 

@@ -224,7 +224,7 @@ not a number is also nil: it is not a valid aging value, and inventing one from
 it would be a fabricated policy.
 
 The four remaining shadow fields — last change, warn, inactive and expire — are
-parsed and discarded. A fact field is permanent output surface (CLAUDE.md §7),
+parsed and discarded. A fact field is permanent output surface (CONTRIBUTING.md, "Working style"),
 and adding one later as an optional field costs nothing, while carrying six on
 the chance that something reads them is six fields that travel in every bundle.
 

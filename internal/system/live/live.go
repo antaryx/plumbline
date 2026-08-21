@@ -260,7 +260,7 @@ func (s *System) Exec(ctx context.Context, argv []string) (system.ExecResult, er
 	// G204 is the whole point of this function rather than a defect in it: the
 	// seam exists so that everything above it can run a command without ever
 	// building one. argv arrives already split, it is never assembled from a
-	// string, and CLAUDE.md rule 8 forbids `sh -c` anywhere in the tree — so
+	// string, and CONTRIBUTING.md rule 8 forbids `sh -c` anywhere in the tree — so
 	// there is no shell to inject into. The environment is fixed above.
 	//nolint:gosec // execution of parameterized argv is safe by design and required by the seam
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)

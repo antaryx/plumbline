@@ -21,7 +21,7 @@ import (
 // root, two of them pinned to untagged commits. Four direct and indirect
 // dependencies became seventeen for a presentation-layer feature.
 //
-// That is the wrong trade for this program. CLAUDE.md rule 7 says every import
+// That is the wrong trade for this program. CONTRIBUTING.md rule 7 says every import
 // is supply-chain surface and the standard library is the default; a security
 // auditor that asks to be trusted with root is the last place to spend that
 // budget on decoration. The three things the library did are the three

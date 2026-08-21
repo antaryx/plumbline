@@ -201,7 +201,7 @@ func (f Firewall) Kinds() []FirewallKind {
 // A check consults this before drawing any negative conclusion: a file that
 // could not be read might be the firewall, and reporting "no firewall is
 // configured" over the paths that happened to be readable is the false
-// assurance CLAUDE.md rule 3 forbids.
+// assurance CONTRIBUTING.md rule 3 forbids.
 func (f Firewall) Unreadable() []FirewallSource {
 	var out []FirewallSource
 	for _, s := range f.Sources {
