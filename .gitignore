@@ -35,6 +35,11 @@ suppress.json
 suppressions.json
 plumbline-suppress*.json
 
+# WSL/NTFS alternate-data-stream markers. They appear beside any file copied
+# in from Windows, carry nothing but a download-zone id, and are pure noise in
+# a repository.
+*:Zone.Identifier
+
 # Editors
 .vscode/
 .idea/
