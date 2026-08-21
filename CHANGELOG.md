@@ -11,6 +11,41 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+### Removed
+- **`lipgloss` and its thirteen transitive modules (RC-5).** The dashboard RC-4
+  introduced is unchanged — byte-identical output — and now draws itself with
+  `strings.Builder`, the package's existing colour helpers and hardcoded box
+  characters. **Direct and indirect dependencies are back to four.**
+
+  What the library contributed was a box border, a horizontal join and a
+  hex-to-terminal downsample. What it cost was termenv, go-colorful,
+  go-runewidth, uniseg, terminfo, x/ansi, x/cellbuf, colorprofile and more, in
+  a binary that runs as root, two of them pinned to untagged commits. It also
+  had to be actively restrained: its package-level styles inspect `os.Stdout`
+  at first use, which violates the OS seam and makes output depend on what the
+  terminal answered. The replacement cannot do that, because it is only
+  strings.
+
+  This package already had the hard part — `visibleWidth`, which measures a
+  string containing SGR escapes, and which is the thing `text/tabwriter` cannot
+  do.
+
+### Added
+- **Generated reference documentation (RC-5).** `tools/gendocs` writes
+  `docs/MODULE-CATALOG.md` and `docs/CHECK-REFERENCE.md` from `cli.Catalog()` —
+  the same assembly the binary evaluates with, so there is no second list of
+  checks to drift. `make docs` regenerates them; `make invariants` fails if the
+  committed files have drifted, so a check added without regenerating is a
+  failed build rather than a discovery six months later.
+
+- **`.goreleaser.yaml` (RC-5).** linux/amd64 and linux/arm64, `.deb` and `.rpm`
+  via nfpms, an SPDX SBOM per artifact via syft, and keyless cosign signing of
+  the checksum file — no private key to leak, and a certificate that records
+  the workflow and commit that produced the artifact. Builds are `CGO_ENABLED=0`
+  and `-trimpath`, with the build date taken from the commit rather than the
+  clock so two builds of one tag are byte-identical. `make verify` runs as a
+  before-hook: nothing ships from a tree that would not pass review.
+
 ### Changed
 - **The scan summary is a dashboard (RC-4).** A posture gauge across the grid
   and PASS / FAIL / UNKNOWN / SKIPPED cards beneath it, drawn with
@@ -27,10 +62,9 @@ explanation in this file is a defect.
   colour decision `useColor` already made. With colour off it is given the
   Ascii profile: the boxes still draw and nothing is painted.
 
-  **This adds 13 modules to a binary that runs as root**, taking the dependency
-  count from 4 to 17, two of them untagged pseudo-versions. That is a real
-  supply-chain expansion for a presentation-layer feature and is recorded here
-  rather than buried in `go.mod`.
+  It shipped on `lipgloss`, which took the dependency count from 4 to 17. That
+  was reversed in RC-5 before either reached a release; the entry above records
+  what it cost and why.
 
 ### Fixed
 - **`lipgloss.Width` is the inner width, not the total.** The first draft of

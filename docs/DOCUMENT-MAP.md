@@ -156,12 +156,12 @@ release.
 |---|---|---|---|
 | Tier 0 | 8 | 9 | `SUPPORT.md` |
 | Tier 1 | 5 | 6 | `REQUIREMENTS.md` |
-| Tier 2 | 5 | 13 | `DESIGN.md`, `COLLECTORS.md`, `CONFIG-REFERENCE.md`, `OUTPUT-FORMATS.md`, `PLATFORM-SUPPORT.md`, `PERFORMANCE.md`, `MODULE-CATALOG.md`, `CHECK-REFERENCE.md` |
+| Tier 2 | 7 | 13 | `DESIGN.md`, `COLLECTORS.md`, `CONFIG-REFERENCE.md`, `OUTPUT-FORMATS.md`, `PLATFORM-SUPPORT.md`, `PERFORMANCE.md` |
 | Tier 3 | 3 | 5 | `SUPPLY-CHAIN.md`, `PRIVACY.md` |
 | Tier 4 | 2 | 7 | `RELEASE-PROCESS.md`, `TESTING.md`, `CI-CD.md`, `SUPPORT-POLICY.md`, `runbooks` |
 | Tier 5 | 0 | 7 | `INSTALLATION.md`, `QUICKSTART.md`, `USAGE.md`, `CI-INTEGRATION.md`, `FALSE-POSITIVES.md`, `TROUBLESHOOTING.md`, `FAQ.md` |
 
-**24 documents outstanding.** The four the RC touches — `README.md`,
+**22 documents outstanding.** The four the RC touches — `README.md`,
 `CLI-SPEC.md`, `DATA-MODEL.md`, `CHANGELOG.md` — are current with every shipped
 feature through `v1.0.0-rc1`: suppressions, `diff`, SARIF, `explain`, profiles,
 golden bundles, the progress indicator and signal handling.
@@ -169,11 +169,9 @@ golden bundles, the progress indicator and signal handling.
 The gap is dominated by two clusters, and neither is a writing job that can be
 faked from the source:
 
-- **Tier 2 generated references.** `MODULE-CATALOG.md` and `CHECK-REFERENCE.md`
-  are marked *generated* by this map and must stay that way. `plumbline explain`
-  already renders exactly this material for one check; the remaining work is a
-  generator over the whole catalog plus a CI check that the committed output
-  matches, not prose.
+- ~~**Tier 2 generated references.**~~ Done in RC-5: `tools/gendocs` writes both
+  from `cli.Catalog()`, and `make invariants` fails if the committed output has
+  drifted from the catalog. Neither file is ever hand-edited.
 - **Tier 5 user documentation.** Seven documents, none started. `README.md`
   currently carries their load, which is why it is 330 lines and still growing.
 

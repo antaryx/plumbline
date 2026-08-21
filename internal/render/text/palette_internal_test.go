@@ -19,14 +19,15 @@ import (
 	"github.com/antaryx/plumbline/internal/finding"
 )
 
-// TestTheTwoHalvesOfTheReportAgreeOnTheirColours.
+// TestTheSGRConstantsEncodeTheDeclaredPalette.
 //
-// The check lines are painted with the ANSI constants in text.go; the summary
-// dashboard is painted by lipgloss from the hex constants in summary.go. They
-// are two mechanisms rendering one report, and nothing but this test stops
-// somebody tuning one green and leaving the other — which nobody would notice
-// in review and everybody would notice on a terminal.
-func TestTheTwoHalvesOfTheReportAgreeOnTheirColours(t *testing.T) {
+// The palette is declared in hex in summary.go, because that is the form a
+// designer reads and the form the documentation quotes. What the terminal
+// actually receives is the SGR constants in text.go, hand-written escape
+// sequences with six decimal numbers in them. Nothing but this test says the
+// two are the same colour, and a transposed digit in "38;2;34;197;94" is
+// invisible in review and wrong on every terminal.
+func TestTheSGRConstantsEncodeTheDeclaredPalette(t *testing.T) {
 	for _, c := range []struct {
 		what string
 		ansi string
@@ -37,8 +38,8 @@ func TestTheTwoHalvesOfTheReportAgreeOnTheirColours(t *testing.T) {
 		{"unknown", ansiYellow, hexUnknown},
 	} {
 		if got := hexOf(c.ansi); !strings.EqualFold(got, c.hex) {
-			t.Errorf("%s: the check lines paint %s and the dashboard paints %s; "+
-				"one palette was changed and the other was not", c.what, got, c.hex)
+			t.Errorf("%s: the escape sequence encodes %s but the palette declares %s; "+
+				"one was changed and the other was not", c.what, got, c.hex)
 		}
 	}
 }
@@ -98,8 +99,7 @@ func TestEveryDiffCategoryColourIsDistinct(t *testing.T) {
 //
 // It matters more than it looks. --output writes a file an operator reads
 // months later in something that is not a terminal, and a dashboard border is
-// no excuse for escape sequences in it. lipgloss is given the Ascii profile
-// for exactly this and the assertion is that it honoured it.
+// no excuse for escape sequences in it.
 func TestColourOffEmitsNoEscapes(t *testing.T) {
 	s := newStyles(false)
 
@@ -119,8 +119,8 @@ func TestColourOffEmitsNoEscapes(t *testing.T) {
 }
 
 // TestColourOnEmitsTwentyFourBitColour is the other half: the hex palette
-// reaches the terminal rather than being silently downsampled to nothing by a
-// renderer that probed an environment it should never have looked at.
+// reaches the terminal rather than being lost somewhere between the constant
+// and the box.
 func TestColourOnEmitsTwentyFourBitColour(t *testing.T) {
 	s := newStyles(true)
 
@@ -132,12 +132,12 @@ func TestColourOnEmitsTwentyFourBitColour(t *testing.T) {
 // TestTheDashboardFitsTheGrid is the test this file exists for as much as the
 // palette is.
 //
-// The first draft of the dashboard assumed lipgloss.Width was the total width
-// of a box. It is the *inner* width and the border is added on top, so every
-// box ran two columns over the grid — invisible on a wide terminal and a
-// wrapped mess on the eighty-column one the grid exists for, which is where
-// nobody was looking. Arithmetic that is checked by eye on the developer's own
-// terminal is arithmetic that is not checked.
+// An earlier draft got the box arithmetic wrong by two columns per box —
+// invisible on a wide terminal and a wrapped mess on the eighty-column one the
+// grid exists for, which is where nobody was looking. Arithmetic that is
+// checked by eye on the developer's own terminal is arithmetic that is not
+// checked, and the drawing is now this package's own so there is no library
+// left to blame for the convention.
 func TestTheDashboardFitsTheGrid(t *testing.T) {
 	s := newStyles(false)
 

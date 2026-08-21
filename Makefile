@@ -52,7 +52,7 @@ vet:
 .PHONY: invariants
 ## invariants: architectural rules that a compiler cannot enforce but that the
 ## whole test strategy depends on. See CLAUDE.md.
-invariants: check-system-seam check-check-purity check-fixture-coverage
+invariants: check-system-seam check-check-purity check-fixture-coverage check-docs-current
 
 .PHONY: check-system-seam
 ## Nothing outside internal/system may touch the OS directly. Violating this
@@ -133,9 +133,18 @@ golden-update:
 	@git --no-pager diff --stat -- testdata/bundles || true
 	@echo "read the diff: git diff testdata/bundles"
 
+.PHONY: check-docs-current
+## docs/MODULE-CATALOG.md and docs/CHECK-REFERENCE.md are generated from the
+## catalog and must not drift from it. Wrong reference documentation for a
+## security tool is worse than none, because somebody acts on it.
+check-docs-current:
+	@go run ./tools/gendocs -check
+
 .PHONY: docs
+## docs: regenerate MODULE-CATALOG.md and CHECK-REFERENCE.md from the catalog.
+## Run it after adding a check; `make verify` fails until you do.
 docs:
-	@echo "regenerate MODULE-CATALOG.md and CHECK-REFERENCE.md (v0.3 WP)"
+	@go run ./tools/gendocs
 
 .PHONY: clean
 clean:

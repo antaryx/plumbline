@@ -29,6 +29,14 @@ import (
 	_ "github.com/antaryx/plumbline/internal/collect/walker"
 )
 
+// Catalog is the catalog this binary carries.
+//
+// Exported so that tools/gendocs can generate the reference documentation from
+// the same assembly the binary evaluates with. There is deliberately no second
+// list of checks anywhere: a generated document built from a copy of the
+// catalog is a document that describes a catalog nobody runs.
+func Catalog() *catalog.Catalog { return buildCatalog() }
+
 // buildCatalog assembles the catalog this binary carries.
 //
 // The list is explicit rather than discovered. A check that is in the tree but

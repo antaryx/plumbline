@@ -415,15 +415,30 @@ Linux distributions. Resolved explicitly and bounded, without weakening the
 seam, through one shared `collect.ResolveLinks` that the AUTH collector's Red
 Hat PAM walk now uses too.
 
+#### RC-4/RC-5. Terminal dashboard, and the supply chain it nearly cost — **DONE (2026-08-21)**
+
+The scan summary became a posture gauge and four count cards. It shipped on
+`lipgloss` in RC-4 and was rewritten without it in RC-5: the library
+contributed a box border, a horizontal join and a hex downsample, and cost
+thirteen modules in a binary that runs as root. **The dependency count is back
+to four and the dashboard is byte-identical.** `internal/render/text` already
+had the hard part — `visibleWidth`, which measures a string containing SGR
+escapes.
+
+RC-5 also added `tools/gendocs`, which generates `MODULE-CATALOG.md` and
+`CHECK-REFERENCE.md` from `cli.Catalog()` with a freshness gate in
+`make invariants`, and `.goreleaser.yaml` covering linux/amd64 and linux/arm64,
+`.deb` and `.rpm` packages, syft SBOMs and keyless cosign signing.
+
 #### Still open in the RC phase
 
-- **Documentation.** `DOCUMENT-MAP.md` now carries an audited status table:
-  **24 v1-gating documents are outstanding**, dominated by the Tier 2 generated
-  references (`MODULE-CATALOG.md`, `CHECK-REFERENCE.md` — a generator over the
-  catalog plus a CI freshness check, not prose) and all seven of Tier 5.
-  `README.md` is currently carrying Tier 5's load.
+- **Documentation.** `DOCUMENT-MAP.md` carries an audited status table:
+  **22 v1-gating documents are outstanding**, now dominated by all seven of
+  Tier 5. `README.md` is currently carrying their load.
 - **`PERFORMANCE.md`** separately, because its numbers must be measured on a
   defined reference host before they can be written down.
+- **A release workflow** that runs GoReleaser on a tag. The configuration is
+  committed and validated; nothing invokes it yet.
 
 ---
 
