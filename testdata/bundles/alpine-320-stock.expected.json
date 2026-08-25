@@ -3,8 +3,8 @@
   "schema": "findings/v1",
   "catalog_version": 15,
   "scan": {
-    "started": "2026-08-21T04:37:08.382949289Z",
-    "finished": "2026-08-21T04:37:08.389625195Z",
+    "started": "2026-08-25T21:04:24.637165943Z",
+    "finished": "2026-08-25T21:04:24.693757899Z",
     "root": "",
     "euid": 0,
     "profile": "default",
@@ -14,20 +14,20 @@
   },
   "summary": {
     "counts": {
-      "pass": 27,
-      "fail": 7,
+      "pass": 30,
+      "fail": 8,
       "not_applicable": 45,
       "skipped": 0,
-      "unknown": 4,
+      "unknown": 0,
       "total": 83
     },
     "by_severity": {
       "HIGH": 1,
-      "LOW": 2,
+      "LOW": 3,
       "MEDIUM": 4
     },
-    "posture": 83.9506172839506,
-    "coverage": 89.47368421052632
+    "posture": 84.0909090909091,
+    "coverage": 100
   },
   "findings": [
     {
@@ -571,42 +571,79 @@
     {
       "check_id": "MEMORY-0001",
       "module": "MEMORY",
-      "result": "UNKNOWN",
+      "result": "PASS",
       "severity": "MEDIUM",
       "base_severity": "MEDIUM",
-      "unknown_reason": "fact_not_collected",
       "fingerprint": "050f95b25e94ed5be6dfc1e57b2b9285",
-      "detail": "required fact memory.elf was not collected"
+      "detail": "All 2 probed binaries are position-independent (ET_DYN), so ASLR can randomise their load addresses.",
+      "evidence": [
+        {
+          "source": "/usr/bin/crontab -\u003e /bin/busybox",
+          "excerpt": "ELF type ET_DYN; sha256 b7de36c48f4c8b08a256200f3d6ccf20b9aade3219e356563a5ec3f12db78d7b"
+        },
+        {
+          "source": "/usr/bin/passwd -\u003e /bin/busybox",
+          "excerpt": "ELF type ET_DYN; sha256 b7de36c48f4c8b08a256200f3d6ccf20b9aade3219e356563a5ec3f12db78d7b"
+        }
+      ]
     },
     {
       "check_id": "MEMORY-0002",
       "module": "MEMORY",
-      "result": "UNKNOWN",
+      "result": "PASS",
       "severity": "MEDIUM",
       "base_severity": "MEDIUM",
-      "unknown_reason": "fact_not_collected",
       "fingerprint": "b7728b439a3c649aac3959221a7f6471",
-      "detail": "required fact memory.elf was not collected"
+      "detail": "All 2 probed binaries use full RELRO, so their relocation tables are resolved and mapped read-only before the program starts.",
+      "evidence": [
+        {
+          "source": "/usr/bin/crontab -\u003e /bin/busybox",
+          "excerpt": "PT_GNU_RELRO=true BIND_NOW=true; sha256 b7de36c48f4c8b08a256200f3d6ccf20b9aade3219e356563a5ec3f12db78d7b"
+        },
+        {
+          "source": "/usr/bin/passwd -\u003e /bin/busybox",
+          "excerpt": "PT_GNU_RELRO=true BIND_NOW=true; sha256 b7de36c48f4c8b08a256200f3d6ccf20b9aade3219e356563a5ec3f12db78d7b"
+        }
+      ]
     },
     {
       "check_id": "MEMORY-0003",
       "module": "MEMORY",
-      "result": "UNKNOWN",
+      "result": "PASS",
       "severity": "MEDIUM",
       "base_severity": "MEDIUM",
-      "unknown_reason": "fact_not_collected",
       "fingerprint": "d4dd5bc8b0b29e0c593636b49ec8898d",
-      "detail": "required fact memory.elf was not collected"
+      "detail": "All 2 probed binaries reference __stack_chk_fail, so their stack frames carry a canary.",
+      "evidence": [
+        {
+          "source": "/usr/bin/crontab -\u003e /bin/busybox",
+          "excerpt": "396 symbols read; sha256 b7de36c48f4c8b08a256200f3d6ccf20b9aade3219e356563a5ec3f12db78d7b"
+        },
+        {
+          "source": "/usr/bin/passwd -\u003e /bin/busybox",
+          "excerpt": "396 symbols read; sha256 b7de36c48f4c8b08a256200f3d6ccf20b9aade3219e356563a5ec3f12db78d7b"
+        }
+      ]
     },
     {
       "check_id": "MEMORY-0004",
       "module": "MEMORY",
-      "result": "UNKNOWN",
+      "result": "FAIL",
       "severity": "LOW",
       "base_severity": "LOW",
-      "unknown_reason": "fact_not_collected",
-      "fingerprint": "e8774b5dd212de854088cff9fc7002df",
-      "detail": "required fact memory.elf was not collected"
+      "subject": "/usr/bin/crontab",
+      "fingerprint": "8964912b58154e01a5ce7f662f4dbd6c",
+      "detail": "2 probed binaries are not built with _FORTIFY_SOURCE, calling fortifiable libc functions with no _chk variant linked: /usr/bin/crontab -\u003e /bin/busybox, /usr/bin/passwd -\u003e /bin/busybox.",
+      "evidence": [
+        {
+          "source": "/usr/bin/crontab -\u003e /bin/busybox",
+          "excerpt": "19 fortifiable call(s), no _chk variant; 396 symbols read; sha256 b7de36c48f4c8b08a256200f3d6ccf20b9aade3219e356563a5ec3f12db78d7b"
+        },
+        {
+          "source": "/usr/bin/passwd -\u003e /bin/busybox",
+          "excerpt": "19 fortifiable call(s), no _chk variant; 396 symbols read; sha256 b7de36c48f4c8b08a256200f3d6ccf20b9aade3219e356563a5ec3f12db78d7b"
+        }
+      ]
     },
     {
       "check_id": "NETWORK-0001",

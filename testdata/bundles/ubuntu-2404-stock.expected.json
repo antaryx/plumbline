@@ -3,19 +3,22 @@
   "schema": "findings/v1",
   "catalog_version": 15,
   "scan": {
-    "started": "2026-08-21T04:32:36.140921599Z",
-    "finished": "2026-08-21T04:32:36.183583633Z",
+    "started": "2026-08-25T21:04:47.054771112Z",
+    "finished": "2026-08-25T21:04:47.110869068Z",
     "root": "",
     "euid": 0,
-    "profile": "default"
+    "profile": "default",
+    "host": {
+      "os_version": "Ubuntu 24.04.4 LTS"
+    }
   },
   "summary": {
     "counts": {
-      "pass": 35,
+      "pass": 39,
       "fail": 12,
       "not_applicable": 32,
       "skipped": 0,
-      "unknown": 4,
+      "unknown": 0,
       "total": 83
     },
     "by_severity": {
@@ -23,8 +26,8 @@
       "LOW": 4,
       "MEDIUM": 5
     },
-    "posture": 79.27927927927928,
-    "coverage": 92.15686274509804
+    "posture": 80.50847457627118,
+    "coverage": 100
   },
   "findings": [
     {
@@ -623,42 +626,190 @@
     {
       "check_id": "MEMORY-0001",
       "module": "MEMORY",
-      "result": "UNKNOWN",
+      "result": "PASS",
       "severity": "MEDIUM",
       "base_severity": "MEDIUM",
-      "unknown_reason": "fact_not_collected",
       "fingerprint": "050f95b25e94ed5be6dfc1e57b2b9285",
-      "detail": "required fact memory.elf was not collected"
+      "detail": "All 9 probed binaries are position-independent (ET_DYN), so ASLR can randomise their load addresses.",
+      "evidence": [
+        {
+          "source": "/usr/bin/chfn",
+          "excerpt": "ELF type ET_DYN; sha256 9d8e1c2f1c89f808206c65982fa058369de1af7be19ee325a2f3e95c48ab8052"
+        },
+        {
+          "source": "/usr/bin/chsh",
+          "excerpt": "ELF type ET_DYN; sha256 d7aad828e159b1d570f643d2cbe44d551a5b9bc9b2870dab3fd5cbc5260e749d"
+        },
+        {
+          "source": "/usr/bin/gpasswd",
+          "excerpt": "ELF type ET_DYN; sha256 b9ef1bde0bde1b6839a0f55d43a606645723436932f072e3bf71e4c1a0ed4c06"
+        },
+        {
+          "source": "/usr/bin/mount",
+          "excerpt": "ELF type ET_DYN; sha256 ac5aa68d34add5a33ae81ac3a971aea677c4032d768aab5a3c4c2707f728885e"
+        },
+        {
+          "source": "/usr/bin/newgrp",
+          "excerpt": "ELF type ET_DYN; sha256 572ab15948df3969e929b902641c3a42e76dce7d71a22fbc58011ca89d8d965e"
+        },
+        {
+          "source": "/usr/bin/passwd",
+          "excerpt": "ELF type ET_DYN; sha256 ca3fc307dda8259f585bb38c70e82bd15af61e8574cd0d6e430292e328bb3477"
+        },
+        {
+          "source": "/usr/bin/su",
+          "excerpt": "ELF type ET_DYN; sha256 c74311fe5636b7d7f9a56239fa8adeeab12ba86fe7d41b91afa85bf9bbdae78b"
+        },
+        {
+          "source": "/usr/bin/umount",
+          "excerpt": "ELF type ET_DYN; sha256 2ea59b57d249d58c64b028b2acf6118b62dc3ba89012a1cf4ff5f5a9891f513d"
+        },
+        {
+          "source": "/usr/sbin/unix_chkpwd",
+          "excerpt": "ELF type ET_DYN; sha256 4ec01f27b6b198c3612f50a05d246102f00bf0ccb6be3516f9f60f4805556675"
+        }
+      ]
     },
     {
       "check_id": "MEMORY-0002",
       "module": "MEMORY",
-      "result": "UNKNOWN",
+      "result": "PASS",
       "severity": "MEDIUM",
       "base_severity": "MEDIUM",
-      "unknown_reason": "fact_not_collected",
       "fingerprint": "b7728b439a3c649aac3959221a7f6471",
-      "detail": "required fact memory.elf was not collected"
+      "detail": "All 9 probed binaries use full RELRO, so their relocation tables are resolved and mapped read-only before the program starts.",
+      "evidence": [
+        {
+          "source": "/usr/bin/chfn",
+          "excerpt": "PT_GNU_RELRO=true BIND_NOW=true; sha256 9d8e1c2f1c89f808206c65982fa058369de1af7be19ee325a2f3e95c48ab8052"
+        },
+        {
+          "source": "/usr/bin/chsh",
+          "excerpt": "PT_GNU_RELRO=true BIND_NOW=true; sha256 d7aad828e159b1d570f643d2cbe44d551a5b9bc9b2870dab3fd5cbc5260e749d"
+        },
+        {
+          "source": "/usr/bin/gpasswd",
+          "excerpt": "PT_GNU_RELRO=true BIND_NOW=true; sha256 b9ef1bde0bde1b6839a0f55d43a606645723436932f072e3bf71e4c1a0ed4c06"
+        },
+        {
+          "source": "/usr/bin/mount",
+          "excerpt": "PT_GNU_RELRO=true BIND_NOW=true; sha256 ac5aa68d34add5a33ae81ac3a971aea677c4032d768aab5a3c4c2707f728885e"
+        },
+        {
+          "source": "/usr/bin/newgrp",
+          "excerpt": "PT_GNU_RELRO=true BIND_NOW=true; sha256 572ab15948df3969e929b902641c3a42e76dce7d71a22fbc58011ca89d8d965e"
+        },
+        {
+          "source": "/usr/bin/passwd",
+          "excerpt": "PT_GNU_RELRO=true BIND_NOW=true; sha256 ca3fc307dda8259f585bb38c70e82bd15af61e8574cd0d6e430292e328bb3477"
+        },
+        {
+          "source": "/usr/bin/su",
+          "excerpt": "PT_GNU_RELRO=true BIND_NOW=true; sha256 c74311fe5636b7d7f9a56239fa8adeeab12ba86fe7d41b91afa85bf9bbdae78b"
+        },
+        {
+          "source": "/usr/bin/umount",
+          "excerpt": "PT_GNU_RELRO=true BIND_NOW=true; sha256 2ea59b57d249d58c64b028b2acf6118b62dc3ba89012a1cf4ff5f5a9891f513d"
+        },
+        {
+          "source": "/usr/sbin/unix_chkpwd",
+          "excerpt": "PT_GNU_RELRO=true BIND_NOW=true; sha256 4ec01f27b6b198c3612f50a05d246102f00bf0ccb6be3516f9f60f4805556675"
+        }
+      ]
     },
     {
       "check_id": "MEMORY-0003",
       "module": "MEMORY",
-      "result": "UNKNOWN",
+      "result": "PASS",
       "severity": "MEDIUM",
       "base_severity": "MEDIUM",
-      "unknown_reason": "fact_not_collected",
       "fingerprint": "d4dd5bc8b0b29e0c593636b49ec8898d",
-      "detail": "required fact memory.elf was not collected"
+      "detail": "All 9 probed binaries reference __stack_chk_fail, so their stack frames carry a canary.",
+      "evidence": [
+        {
+          "source": "/usr/bin/chfn",
+          "excerpt": "142 symbols read; sha256 9d8e1c2f1c89f808206c65982fa058369de1af7be19ee325a2f3e95c48ab8052"
+        },
+        {
+          "source": "/usr/bin/chsh",
+          "excerpt": "126 symbols read; sha256 d7aad828e159b1d570f643d2cbe44d551a5b9bc9b2870dab3fd5cbc5260e749d"
+        },
+        {
+          "source": "/usr/bin/gpasswd",
+          "excerpt": "135 symbols read; sha256 b9ef1bde0bde1b6839a0f55d43a606645723436932f072e3bf71e4c1a0ed4c06"
+        },
+        {
+          "source": "/usr/bin/mount",
+          "excerpt": "151 symbols read; sha256 ac5aa68d34add5a33ae81ac3a971aea677c4032d768aab5a3c4c2707f728885e"
+        },
+        {
+          "source": "/usr/bin/newgrp",
+          "excerpt": "92 symbols read; sha256 572ab15948df3969e929b902641c3a42e76dce7d71a22fbc58011ca89d8d965e"
+        },
+        {
+          "source": "/usr/bin/passwd",
+          "excerpt": "130 symbols read; sha256 ca3fc307dda8259f585bb38c70e82bd15af61e8574cd0d6e430292e328bb3477"
+        },
+        {
+          "source": "/usr/bin/su",
+          "excerpt": "134 symbols read; sha256 c74311fe5636b7d7f9a56239fa8adeeab12ba86fe7d41b91afa85bf9bbdae78b"
+        },
+        {
+          "source": "/usr/bin/umount",
+          "excerpt": "121 symbols read; sha256 2ea59b57d249d58c64b028b2acf6118b62dc3ba89012a1cf4ff5f5a9891f513d"
+        },
+        {
+          "source": "/usr/sbin/unix_chkpwd",
+          "excerpt": "49 symbols read; sha256 4ec01f27b6b198c3612f50a05d246102f00bf0ccb6be3516f9f60f4805556675"
+        }
+      ]
     },
     {
       "check_id": "MEMORY-0004",
       "module": "MEMORY",
-      "result": "UNKNOWN",
+      "result": "PASS",
       "severity": "LOW",
       "base_severity": "LOW",
-      "unknown_reason": "fact_not_collected",
       "fingerprint": "e8774b5dd212de854088cff9fc7002df",
-      "detail": "required fact memory.elf was not collected"
+      "detail": "All 9 probed binaries reference the fortified _chk libc entry points.",
+      "evidence": [
+        {
+          "source": "/usr/bin/chfn",
+          "excerpt": "6 fortifiable call(s), no _chk variant; 142 symbols read; sha256 9d8e1c2f1c89f808206c65982fa058369de1af7be19ee325a2f3e95c48ab8052"
+        },
+        {
+          "source": "/usr/bin/chsh",
+          "excerpt": "4 fortifiable call(s), no _chk variant; 126 symbols read; sha256 d7aad828e159b1d570f643d2cbe44d551a5b9bc9b2870dab3fd5cbc5260e749d"
+        },
+        {
+          "source": "/usr/bin/gpasswd",
+          "excerpt": "4 fortifiable call(s), no _chk variant; 135 symbols read; sha256 b9ef1bde0bde1b6839a0f55d43a606645723436932f072e3bf71e4c1a0ed4c06"
+        },
+        {
+          "source": "/usr/bin/mount",
+          "excerpt": "4 fortifiable call(s), no _chk variant; 151 symbols read; sha256 ac5aa68d34add5a33ae81ac3a971aea677c4032d768aab5a3c4c2707f728885e"
+        },
+        {
+          "source": "/usr/bin/newgrp",
+          "excerpt": "1 fortifiable call(s), no _chk variant; 92 symbols read; sha256 572ab15948df3969e929b902641c3a42e76dce7d71a22fbc58011ca89d8d965e"
+        },
+        {
+          "source": "/usr/bin/passwd",
+          "excerpt": "3 fortifiable call(s), no _chk variant; 130 symbols read; sha256 ca3fc307dda8259f585bb38c70e82bd15af61e8574cd0d6e430292e328bb3477"
+        },
+        {
+          "source": "/usr/bin/su",
+          "excerpt": "4 fortifiable call(s), no _chk variant; 134 symbols read; sha256 c74311fe5636b7d7f9a56239fa8adeeab12ba86fe7d41b91afa85bf9bbdae78b"
+        },
+        {
+          "source": "/usr/bin/umount",
+          "excerpt": "2 fortifiable call(s), no _chk variant; 121 symbols read; sha256 2ea59b57d249d58c64b028b2acf6118b62dc3ba89012a1cf4ff5f5a9891f513d"
+        },
+        {
+          "source": "/usr/sbin/unix_chkpwd",
+          "excerpt": "3 fortifiable call(s), no _chk variant; 49 symbols read; sha256 4ec01f27b6b198c3612f50a05d246102f00bf0ccb6be3516f9f60f4805556675"
+        }
+      ]
     },
     {
       "check_id": "NETWORK-0001",

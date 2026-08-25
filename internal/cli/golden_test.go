@@ -72,26 +72,35 @@ type pin struct {
 	why string
 }
 
-// Every bundle below carries four UNKNOWNs it did not carry at catalog 13: the
-// whole MEMORY module, resolving to UNKNOWN(fact_not_collected) because
-// memory.elf was not a fact when these were recorded. An old bundle cannot
-// answer a question nobody was asking when it was written, and the alternative
-// is a check that reports PASS over binaries nobody looked at.
+// The corpus was re-recorded at catalog 15, so the MEMORY module reaches real
+// verdicts on all six rather than the UNKNOWN(fact_not_collected) an old
+// recording could only give it. Coverage is back to where it was before the
+// module existed: 100 on the three bundles that answer everything, and the
+// residual UNKNOWNs on the other three are the pre-existing AUTH and KERNEL
+// ones, not MEMORY.
 //
-// It is why coverage falls on all six while posture does not move at all:
-// posture is computed over the checks that reached a verdict, and coverage is
-// what says how many did.
+// Two of the new verdicts are FAIL, and both are the documented limits of
+// reading hardening out of a symbol table rather than defects in the hosts:
 //
-// **Re-recording is what turns these into real verdicts**, and it needs docker,
-// so `make verify` cannot do it — see testdata/bundles/record.sh.
+//   - alpine, MEMORY-0004: /usr/bin/crontab and /usr/bin/passwd are both
+//     symlinks to /bin/busybox — one binary, one digest, reported under the two
+//     paths an operator would ask about. musl does not implement glibc's _chk
+//     entry points at all, so no busybox build on Alpine can pass this check.
+//   - debian, MEMORY-0003: /usr/bin/newgrp, 52 symbols, no __stack_chk_fail.
+//     -fstack-protector-strong instruments only functions with local arrays,
+//     and this one has none.
+//
+// Both are in docs/FALSE-POSITIVES.md. They are pinned here deliberately: a run
+// in which either became a PASS would mean the symbol reading had started
+// inventing evidence, which is a worse failure than the false positive.
 var pinned = map[string]pin{
 	// A stock Ubuntu server on the day it is provisioned. The 32 NOT_APPLICABLE
 	// are almost entirely SSHD and LOGGING: a base image runs no sshd and no
 	// syslog daemon, and a check that declines to judge an absent subject is
 	// the behaviour, not a gap.
 	"ubuntu-2404-stock": {
-		catalog: 15, pass: 35, fail: 12, notApplicable: 32, unknown: 4, skipped: 0,
-		posture: 79.27927927927928, coverage: 92.15686274509804,
+		catalog: 15, pass: 39, fail: 12, notApplicable: 32, unknown: 0, skipped: 0,
+		posture: 80.50847457627118, coverage: 100,
 		why: "the unhardened baseline every other number is measured against",
 	},
 
@@ -99,8 +108,8 @@ var pinned = map[string]pin{
 	// check cares about. One PASS and one NOT_APPLICABLE separate them here,
 	// and which ones is the interesting part of any diff on this pair.
 	"debian-13-stock": {
-		catalog: 15, pass: 34, fail: 12, notApplicable: 33, unknown: 4, skipped: 0,
-		posture: 78.89908256880734, coverage: 92,
+		catalog: 15, pass: 37, fail: 13, notApplicable: 33, unknown: 0, skipped: 0,
+		posture: 78.44827586206897, coverage: 100,
 		why: "Debian's defaults, which are not Ubuntu's",
 	},
 
@@ -108,8 +117,8 @@ var pinned = map[string]pin{
 	// is the bundle that catches a check quietly assuming a Debian-shaped /etc
 	// and reporting a verdict about a file that was never there.
 	"alpine-320-stock": {
-		catalog: 15, pass: 27, fail: 7, notApplicable: 45, unknown: 4, skipped: 0,
-		posture: 83.9506172839506, coverage: 89.47368421052632,
+		catalog: 15, pass: 30, fail: 8, notApplicable: 45, unknown: 0, skipped: 0,
+		posture: 84.0909090909091, coverage: 100,
 		why: "the distribution least like the others, where guessing shows up",
 	},
 
@@ -121,8 +130,8 @@ var pinned = map[string]pin{
 	// binary, not of any file on the host. AUTH-0002 says it does not know.
 	// Every other scanner reports the documented default and calls it a PASS.
 	"fedora-44-stock": {
-		catalog: 15, pass: 33, fail: 12, notApplicable: 33, unknown: 5, skipped: 0,
-		posture: 77.77777777777779, coverage: 90,
+		catalog: 15, pass: 37, fail: 12, notApplicable: 33, unknown: 1, skipped: 0,
+		posture: 79.13043478260869, coverage: 98,
 		why: "the RPM family's leading edge, where authselect owns the PAM stack",
 	},
 
@@ -130,8 +139,8 @@ var pinned = map[string]pin{
 	// point of it. One FAIL and one NOT_APPLICABLE separate the two, and which
 	// ones is the interesting part of any diff on this pair.
 	"rocky-9-stock": {
-		catalog: 15, pass: 33, fail: 11, notApplicable: 34, unknown: 5, skipped: 0,
-		posture: 80, coverage: 89.79591836734694,
+		catalog: 15, pass: 37, fail: 11, notApplicable: 34, unknown: 1, skipped: 0,
+		posture: 81.25, coverage: 97.95918367346938,
 		why: "the enterprise RPM baseline most real audits run against",
 	},
 
@@ -147,8 +156,8 @@ var pinned = map[string]pin{
 	// correct, and a run in which any of them became a PASS would be a serious
 	// regression rather than an improvement.
 	"ubuntu-2404-hardened": {
-		catalog: 15, pass: 74, fail: 4, notApplicable: 0, unknown: 5, skipped: 0,
-		posture: 96.64804469273743, coverage: 93.97590361445783,
+		catalog: 15, pass: 78, fail: 4, notApplicable: 0, unknown: 1, skipped: 0,
+		posture: 96.7741935483871, coverage: 98.79518072289156,
 		why: "the only bundle on which every check in the catalog evaluates",
 	},
 }
