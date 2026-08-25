@@ -1,4 +1,4 @@
-# ARCHITECTURE — Plumbline
+# Plumbline architecture
 
 **Applies to:** v1.x
 **Status:** design
@@ -23,14 +23,14 @@ Everything downstream follows from this split:
 
 | Consequence | Why it matters |
 |---|---|
-| One filesystem walk, not twelve | Fixes the concurrency disaster in the source design (audit A-04) |
+| One filesystem walk, not twelve | Fixes the concurrent-walk problem in the source design (audit A-04) |
 | Checks are pure functions | 110 checks become unit-testable against fixtures (A-05) |
 | Bundles are portable | Re-evaluate old state, offline, after the catalog improves |
 | Bundles are diffable | "What changed since March" becomes a first-class feature |
 | Collection and evaluation can be separated in time and space | Collect on a locked-down prod host, evaluate on your laptop |
-| Fixtures *are* bundles | Test corpus is real recorded system state, not hand-written mocks |
+| Fixtures are bundles | Test corpus is real recorded system state, not hand-written mocks |
 
-This is the one architectural decision that everything else defers to. Record it as ADR-0001.
+Everything else defers to this decision. It is recorded as ADR-0001.
 
 ---
 
@@ -76,7 +76,7 @@ This is the one architectural decision that everything else defers to. Record it
 
 ### 2.1 The `System` interface
 
-Everything that touches the operating system goes through one seam. Nothing else in the codebase is allowed to call `os.Open`, `exec.Command`, or read `/proc` directly — enforced with a lint rule in CI, because this boundary is the whole test strategy and it will erode the first time someone is in a hurry.
+Everything that touches the operating system goes through one seam. Nothing else in the codebase may call `os.Open`, `exec.Command`, or read `/proc` directly. A lint rule in CI enforces this, because the boundary is the whole test strategy and it erodes without enforcement.
 
 ```go
 // internal/system
@@ -116,9 +116,9 @@ Three implementations:
 | `system/rooted` | `--root /mnt/host` | Same as live, prefixes every path, refuses absolute symlink escapes out of the root. Makes container and mounted-image scanning correct. |
 | `system/fake` | tests | Backed by a `testdata/` tree plus a YAML manifest of command outputs, process lists and sysctls. |
 
-`ReadFile` returning a truncation offset is deliberate: a check must never be able to blow up memory because someone made `/etc/passwd` a 4 GB file. Every read has a cap (default 8 MiB, per-collector overridable); exceeding it is a fact-level error, not a panic.
+`ReadFile` returns a truncation offset so a check cannot exhaust memory because someone made `/etc/passwd` a 4 GB file. Every read has a cap (default 8 MiB, overridable per collector); exceeding it is a fact-level error, not a panic.
 
-`Exec` takes `argv []string`, never a command string. There is no shell in the collection path. This eliminates an entire vulnerability class before the first check is written.
+`Exec` takes `argv []string`, never a command string. There is no shell in the collection path, which removes command injection as a class.
 
 ---
 
@@ -140,10 +140,10 @@ type Collector interface {
 
 Properties:
 
-- **The registry is a DAG**, topologically sorted before execution. `sshd_effective_config` depends on `sshd_config_files`, which depends on `fs_stat`. Cycles are a startup panic in tests, never in production.
-- **Independent branches run concurrently, but concurrency is capped by cost class.** `Expensive` collectors (anything touching the whole filesystem) run with a concurrency of 1. This directly prevents the source design's twelve-simultaneous-`find` problem.
-- **Failure is local.** A collector that fails records a `FactError` in the bundle with its reason. Every check that depends on that fact resolves to `UNKNOWN`, with the collector's error as its explanation. The scan continues. There is no path where a collector failure becomes a silent PASS.
-- **Collectors are budgeted.** Each declares a timeout; exceeding it is a `FactError{Kind: Timeout}`, not a hang.
+- The registry is a DAG, topologically sorted before execution. `sshd_effective_config` depends on `sshd_config_files`, which depends on `fs_stat`. Cycles are a startup panic in tests, never in production.
+- Independent branches run concurrently, but concurrency is capped by cost class. `Expensive` collectors (anything touching the whole filesystem) run with a concurrency of 1. This prevents the source design's twelve-simultaneous-`find` problem.
+- Failure is local. A collector that fails records a `FactError` in the bundle with its reason. Every check that depends on that fact resolves to `UNKNOWN`, with the collector's error as its explanation. The scan continues, and there is no path where a collector failure becomes a silent PASS.
+- Collectors are budgeted. Each declares a timeout; exceeding it is a `FactError{Kind: Timeout}`, not a hang.
 
 ### 3.2 The single filesystem walk
 
@@ -158,12 +158,12 @@ type WalkInterest struct {
 }
 ```
 
-Walk rules, all non-negotiable and all tested:
+Walk rules, all tested:
 
 - Never crosses filesystem boundaries by default (`--walk-crossfs` opts in).
-- Skips by fstype: `proc`, `sysfs`, `devtmpfs`, `cgroup*`, `tracefs`, `debugfs`, `fuse.*`, `nfs*`, `cifs`, `autofs`. Network filesystems are the classic hang.
-- Never follows symlinks. Never opens anything that is not a regular file or directory — no FIFOs, no character devices, no sockets. (Opening an unprivileged user's FIFO as root hangs the scanner forever; this is a trivially exploitable local DoS in the source design.)
-- Depth limit, inode-count limit, and wall-clock budget. Hitting any limit produces a `Truncated` marker in the fact, and every downstream finding is annotated "based on a partial filesystem scan" rather than pretending to completeness.
+- Skips by fstype: `proc`, `sysfs`, `devtmpfs`, `cgroup*`, `tracefs`, `debugfs`, `fuse.*`, `nfs*`, `cifs`, `autofs`. Network filesystems are a common cause of hangs.
+- Never follows symlinks. Never opens anything that is not a regular file or directory: no FIFOs, no character devices, no sockets. (Opening an unprivileged user's FIFO as root blocks indefinitely, which was a local denial of service against the source design.)
+- Depth limit, inode-count limit, and wall-clock budget. Hitting any limit produces a `Truncated` marker in the fact, and every downstream finding is annotated "based on a partial filesystem scan" rather than reported as complete.
 - Bind-mount and cycle detection via device+inode set.
 
 ### 3.3 The fact bundle
@@ -189,9 +189,9 @@ bundle.plb
 Notes:
 
 - `hostname*` and other identifying fields are subject to `--redact` (see `PRIVACY.md`). Redaction happens at collection time, not render time, so a redacted bundle is safe to send.
-- Facts are **typed and independently versioned**. `passwd.json` carries `"fact_version": 2`. A check declares which fact versions it understands. Evaluating a new catalog against an old bundle is therefore well-defined: unsupported fact version → `UNKNOWN(fact_version_mismatch)`, never a wrong answer.
+- Facts are typed and independently versioned. `passwd.json` carries `"fact_version": 2`. A check declares which fact versions it understands. Evaluating a new catalog against an old bundle is therefore well-defined: unsupported fact version → `UNKNOWN(fact_version_mismatch)`, never a wrong answer.
 - Evidence is content-addressed so that ten checks citing `/etc/login.defs` store it once.
-- Bundles are **not** guaranteed to be byte-identical between two collections of the same host — timestamps and process lists move. *Findings* derived from a bundle are guaranteed identical. That is the determinism claim, stated precisely.
+- Bundles are not guaranteed to be byte-identical between two collections of the same host, because timestamps and process lists move. Findings derived from a bundle are guaranteed identical. That is the determinism claim.
 
 ---
 
@@ -218,11 +218,11 @@ type Check struct {
 }
 ```
 
-`Eval` receives a `FactSet` and returns a `Result`. It has no `System`, no `context`, no clock, no network. It cannot be slow in any interesting way, and it cannot be flaky. This is enforced by the type signature, which is the only enforcement that actually holds.
+`Eval` receives a `FactSet` and returns a `Result`. It has no `System`, no `context`, no clock and no network, so it cannot block and cannot be flaky. The type signature is what enforces this.
 
 ### 4.2 Result states
 
-Five, not four. The missing fifth is where the source design's worst failure mode lived.
+Five, not four. The fifth state is the one the source design lacked.
 
 | State | Meaning | Counts toward score? |
 |---|---|---|
@@ -230,9 +230,9 @@ Five, not four. The missing fifth is where the source design's worst failure mod
 | `FAIL` | The condition was tested and not met | Yes (denominator) |
 | `NOT_APPLICABLE` | The subject does not exist here (no sshd installed) | No |
 | `SKIPPED` | Not run by choice (profile, filter, privilege) | No, but counted in coverage |
-| `UNKNOWN` | Could not be determined — fact missing, unparseable, truncated, collector errored, privileges insufficient | No, but counted in coverage **and surfaced prominently** |
+| `UNKNOWN` | Could not be determined: fact missing, unparseable, truncated, collector errored, privileges insufficient | No, but counted in coverage and surfaced in the summary |
 
-`UNKNOWN` is the honesty valve. A hardening tool that reports PASS when it could not read the file is worse than useless, because it converts ignorance into false assurance. Every `UNKNOWN` carries a machine-readable reason code and appears in the report summary, not buried in an appendix.
+`UNKNOWN` is what keeps the other four states honest. A tool that reports PASS when it could not read the file converts ignorance into false assurance. Every `UNKNOWN` carries a machine-readable reason code and appears in the report summary rather than in an appendix.
 
 ### 4.3 Findings
 
@@ -251,13 +251,13 @@ type Finding struct {
 }
 ```
 
-**Fingerprint** is `sha256(check_id ‖ normalised_subject)` where subject is the specific thing that failed — the path, the account name, the port. Findings must be stable across runs so that CI can suppress a known-accepted finding, and so SARIF's deduplication in GitHub's security tab works. This is missing from the source design and is the single most-requested feature of every scanner that ships without it.
+The fingerprint is `sha256(check_id ‖ normalised_subject)`, where the subject is the specific thing that failed: the path, the account name, the port. Findings have to be stable across runs so CI can suppress a known-accepted finding and so SARIF deduplication in GitHub's security tab works. The source design had no equivalent.
 
 ### 4.4 Severity and context
 
 Static per-check severity is wrong (audit A-20): `PermitRootLogin yes` on an internet-facing bastion is not the same finding as on an air-gapped lab box.
 
-v1 does the minimum honest thing: the catalog ships a `BaseSeverity`, and the *scan context* can adjust it by at most one level, using only facts already collected:
+v1 does the minimum: the catalog ships a `BaseSeverity`, and the scan context can adjust it by at most one level, using only facts already collected:
 
 | Context signal | Adjustment |
 |---|---|
@@ -265,11 +265,11 @@ v1 does the minimum honest thing: the catalog ships a `BaseSeverity`, and the *s
 | Host has no interactive login accounts besides root | −1 for interactive-session checks |
 | `--exposure internal\|internet\|airgapped` supplied by the operator | ±1 per category; the scoring formulas it feeds are in §5 |
 
-Both severities are always reported. No hidden adjustment.
+Both severities are always reported; no adjustment is hidden.
 
 ### 4.5 Execution
 
-Checks are pure and fast, so parallelism is trivial and bounded by `GOMAXPROCS`. Each check runs under a `recover()`; a panic becomes `UNKNOWN(internal_error)` with the check ID and a stack trace in the debug log, and CI treats any panic in the fixture corpus as a test failure. One bad check never takes down a scan.
+Checks are pure and fast, so parallelism is trivial and bounded by `GOMAXPROCS`. Each check runs under a `recover()`; a panic becomes `UNKNOWN(internal_error)` with the check ID and a stack trace in the debug log, and CI treats any panic in the fixture corpus as a test failure. A single failing check does not stop the scan.
 
 ---
 
@@ -283,10 +283,10 @@ Coverage   = Evaluated / (Total − NOT_APPLICABLE)
 Posture    = Σ(weight of PASS) / Σ(weight of Evaluated) × 100
 ```
 
-- `SKIPPED` and `UNKNOWN` **leave the denominator** and instead reduce **Coverage**. An unprivileged run therefore reports something like `Posture 82 (coverage 44%)`, which is truthful, instead of the source design's `40`, which punishes the user for not being root.
-- **Coverage is always displayed next to Posture.** A posture score without its coverage is forbidden in every renderer. This is a rendering-layer invariant, tested.
-- Every score is stamped with the **catalog version**. Comparing scores across catalog versions is refused by `plumbline diff` unless `--allow-catalog-drift` is passed, and even then it is annotated.
-- **One score, not two.** The source design's Risk Score double-counted the Hardening Index with arbitrary constants. Dropped. Exposure context is expressed through severity adjustment (§4.4), where it is visible and explainable, instead of as a magic additive term.
+- `SKIPPED` and `UNKNOWN` leave the denominator and instead reduce coverage. An unprivileged run therefore reports something like `Posture 82 (coverage 44%)` rather than the source design's `40`, which penalised the user for not being root.
+- Coverage is always displayed next to posture. A posture score without its coverage is rejected in every renderer. This is a rendering-layer invariant, and it is tested.
+- Every score is stamped with the catalog version. Comparing scores across catalog versions is refused by `plumbline diff` unless `--allow-catalog-drift` is passed, and even then it is annotated.
+- One score, not two. The source design's Risk Score double-counted the Hardening Index with arbitrary constants and was dropped. Exposure context is expressed through severity adjustment (§4.4), where it is visible and explainable, rather than as an additive term.
 
 ---
 
@@ -304,7 +304,7 @@ plumbline version  [--json]                                  tool, catalog, sche
 plumbline completion <shell>
 ```
 
-`scan` is `collect | eval` fused for convenience. That the two are genuinely separable is the point: the privileged step and the analysis step are different trust domains, and a hardened environment can run `collect` under audit and `eval` anywhere.
+`scan` is `collect | eval` fused for convenience. The two remain separable because the privileged step and the analysis step are different trust domains: a hardened environment can run `collect` under audit and `eval` anywhere.
 
 Flag precedence, resolved in this order and documented in `CLI-SPEC.md` (the source design left this ambiguous): explicit flags → `--profile` → config file → built-in defaults. `--module` and `--skip-module` are applied as include-then-exclude. Mode flags (`--quick`, `--full`) are a single mutually exclusive enum, not independent booleans.
 
@@ -312,19 +312,19 @@ Flag precedence, resolved in this order and documented in `CLI-SPEC.md` (the sou
 
 ## 7. Safety rules for the collection path
 
-These derive from `THREAT-MODEL.md` and are stated here because they constrain the architecture. Plumbline runs as root and reads attacker-influenced input; the source design did not consider this at all.
+These derive from `THREAT-MODEL.md` and are stated here because they constrain the architecture. Plumbline runs as root and reads attacker-influenced input; the source design did not consider it.
 
 | Rule | Rationale |
 |---|---|
 | Privileged reads use `openat2` with `RESOLVE_NO_SYMLINKS` / `RESOLVE_BENEATH` where available; fall back to `O_NOFOLLOW` plus post-open `fstat` verification | Defeats symlink swap and TOCTOU against a root reader |
-| Only regular files and directories are ever opened | FIFOs block forever; device nodes have side effects |
+| Only regular files and directories are ever opened | FIFOs block indefinitely; device nodes have side effects |
 | Every read is size-capped and the cap is recorded | Prevents memory exhaustion via a hostile `/etc` file |
 | No shell, ever. `exec` takes argv | Removes command injection from the collection path |
-| `LC_ALL=C`, `LANG=C`, `TZ=UTC`, minimal `PATH`, cleared environment on every exec | Locale-dependent output parsing is the classic silent-wrong-answer bug (audit A-31) |
+| `LC_ALL=C`, `LANG=C`, `TZ=UTC`, minimal `PATH`, cleared environment on every exec | Locale-dependent output parsing is a common silent-wrong-answer bug (audit A-31) |
 | All rendered strings are sanitised for terminal control sequences | Filenames containing ANSI escapes otherwise attack the operator's terminal |
-| Output files created `0600`, directories `0700`, via `O_EXCL` | Reports are a reconnaissance goldmine (audit A-17) |
+| Output files created `0600`, directories `0700`, via `O_EXCL` | Reports contain reconnaissance-grade detail (audit A-17) |
 | Config from the current working directory is ignored when euid == 0 unless passed explicitly with `--config` | An attacker-controlled `./plumbline.yaml` should not steer a root-run scanner (audit A-30) |
-| No network syscalls in the `collect` or `eval` path — enforced by an integration test that runs the binary in a namespace with no network and asserts success | Makes the offline claim testable rather than aspirational |
+| No network syscalls in the `collect` or `eval` path, enforced by an integration test that runs the binary in a namespace with no network and asserts success | Makes the offline claim testable |
 
 ---
 
@@ -367,13 +367,13 @@ plumbline/
 └── SECURITY.md · CONTRIBUTING.md · CHANGELOG.md
 ```
 
-Note what is absent versus the source design: no `pkg/` public API (v1 keeps everything `internal/`; the JSON schema is the API — see `VERSIONING.md`), no `plugins/`, no `compliance/` data directory, no PDF renderer.
+Note what is absent versus the source design: no `pkg/` public API (v1 keeps everything `internal/`, and the JSON schema is the API; see `VERSIONING.md`), no `plugins/`, no `compliance/` data directory, no PDF renderer.
 
 ---
 
 ## 9. Error and exit model
 
-Findings are one thing; the tool's own health is another. Both must reach CI unambiguously.
+Findings are one thing and the tool's own health is another. Both have to reach CI unambiguously.
 
 | Exit | Meaning |
 |---|---|
@@ -381,35 +381,35 @@ Findings are one thing; the tool's own health is another. Both must reach CI una
 | 1 | Usage or configuration error (nothing was scanned) |
 | 2 | Completed; findings at or above `--fail-on` |
 | 3 | Completed; posture below `--threshold` |
-| 4 | Completed **degraded** — one or more collectors errored, or coverage below `--min-coverage` |
+| 4 | Completed degraded: one or more collectors errored, or coverage below `--min-coverage` |
 | 10 | Insufficient privileges for the requested profile and `--strict-privileges` was set |
 | 11 | Timeout exceeded |
 | 70 | Internal error (panic escaped, bundle corrupt) |
 | 130 | Interrupted |
 
-Precedence, evaluated top-down and **documented as a contract**: `130 > 70 > 11 > 1 > 10 > 4 > 2 > 3 > 0`. The source design's scheme had three codes match a single common outcome with no tiebreak (audit A-20).
+Precedence, evaluated top-down and documented as a contract: `130 > 70 > 11 > 1 > 10 > 4 > 2 > 3 > 0`. The source design's scheme had three codes match a single common outcome with no tiebreak (audit A-20).
 
-Exit code 4 is the one the source design lacked entirely, and it is the important one: CI must be able to tell "your host is misconfigured" apart from "the scanner could not see your host."
+Exit code 4 is the one the source design lacked. CI has to be able to tell "your host is misconfigured" apart from "the scanner could not see your host."
 
 ---
 
 ## 10. Testing strategy
 
-Summarised here because it is an architectural property, not an afterthought. Full detail in `TESTING.md`.
+Summarised here because it constrains the architecture. Full detail in `TESTING.md`.
 
 | Layer | Method | Gate |
 |---|---|---|
 | Checks | Table tests over `system/fake` fixtures | Every check needs ≥1 PASS and ≥1 FAIL fixture. CI fails on any check without both. |
 | Collectors | Fixture trees + recorded command output | Parser tests per distro format variant |
 | Determinism | Evaluate the same bundle twice, assert byte-identical findings JSON | Every CI run |
-| Golden bundles | Real bundles recorded from Ubuntu/Debian/Fedora/Alpine/Arch containers, committed | Findings diff reviewed on every catalog change — this is the regression net |
+| Golden bundles | Real bundles recorded from Ubuntu/Debian/Fedora/Alpine/Arch containers, committed | Findings diff reviewed on every catalog change |
 | Schema | Every rendered JSON validated against `findings-v1.schema.json` | Every CI run |
 | Offline | Run the binary in a no-network namespace | Every CI run |
 | Robustness | Fuzz the config parsers; hostile-fixture corpus (deep symlink chains, FIFOs, huge files, ANSI filenames, cyclic bind mounts) | Every CI run |
 | Integration | Real containers per distro, assert no panics and non-empty coverage | Nightly |
 | Performance | Timed scan of a standard fixture host, assert against budget | Every PR |
 
-The golden-bundle corpus is the highest-leverage asset in the repository. Once ~20 recorded bundles exist across distros, any catalog change instantly shows its blast radius as a findings diff — which no shell-based auditor can do at all.
+The golden-bundle corpus is what makes a catalog change reviewable. Once around 20 recorded bundles exist across distros, any catalog change shows its blast radius as a findings diff.
 
 ---
 
@@ -425,23 +425,23 @@ supply-chain surface (`CONTRIBUTING.md` rule 7).
 | CLI | `spf13/cobra` (+ `spf13/pflag`) | Standard |
 | Compression | `klauspost/compress/zstd` | Pure Go; the bundle format |
 | Schema validation | `santhosh-tekuri/jsonschema/v5` | Test-time, validates `findings-v1` |
-| Build and release | `goreleaser`, `syft`, `cosign` | Tooling, not linked in — see `SUPPLY-CHAIN.md` |
+| Build and release | `goreleaser`, `syft`, `cosign` | Tooling, not linked in; see `SUPPLY-CHAIN.md` |
 
 Everything else is the standard library. Config parsing is hand-rolled, tests
-use `testing` and nothing else, and the terminal report — grid, colour, box
-drawing, ANSI-aware padding — is this project's own code in
+use `testing` and nothing else, and the terminal report (grid, colour, box
+drawing, ANSI-aware padding) is this project's own code in
 `internal/render/text`.
 
-**This table previously listed `charmbracelet/lipgloss`, `charmbracelet/bubbles`,
-`gopkg.in/yaml.v3`, `google/go-cmp` and `testify`.** None of them is in
-`go.mod`; the list described an intention from the design phase that the
-implementation never took up, except for lipgloss, which was added during the
-release candidates and removed before GA when it proved to cost thirteen
-transitive modules for a box border. Corrected in the v1.0.0 documentation
-review (WP-38); the history is in `CHANGELOG.md` under `v1.0.0-rc1`.
+This table previously listed `charmbracelet/lipgloss`, `charmbracelet/bubbles`,
+`gopkg.in/yaml.v3`, `google/go-cmp` and `testify`. None of them is in `go.mod`.
+The list described an intention from the design phase that the implementation
+never took up, except for lipgloss, which was added during the release
+candidates and removed before GA because it cost thirteen transitive modules for
+a box border. Corrected in the v1.0.0 documentation review (WP-38); the history
+is in `CHANGELOG.md` under `v1.0.0-rc1`.
 
 The dependency count is itself a control, and the SBOM published with every
-release is what makes it checkable rather than a claim.
+release is what makes it checkable.
 
 ## 12. What is explicitly deferred
 
@@ -453,7 +453,7 @@ So that "we'll add it later" is a decision on record rather than an omission:
 | Compliance mapping beyond public-domain frameworks | v2, as user-supplied packs | Licensing (audit A-02) |
 | Containers / cloud modules | v2 | Larger fixture surface; cloud needs IMDS network access, which breaks the offline invariant and needs its own opt-in flag |
 | Remediation script generation | v2 | The check catalog must stabilise first, or every fix is rewritten |
-| Interactive TUI browser | v2 | Value is real, cost is high, JSON + terminal covers v1 |
+| Interactive TUI browser | v2 | High cost; JSON and terminal output cover v1 |
 | Extension mechanism | v3 | Not Go `plugin` under any circumstances (audit A-06) |
 | macOS | v3 | Needs hardware and a fixture corpus; do not claim it before then |
-| Fleet aggregation | v3 | Bundles make it natural later; premature now |
+| Fleet aggregation | v3 | Bundles make it straightforward later; premature now |
