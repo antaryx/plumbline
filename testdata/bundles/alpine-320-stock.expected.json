@@ -1,10 +1,10 @@
 {
   "bundle": "alpine-320-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 15,
+  "catalog_version": 16,
   "scan": {
-    "started": "2026-08-25T21:04:24.637165943Z",
-    "finished": "2026-08-25T21:04:24.693757899Z",
+    "started": "2026-08-25T21:31:44.169375564Z",
+    "finished": "2026-08-25T21:31:44.201476282Z",
     "root": "",
     "euid": 0,
     "profile": "default",
@@ -16,10 +16,10 @@
     "counts": {
       "pass": 30,
       "fail": 8,
-      "not_applicable": 45,
+      "not_applicable": 47,
       "skipped": 0,
       "unknown": 0,
-      "total": 83
+      "total": 85
     },
     "by_severity": {
       "HIGH": 1,
@@ -83,6 +83,24 @@
       "base_severity": "LOW",
       "fingerprint": "311566061e4e2fa473317e9a2df24643",
       "detail": "There is no /etc/pam.d on this host, so it does not use PAM. Whatever decides that a login attempt succeeds here is a mechanism this module cannot read — a minimal container image and a busybox-based appliance both look like this — and no conclusion about password policy may be drawn from its absence."
+    },
+    {
+      "check_id": "CONTAINERS-0001",
+      "module": "CONTAINERS",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "723583a19df47e846889dd010e907caa",
+      "detail": "No dockerd binary was found on this host, so there is no Docker daemon configuration to report on."
+    },
+    {
+      "check_id": "CONTAINERS-0002",
+      "module": "CONTAINERS",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "ffed68743d2475c7c93c5eb9f2d557b5",
+      "detail": "No dockerd binary was found on this host, so there is no Docker daemon configuration to report on."
     },
     {
       "check_id": "CRON-0001",

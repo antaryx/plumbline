@@ -44,13 +44,28 @@ explanation in this file is a defect.
   `UNKNOWN` there rather than condemning a hardened binary for having nothing to
   look at.
 
-### Added (scaffolding, not yet wired)
+### Added
+- **`CONTAINERS` module, first two checks.** `CONTAINERS-0001` (user-namespace
+  remapping) and `CONTAINERS-0002` (`no-new-privileges`), with the Docker
+  daemon collector now wired into `internal/cli/catalog.go`. Catalog 16, 85
+  checks. Neither is in `cis-l1`, which selects by module and does not name
+  this one.
+
+  **A host with Docker and no `daemon.json` FAILs both, and that is the point.**
+  Such a host runs on compiled-in defaults — `userns-remap` off,
+  `no_new_privileges` off — which is a real configuration and the most common
+  Docker installation there is. Excusing it as `NOT_APPLICABLE` would leave the
+  module silent on exactly the hosts it exists for. The `NOT_APPLICABLE` gate is
+  `Installed` (is there a `dockerd` binary), never the presence of the file.
+
+  Every verdict drawn from the file says so: `dockerd` takes the same options as
+  command-line flags and the stock unit passes some, so a finding that claimed
+  to describe the running daemon would be claiming more than it checked.
+
 - **`CONTAINERS` collector for the Docker daemon.** Reads
   `/etc/docker/daemon.json` into `containers.docker_daemon`, modelling
   `userns-remap`, `icc`, `log-driver`, `experimental`, `live-restore`,
-  `no-new-privileges` and `hosts`. **Not imported by
-  `internal/cli/catalog.go`**, so it does not run in a scan; no `CONTAINERS`
-  check exists yet.
+  `no-new-privileges` and `hosts`.
 
   It is the first collector in the tree to parse JSON, and the malformed case
   is more consequential here than in any text config: a line-oriented file has
@@ -114,7 +129,14 @@ explanation in this file is a defect.
   made by the same scan cannot.
 
 ### Changed
-- **Golden bundles re-recorded at catalog 15.** All six now carry `memory.elf`,
+- **Golden bundles re-recorded at catalog 16.** All six now carry `memory.elf`
+  and `containers.docker_daemon`. The CONTAINERS checks are `NOT_APPLICABLE` on
+  every one — the recipes install no Docker — which holds coverage at the
+  baseline below and marks an honest limit: a bundle recorded inside a container
+  cannot carry a container runtime's configuration. Covering CONTAINERS against
+  a real daemon needs a recipe that installs one.
+
+- **Golden bundles re-recorded at catalog 15.** All six carry `memory.elf`,
   so the `MEMORY` module reaches real verdicts instead of
   `UNKNOWN(fact_not_collected)`. Coverage returns to its pre-MEMORY baseline —
   100 on ubuntu-stock, debian and alpine; the residual `UNKNOWN`s on fedora,

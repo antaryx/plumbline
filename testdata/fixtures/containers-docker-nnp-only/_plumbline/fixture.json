@@ -1,0 +1,3 @@
+{
+  "description": "no-new-privileges is enabled and userns-remap is not set. The mirror image of containers-docker-permissive, and the pair is what proves the two checks read the option each owns: CONTAINERS-0002 passes here and CONTAINERS-0001 fails, while the hardened fixture passes both."
+}

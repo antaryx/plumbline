@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 15 · 83 checks · 10 modules**
+**Catalog version 16 · 85 checks · 11 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 
@@ -14,6 +14,7 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | Module | Checks | Critical | High | Medium | Low | Info |
 |---|---:|---:|---:|---:|---:|---:|
 | `AUTH` | 6 | 0 | 3 | 2 | 1 | 0 |
+| `CONTAINERS` | 2 | 0 | 0 | 2 | 0 | 0 |
 | `CRON` | 5 | 0 | 2 | 2 | 1 | 0 |
 | `FILESYS` | 10 | 2 | 3 | 4 | 1 | 0 |
 | `KERNEL` | 16 | 0 | 1 | 13 | 2 | 0 |
@@ -23,7 +24,7 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | `SERVICES` | 5 | 0 | 2 | 3 | 0 | 0 |
 | `SSHD` | 19 | 1 | 7 | 8 | 3 | 0 |
 | `USERS` | 10 | 2 | 4 | 2 | 2 | 0 |
-| **total** | **83** | 5 | 24 | 42 | 12 | 0 |
+| **total** | **85** | 5 | 24 | 44 | 12 | 0 |
 
 Severity is the check's **base** severity, before any context adjustment a finding may carry.
 
@@ -39,6 +40,13 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`AUTH-0004`](CHECK-REFERENCE.md#auth-0004--pam-does-not-accept-an-empty-password) PAM does not accept an empty password | HIGH | `auth.pam` |
 | [`AUTH-0005`](CHECK-REFERENCE.md#auth-0005--passwords-are-hashed-with-a-strong-algorithm) Passwords are hashed with a strong algorithm | HIGH | `auth.pam` |
 | [`AUTH-0006`](CHECK-REFERENCE.md#auth-0006--recent-passwords-cannot-be-reused) Recent passwords cannot be reused | LOW | `auth.pam` |
+
+## CONTAINERS
+
+| Check | Severity | Reads |
+|---|---|---|
+| [`CONTAINERS-0001`](CHECK-REFERENCE.md#containers-0001--the-docker-daemon-remaps-container-users-to-unprivileged-host-uids) The Docker daemon remaps container users to unprivileged host uids | MEDIUM | `containers.docker_daemon` |
+| [`CONTAINERS-0002`](CHECK-REFERENCE.md#containers-0002--the-docker-daemon-applies-no-new-privileges-to-containers-by-default) The Docker daemon applies no-new-privileges to containers by default | MEDIUM | `containers.docker_daemon` |
 
 ## CRON
 

@@ -1,10 +1,10 @@
 {
   "bundle": "rocky-9-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 15,
+  "catalog_version": 16,
   "scan": {
-    "started": "2026-08-25T21:04:37.294229537Z",
-    "finished": "2026-08-25T21:04:38.237796029Z",
+    "started": "2026-08-25T21:31:51.893733451Z",
+    "finished": "2026-08-25T21:31:52.46518356Z",
     "root": "",
     "euid": 0,
     "profile": "default",
@@ -16,10 +16,10 @@
     "counts": {
       "pass": 37,
       "fail": 11,
-      "not_applicable": 34,
+      "not_applicable": 36,
       "skipped": 0,
       "unknown": 1,
-      "total": 83
+      "total": 85
     },
     "by_severity": {
       "HIGH": 2,
@@ -178,6 +178,24 @@
           "excerpt": "12 rule(s) read"
         }
       ]
+    },
+    {
+      "check_id": "CONTAINERS-0001",
+      "module": "CONTAINERS",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "723583a19df47e846889dd010e907caa",
+      "detail": "No dockerd binary was found on this host, so there is no Docker daemon configuration to report on."
+    },
+    {
+      "check_id": "CONTAINERS-0002",
+      "module": "CONTAINERS",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "ffed68743d2475c7c93c5eb9f2d557b5",
+      "detail": "No dockerd binary was found on this host, so there is no Docker daemon configuration to report on."
     },
     {
       "check_id": "CRON-0001",

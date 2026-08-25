@@ -1,0 +1,4 @@
+{
+  "no-new-privileges": true,
+  "log-driver": "journald"
+}

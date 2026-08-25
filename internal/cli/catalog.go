@@ -3,6 +3,7 @@ package cli
 import (
 	"github.com/antaryx/plumbline/internal/catalog"
 	authchecks "github.com/antaryx/plumbline/internal/catalog/checks/auth"
+	containerschecks "github.com/antaryx/plumbline/internal/catalog/checks/containers"
 	cronchecks "github.com/antaryx/plumbline/internal/catalog/checks/cron"
 	filesyschecks "github.com/antaryx/plumbline/internal/catalog/checks/filesys"
 	kernelchecks "github.com/antaryx/plumbline/internal/catalog/checks/kernel"
@@ -17,6 +18,7 @@ import (
 	// composition root, is what puts them in the default registry; nothing
 	// deeper in the tree reaches for a collector by name.
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/auth"
+	_ "github.com/antaryx/plumbline/internal/collect/collectors/containers"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/cron"
 	// filesys registers walker interests rather than a collector of its own:
 	// there is one traversal per scan and it belongs to collect/walker.
@@ -53,6 +55,8 @@ func buildCatalog() *catalog.Catalog {
 		authchecks.Check0004,
 		authchecks.Check0005,
 		authchecks.Check0006,
+		containerschecks.Check0001,
+		containerschecks.Check0002,
 		cronchecks.Check0001,
 		cronchecks.Check0002,
 		cronchecks.Check0003,

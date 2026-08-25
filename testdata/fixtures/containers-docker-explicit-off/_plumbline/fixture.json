@@ -1,0 +1,3 @@
+{
+  "description": "Both options are written down and both are set to the value that disables them. Same verdicts as the permissive fixture and a different explanation: somebody decided this rather than never having considered it, and a report telling them to set an option they already set to the other value reads as though nobody looked. It is also the case that proves an explicitly empty userns-remap is treated as disabled, which is what dockerd does with it."
+}

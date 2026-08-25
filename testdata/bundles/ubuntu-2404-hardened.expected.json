@@ -1,10 +1,10 @@
 {
   "bundle": "ubuntu-2404-hardened.plb",
   "schema": "findings/v1",
-  "catalog_version": 15,
+  "catalog_version": 16,
   "scan": {
-    "started": "2026-08-25T21:04:43.017521456Z",
-    "finished": "2026-08-25T21:04:43.359228557Z",
+    "started": "2026-08-25T21:31:55.438565245Z",
+    "finished": "2026-08-25T21:31:55.619481732Z",
     "root": "",
     "euid": 0,
     "profile": "default",
@@ -16,10 +16,10 @@
     "counts": {
       "pass": 78,
       "fail": 4,
-      "not_applicable": 0,
+      "not_applicable": 2,
       "skipped": 0,
       "unknown": 1,
-      "total": 83
+      "total": 85
     },
     "by_severity": {
       "LOW": 2,
@@ -152,6 +152,24 @@
           "sha256": "334d4ca5a1701084a5576e7023d8ee5ea7f2e2b8d211b1392b1bfa16b75eb156"
         }
       ]
+    },
+    {
+      "check_id": "CONTAINERS-0001",
+      "module": "CONTAINERS",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "723583a19df47e846889dd010e907caa",
+      "detail": "No dockerd binary was found on this host, so there is no Docker daemon configuration to report on."
+    },
+    {
+      "check_id": "CONTAINERS-0002",
+      "module": "CONTAINERS",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "ffed68743d2475c7c93c5eb9f2d557b5",
+      "detail": "No dockerd binary was found on this host, so there is no Docker daemon configuration to report on."
     },
     {
       "check_id": "CRON-0001",

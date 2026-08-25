@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 15 · 83 checks · 10 modules**
+**Catalog version 16 · 85 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -390,6 +390,122 @@ authselect current
 
 - [pam\_pwhistory(8)](https://man7.org/linux/man-pages/man8/pam_pwhistory.8.html)
 - [NIST SP 800-63B §5.1.1.2 — against routine expiry](https://pages.nist.gov/800-63-3/sp800-63b.html)
+
+---
+
+## CONTAINERS
+
+### CONTAINERS-0001 — The Docker daemon remaps container users to unprivileged host uids
+
+| | |
+|---|---|
+| Module | `CONTAINERS` |
+| Base severity | MEDIUM |
+| Since | catalog 16 |
+| Reads | `containers.docker_daemon` |
+| Tags | `containers`, `docker`, `privilege-boundary`, `namespaces` |
+
+Without user-namespace remapping, uid 0 inside a container is
+uid 0 on the host. The container's isolation is doing all of the work: a kernel
+bug, a permissive bind mount, or a misconfigured capability set turns root in
+the container into root on the machine, with no further escalation required.
+
+userns-remap gives the daemon a subordinate uid range and maps container uid 0
+onto an unprivileged host uid instead. The isolation still matters, but a
+process that gets past it lands as nobody rather than as root, which is the
+difference between an escape and a compromise.
+
+It is off by default, so a host with no daemon.json fails this check —
+correctly, because the default is what such a host is running.
+
+The trade is real and is why this is not universally enabled: remapping breaks
+containers that need to share uids with the host, and it is awkward with
+--privileged and with some volume layouts. Where it cannot be enabled, the
+compensating controls are the ones that stop a process reaching the boundary in
+the first place.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort HIGH
+
+Enable userns-remap in the Docker daemon configuration.
+
+1. Understand what it will break before enabling it. Containers that share uids with the host, use --privileged, or bind-mount host paths written by root will need changes.
+2. Create or edit /etc/docker/daemon.json and set "userns-remap": "default", which makes dockerd create and use a dockremap subordinate range.
+3. Check that /etc/subuid and /etc/subgid contain an entry for the remap user; dockerd creates one for 'default' but a named user needs it in place first.
+4. Restart the daemon: systemctl restart docker. Existing containers and images stay, but the daemon's storage moves to a uid-scoped directory and containers must be recreated.
+5. Verify: docker info \| grep -i userns should report the remapping, and a container's root should map to a non-zero host uid.
+
+```sh
+docker info --format '{{.SecurityOptions}}'
+systemctl restart docker
+```
+
+> **Caution.** Enabling remapping moves the daemon's data root to a uid-scoped directory: running containers must be recreated and volumes written by a previous root may become unreadable. Do this on a host you can afford to disrupt, and take a backup of /var/lib/docker first.
+
+**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-39`
+
+**References**
+
+- [dockerd — isolate containers with a user namespace](https://docs.docker.com/engine/security/userns-remap/)
+
+---
+
+### CONTAINERS-0002 — The Docker daemon applies no-new-privileges to containers by default
+
+| | |
+|---|---|
+| Module | `CONTAINERS` |
+| Base severity | MEDIUM |
+| Since | catalog 16 |
+| Reads | `containers.docker_daemon` |
+| Tags | `containers`, `docker`, `privilege-boundary`, `setuid` |
+
+no_new_privileges is a process flag the kernel never clears
+once set: a process carrying it, and every child it forks, cannot gain
+privileges through execve. Setuid and setgid bits stop taking effect and file
+capabilities stop being granted.
+
+Inside a container that closes a specific and well-used path. An attacker with
+code execution as an unprivileged container user looks for a setuid binary in
+the image — and images routinely carry ping, mount, su and sudo without anybody
+having thought about it — then uses it to become root in the container, which is
+the position from which a namespace escape is worth attempting. With the flag
+set, the setuid bit does nothing and the attacker stays where they landed.
+
+The daemon-wide setting is what makes this reliable. Per-container
+--security-opt=no-new-privileges works and depends on whoever wrote the run
+command remembering it, which over a fleet means it is sometimes set.
+
+It defaults to off, so a host with no daemon.json fails this check — correctly,
+because the default is what such a host is running. It is also cheap: unlike
+user-namespace remapping, turning it on breaks only workloads that were
+deliberately escalating privileges inside a container.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Enable no-new-privileges in the Docker daemon configuration.
+
+1. Create or edit /etc/docker/daemon.json and set "no-new-privileges": true.
+2. Identify workloads that deliberately escalate inside a container before restarting: anything invoking sudo, su or a setuid helper from an entrypoint will stop working.
+3. Restart the daemon: systemctl restart docker. Running containers keep their existing setting until they are recreated.
+4. Verify on a new container: docker run --rm alpine sh -c 'grep NoNewPrivs /proc/self/status' should report 1.
+5. A workload that genuinely needs to escalate can be exempted per container with --security-opt=no-new-privileges=false, which keeps the safe default for everything else.
+
+```sh
+docker info --format '{{.SecurityOptions}}'
+docker run --rm alpine sh -c 'grep NoNewPrivs /proc/self/status'
+```
+
+> **Caution.** Restarting the daemon stops every running container unless live-restore is enabled. Schedule it, and check first for entrypoints that rely on sudo or a setuid helper — those will fail after the change rather than at restart.
+
+**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-7`
+
+**References**
+
+- [no\_new\_privs — Linux kernel documentation](https://docs.kernel.org/userspace-api/no_new_privs.html)
 
 ---
 
