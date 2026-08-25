@@ -1,7 +1,7 @@
 {
   "bundle": "debian-13-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 16,
+  "catalog_version": 17,
   "scan": {
     "started": "2026-08-25T21:31:46.550601813Z",
     "finished": "2026-08-25T21:31:46.799731954Z",
@@ -16,10 +16,10 @@
     "counts": {
       "pass": 37,
       "fail": 13,
-      "not_applicable": 35,
+      "not_applicable": 36,
       "skipped": 0,
       "unknown": 0,
-      "total": 85
+      "total": 86
     },
     "by_severity": {
       "HIGH": 3,
@@ -151,6 +151,15 @@
       "severity": "MEDIUM",
       "base_severity": "MEDIUM",
       "fingerprint": "ffed68743d2475c7c93c5eb9f2d557b5",
+      "detail": "No dockerd binary was found on this host, so there is no Docker daemon configuration to report on."
+    },
+    {
+      "check_id": "CONTAINERS-0003",
+      "module": "CONTAINERS",
+      "result": "NOT_APPLICABLE",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "fingerprint": "4a8bcbdd15f5d1f047fe3a5c1847f7ff",
       "detail": "No dockerd binary was found on this host, so there is no Docker daemon configuration to report on."
     },
     {

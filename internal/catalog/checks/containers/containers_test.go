@@ -17,7 +17,7 @@ import (
 const fixtureRoot = "../../../../testdata/fixtures"
 
 // all is the CONTAINERS module as this work package leaves it.
-var all = []catalog.Check{checks.Check0001, checks.Check0002}
+var all = []catalog.Check{checks.Check0001, checks.Check0002, checks.Check0003}
 
 func collectFixture(t *testing.T, name string) *fact.Set {
 	t.Helper()
@@ -134,6 +134,53 @@ func TestCheck0002NoNewPrivileges(t *testing.T) {
 	})
 }
 
+func TestCheck0003InterContainerCommunication(t *testing.T) {
+	run(t, checks.Check0003, []tc{
+		{fixture: "containers-docker-hardened", result: finding.Pass, detailContains: "icc is disabled"},
+		// Explicitly true.
+		{fixture: "containers-docker-permissive", result: finding.Fail, severity: finding.Low, detailContains: "every port of every other"},
+		{fixture: "containers-docker-icc-only", result: finding.Fail, severity: finding.Low, detailContains: "icc is not disabled"},
+		// Absent from a file that exists. Docker's default is permissive, so a
+		// key nobody wrote leaves the bridge open.
+		{fixture: "containers-docker-nnp-only", result: finding.Fail, severity: finding.Low, detailContains: "icc is not disabled"},
+		{fixture: "containers-docker-explicit-off", result: finding.Fail, severity: finding.Low, detailContains: "icc is not disabled"},
+		// No file at all: the other flavour of absence, same verdict.
+		{fixture: "containers-docker-defaults", result: finding.Fail, severity: finding.Low, detailContains: "compiled-in defaults"},
+		{fixture: "containers-absent", result: finding.NotApplicable, detailContains: "no dockerd binary"},
+		{fixture: "containers-docker-denied", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "could not be read"},
+		// icc: "false" as a string. dockerd rejects the file, so nothing may be
+		// read from it — the case a lenient parser would take as a set value.
+		{fixture: "containers-docker-wrongtype", result: finding.Unknown, reason: finding.ReasonParse, detailContains: "not valid json"},
+	})
+}
+
+// TestAbsentICCIsNeverReadAsDisabled is CONTAINERS-0003's reason for existing
+// in the shape it has.
+//
+// Docker's icc defaults to *true*. A plain bool in the fact would decode an
+// absent key as false and this check would report PASS — an open bridge
+// described as a closed one, which is the single most misleading answer it
+// could give and the one an operator would never think to question. The three
+// permissive shapes are asserted together so none can drift alone.
+func TestAbsentICCIsNeverReadAsDisabled(t *testing.T) {
+	for _, fixture := range []string{
+		"containers-docker-nnp-only",     // file present, icc key absent
+		"containers-docker-explicit-off", // file present, icc key absent
+		"containers-docker-defaults",     // no file at all
+	} {
+		got := evalCheck(t, checks.Check0003, fixture)
+		if got.Result != finding.Fail {
+			t.Errorf("%s over %s = %s, want FAIL; an unset icc is permissive: %s",
+				checks.Check0003.ID, fixture, got.Result, got.Detail)
+		}
+	}
+
+	// And the inverse, so the test cannot pass by always failing.
+	if got := evalCheck(t, checks.Check0003, "containers-docker-hardened"); got.Result != finding.Pass {
+		t.Errorf("an explicitly false icc = %s, want PASS: %s", got.Result, got.Detail)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // module-wide invariants
 // ---------------------------------------------------------------------------
@@ -205,14 +252,22 @@ func TestChecksAreIndependent(t *testing.T) {
 		{"containers-docker-nnp-only", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Fail, // userns-remap absent
 			"CONTAINERS-0002": finding.Pass, // no-new-privileges true
+			"CONTAINERS-0003": finding.Fail, // icc absent, so permissive
+		}},
+		{"containers-docker-icc-only", map[string]finding.Result{
+			"CONTAINERS-0001": finding.Pass,
+			"CONTAINERS-0002": finding.Pass,
+			"CONTAINERS-0003": finding.Fail, // the only thing wrong
 		}},
 		{"containers-docker-hardened", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Pass,
 			"CONTAINERS-0002": finding.Pass,
+			"CONTAINERS-0003": finding.Pass,
 		}},
 		{"containers-docker-permissive", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Fail,
 			"CONTAINERS-0002": finding.Fail,
+			"CONTAINERS-0003": finding.Fail,
 		}},
 	}
 
@@ -268,6 +323,7 @@ func TestEveryVerdictCarriesTheReadingCaveat(t *testing.T) {
 		"containers-docker-permissive",
 		"containers-docker-defaults",
 		"containers-docker-nnp-only",
+		"containers-docker-icc-only",
 	} {
 		for _, check := range all {
 			got := evalCheck(t, check, fixture)

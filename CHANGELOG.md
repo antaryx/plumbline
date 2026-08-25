@@ -45,11 +45,27 @@ explanation in this file is a defect.
   look at.
 
 ### Added
+- **`CONTAINERS-0003`, inter-container communication.** Reports a daemon that
+  leaves `icc` at its permissive default, so every container on the default
+  bridge can reach every port of every other one. Catalog 17, 86 checks.
+
+  **Rated `LOW`, where `CONTAINERS-0001` and `-0002` are `MEDIUM`**, and the
+  reason is reach rather than kind: those two apply to every container the
+  daemon starts, while this governs the default bridge alone. Containers on a
+  user-defined network are unaffected — and Docker Compose creates one per
+  project — so on a Compose-only host the setting changes very little. It still
+  matters for plain `docker run`, and it costs nothing to set. The limitation
+  is stated up front in the check's description rather than left for an
+  operator to discover.
+
+  Adding it needed no re-recording: the corpus already carries
+  `containers.docker_daemon`, so a new check over an existing fact only moves
+  the expectations. That is the payoff from re-recording at catalog 16.
+
 - **`CONTAINERS` module, first two checks.** `CONTAINERS-0001` (user-namespace
   remapping) and `CONTAINERS-0002` (`no-new-privileges`), with the Docker
-  daemon collector now wired into `internal/cli/catalog.go`. Catalog 16, 85
-  checks. Neither is in `cis-l1`, which selects by module and does not name
-  this one.
+  daemon collector now wired into `internal/cli/catalog.go`. Neither is in
+  `cis-l1`, which selects by module and does not name this one.
 
   **A host with Docker and no `daemon.json` FAILs both, and that is the point.**
   Such a host runs on compiled-in defaults — `userns-remap` off,

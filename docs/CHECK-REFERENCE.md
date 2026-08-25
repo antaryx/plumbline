@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 16 · 85 checks · 11 modules**
+**Catalog version 17 · 86 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -506,6 +506,67 @@ docker run --rm alpine sh -c 'grep NoNewPrivs /proc/self/status'
 **References**
 
 - [no\_new\_privs — Linux kernel documentation](https://docs.kernel.org/userspace-api/no_new_privs.html)
+
+---
+
+### CONTAINERS-0003 — The Docker daemon restricts traffic between containers on the default bridge
+
+| | |
+|---|---|
+| Module | `CONTAINERS` |
+| Base severity | LOW |
+| Since | catalog 17 |
+| Reads | `containers.docker_daemon` |
+| Tags | `containers`, `docker`, `network-segmentation`, `lateral-movement` |
+
+Containers attached to the default bridge network can, by
+default, reach every port of every other container on it. Nothing has to be
+published and no rule has to be added: the daemon installs an ACCEPT rule
+between them and leaves it there.
+
+That makes a single compromised container a position from which to reach the
+others. A database that publishes no port to the host is still on the bridge,
+and a web container running attacker code is on the same bridge, so the
+database's port is one connection away. Setting icc to false replaces the
+blanket ACCEPT with DROP, after which containers reach each other only through
+links or published ports — connections somebody had to ask for.
+
+The default is true, so a host with no daemon.json fails this check —
+correctly, because the default is what such a host is running.
+
+**This governs the default bridge and nothing else.** Containers on a
+user-defined network are unaffected: those have their own isolation from other
+networks, and within one, containers can always reach each other whatever icc
+says. Docker Compose creates a user-defined network for every project, so on a
+host whose workloads all run under Compose this setting changes very little.
+It still matters for containers started with a plain docker run, which is most
+ad-hoc and many CI ones, and it costs nothing to set.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Set icc to false in the Docker daemon configuration.
+
+1. Check whether it will change anything for your workloads first: containers on a user-defined network, including everything Docker Compose starts, are unaffected by this setting.
+2. Find containers on the default bridge that talk to each other: docker network inspect bridge lists them, and anything relying on that path will stop working.
+3. Create or edit /etc/docker/daemon.json and set "icc": false.
+4. Restart the daemon: systemctl restart docker.
+5. Give the containers that do need to talk a user-defined network instead — docker network create, then --network on each — which is the supported way to scope container-to-container traffic and is unaffected by icc.
+6. Verify: docker network inspect bridge should report com.docker.network.bridge.enable\_icc as false.
+
+```sh
+docker network inspect bridge --format '{{index .Options "com.docker.network.bridge.enable_icc"}}'
+systemctl restart docker
+```
+
+> **Caution.** Containers on the default bridge that reach each other directly will lose that path immediately. Restarting the daemon also stops every running container unless live-restore is enabled. Move dependent workloads onto a user-defined network before making the change, not after.
+
+**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 AC-4`
+
+**References**
+
+- [Docker — container communication on the default bridge](https://docs.docker.com/engine/network/drivers/bridge/)
 
 ---
 

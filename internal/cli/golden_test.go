@@ -100,7 +100,7 @@ var pinned = map[string]pin{
 	// syslog daemon, and a check that declines to judge an absent subject is
 	// the behaviour, not a gap.
 	"ubuntu-2404-stock": {
-		catalog: 16, pass: 39, fail: 12, notApplicable: 34, unknown: 0, skipped: 0,
+		catalog: 17, pass: 39, fail: 12, notApplicable: 35, unknown: 0, skipped: 0,
 		posture: 80.50847457627118, coverage: 100,
 		why: "the unhardened baseline every other number is measured against",
 	},
@@ -109,7 +109,7 @@ var pinned = map[string]pin{
 	// check cares about. One PASS and one NOT_APPLICABLE separate them here,
 	// and which ones is the interesting part of any diff on this pair.
 	"debian-13-stock": {
-		catalog: 16, pass: 37, fail: 13, notApplicable: 35, unknown: 0, skipped: 0,
+		catalog: 17, pass: 37, fail: 13, notApplicable: 36, unknown: 0, skipped: 0,
 		posture: 78.44827586206897, coverage: 100,
 		why: "Debian's defaults, which are not Ubuntu's",
 	},
@@ -118,7 +118,7 @@ var pinned = map[string]pin{
 	// is the bundle that catches a check quietly assuming a Debian-shaped /etc
 	// and reporting a verdict about a file that was never there.
 	"alpine-320-stock": {
-		catalog: 16, pass: 30, fail: 8, notApplicable: 47, unknown: 0, skipped: 0,
+		catalog: 17, pass: 30, fail: 8, notApplicable: 48, unknown: 0, skipped: 0,
 		posture: 84.0909090909091, coverage: 100,
 		why: "the distribution least like the others, where guessing shows up",
 	},
@@ -131,7 +131,7 @@ var pinned = map[string]pin{
 	// binary, not of any file on the host. AUTH-0002 says it does not know.
 	// Every other scanner reports the documented default and calls it a PASS.
 	"fedora-44-stock": {
-		catalog: 16, pass: 37, fail: 12, notApplicable: 35, unknown: 1, skipped: 0,
+		catalog: 17, pass: 37, fail: 12, notApplicable: 36, unknown: 1, skipped: 0,
 		posture: 79.13043478260869, coverage: 98,
 		why: "the RPM family's leading edge, where authselect owns the PAM stack",
 	},
@@ -140,7 +140,7 @@ var pinned = map[string]pin{
 	// point of it. One FAIL and one NOT_APPLICABLE separate the two, and which
 	// ones is the interesting part of any diff on this pair.
 	"rocky-9-stock": {
-		catalog: 16, pass: 37, fail: 11, notApplicable: 36, unknown: 1, skipped: 0,
+		catalog: 17, pass: 37, fail: 11, notApplicable: 37, unknown: 1, skipped: 0,
 		posture: 81.25, coverage: 97.95918367346938,
 		why: "the enterprise RPM baseline most real audits run against",
 	},
@@ -149,7 +149,7 @@ var pinned = map[string]pin{
 	// verdict on a host does so here, which no fixture and no stock image
 	// manages on its own.
 	//
-	// The 2 NOT_APPLICABLE are the CONTAINERS module: the recipe installs no
+	// The 3 NOT_APPLICABLE are the CONTAINERS module: the recipe installs no
 	// Docker, so there is no daemon to judge. That is the correct answer and
 	// the honest limit of a container-recorded corpus — a bundle recorded
 	// inside a container cannot carry a container runtime's configuration.
@@ -164,7 +164,7 @@ var pinned = map[string]pin{
 	// correct, and a run in which any of them became a PASS would be a serious
 	// regression rather than an improvement.
 	"ubuntu-2404-hardened": {
-		catalog: 16, pass: 78, fail: 4, notApplicable: 2, unknown: 1, skipped: 0,
+		catalog: 17, pass: 78, fail: 4, notApplicable: 3, unknown: 1, skipped: 0,
 		posture: 96.7741935483871, coverage: 98.79518072289156,
 		why: "the only bundle on which every check in the catalog evaluates",
 	},
