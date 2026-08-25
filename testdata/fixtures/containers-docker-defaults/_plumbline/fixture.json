@@ -1,0 +1,3 @@
+{
+  "description": "Docker is installed and there is no daemon.json at all. This is the ordinary state of most hosts running Docker and it is a configuration rather than an absence of one: every compiled-in default is in force, and several of those are what a hardening check objects to - inter-container communication is on and user-namespace remapping is off. A module that read the missing file as NOT_APPLICABLE would decline to judge the most common Docker installation there is."
+}

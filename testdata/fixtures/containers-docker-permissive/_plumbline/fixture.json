@@ -1,0 +1,3 @@
+{
+  "description": "Docker is installed and configured permissively: inter-container communication explicitly on, experimental features enabled, and the root-equivalent API bound to tcp://0.0.0.0:2375 with no TLS. It also carries registry-mirrors and insecure-registries, which this build does not model - they appear in Keys by name and nowhere else, which is what proves values of unmodelled options do not reach the bundle."
+}

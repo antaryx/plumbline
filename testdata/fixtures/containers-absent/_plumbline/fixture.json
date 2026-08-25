@@ -1,0 +1,3 @@
+{
+  "description": "No dockerd binary and no configuration. The host does not run containers, so the CONTAINERS module is NOT_APPLICABLE - the subject of the sentence has been removed. This is the fixture that has to be told apart from containers-docker-defaults, where the file is equally absent and the verdict is the opposite."
+}

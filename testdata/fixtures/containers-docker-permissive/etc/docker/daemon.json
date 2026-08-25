@@ -1,0 +1,7 @@
+{
+  "icc": true,
+  "experimental": true,
+  "hosts": ["unix:///var/run/docker.sock", "tcp://0.0.0.0:2375"],
+  "registry-mirrors": ["https://mirror.example.internal"],
+  "insecure-registries": ["registry.example.internal:5000"]
+}

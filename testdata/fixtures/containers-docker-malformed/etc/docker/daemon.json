@@ -1,0 +1,4 @@
+{
+  "icc": false,
+  "log-driver": "journald",
+}

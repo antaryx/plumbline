@@ -1,0 +1,3 @@
+{
+  "description": "Valid JSON whose icc value is the string 'false' rather than the boolean. dockerd rejects it exactly as it rejects a syntax error, so it is recorded as malformed for the same reason: the file on disk is not the configuration in force. This is the case a lenient parser would silently read as a configured value."
+}

@@ -44,6 +44,29 @@ explanation in this file is a defect.
   `UNKNOWN` there rather than condemning a hardened binary for having nothing to
   look at.
 
+### Added (scaffolding, not yet wired)
+- **`CONTAINERS` collector for the Docker daemon.** Reads
+  `/etc/docker/daemon.json` into `containers.docker_daemon`, modelling
+  `userns-remap`, `icc`, `log-driver`, `experimental`, `live-restore`,
+  `no-new-privileges` and `hosts`. **Not imported by
+  `internal/cli/catalog.go`**, so it does not run in a scan; no `CONTAINERS`
+  check exists yet.
+
+  It is the first collector in the tree to parse JSON, and the malformed case
+  is more consequential here than in any text config: a line-oriented file has
+  partial meaning, and a JSON document has none. One stray comma and `dockerd`
+  refuses to start, so a rejected file is recorded as `malformed` and yields no
+  values at all rather than reading as "no options set".
+
+  Two distinctions the fact is shaped around: an absent `daemon.json` is not an
+  absent Docker (a daemon on its defaults has `icc` on and no user-namespace
+  remapping, which is a configuration worth judging), and an absent key is not
+  a false key (`icc` defaults to *true*, so the modelled booleans are `*bool`
+  and `fact.OptBool` reports whether the document set them).
+
+  `Keys` records the top-level key names only, never values: `daemon.json`
+  holds registry mirrors, proxy URLs and storage paths, and a bundle travels.
+
 ### Known false positives
 - **`MEMORY-0003` on small C utilities.** `-fstack-protector-strong` instruments
   only functions with local arrays or address-taken locals, so a program with

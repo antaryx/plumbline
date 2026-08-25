@@ -1,0 +1,3 @@
+{
+  "description": "A trailing comma, which is the most common way a hand-edited daemon.json goes wrong. dockerd refuses to start on it, so the daemon is either running the last configuration that parsed or is not running at all, and this scan cannot tell which. Nothing may be concluded about the running configuration from a file the daemon would reject."
+}

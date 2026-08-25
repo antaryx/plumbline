@@ -717,3 +717,53 @@ func TestELFHardeningRoundTrip(t *testing.T) {
 		t.Errorf("Unreadable() = %v, want exactly [/usr/sbin/sshd]", u)
 	}
 }
+
+// TestDockerDaemonRoundTrip proves the containers.docker_daemon decoder
+// registration, and specifically that the optional booleans survive.
+//
+// A *bool is the one shape in the fact vocabulary where a decoder bug is
+// invisible: nil and false marshal differently but read the same way through a
+// plain bool, so a fact that lost the distinction would report every absent key
+// as an explicit false. For icc, whose default is true, that inverts the
+// meaning of the field.
+func TestDockerDaemonRoundTrip(t *testing.T) {
+	yes, no := true, false
+	src := fact.DockerDaemon{
+		State:      fact.DockerConfigPresent,
+		Path:       "/etc/docker/daemon.json",
+		Digest:     "6a1f2e3d4c5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9",
+		Installed:  true,
+		DaemonPath: "/usr/bin/dockerd",
+		Keys:       []string{"icc", "insecure-registries", "userns-remap"},
+
+		UsernsRemap: "default",
+		ICC:         &no,
+		LiveRestore: &yes,
+		// Experimental and NoNewPrivileges are deliberately nil: the document
+		// did not set them, and that is what has to survive.
+	}
+
+	s := fact.NewSet()
+	s.Put(src)
+	got := read(t, write(t, testBundle(s)))
+
+	d, ferr, ok := fact.Get[fact.DockerDaemon](got.Facts, fact.DockerDaemonID)
+	if !ok {
+		t.Fatalf("containers.docker_daemon not readable after round trip: err=%v", ferr)
+	}
+	if !reflect.DeepEqual(d, src) {
+		t.Errorf("containers.docker_daemon changed:\n want %#v\n  got %#v", src, d)
+	}
+
+	// The distinction the pointers exist for, asserted through the accessor a
+	// check would use.
+	if v, set := fact.OptBool(d.ICC); !set || v {
+		t.Errorf("icc = (%v, set=%v), want (false, set=true)", v, set)
+	}
+	if v, set := fact.OptBool(d.Experimental); set || v {
+		t.Errorf("experimental = (%v, set=%v), want (false, set=false) for a key the document omitted", v, set)
+	}
+	if !d.Parsed() || !d.Configurable() {
+		t.Errorf("accessors broke across the round trip: Parsed=%v Configurable=%v", d.Parsed(), d.Configurable())
+	}
+}

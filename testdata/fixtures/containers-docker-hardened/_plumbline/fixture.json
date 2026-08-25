@@ -1,0 +1,3 @@
+{
+  "description": "Docker is installed and every option this build models is set to its hardened value: user namespaces remapped, inter-container communication off, no-new-privileges on, and the daemon listening only on the unix socket. The good case for the CONTAINERS module."
+}

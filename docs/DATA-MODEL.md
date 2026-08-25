@@ -169,6 +169,7 @@ gets produced.
 | `fs.tally.<tally>` | 1 | `collect/walker` (`fswalk`) | `Tally`, `Roots[]`, `Buckets[]`, `Truncated`, `TruncationReasons[]`, `KeysDropped`, `InodesTallied`, `InodesVisited` |
 | `users.nsswitch` | 1 | `collect/collectors/users` | `Databases[]`, `State`, `Path`, `Malformed[]`, `Digest` |
 | `memory.elf` | 1 | `collect/collectors/memory` | `Binaries[]`, `Truncated` |
+| `containers.docker_daemon` | 1 | `collect/collectors/containers` | `State`, `Path`, `Digest`, `Installed`, `DaemonPath`, `Keys[]`, plus the modelled options |
 
 Every fact added later is listed here with its version history.
 
@@ -702,6 +703,53 @@ that never look at the bytes. Same reasoning as `cron.files` carrying no
 crontab. `Truncated` means the collector stopped before probing every target; a
 target absent from `Binaries` was never looked at, which no check may read as a
 statement about the host.
+
+
+#### `containers.docker_daemon` — what daemon.json says, and only that
+
+Two distinctions carry this fact, and both are ones a scaffold gets wrong.
+
+**An absent `daemon.json` is not an absent Docker.** A daemon with no
+configuration file runs on every compiled-in default, and several of those are
+what a hardening check exists to object to: inter-container communication is on,
+user-namespace remapping is off. Absence is a configuration, and on most hosts
+running Docker it is *the* configuration. `Installed` — a stat for a `dockerd`
+binary — is what separates that from a host with no container runtime, where the
+module is genuinely `NOT_APPLICABLE`. Without it a check reading `absent` would
+have to pick one of those meanings and be wrong on the other half of a fleet.
+
+**An absent key is not a false key.** `icc` defaults to *true*, so a plain bool
+would turn "the operator never wrote this" into "inter-container communication
+is off" — an open network reported as closed. The modelled booleans are
+therefore `*bool`, and `fact.OptBool` returns the value alongside whether the
+document set it. The collector never substitutes Docker's default; encoding the
+default is the check's business, as `SSHD-0002` does for `PermitRootLogin`.
+
+`State` distinguishes `present`, `absent`, `denied`, `not_regular`, `malformed`,
+`truncated` and `error`. **`malformed` matters more here than in any text
+config.** A line-oriented file has partial meaning — one bad directive leaves
+the rest intelligible — and a JSON document has none: one stray comma and
+`dockerd` refuses to start, so the daemon is running the last configuration that
+parsed or is not running at all. Recording such a file as "no options set" would
+hand a check the compiled-in defaults for a host whose real configuration is
+unknown. `Parsed()` is the gate.
+
+`Keys` lists the top-level key names the document set, **names only, never
+values**. It lets a check tell "the operator did not set this" from "this build
+does not model that option", without `registry-mirrors`, proxy URLs or storage
+paths reaching an artifact written to travel (`PRIVACY.md`). An unrecognised key
+is recorded and judged by nothing: `dockerd` does refuse to start on one, but
+the valid key set differs by release, and calling a newer option a fault would
+report a broken daemon on a host that is merely more current than this build.
+
+**The file is not the running configuration.** `dockerd` takes the same options
+as command-line flags, and the stock unit passes some — `ExecStart=/usr/bin/dockerd
+-H fd:// --containerd=…`. An option set only there is invisible here. `dockerd`
+refuses to start when one is given in both places, so the two cannot disagree
+silently, but a flag the file never mentions is in force and unrecorded. Until
+the join against the systemd unit exists, a check reading this fact may state
+what the file says and not what the daemon is doing. Rootless Docker's
+`~/.config/docker/daemon.json` is per-user and is not read.
 
 ---
 

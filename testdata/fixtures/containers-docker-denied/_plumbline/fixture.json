@@ -1,0 +1,7 @@
+{
+  "description": "The daemon configuration exists and cannot be read, as under an unprivileged scan. The file on disk is the hardened one, deliberately: a check that reported PASS here would be reporting a verdict drawn from a file it never opened.",
+  "euid": 1000,
+  "unreadable": [
+    "/etc/docker/daemon.json"
+  ]
+}

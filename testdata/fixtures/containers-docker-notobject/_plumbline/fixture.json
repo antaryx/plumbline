@@ -1,0 +1,3 @@
+{
+  "description": "Valid JSON that is an array rather than an object. dockerd wants an object; an array parses and means nothing, which is the case a parser checking only for syntax errors would accept."
+}
