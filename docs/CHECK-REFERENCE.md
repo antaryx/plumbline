@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 13 · 79 checks · 9 modules**
+**Catalog version 15 · 83 checks · 10 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -2394,6 +2394,247 @@ ss -tnp | grep :514
 
 - [rsyslog — omfwd](https://www.rsyslog.com/doc/configuration/modules/omfwd.html)
 - [RFC 5424 — The Syslog Protocol](https://www.rfc-editor.org/rfc/rfc5424)
+
+---
+
+## MEMORY
+
+### MEMORY-0001 — Privileged binaries are position-independent executables
+
+| | |
+|---|---|
+| Module | `MEMORY` |
+| Base severity | MEDIUM |
+| Since | catalog 14 |
+| Reads | `memory.elf` |
+| Tags | `memory`, `exploit-mitigation`, `aslr`, `setuid` |
+
+A position-independent executable can be loaded at a
+different base address on every execution, which is what lets ASLR randomise
+its code. A binary linked at a fixed address (ELF type ET_EXEC) cannot be
+moved, so its instruction addresses are identical on every host running that
+build — and an attacker who needs a gadget in it does not have to leak an
+address first.
+
+The exposure is worth attention specifically on setuid-root utilities and the
+daemons that authenticate: on those, a memory-corruption bug is a local root
+escalation rather than a crash, and the missing randomisation is what turns an
+unreliable exploit into a repeatable one.
+
+Every mainstream distribution has built these binaries as PIE for years, so a
+failure here usually means a locally compiled or vendor-supplied replacement
+rather than a distribution default.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort MEDIUM
+
+Replace the binary with a position-independent build.
+
+1. Confirm the finding independently: readelf -h <path> \| grep Type — ET\_DYN is a PIE, ET\_EXEC is not.
+2. Identify what owns the file: dpkg -S <path> or rpm -qf <path>. A file no package owns was installed outside the package manager and is the likely cause.
+3. If a package owns it, reinstall from the distribution: every mainstream distribution has shipped these as PIE for years, so a fixed-address build usually means the file was replaced locally.
+4. If it was built locally, rebuild with -fPIE in CFLAGS and -pie in LDFLAGS, then confirm with readelf before installing.
+5. If a vendor supplies it, raise it with them: this is a build-flag change on their side, not a configuration option on yours.
+
+```sh
+readelf -h /usr/bin/sudo | grep Type
+dpkg -S /usr/bin/sudo || rpm -qf /usr/bin/sudo
+```
+
+> **Caution.** Replacing a setuid-root binary can leave you unable to escalate privileges. Verify a second route to root in a separate session before swapping sudo or su, and keep the original file until the replacement is confirmed working.
+
+**Controls** — `nist-800-53-r5 SI-16`
+
+**References**
+
+- [elf(5) — ELF header types](https://man7.org/linux/man-pages/man5/elf.5.html)
+
+---
+
+### MEMORY-0002 — Privileged binaries use full RELRO
+
+| | |
+|---|---|
+| Module | `MEMORY` |
+| Base severity | MEDIUM |
+| Since | catalog 15 |
+| Reads | `memory.elf` |
+| Tags | `memory`, `exploit-mitigation`, `relro`, `setuid` |
+
+RELRO maps a dynamically linked program's relocation data
+read-only once the dynamic linker has finished with it. Partial RELRO covers
+the sections resolved at startup and stops short of the PLT's global offset
+table, because lazy binding writes an address into that table the first time
+each imported function is called — so the table has to stay writable for the
+life of the process.
+
+That writable table is a well-worn target. An attacker with an arbitrary write
+overwrites one entry and takes control at the next call to the function it
+belongs to, without needing to defeat any of the other mitigations. Full RELRO
+closes it by telling the linker to resolve every relocation before main runs
+(BIND_NOW), after which the whole table can be mapped read-only.
+
+The cost is startup time on programs with very large import tables, which is
+why it is not universally the default. On a setuid-root utility it is the
+right trade.
+
+This check reports FAIL only when the relocation table is actually left
+writable. A statically linked binary resolves nothing at run time and is
+NOT_APPLICABLE rather than a failure: it has no lazy binding to close.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort MEDIUM
+
+Rebuild the binary with full RELRO, or obtain a build that has it.
+
+1. Confirm the finding independently: readelf -d <path> \| grep -E 'BIND\_NOW\|FLAGS' — full RELRO needs a GNU\_RELRO segment plus BIND\_NOW, DF\_BIND\_NOW or DF\_1\_NOW.
+2. Check the GNU\_RELRO segment is present too: readelf -l <path> \| grep GNU\_RELRO. A binary with neither needs both flags, not just one.
+3. Identify what owns the file: dpkg -S <path> or rpm -qf <path>.
+4. If a package owns it, check whether the distribution ships a hardened build; most enable this by default and a missing flag suggests the file was replaced locally.
+5. If it was built locally, rebuild with -Wl,-z,relro,-z,now in LDFLAGS and confirm with readelf before installing.
+6. Expect a small startup cost on programs with large import tables; measure it before rejecting the change on that basis.
+
+```sh
+readelf -d /usr/bin/sudo | grep -E 'BIND_NOW|FLAGS'
+readelf -l /usr/bin/sudo | grep GNU_RELRO
+```
+
+> **Caution.** Replacing a setuid-root binary can leave you unable to escalate privileges. Verify a second route to root in a separate session before swapping sudo or su, and keep the original file until the replacement is confirmed working.
+
+**Controls** — `nist-800-53-r5 SI-16`
+
+**References**
+
+- [ld(1) — -z relro and -z now](https://man7.org/linux/man-pages/man1/ld.1.html)
+
+---
+
+### MEMORY-0003 — Privileged binaries are built with stack protection
+
+| | |
+|---|---|
+| Module | `MEMORY` |
+| Base severity | MEDIUM |
+| Since | catalog 15 |
+| Reads | `memory.elf` |
+| Tags | `memory`, `exploit-mitigation`, `stack-protector`, `setuid` |
+
+A stack protector places a random value between a function's
+local buffers and its saved return address, and checks that the value is intact
+before returning. A linear overflow that reaches the return address has to pass
+through the canary first, so the corruption is detected and the process aborts
+rather than returning to an address the attacker chose. The evidence is a
+reference to __stack_chk_fail, the function the compiler-inserted check calls
+when the value has changed.
+
+Two limits on what a missing symbol proves, and both matter before acting on a
+failure here:
+
+The distribution default, -fstack-protector-strong, instruments only functions
+that have local arrays or take the address of a local. A small utility can be
+compiled with it correctly and contain no instrumented function at all, and
+will then carry no __stack_chk_fail. On a stock Debian host /usr/bin/newgrp is
+exactly this case.
+
+A binary from a memory-safe language does not use this mechanism and will not
+have the symbol. sudo-rs, which several distributions now ship as /usr/bin/sudo,
+gets its memory safety from the language and reports here as though it had none.
+That is a limitation of what a symbol table can tell you, not a finding about
+the binary.
+
+So this check reports what the symbols say — no more. Confirm what produced the
+binary before treating a failure as a defect.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort MEDIUM
+
+Confirm what built the binary, then rebuild with a stack protector if it is C or C++.
+
+1. Rule out the two known false positives first. A binary from a memory-safe language (Rust, Go) does not use this mechanism, and a small C program with no local arrays legitimately has no instrumented function.
+2. Confirm the finding independently: readelf -sW <path> \| grep \_\_stack\_chk\_fail — no output means no reference.
+3. Check the binary is not merely stripped of the table you are reading: a fully stripped static binary reports UNKNOWN here rather than FAIL, so a FAIL means a table was read and the symbol was not in it.
+4. Identify what owns the file: dpkg -S <path> or rpm -qf <path>.
+5. If it was built locally as C or C++, rebuild with -fstack-protector-strong in CFLAGS and confirm with readelf before installing.
+6. If a vendor supplies it, raise it with them, quoting the missing symbol.
+
+```sh
+readelf -sW /usr/bin/sudo | grep __stack_chk_fail
+dpkg -S /usr/bin/sudo || rpm -qf /usr/bin/sudo
+```
+
+> **Caution.** Replacing a setuid-root binary can leave you unable to escalate privileges. Verify a second route to root in a separate session before swapping sudo or su, and keep the original file until the replacement is confirmed working.
+
+**Controls** — `nist-800-53-r5 SI-16`
+
+**References**
+
+- [gcc(1) — -fstack-protector-strong](https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html)
+
+---
+
+### MEMORY-0004 — Privileged binaries are built with \_FORTIFY\_SOURCE
+
+| | |
+|---|---|
+| Module | `MEMORY` |
+| Base severity | LOW |
+| Since | catalog 15 |
+| Reads | `memory.elf` |
+| Tags | `memory`, `exploit-mitigation`, `fortify-source`, `setuid` |
+
+_FORTIFY_SOURCE substitutes a checked variant for libc calls
+whose destination size the compiler can work out — memcpy becomes __memcpy_chk,
+sprintf becomes __sprintf_chk, and so on. The checked variant knows how large
+the buffer is and aborts instead of writing past it. It costs almost nothing at
+run time and turns a class of buffer overflow into a clean abort.
+
+Unlike a stack canary, this is not one symbol but a family: the presence of any
+_chk entry point proves the option was in effect for the translation unit that
+produced the call.
+
+Absence is the harder half, because two very different binaries produce it. One
+was compiled without the option. The other was compiled with it and calls
+nothing the macro could substitute — a program that never formats a string or
+copies a buffer has nothing to fortify, and looks identical from outside.
+
+The check separates them by counting the unfortified originals. A binary that
+references memcpy and sprintf and carries no __memcpy_chk was not fortified.
+A binary that references neither is NOT_APPLICABLE: there is no call for the
+option to have changed, so reporting it as unfortified would be a finding about
+a header macro drawn from a program that would look the same either way.
+
+A binary from a memory-safe language reaches that same NOT_APPLICABLE only if it
+calls no fortifiable libc function; one that links against libc for string and
+memory work will report FAIL, which reflects what its symbol table says rather
+than how it manages memory.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort MEDIUM
+
+Rebuild the binary with \_FORTIFY\_SOURCE, or obtain a build that has it.
+
+1. Confirm the finding independently: readelf -sW <path> \| grep '\_chk' — no output means no fortified entry point was linked.
+2. Check which unfortified calls the binary does make: readelf -sW <path> \| grep -E 'memcpy\|sprintf\|strcpy\|printf'. Those are what the option would have covered.
+3. Identify what owns the file: dpkg -S <path> or rpm -qf <path>.
+4. If it was built locally, rebuild with -D\_FORTIFY\_SOURCE=3 (or =2 on older toolchains) and an optimisation level of at least -O1, which the macro requires to work at all.
+5. Re-check with readelf after rebuilding: a build that silently dropped the flag looks exactly like one that never had it.
+
+```sh
+readelf -sW /usr/bin/sudo | grep _chk
+dpkg -S /usr/bin/sudo || rpm -qf /usr/bin/sudo
+```
+
+> **Caution.** Replacing a setuid-root binary can leave you unable to escalate privileges. Verify a second route to root in a separate session before swapping sudo or su, and keep the original file until the replacement is confirmed working.
+
+**Controls** — `nist-800-53-r5 SI-16`
+
+**References**
+
+- [feature\_test\_macros(7) — \_FORTIFY\_SOURCE](https://man7.org/linux/man-pages/man7/feature_test_macros.7.html)
 
 ---
 

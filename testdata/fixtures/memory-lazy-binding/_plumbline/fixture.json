@@ -1,0 +1,3 @@
+{
+  "description": "/usr/bin/sudo has a PT_GNU_RELRO segment and no BIND_NOW of any encoding: partial RELRO, not full. The PLT's global offset table stays writable for the life of the process, which is the single entry an arbitrary write turns into control of the next imported call. MEMORY-0001 and MEMORY-0003 pass over this fixture and only MEMORY-0002 fails, which is what proves partial RELRO is not being read as full."
+}

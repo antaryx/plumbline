@@ -1,0 +1,3 @@
+{
+  "description": "Every binary references malloc, free and exit and nothing _FORTIFY_SOURCE could substitute. There is no call for the option to have changed, so MEMORY-0004 is NOT_APPLICABLE rather than FAIL: reporting it as unfortified would be a finding about a header macro drawn from a program that would look identical either way. The other three checks still reach real verdicts."
+}

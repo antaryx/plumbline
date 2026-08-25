@@ -662,3 +662,58 @@ func TestAFactFromTheFutureIsUnknownRatherThanAbsent(t *testing.T) {
 		t.Error("an ordinary decoded fact reports itself as opaque")
 	}
 }
+
+// TestELFHardeningRoundTrip proves the memory.elf decoder registration. A fact
+// whose ID is in the registry but whose decoder was never wired reads back as
+// an UnknownFact, and a check requiring it then resolves to UNKNOWN from a
+// bundle that was written perfectly well.
+//
+// The entry deliberately carries a non-observed state alongside the observed
+// one, because the states are strings and a decoder that dropped them would
+// leave every entry looking like the zero value — which is not "observed", but
+// is close enough to it to be worth pinning.
+func TestELFHardeningRoundTrip(t *testing.T) {
+	src := fact.ELFHardening{
+		Binaries: []fact.ELFBinary{
+			{
+				Path:   "/usr/bin/sudo",
+				State:  fact.ELFObserved,
+				PIE:    true,
+				Stack:  fact.ELFStackNoExec,
+				RELRO:  true,
+				Type:   "ET_DYN",
+				Digest: "3b1f8c2d4e5a6b7c8d9e0f1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e",
+			},
+			{
+				Path:  "/usr/sbin/sshd",
+				State: fact.ELFDenied,
+				Stack: fact.ELFStackUnspecified,
+				Msg:   "cannot read the file",
+			},
+		},
+		Truncated: true,
+	}
+
+	s := fact.NewSet()
+	s.Put(src)
+	got := read(t, write(t, testBundle(s)))
+
+	h, ferr, ok := fact.Get[fact.ELFHardening](got.Facts, fact.ELFHardeningID)
+	if !ok {
+		t.Fatalf("memory.elf not readable after round trip: err=%v", ferr)
+	}
+	if !reflect.DeepEqual(h, src) {
+		t.Errorf("memory.elf changed:\n want %#v\n  got %#v", src, h)
+	}
+
+	// The accessors a check will actually use still work over the decoded fact.
+	if b, found := h.Get("/usr/bin/sudo"); !found || !b.Usable() {
+		t.Errorf("sudo entry = %+v (found=%v), want a usable observation", b, found)
+	}
+	if nx, known := h.Binaries[1].NX(); nx || known {
+		t.Errorf("a denied entry reported NX() = (%v, %v), want (false, false)", nx, known)
+	}
+	if u := h.Unreadable(); len(u) != 1 || u[0].Path != "/usr/sbin/sshd" {
+		t.Errorf("Unreadable() = %v, want exactly [/usr/sbin/sshd]", u)
+	}
+}

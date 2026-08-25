@@ -11,7 +11,105 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- **`MEMORY` module completed.** `MEMORY-0002` (full RELRO), `MEMORY-0003`
+  (stack protection) and `MEMORY-0004` (`_FORTIFY_SOURCE`) join `MEMORY-0001`.
+  Catalog 15, 83 checks. None is in the `cis-l1` profile: the CIS Level 1 server
+  baseline does not cover per-binary build flags.
+
+  All four share one evaluator, because the combining rules are where a check of
+  this shape goes wrong and there are three of them: FAIL outranks UNKNOWN, a
+  property that does not apply is not one that passes, and a file that does not
+  say is not a file that says no.
+
+- **Symbol-table and dynamic-section reading in the ELF collector.** `BindNow`,
+  `HasCanary`, `HasFortify`, plus the discriminators that keep them honest:
+  `Dynamic`, `Symbols`, `SymbolCount` and `FortifyCandidates`. Additive fields,
+  so `memory.elf` stays at version 1 per §2.2 of the data model.
+
+  Eager binding is read from all three encodings. `DT_BIND_NOW` is the tag the
+  specification names and is now effectively extinct: on a sample of stock
+  Debian binaries not one carried it and every one carried `DF_1_NOW`. Reading
+  only the documented tag would have reported every correctly hardened binary
+  on a current distribution as lazily bound.
+
+  Symbols are read from `.dynsym` and `.symtab` together. A stripped image —
+  every binary a distribution installs — keeps the first and discards the
+  second; an unstripped static binary has the reverse.
+
+- **`fact.ELFSymbols`, a third state for symbol evidence.** An absent symbol and
+  an absent symbol *table* are different observations, and a boolean merged
+  them. A fully stripped binary has no `__stack_chk_fail` for the same reason it
+  has no symbol of any kind, so `MEMORY-0003` and `MEMORY-0004` resolve to
+  `UNKNOWN` there rather than condemning a hardened binary for having nothing to
+  look at.
+
+### Known false positives
+- **`MEMORY-0003` on small C utilities.** `-fstack-protector-strong` instruments
+  only functions with local arrays or address-taken locals, so a program with
+  none carries no `__stack_chk_fail` while being compiled correctly.
+  `/usr/bin/newgrp` on stock Debian is exactly this.
+- **`MEMORY-0003` and `MEMORY-0004` on binaries from memory-safe languages.**
+  Rust and Go use neither glibc's stack protector nor its fortified entry
+  points. `sudo-rs`, shipped as `/usr/bin/sudo` on several distributions,
+  reports as though it had no hardening at all.
+
+  Both are stated on the checks themselves and in `docs/FALSE-POSITIVES.md`.
+  Neither is fixable from a symbol table, which is why they are documented
+  rather than worked around.
+
+- **`MEMORY` module, first check.** `MEMORY-0001` reports privileged binaries
+  linked at a fixed address (`ET_EXEC`) rather than as position-independent
+  executables, which is what lets ASLR randomise their code. Catalog 14, 80
+  checks. Not in the `cis-l1` profile: the CIS Level 1 server baseline does not
+  cover per-binary build flags, and adding it there would change what that
+  profile claims to be.
+
+- **`memory.elf` fact and the collector that produces it.** Reads PIE, NX and
+  partial RELRO out of the ELF program headers with `debug/elf`, over a fixed
+  list of setuid-root utilities and privileged daemons. Nothing is executed.
+  Symbolic links are resolved through the seam, because `/usr/bin/sudo` is an
+  alternatives link on every Debian-family host and stopping at it would examine
+  nothing on the binary most worth examining.
+
+  `NX` is three states rather than a boolean. A binary with no `PT_GNU_STACK`
+  header leaves the decision to the kernel, by a rule that differs across
+  architectures and kernel versions, so the file does not answer the question
+  and the collector does not invent one.
+
+- **`System.ReadOpaque`.** A read whose *bytes* are not evidence, with the same
+  caps, the same refusal of non-regular files and the same digest as `ReadFile`.
+  Bytes read this way never enter a bundle's evidence store; the digest, on the
+  fact, is what survives. The exclusion is enforced at the seam rather than by
+  the caller, alongside the existing credential-file exclusion, because a
+  collector that has to remember to opt out is one that will eventually forget.
+
+  On a live host the twelve binaries `MEMORY` examines are about 2.0 MB. They
+  contribute 2.4 KB of fact and no evidence — an artifact 835 times smaller than
+  storing them would have produced, with nothing lost that an auditor can use:
+  `sha256sum` on the host reproduces the recorded digest, which a stored copy
+  made by the same scan cannot.
+
+### Changed
+- **Golden bundles re-recorded at catalog 15.** All six now carry `memory.elf`,
+  so the `MEMORY` module reaches real verdicts instead of
+  `UNKNOWN(fact_not_collected)`. Coverage returns to its pre-MEMORY baseline —
+  100 on ubuntu-stock, debian and alpine; the residual `UNKNOWN`s on fedora,
+  rocky and ubuntu-hardened are the pre-existing AUTH and KERNEL ones.
+
+  Two new `FAIL`s, both documented limits rather than defects in the hosts:
+  alpine's `MEMORY-0004` (`/usr/bin/crontab` and `/usr/bin/passwd` are one
+  busybox binary under two names, and musl has no `_chk` entry points) and
+  debian's `MEMORY-0003` (`/usr/bin/newgrp`, 52 symbols, nothing needing a
+  canary). Both are pinned deliberately: a run where either became a `PASS`
+  would mean the symbol reading had begun inventing evidence.
+
+- **Third known false positive recorded.** `MEMORY-0004` on musl, alongside the
+  small-C-utility and memory-safe-language cases.
+
+### Check corrections
+
+None. No existing check changed its verdict on any fixture or any golden bundle.
 
 ---
 

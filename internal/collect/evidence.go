@@ -86,3 +86,36 @@ func (r recordingSystem) ReadFile(path string, maxBytes int64) (system.ReadResul
 	}
 	return res, nil
 }
+
+// ReadOpaque reads without recording. It is the second exclusion at this seam,
+// and it is here for the same reason the first one is: a collector that had to
+// remember to opt out is a collector that will one day forget.
+//
+// The two exclusions differ in what they are protecting. Credential files are
+// excluded because storing them would be harmful — a bundle full of password
+// hashes is an offline attack kit that travels. Opaque reads are excluded
+// because storing them would be useless and expensive: an ELF binary is a few
+// hundred kilobytes of machine code that no auditor reads as text, and copying
+// a dozen of them into every scan makes an artifact the size of the binaries
+// it describes for evidence nobody can check by eye.
+//
+// What is kept in both cases is the same thing: the digest, on the fact. For a
+// binary that is the stronger record, because `sha256sum` on the host
+// reproduces it — a check against the running system rather than against a
+// copy the same scan made.
+//
+// This override is not strictly load-bearing today. recordingSystem embeds
+// system.System, so an unoverridden ReadOpaque would promote the wrapped
+// implementation and bypass the recorder anyway. It is written out because
+// that would be accidental correctness: the policy would live in the absence
+// of a method, where nothing states it and a later refactor cannot see it.
+//
+// MarkTruncated is deliberately not called. It exists so a finding citing
+// partial evidence is annotated rather than implying the file ended where the
+// excerpt does, and there is no stored evidence here to annotate. A path in
+// the manifest's truncated_sources with no blob behind it would describe a
+// gap in an evidence store that never held the file. The truncation is
+// recorded where it belongs instead, on the fact — see fact.ELFTruncated.
+func (r recordingSystem) ReadOpaque(path string, maxBytes int64) (system.ReadResult, error) {
+	return r.System.ReadOpaque(path, maxBytes)
+}

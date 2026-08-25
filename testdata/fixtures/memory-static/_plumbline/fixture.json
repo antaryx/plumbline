@@ -1,0 +1,3 @@
+{
+  "description": "Every binary is statically linked and unstripped: no dynamic section, symbols in .symtab rather than .dynsym. Full RELRO is NOT_APPLICABLE because a static binary resolves nothing at run time and has no relocation table to protect. The canary and fortify symbols are still found, which is what proves both tables are read rather than only the one a stripped distribution binary uses."
+}

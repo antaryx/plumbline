@@ -119,6 +119,34 @@ type System interface {
 	// from blocking forever on an unprivileged user's FIFO.
 	ReadFile(path string, maxBytes int64) (ReadResult, error)
 
+	// ReadOpaque reads a file whose *bytes* are not evidence, with exactly the
+	// mechanics of ReadFile — same caps, same refusal of anything that is not
+	// a regular file, same digest over the bytes actually read.
+	//
+	// The difference is disposition, not behaviour. Bytes read through
+	// ReadFile are recorded in the bundle's evidence store, because for a
+	// configuration file the bytes *are* the evidence: an auditor disputing a
+	// finding re-reads the line it quoted. That is the wrong trade for a file
+	// nobody will read as text. An ELF binary is several hundred kilobytes of
+	// machine code; copying it into an artifact designed to travel would make
+	// a bundle the size of the binaries it audited, and it would prove nothing
+	// a human could check by eye.
+	//
+	// What survives is the digest, which is the part an auditor can actually
+	// verify — `sha256sum /usr/bin/sudo` on the host reproduces it, which is
+	// more than a stored blob offers, because it is checkable against the
+	// running system rather than against a copy the same scan made.
+	//
+	// **The exclusion is enforced at the seam, not by the caller.** A collector
+	// that had to remember to opt out is a collector that will one day forget,
+	// and the forgetting would be invisible until somebody opened a 200 MB
+	// bundle. See collect.recordingSystem.
+	//
+	// This is unrelated to fact.Opaque, which marks a fact that is present and
+	// not interpretable. The shared word is unfortunate; the concepts do not
+	// touch.
+	ReadOpaque(path string, maxBytes int64) (ReadResult, error)
+
 	// ReadDir lists a directory without following symlinks, reading at most
 	// maxEntries of them (DefaultMaxDirEntries when <= 0).
 	//

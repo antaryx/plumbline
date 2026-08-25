@@ -168,6 +168,7 @@ gets produced.
 | `fs.mounts` | 1 | `collect/walker` (`fswalk`) | `Entries[]`, `Known` |
 | `fs.tally.<tally>` | 1 | `collect/walker` (`fswalk`) | `Tally`, `Roots[]`, `Buckets[]`, `Truncated`, `TruncationReasons[]`, `KeysDropped`, `InodesTallied`, `InodesVisited` |
 | `users.nsswitch` | 1 | `collect/collectors/users` | `Databases[]`, `State`, `Path`, `Malformed[]`, `Digest` |
+| `memory.elf` | 1 | `collect/collectors/memory` | `Binaries[]`, `Truncated` |
 
 Every fact added later is listed here with its version history.
 
@@ -626,6 +627,81 @@ per §2.2 it is an optional field that no check is required to consider, and a
 check reading a bundle written before it existed emits evidence without a
 digest, which is what it did then and what the findings schema permits. See
 `docs/adr/0009-evidence-digest-tracking.md`.
+
+#### `memory.elf` — ELF hardening on the binaries worth hardening
+
+One fact carrying an entry per probed binary, not one fact per binary. Two
+constraints decide it, and neither is stylistic.
+
+`Produces()` is read before a collector runs, so that a timeout or a panic can
+be filed against the facts a check will look for. A per-path fact ID set is not
+known until the collector has already stat'ed the host, so such a collector
+could only ever be blamed by name. `fs.<interest>` is not a counter-example:
+interests are registered at `init` and are static by the time anything asks.
+And a fact ID becomes a bundle member name verbatim — `facts/<id>.json` — so an
+ID carrying an absolute path would turn the flat `facts/` directory into a
+mirror of the audited host's filesystem layout.
+
+Per-binary ignorance lives in `ELFBinary.State` instead, so one unreadable
+binary marks its own entry and leaves every other entry usable. The states are
+`observed`, `absent`, `denied`, `not_regular`, `not_elf`, `too_large`,
+`truncated` and `error`, and `PIE`, `Stack` and `RELRO` mean nothing unless the
+state is `observed`. `false` is a legitimate value for both booleans, so
+neither can double as "not recorded" — the rule ADR-0016 sets for uid 0.
+
+**`Stack` is three states, not a bool.** With no `PT_GNU_STACK` header the
+kernel applies its own default, which differs by architecture and by kernel
+version, so the file does not answer the question. `ELFStackUnspecified`
+carries that to the check, which resolves it to `UNKNOWN`. `NX()` returns the
+value and whether the file said; a check that ignored the second return would
+read an unspecified stack as an executable one.
+
+**`RELRO` is partial RELRO and nothing more**, and `BindNow` is the other half.
+Full RELRO is partial RELRO plus eager binding, which lives in the dynamic
+section rather than in the program headers; reading `RELRO` alone as "RELRO is
+on" would report a writable GOT as hardened. `FullRELRO()` combines the two and
+returns whether the file answered at all — a statically linked binary has no
+relocation table and neither has nor lacks the property.
+
+Three dynamic-section encodings mean eager binding and all three are read:
+`DT_BIND_NOW`, `DT_FLAGS`/`DF_BIND_NOW`, and `DT_FLAGS_1`/`DF_1_NOW`. The last
+is what current toolchains emit — on a sample of stock Debian binaries not one
+carried `DT_BIND_NOW`, the tag the specification names, and every one carried
+`DF_1_NOW`. A reader that trusted the documented tag would report every
+correctly hardened binary on a current distribution as lazily bound.
+
+**`Symbols` exists because an absent symbol and an absent symbol *table* are
+different observations.** `HasCanary` and `HasFortify` come from `.dynsym` and
+`.symtab`, unioned, because a stripped image — which is every binary a
+distribution installs — keeps the first and discards the second, while an
+unstripped static binary has the reverse. When neither is present the state is
+`stripped` and both booleans mean nothing: reading them as "unhardened" would
+condemn a hardened binary for having nothing to look at. `SymbolsRead()` is the
+gate, and the symbol checks resolve to `UNKNOWN` when it is false.
+
+`FortifyCandidates` counts referenced libc functions that have a fortified
+variant and were linked unfortified. It separates "compiled without
+`_FORTIFY_SOURCE`" from "compiled with it and calling nothing it could
+substitute", which are a finding and a non-finding that look identical from
+outside.
+
+`Resolved` is the path actually read, when the target was a symbolic link. The
+seam never follows a terminal symlink, so the collector resolves the chain
+itself and every hop goes back through the interface, which is what keeps
+`--root` governing what is looked at (ADR-0017). Following links is not an edge
+case here: on every Debian-family host `/usr/bin/sudo` is an alternatives link,
+and a collector that stopped at it would examine nothing on the binary most
+worth examining. Both paths are recorded because both belong in a report — one
+names the command an operator types, the other names the file they have to
+replace.
+
+The fact carries no binary contents, only the parsed properties and a sha256 of
+the image. A bundle is written to travel, and copying whole executables into one
+would make an audit artifact the size of the binaries it audited, for checks
+that never look at the bytes. Same reasoning as `cron.files` carrying no
+crontab. `Truncated` means the collector stopped before probing every target; a
+target absent from `Binaries` was never looked at, which no check may read as a
+statement about the host.
 
 ---
 

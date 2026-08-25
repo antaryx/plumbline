@@ -1,0 +1,3 @@
+{
+  "description": "/usr/bin/sudo references the fortified _chk entry points and no __stack_chk_fail: FORTIFY_SOURCE was in effect and the stack protector was not. The two come from different compiler flags and this fixture holds them apart, so MEMORY-0004 passes over it while MEMORY-0003 fails."
+}

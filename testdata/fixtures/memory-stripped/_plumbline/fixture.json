@@ -1,0 +1,3 @@
+{
+  "description": "Every binary is fully stripped: no .dynsym, no .symtab, nothing to read a symbol name from. PIE and RELRO come from program headers and are still determined, so MEMORY-0001 and MEMORY-0002 pass. The canary and FORTIFY questions have no evidence either way and resolve to UNKNOWN \u2014 the case a boolean would have reported as 'unhardened' on the strength of having found nothing to look at."
+}

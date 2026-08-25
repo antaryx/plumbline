@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 13 · 79 checks · 9 modules**
+**Catalog version 15 · 83 checks · 10 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 
@@ -18,11 +18,12 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | `FILESYS` | 10 | 2 | 3 | 4 | 1 | 0 |
 | `KERNEL` | 16 | 0 | 1 | 13 | 2 | 0 |
 | `LOGGING` | 5 | 0 | 0 | 4 | 1 | 0 |
+| `MEMORY` | 4 | 0 | 0 | 3 | 1 | 0 |
 | `NETWORK` | 3 | 0 | 2 | 1 | 0 | 0 |
 | `SERVICES` | 5 | 0 | 2 | 3 | 0 | 0 |
 | `SSHD` | 19 | 1 | 7 | 8 | 3 | 0 |
 | `USERS` | 10 | 2 | 4 | 2 | 2 | 0 |
-| **total** | **79** | 5 | 24 | 39 | 11 | 0 |
+| **total** | **83** | 5 | 24 | 42 | 12 | 0 |
 
 Severity is the check's **base** severity, before any context adjustment a finding may carry.
 
@@ -94,6 +95,15 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`LOGGING-0003`](CHECK-REFERENCE.md#logging-0003--the-systemd-journal-is-stored-persistently) The systemd journal is stored persistently | MEDIUM | `logging.journald` |
 | [`LOGGING-0004`](CHECK-REFERENCE.md#logging-0004--journald-forwards-to-syslog-where-rsyslog-is-present) journald forwards to syslog where rsyslog is present | LOW | `logging.journald`, `logging.rsyslog` |
 | [`LOGGING-0005`](CHECK-REFERENCE.md#logging-0005--remote-log-forwarding-uses-a-reliable-transport) Remote log forwarding uses a reliable transport | MEDIUM | `logging.rsyslog` |
+
+## MEMORY
+
+| Check | Severity | Reads |
+|---|---|---|
+| [`MEMORY-0001`](CHECK-REFERENCE.md#memory-0001--privileged-binaries-are-position-independent-executables) Privileged binaries are position-independent executables | MEDIUM | `memory.elf` |
+| [`MEMORY-0002`](CHECK-REFERENCE.md#memory-0002--privileged-binaries-use-full-relro) Privileged binaries use full RELRO | MEDIUM | `memory.elf` |
+| [`MEMORY-0003`](CHECK-REFERENCE.md#memory-0003--privileged-binaries-are-built-with-stack-protection) Privileged binaries are built with stack protection | MEDIUM | `memory.elf` |
+| [`MEMORY-0004`](CHECK-REFERENCE.md#memory-0004--privileged-binaries-are-built-with-fortifysource) Privileged binaries are built with \_FORTIFY\_SOURCE | LOW | `memory.elf` |
 
 ## NETWORK
 

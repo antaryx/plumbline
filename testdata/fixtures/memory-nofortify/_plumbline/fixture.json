@@ -1,0 +1,3 @@
+{
+  "description": "/usr/bin/sudo references printf, memcpy, sprintf and strcpy in their unfortified forms and carries no _chk variant of any of them. Four calls _FORTIFY_SOURCE would have substituted and did not, which is what separates 'built without the option' from 'built with it and calling nothing it could fortify'. The canary is present, so only MEMORY-0004 fails."
+}

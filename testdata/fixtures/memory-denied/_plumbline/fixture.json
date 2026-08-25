@@ -1,0 +1,10 @@
+{
+  "description": "Every probed binary exists and none can be read, as under an unprivileged scan of a tree whose parent refuses traversal. The binaries on disk are fully hardened, deliberately: a check that reported PASS here would be reporting a verdict drawn from a file it never opened.",
+  "euid": 1000,
+  "unreadable": [
+    "/usr/bin/sudo",
+    "/usr/bin/su",
+    "/usr/bin/passwd",
+    "/usr/sbin/sshd"
+  ]
+}

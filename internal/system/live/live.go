@@ -130,6 +130,16 @@ func (s *System) Readlink(p string) (string, error) {
 	return target, nil
 }
 
+// ReadOpaque reads a file whose bytes are not evidence. The mechanics are
+// ReadFile's exactly — the seam does the same work either way — and the whole
+// of the difference is that collect.recordingSystem does not hand the result
+// to the evidence store. Keeping the two paths identical here is deliberate:
+// a second implementation could drift in its caps or its symlink handling, and
+// that drift would be a security difference nobody was looking for.
+func (s *System) ReadOpaque(p string, maxBytes int64) (system.ReadResult, error) {
+	return s.ReadFile(p, maxBytes)
+}
+
 func (s *System) ReadFile(p string, maxBytes int64) (system.ReadResult, error) {
 	clean, real, err := s.resolve(p)
 	if err != nil {

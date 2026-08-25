@@ -1,6 +1,7 @@
 package collect_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"path/filepath"
@@ -597,5 +598,70 @@ func TestReadsAreRecordedAsEvidence(t *testing.T) {
 	}
 	if !strings.Contains(string(blob), ev.Excerpt) {
 		t.Errorf("the excerpt %q is not present in the source it cites", ev.Excerpt)
+	}
+}
+
+// TestOpaqueReadsAreNotRecordedAsEvidence is the other half of the rule above,
+// and it exists because the exclusion is invisible by construction: nothing
+// about a bundle that quietly grew by two hundred megabytes says which read
+// put it there.
+//
+// The two reads are of the same file, so the only variable is which method the
+// collector called. ReadFile stores the bytes; ReadOpaque does not, and still
+// returns the digest — which is the whole point, because the digest is what a
+// finding cites and what `sha256sum` on the host reproduces.
+func TestOpaqueReadsAreNotRecordedAsEvidence(t *testing.T) {
+	const path = "/etc/ssh/sshd_config"
+
+	readWith := func(t *testing.T, read func(system.System) (system.ReadResult, error)) (*bundle.EvidenceStore, system.ReadResult) {
+		t.Helper()
+		store := bundle.NewEvidenceStore()
+		var res system.ReadResult
+
+		r := collect.NewRegistry()
+		r.Register(stub{
+			id:       "reader",
+			produces: []fact.ID{fact.ID("test.read")},
+			run: func(_ context.Context, s system.System, _ *fact.Set) error {
+				var err error
+				res, err = read(s)
+				return err
+			},
+		})
+		runner := collect.Runner{Registry: r, Timeout: 5 * time.Second, Evidence: store}
+		if err := runner.Run(context.Background(), sys(t, "sshd-hardened"), fact.NewSet()); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		return store, res
+	}
+
+	recorded, viaReadFile := readWith(t, func(s system.System) (system.ReadResult, error) {
+		return s.ReadFile(path, 0)
+	})
+	if got := recorded.Len(); got != 1 {
+		t.Fatalf("ReadFile stored %d blobs, want 1; the control case is broken, so the comparison below proves nothing", got)
+	}
+
+	excluded, viaReadOpaque := readWith(t, func(s system.System) (system.ReadResult, error) {
+		return s.ReadOpaque(path, 0)
+	})
+	if got := excluded.Len(); got != 0 {
+		t.Errorf("ReadOpaque stored %d blobs, want 0; the bytes of a file read opaquely reached the bundle", got)
+	}
+	if got := excluded.TotalBytes(); got != 0 {
+		t.Errorf("the evidence store holds %d bytes after an opaque read, want 0", got)
+	}
+
+	// Same bytes, same digest, whichever way they were read. A check citing an
+	// opaque source is citing something an auditor can still verify, against
+	// the host rather than against a copy this scan kept.
+	if viaReadOpaque.SHA256 == "" {
+		t.Error("ReadOpaque returned no digest; there would be nothing left to cite")
+	}
+	if viaReadOpaque.SHA256 != viaReadFile.SHA256 {
+		t.Errorf("digest differs by read method: opaque %s, recorded %s", viaReadOpaque.SHA256, viaReadFile.SHA256)
+	}
+	if !bytes.Equal(viaReadOpaque.Data, viaReadFile.Data) {
+		t.Error("ReadOpaque returned different bytes from ReadFile; the two reads must differ only in disposition")
 	}
 }

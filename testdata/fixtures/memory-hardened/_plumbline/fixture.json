@@ -1,0 +1,3 @@
+{
+  "description": "Every installed binary is ET_DYN with a non-executable PT_GNU_STACK, a PT_GNU_RELRO segment, DF_1_NOW, a __stack_chk_fail reference and fortified _chk entry points: PIE, NX, full RELRO, stack protection and FORTIFY_SOURCE all present. The good case for all four MEMORY checks. The remaining targets are absent, which is ordinary on any host and must not stop a PASS."
+}

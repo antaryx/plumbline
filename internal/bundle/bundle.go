@@ -375,6 +375,16 @@ var registry = map[fact.ID]decoder{
 			return f, nil
 		},
 	},
+	fact.ELFHardeningID: {
+		version: fact.ELFHardening{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.ELFHardening
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
 }
 
 // fsMatchesDecoder handles the fs.* namespace, whose IDs cannot be listed in

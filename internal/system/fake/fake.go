@@ -362,6 +362,13 @@ func modeFromUnix(mode uint32) fs.FileMode {
 	return m
 }
 
+// ReadOpaque reads a file whose bytes are not evidence. It is ReadFile, for
+// the reason live.System.ReadOpaque is: the fixture backend must not be the
+// place where the two reads start behaving differently.
+func (s *System) ReadOpaque(p string, maxBytes int64) (system.ReadResult, error) {
+	return s.ReadFile(p, maxBytes)
+}
+
 func (s *System) ReadFile(p string, maxBytes int64) (system.ReadResult, error) {
 	clean, real, err := s.resolve(p)
 	if err != nil {

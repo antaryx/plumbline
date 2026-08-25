@@ -1,0 +1,7 @@
+{
+  "description": "One binary is readable and unhardened; another cannot be read at all. This is the asymmetry ADR-0014 states, applied to binaries: an incomplete examination can invalidate a negative result and can never invalidate a positive one. The offender that was found is still an offender whatever the unreadable one turns out to be, so the verdict is FAIL rather than UNKNOWN.",
+  "euid": 1000,
+  "unreadable": [
+    "/usr/sbin/sshd"
+  ]
+}

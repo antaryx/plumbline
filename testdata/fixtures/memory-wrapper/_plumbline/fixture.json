@@ -1,0 +1,3 @@
+{
+  "description": "/usr/bin/sudo is a shell wrapper rather than an ELF, so there is no header to report hardening for and it is neither a pass nor a failure. /usr/bin/passwd is ET_DYN with no PT_GNU_STACK header at all: PIE is determined, NX is not, which proves the properties are read independently rather than through a shared 'is it hardened' notion."
+}

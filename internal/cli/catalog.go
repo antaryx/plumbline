@@ -7,6 +7,7 @@ import (
 	filesyschecks "github.com/antaryx/plumbline/internal/catalog/checks/filesys"
 	kernelchecks "github.com/antaryx/plumbline/internal/catalog/checks/kernel"
 	loggingchecks "github.com/antaryx/plumbline/internal/catalog/checks/logging"
+	memorychecks "github.com/antaryx/plumbline/internal/catalog/checks/memory"
 	networkchecks "github.com/antaryx/plumbline/internal/catalog/checks/network"
 	serviceschecks "github.com/antaryx/plumbline/internal/catalog/checks/services"
 	sshdchecks "github.com/antaryx/plumbline/internal/catalog/checks/sshd"
@@ -22,6 +23,7 @@ import (
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/filesys"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/kernel"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/logging"
+	_ "github.com/antaryx/plumbline/internal/collect/collectors/memory"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/network"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/services"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/sshd"
@@ -87,6 +89,10 @@ func buildCatalog() *catalog.Catalog {
 		loggingchecks.Check0003,
 		loggingchecks.Check0004,
 		loggingchecks.Check0005,
+		memorychecks.Check0001,
+		memorychecks.Check0002,
+		memorychecks.Check0003,
+		memorychecks.Check0004,
 		networkchecks.Check0001,
 		networkchecks.Check0002,
 		networkchecks.Check0003,

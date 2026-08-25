@@ -531,6 +531,51 @@ Restating, because these are what the schedule is bought with: no TUI browser, n
 
 ---
 
+## MEMORY, started ahead of v2
+
+`MEMORY` is a v2 module in the plan above and the first slice of it landed in
+v1.x: the `memory.elf` collector and `MEMORY-0001` (PIE), catalog 14.
+
+It went early because it is the one module on the v2 list that needs nothing the
+v1 architecture does not already have. No network, no new dependency, no
+privilege the scan does not hold, and no judgement a pure check cannot make from
+a fact — the properties are static bits in a program header. That made it the
+cheapest way to exercise the collector-and-check seam end to end before the
+modules that do need new machinery arrive.
+
+Two things it produced that outlive the module:
+
+- **`System.ReadOpaque`.** A read whose bytes never enter the evidence store.
+  It exists because binaries are large and unreadable-by-humans, and it is the
+  seam `INTEGRITY` will want for package databases and `CONTAINERS` for image
+  layers.
+- **The recorded corpus now carries an `UNKNOWN` it cannot resolve.** Every
+  golden bundle predates `memory.elf`, so `MEMORY-0001` is
+  `UNKNOWN(fact_not_collected)` on all six. That is correct, and it is also the
+  first concrete demonstration that adding a check devalues an old bundle's
+  coverage. Re-recording needs docker; the question of how often the corpus
+  should be re-recorded is now a real one rather than a hypothetical.
+
+The module is now complete for what an ELF header and symbol table can answer:
+`MEMORY-0001` (PIE), `MEMORY-0002` (full RELRO), `MEMORY-0003` (stack
+protection) and `MEMORY-0004` (`_FORTIFY_SOURCE`), catalog 15.
+
+Symbol-derived checks brought a limit the header-derived ones did not have. A
+program header is present or it is not, and either way the file has answered. A
+symbol's absence is only evidence if there was a table to be absent from, and
+even then it is weaker than it looks: the compiler emits `__stack_chk_fail` only
+for functions that needed a canary, and a binary from a memory-safe language
+uses none of these mechanisms. Both are recorded in `docs/FALSE-POSITIVES.md`
+and stated on the checks. Neither is fixable from a symbol table.
+
+There is no `MEMORY-0005` planned. NX is collected and deliberately unchecked:
+`PT_GNU_STACK` is absent on a meaningful share of real binaries, and the kernel
+default it falls back to differs by architecture and version, so a check would
+be `UNKNOWN` on exactly the hosts worth asking about. The fact carries the
+tri-state for whoever wants it.
+
+---
+
 ## v2.0.0 — Intelligence
 
 **The promise:** *It tells you what is exploitable, not just what is untidy — and it is right about it more often than a naive scanner.*
@@ -546,7 +591,7 @@ Requires v1 to have been stable for at least one minor cycle. Do not start v2 wo
    - Every vulnerability finding states the vendor's fixed-version and links the vendor advisory — because "fixed in 3.0.2-0ubuntu1.15" is the actionable fact, not the CVSS score.
    - **Gate:** publish a measured false-positive comparison against a naive NVD matcher on stock Ubuntu LTS, Debian and Alpine hosts. If the numbers are not clearly better, the feature does not ship. This comparison is the feature's entire justification.
 
-2. **New modules** — `CONTAINERS` (Docker/Podman/K8s node config, ~15), `PRIVESC` (renamed from PENTEST, gated behind `--enable privesc` with an authorised-use notice, ~15), `MEMORY` (ELF hardening: RELRO, PIE, canaries, FORTIFY — self-contained and satisfying, ~10), `INTEGRITY` (package DB verification + bundle-to-bundle drift, ~9), `STORAGE`, `CRYPTO` (local certificate and key material only; still no network probing). Catalog to ~250 checks.
+2. **New modules** — `CONTAINERS` (Docker/Podman/K8s node config, ~15), `PRIVESC` (renamed from PENTEST, gated behind `--enable privesc` with an authorised-use notice, ~15), `MEMORY` (ELF hardening: RELRO, PIE, canaries, FORTIFY — self-contained and satisfying, ~10; **started early, see below**), `INTEGRITY` (package DB verification + bundle-to-bundle drift, ~9), `STORAGE`, `CRYPTO` (local certificate and key material only; still no network probing). Catalog to ~250 checks.
 
 3. **`CLOUD` module, carefully** — IMDS queries are network access, which breaks the v1 invariant. Therefore: off by default, requires `--enable cloud`, restricted to link-local metadata addresses by an explicit allowlist, and the bundle records that network was used. The offline test asserts that the *default* path still makes zero network syscalls.
 

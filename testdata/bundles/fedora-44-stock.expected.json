@@ -1,7 +1,7 @@
 {
   "bundle": "fedora-44-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 13,
+  "catalog_version": 15,
   "scan": {
     "started": "2026-08-21T04:44:59.004982558Z",
     "finished": "2026-08-21T04:44:59.896266504Z",
@@ -15,8 +15,8 @@
       "fail": 12,
       "not_applicable": 33,
       "skipped": 0,
-      "unknown": 1,
-      "total": 79
+      "unknown": 5,
+      "total": 83
     },
     "by_severity": {
       "HIGH": 3,
@@ -24,7 +24,7 @@
       "MEDIUM": 6
     },
     "posture": 77.77777777777779,
-    "coverage": 97.82608695652173
+    "coverage": 90
   },
   "findings": [
     {
@@ -627,6 +627,46 @@
       "base_severity": "MEDIUM",
       "fingerprint": "7dee6bdb162eeed7f6cfd808a7aee971",
       "detail": "No rsyslog configuration found; this host does not run rsyslog. Where journald is the only log daemon, LOGGING-0003 and LOGGING-0004 are the checks that apply."
+    },
+    {
+      "check_id": "MEMORY-0001",
+      "module": "MEMORY",
+      "result": "UNKNOWN",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "050f95b25e94ed5be6dfc1e57b2b9285",
+      "detail": "required fact memory.elf was not collected"
+    },
+    {
+      "check_id": "MEMORY-0002",
+      "module": "MEMORY",
+      "result": "UNKNOWN",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "b7728b439a3c649aac3959221a7f6471",
+      "detail": "required fact memory.elf was not collected"
+    },
+    {
+      "check_id": "MEMORY-0003",
+      "module": "MEMORY",
+      "result": "UNKNOWN",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "d4dd5bc8b0b29e0c593636b49ec8898d",
+      "detail": "required fact memory.elf was not collected"
+    },
+    {
+      "check_id": "MEMORY-0004",
+      "module": "MEMORY",
+      "result": "UNKNOWN",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "e8774b5dd212de854088cff9fc7002df",
+      "detail": "required fact memory.elf was not collected"
     },
     {
       "check_id": "NETWORK-0001",

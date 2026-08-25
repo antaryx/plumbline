@@ -1,0 +1,3 @@
+{
+  "description": "None of the probed binaries is installed. The host has not satisfied any of these controls; it has removed the subject of the sentence, so every MEMORY check is NOT_APPLICABLE rather than PASS. A PASS here would inflate the posture score with controls that were never tested."
+}
