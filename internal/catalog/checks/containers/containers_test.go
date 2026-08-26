@@ -17,7 +17,19 @@ import (
 const fixtureRoot = "../../../../testdata/fixtures"
 
 // all is the CONTAINERS module as this work package leaves it.
-var all = []catalog.Check{checks.Check0001, checks.Check0002, checks.Check0003}
+var all = []catalog.Check{
+	checks.Check0001, checks.Check0002, checks.Check0003, checks.Check0004, checks.Check0005,
+}
+
+// defaultIsUnsafe is the subset of the module whose option the daemon leaves
+// off, so that a host which says nothing is running the value the check
+// objects to. CONTAINERS-0005 is deliberately not in it: experimental defaults
+// to off, and silence there is the safe state rather than the permissive one.
+// The split is the module's one real asymmetry and several invariants below
+// turn on it.
+var defaultIsUnsafe = []catalog.Check{
+	checks.Check0001, checks.Check0002, checks.Check0003, checks.Check0004,
+}
 
 func collectFixture(t *testing.T, name string) *fact.Set {
 	t.Helper()
@@ -154,6 +166,54 @@ func TestCheck0003InterContainerCommunication(t *testing.T) {
 	})
 }
 
+func TestCheck0004LiveRestore(t *testing.T) {
+	run(t, checks.Check0004, []tc{
+		{fixture: "containers-docker-hardened", result: finding.Pass, detailContains: "live-restore is enabled"},
+		{fixture: "containers-docker-permissive", result: finding.Fail, severity: finding.Medium, detailContains: "stops every container"},
+		// The isolating case: a file whose author plainly did think about
+		// hardening and skipped the one availability setting on the list.
+		{fixture: "containers-docker-no-live-restore", result: finding.Fail, severity: finding.Medium, detailContains: "live-restore is not enabled"},
+		{fixture: "containers-docker-icc-only", result: finding.Pass, detailContains: "live-restore is enabled"},
+		// Key absent from a file that exists. The daemon default is off, so an
+		// unwritten key is the failing state.
+		{fixture: "containers-docker-nnp-only", result: finding.Fail, severity: finding.Medium, detailContains: "live-restore is not enabled"},
+		{fixture: "containers-docker-explicit-off", result: finding.Fail, severity: finding.Medium, detailContains: "live-restore is not enabled"},
+		{fixture: "containers-docker-defaults", result: finding.Fail, severity: finding.Medium, detailContains: "compiled-in defaults"},
+		{fixture: "containers-absent", result: finding.NotApplicable, detailContains: "no dockerd binary"},
+		{fixture: "containers-docker-denied", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "could not be read"},
+		{fixture: "containers-docker-malformed", result: finding.Unknown, reason: finding.ReasonParse, detailContains: "not valid json"},
+	})
+}
+
+// TestCheck0005Experimental. Note how much of this table is PASS where the
+// other four are FAIL: this is the one option in the module the daemon leaves
+// in the state the check wants, so every host that never mentioned it passes.
+func TestCheck0005Experimental(t *testing.T) {
+	run(t, checks.Check0005, []tc{
+		// Explicitly false.
+		{fixture: "containers-docker-hardened", result: finding.Pass, detailContains: "experimental is not enabled"},
+		// The isolating case: one flag flipped on an otherwise hardened file.
+		{fixture: "containers-docker-experimental-only", result: finding.Fail, severity: finding.Low, detailContains: "experimental is enabled"},
+		{fixture: "containers-docker-permissive", result: finding.Fail, severity: finding.Low, detailContains: "without stability or support guarantees"},
+		// Key absent from a file that exists. Unlike every other check in this
+		// module, that is a pass.
+		{fixture: "containers-docker-icc-only", result: finding.Pass, detailContains: "experimental is not enabled"},
+		{fixture: "containers-docker-nnp-only", result: finding.Pass, detailContains: "experimental is not enabled"},
+		{fixture: "containers-docker-explicit-off", result: finding.Pass, detailContains: "experimental is not enabled"},
+		// No file at all: still a pass, and the detail still has to say where
+		// the setting came from.
+		{fixture: "containers-docker-defaults", result: finding.Pass, detailContains: "compiled-in defaults"},
+		{fixture: "containers-absent", result: finding.NotApplicable, detailContains: "no dockerd binary"},
+		// An unreadable file is UNKNOWN and not PASS, even though a pass is
+		// this check's default answer. The file may well enable experimental
+		// mode, and a check that fell back to its own default would be
+		// reporting a verdict drawn from a document nobody opened.
+		{fixture: "containers-docker-denied", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "could not be read"},
+		{fixture: "containers-docker-malformed", result: finding.Unknown, reason: finding.ReasonParse, detailContains: "not valid json"},
+		{fixture: "containers-docker-notobject", result: finding.Unknown, detailContains: "docker is installed"},
+	})
+}
+
 // TestAbsentICCIsNeverReadAsDisabled is CONTAINERS-0003's reason for existing
 // in the shape it has.
 //
@@ -196,16 +256,27 @@ func TestAbsentICCIsNeverReadAsDisabled(t *testing.T) {
 // module silent on exactly the hosts it exists for, which is the same shape of
 // mistake as reporting PASS for something never examined.
 func TestAMissingConfigIsJudgedNotExcused(t *testing.T) {
-	for _, check := range all {
+	for _, check := range defaultIsUnsafe {
 		running := evalCheck(t, check, "containers-docker-defaults")
 		if running.Result != finding.Fail {
 			t.Errorf("%s = %s on a host with dockerd and no daemon.json, want FAIL: %s",
 				check.ID, running.Result, running.Detail)
 		}
-		// And it has to say where the setting is coming from, because the
-		// remedy is "create the file" rather than "edit the line".
+	}
+
+	// Every check in the module has to reach a verdict on that host and say
+	// where the setting came from, including the one whose verdict is PASS.
+	// The remedy differs by whether a file exists at all — "create the file"
+	// rather than "edit the line" — and a passing finding that hid the
+	// distinction would be describing a file that is not there.
+	for _, check := range all {
+		running := evalCheck(t, check, "containers-docker-defaults")
+		if running.Result == finding.NotApplicable || running.Result == finding.Unknown {
+			t.Errorf("%s = %s on a host with dockerd and no daemon.json; the defaults are a configuration: %s",
+				check.ID, running.Result, running.Detail)
+		}
 		if !strings.Contains(running.Detail, "no /etc/docker/daemon.json") {
-			t.Errorf("%s does not tell the operator there is no file to edit: %s", check.ID, running.Detail)
+			t.Errorf("%s does not tell the operator there is no file: %s", check.ID, running.Detail)
 		}
 
 		none := evalCheck(t, check, "containers-absent")
@@ -213,6 +284,45 @@ func TestAMissingConfigIsJudgedNotExcused(t *testing.T) {
 			t.Errorf("%s = %s on a host with no dockerd, want NOT_APPLICABLE: %s",
 				check.ID, none.Result, none.Detail)
 		}
+	}
+}
+
+// TestSilenceIsAPassOnlyWhereTheDefaultIsSafe is the property that separates
+// CONTAINERS-0005 from the rest of the module, and the one a later check could
+// most easily copy from the wrong neighbour.
+//
+// Four of these checks read a *bool and treat nil as a failure, because the
+// daemon leaves their option off and an unwritten key means the permissive
+// value is in force. CONTAINERS-0005 reads a *bool and treats nil as a pass,
+// because experimental defaults to off and demanding it be written down would
+// fail every correctly configured host for not having said something it did
+// not need to say. Both are "nil means the daemon's default", and the default
+// happens to point in opposite directions.
+//
+// The fixtures below are silent on both options in exactly the same way, which
+// is what makes the divergence attributable to the checks rather than the file.
+func TestSilenceIsAPassOnlyWhereTheDefaultIsSafe(t *testing.T) {
+	for _, fixture := range []string{
+		"containers-docker-nnp-only", // file present, neither key written
+		"containers-docker-defaults", // no file at all
+	} {
+		if got := evalCheck(t, checks.Check0004, fixture); got.Result != finding.Fail {
+			t.Errorf("%s over %s = %s, want FAIL; an unset live-restore leaves the daemon on its off default: %s",
+				checks.Check0004.ID, fixture, got.Result, got.Detail)
+		}
+		if got := evalCheck(t, checks.Check0005, fixture); got.Result != finding.Pass {
+			t.Errorf("%s over %s = %s, want PASS; an unset experimental leaves the daemon on its off default: %s",
+				checks.Check0005.ID, fixture, got.Result, got.Detail)
+		}
+	}
+
+	// And the inverses, so neither half can pass by always answering the same
+	// way. Both fixtures write the option down; each check must follow it.
+	if got := evalCheck(t, checks.Check0004, "containers-docker-hardened"); got.Result != finding.Pass {
+		t.Errorf("an explicitly true live-restore = %s, want PASS: %s", got.Result, got.Detail)
+	}
+	if got := evalCheck(t, checks.Check0005, "containers-docker-experimental-only"); got.Result != finding.Fail {
+		t.Errorf("an explicitly true experimental = %s, want FAIL: %s", got.Result, got.Detail)
 	}
 }
 
@@ -253,21 +363,43 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0001": finding.Fail, // userns-remap absent
 			"CONTAINERS-0002": finding.Pass, // no-new-privileges true
 			"CONTAINERS-0003": finding.Fail, // icc absent, so permissive
+			"CONTAINERS-0004": finding.Fail, // live-restore absent, so off
+			"CONTAINERS-0005": finding.Pass, // experimental absent, so off
 		}},
 		{"containers-docker-icc-only", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Pass,
 			"CONTAINERS-0002": finding.Pass,
 			"CONTAINERS-0003": finding.Fail, // the only thing wrong
+			"CONTAINERS-0004": finding.Pass,
+			"CONTAINERS-0005": finding.Pass,
+		}},
+		{"containers-docker-no-live-restore", map[string]finding.Result{
+			"CONTAINERS-0001": finding.Pass,
+			"CONTAINERS-0002": finding.Pass,
+			"CONTAINERS-0003": finding.Pass,
+			"CONTAINERS-0004": finding.Fail, // the only thing wrong
+			"CONTAINERS-0005": finding.Pass,
+		}},
+		{"containers-docker-experimental-only", map[string]finding.Result{
+			"CONTAINERS-0001": finding.Pass,
+			"CONTAINERS-0002": finding.Pass,
+			"CONTAINERS-0003": finding.Pass,
+			"CONTAINERS-0004": finding.Pass,
+			"CONTAINERS-0005": finding.Fail, // the only thing wrong
 		}},
 		{"containers-docker-hardened", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Pass,
 			"CONTAINERS-0002": finding.Pass,
 			"CONTAINERS-0003": finding.Pass,
+			"CONTAINERS-0004": finding.Pass,
+			"CONTAINERS-0005": finding.Pass,
 		}},
 		{"containers-docker-permissive", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Fail,
 			"CONTAINERS-0002": finding.Fail,
 			"CONTAINERS-0003": finding.Fail,
+			"CONTAINERS-0004": finding.Fail,
+			"CONTAINERS-0005": finding.Fail,
 		}},
 	}
 
@@ -324,6 +456,8 @@ func TestEveryVerdictCarriesTheReadingCaveat(t *testing.T) {
 		"containers-docker-defaults",
 		"containers-docker-nnp-only",
 		"containers-docker-icc-only",
+		"containers-docker-no-live-restore",
+		"containers-docker-experimental-only",
 	} {
 		for _, check := range all {
 			got := evalCheck(t, check, fixture)

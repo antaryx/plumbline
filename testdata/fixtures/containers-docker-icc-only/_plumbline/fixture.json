@@ -1,3 +1,3 @@
 {
-  "description": "Everything this module models is hardened except icc, which is explicitly true. It is the isolating fixture for CONTAINERS-0003: 0001 and 0002 pass over it and only 0003 fails, which is what proves the three checks read the option each owns rather than a shared notion of whether the daemon looks configured."
+  "description": "Everything this module models is hardened except icc, which is explicitly true. It is the isolating fixture for CONTAINERS-0003: every other check passes over it and only 0003 fails, which is what proves the checks read the option each owns rather than a shared notion of whether the daemon looks configured. live-restore is set here for that reason alone - without it this fixture would fail CONTAINERS-0004 as well and would have stopped isolating anything."
 }

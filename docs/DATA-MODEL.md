@@ -725,6 +725,15 @@ therefore `*bool`, and `fact.OptBool` returns the value alongside whether the
 document set it. The collector never substitutes Docker's default; encoding the
 default is the check's business, as `SSHD-0002` does for `PermitRootLogin`.
 
+That the checks own the default is what keeps `set == false` from silently
+becoming a synonym for "failing". Three of the four checks reading a `*bool`
+take it that way — `no-new-privileges`, `icc` and `live-restore` are each in
+their permissive state unless the document asked otherwise — and
+`CONTAINERS-0005` reads the same `nil` as a pass, because `experimental`
+defaults to off and off is the value it wants. Both are "`nil` means the
+daemon's default"; the fact records which keys were written and says nothing
+about what that implies.
+
 `State` distinguishes `present`, `absent`, `denied`, `not_regular`, `malformed`,
 `truncated` and `error`. **`malformed` matters more here than in any text
 config.** A line-oriented file has partial meaning — one bad directive leaves

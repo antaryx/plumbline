@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 17 · 86 checks · 11 modules**
+**Catalog version 18 · 88 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -567,6 +567,126 @@ systemctl restart docker
 **References**
 
 - [Docker — container communication on the default bridge](https://docs.docker.com/engine/network/drivers/bridge/)
+
+---
+
+### CONTAINERS-0004 — The Docker daemon keeps containers running across its own restart
+
+| | |
+|---|---|
+| Module | `CONTAINERS` |
+| Base severity | MEDIUM |
+| Since | catalog 18 |
+| Reads | `containers.docker_daemon` |
+| Tags | `containers`, `docker`, `availability`, `patching` |
+
+By default, stopping dockerd stops every container on the
+host. Upgrading the daemon, changing daemon.json, or a crash in dockerd itself
+all become a full outage of everything the machine was running.
+
+live-restore decouples the two: containers keep running while the daemon is
+down and are reattached when it comes back.
+
+This is an availability control, and it is in a security catalogue because of
+what its absence does to patching. A daemon whose restart takes down every
+workload on the host is a daemon that does not get restarted, so the Docker
+security update sits unapplied until a maintenance window that keeps slipping.
+The exposure is not the downtime; it is the months of running a known-vulnerable
+daemon because the alternative was an outage nobody would authorise.
+
+It defaults to off, so a host with no daemon.json fails this check —
+correctly, because the default is what such a host is running.
+
+Two limits worth knowing before enabling it. It does not cover a change to the
+daemon's own configuration that containers inherit, so some restarts still
+require recreating them. And it is incompatible with live Swarm mode, which
+manages container lifecycle itself.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Enable live-restore in the Docker daemon configuration.
+
+1. Check first whether this host runs Swarm mode: live-restore is incompatible with it, and a Swarm node should be drained and updated rather than kept running through a daemon restart.
+2. Create or edit /etc/docker/daemon.json and set "live-restore": true.
+3. Restart the daemon once to apply it. That restart is still an outage — the setting protects subsequent ones, not the one that enables it.
+4. Verify: docker info should report Live Restore Enabled: true.
+5. Test it before relying on it: start a container, systemctl restart docker, and confirm the container is still running and still reachable.
+
+```sh
+docker info --format '{{.LiveRestoreEnabled}}'
+systemctl restart docker
+```
+
+> **Caution.** The restart that enables this setting will itself stop every running container; schedule it. Do not enable it on a Swarm node, where it is unsupported and the orchestrator expects to manage container lifecycle across daemon restarts itself.
+
+**Controls** — `nist-800-53-r5 CP-10`, `nist-800-53-r5 SI-2`
+
+**References**
+
+- [Docker — keep containers alive during daemon downtime](https://docs.docker.com/engine/daemon/live-restore/)
+
+---
+
+### CONTAINERS-0005 — The Docker daemon does not run with experimental features enabled
+
+| | |
+|---|---|
+| Module | `CONTAINERS` |
+| Base severity | LOW |
+| Since | catalog 18 |
+| Reads | `containers.docker_daemon` |
+| Tags | `containers`, `docker`, `attack-surface`, `supportability` |
+
+Experimental mode unlocks daemon features that Docker ships
+without the guarantees the rest of the engine carries. They are documented as
+subject to change or removal without notice, they are excluded from the
+stability commitments the supported API makes, and they have seen far less
+production exposure than the code paths beside them.
+
+The exposure is attack surface rather than a specific defect. Enabling the
+flag turns on API endpoints and daemon subsystems that would otherwise not be
+reachable at all, in code that is by construction the least exercised in the
+build. Anything with access to the socket can call them, so the daemon's API
+grows without the operator's threat model growing with it.
+
+There is a second, quieter cost. An experimental feature can be withdrawn in a
+minor release, so a host that came to depend on one is a host whose next Docker
+upgrade breaks it — and a daemon that cannot be upgraded is the problem
+CONTAINERS-0004 describes, arrived at from the other direction.
+
+Unlike the rest of this module, the daemon's default here is the safe value:
+experimental is off unless somebody turned it on. A host with no daemon.json
+therefore passes, and a failure means a deliberate act rather than an
+oversight. That is also why this is rated below the other checks — the operator
+who set it may have had a reason, and the finding is a question rather than an
+accusation.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Turn off experimental mode unless a specific feature requires it.
+
+1. Find out what the flag was turned on for before turning it off: experimental mode is rarely enabled by accident, and something on this host may depend on a feature it unlocks.
+2. If nothing depends on it, edit /etc/docker/daemon.json and set "experimental": false, or remove the key — the default is off either way.
+3. If a workload does depend on an experimental feature, treat that as the finding: plan the move to a supported equivalent, because the feature can be withdrawn in any release.
+4. Restart the daemon: systemctl restart docker.
+5. Verify: docker version should no longer report the server as experimental.
+
+```sh
+docker version --format '{{.Server.Experimental}}'
+docker info --format '{{.ExperimentalBuild}}'
+```
+
+> **Caution.** Anything using an experimental daemon feature stops working the moment the flag is cleared. Establish what depends on it first. Restarting the daemon also stops every running container unless live-restore is enabled.
+
+**Controls** — `nist-800-53-r5 CM-7`, `nist-800-53-r5 SA-22`
+
+**References**
+
+- [Docker — daemon configuration file reference](https://docs.docker.com/reference/cli/dockerd/)
 
 ---
 

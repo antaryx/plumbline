@@ -45,6 +45,46 @@ explanation in this file is a defect.
   look at.
 
 ### Added
+- **`CONTAINERS-0004` (live restore) and `CONTAINERS-0005` (experimental
+  features)**, completing the Docker daemon configuration checks. Catalog 18,
+  88 checks. Neither is in `cis-l1`.
+
+  `CONTAINERS-0004` is `MEDIUM` and is an availability control in a security
+  catalogue, which the description justifies rather than assumes. Without
+  `live-restore`, restarting `dockerd` stops every container on the host — so
+  the daemon does not get restarted, and the Docker security update waits for a
+  maintenance window that keeps slipping. The exposure is not the downtime; it
+  is the months of running a known-vulnerable daemon because the alternative
+  was an outage nobody would authorise. The remediation says up front that
+  enabling it costs one outage and that it is unsupported on a Swarm node.
+
+  `CONTAINERS-0005` is `LOW`, the lowest in the module: nothing here is a
+  privilege boundary, and a failure means somebody deliberately enabled
+  experimental mode and may have had a reason. It is a question rather than an
+  accusation.
+
+  **`CONTAINERS-0005` is the first check in this module where an unwritten key
+  is a PASS.** `-0002`, `-0003` and `-0004` all insist their option was
+  requested, because `dockerd` leaves those off and an absent key means the
+  permissive value is in force. `experimental` also defaults to off — and there
+  that is the value the check wants, so demanding `"experimental": false` be
+  written down would fail every correctly configured host for not having said
+  something it did not need to say. Both rules are "`nil` means the daemon's
+  default"; the default points in opposite directions.
+  `TestSilenceIsAPassOnlyWhereTheDefaultIsSafe` asserts the divergence over
+  fixtures that are silent on both options in exactly the same way, so it is
+  attributable to the checks and not the file.
+
+  An unreadable `daemon.json` is still `UNKNOWN` for `-0005`, even though PASS
+  is its answer for silence. The file may well enable experimental mode, and
+  falling back to the check's own default would be reporting a verdict drawn
+  from a document nobody opened.
+
+  Two fixtures were added and one was corrected. `containers-docker-icc-only`
+  had claimed to isolate `CONTAINERS-0003`; the arrival of `-0004` would have
+  made it fail two checks and isolate nothing, so it now sets `live-restore`
+  explicitly for that reason alone.
+
 - **`CONTAINERS-0003`, inter-container communication.** Reports a daemon that
   leaves `icc` at its permissive default, so every container on the default
   bridge can reach every port of every other one. Catalog 17, 86 checks.

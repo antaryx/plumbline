@@ -1,4 +1,6 @@
 {
   "userns-remap": "",
-  "no-new-privileges": false
+  "no-new-privileges": false,
+  "live-restore": false,
+  "experimental": false
 }

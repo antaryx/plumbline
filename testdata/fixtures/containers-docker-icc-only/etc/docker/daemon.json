@@ -2,5 +2,6 @@
   "userns-remap": "default",
   "no-new-privileges": true,
   "icc": true,
+  "live-restore": true,
   "log-driver": "journald"
 }

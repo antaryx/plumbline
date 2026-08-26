@@ -1,0 +1,9 @@
+{
+  "userns-remap": "default",
+  "icc": false,
+  "log-driver": "journald",
+  "experimental": true,
+  "live-restore": true,
+  "no-new-privileges": true,
+  "hosts": ["unix:///var/run/docker.sock"]
+}

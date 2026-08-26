@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 17 · 86 checks · 11 modules**
+**Catalog version 18 · 88 checks · 11 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 
@@ -14,7 +14,7 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | Module | Checks | Critical | High | Medium | Low | Info |
 |---|---:|---:|---:|---:|---:|---:|
 | `AUTH` | 6 | 0 | 3 | 2 | 1 | 0 |
-| `CONTAINERS` | 3 | 0 | 0 | 2 | 1 | 0 |
+| `CONTAINERS` | 5 | 0 | 0 | 3 | 2 | 0 |
 | `CRON` | 5 | 0 | 2 | 2 | 1 | 0 |
 | `FILESYS` | 10 | 2 | 3 | 4 | 1 | 0 |
 | `KERNEL` | 16 | 0 | 1 | 13 | 2 | 0 |
@@ -24,7 +24,7 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | `SERVICES` | 5 | 0 | 2 | 3 | 0 | 0 |
 | `SSHD` | 19 | 1 | 7 | 8 | 3 | 0 |
 | `USERS` | 10 | 2 | 4 | 2 | 2 | 0 |
-| **total** | **86** | 5 | 24 | 44 | 13 | 0 |
+| **total** | **88** | 5 | 24 | 45 | 14 | 0 |
 
 Severity is the check's **base** severity, before any context adjustment a finding may carry.
 
@@ -48,6 +48,8 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`CONTAINERS-0001`](CHECK-REFERENCE.md#containers-0001--the-docker-daemon-remaps-container-users-to-unprivileged-host-uids) The Docker daemon remaps container users to unprivileged host uids | MEDIUM | `containers.docker_daemon` |
 | [`CONTAINERS-0002`](CHECK-REFERENCE.md#containers-0002--the-docker-daemon-applies-no-new-privileges-to-containers-by-default) The Docker daemon applies no-new-privileges to containers by default | MEDIUM | `containers.docker_daemon` |
 | [`CONTAINERS-0003`](CHECK-REFERENCE.md#containers-0003--the-docker-daemon-restricts-traffic-between-containers-on-the-default-bridge) The Docker daemon restricts traffic between containers on the default bridge | LOW | `containers.docker_daemon` |
+| [`CONTAINERS-0004`](CHECK-REFERENCE.md#containers-0004--the-docker-daemon-keeps-containers-running-across-its-own-restart) The Docker daemon keeps containers running across its own restart | MEDIUM | `containers.docker_daemon` |
+| [`CONTAINERS-0005`](CHECK-REFERENCE.md#containers-0005--the-docker-daemon-does-not-run-with-experimental-features-enabled) The Docker daemon does not run with experimental features enabled | LOW | `containers.docker_daemon` |
 
 ## CRON
 

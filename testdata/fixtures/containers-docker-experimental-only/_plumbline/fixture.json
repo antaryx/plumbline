@@ -1,0 +1,3 @@
+{
+  "description": "The hardened configuration with experimental mode switched on and nothing else changed. It is the isolating fixture for CONTAINERS-0005: every other check passes and only 0005 fails. Pairing it against containers-docker-permissive, where experimental is true alongside everything else being wrong, is what keeps 0005 from being read as a proxy for a badly configured daemon - it is a statement about one flag."
+}

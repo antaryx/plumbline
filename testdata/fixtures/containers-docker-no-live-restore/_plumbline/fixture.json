@@ -1,0 +1,3 @@
+{
+  "description": "The hardened configuration with live-restore taken out and nothing else changed. It is the isolating fixture for CONTAINERS-0004: every other check passes and only 0004 fails, on a file whose author plainly did think about hardening. That is the realistic shape of this finding - live-restore is an availability setting on a list of security ones, so it is the option a careful operator is most likely to have skipped."
+}
