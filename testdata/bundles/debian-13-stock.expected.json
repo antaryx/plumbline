@@ -1,7 +1,7 @@
 {
   "bundle": "debian-13-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 24,
+  "catalog_version": 25,
   "scan": {
     "started": "2026-08-25T21:31:46.550601813Z",
     "finished": "2026-08-25T21:31:46.799731954Z",
@@ -16,10 +16,10 @@
     "counts": {
       "pass": 37,
       "fail": 13,
-      "not_applicable": 38,
+      "not_applicable": 39,
       "skipped": 0,
       "unknown": 6,
-      "total": 94
+      "total": 95
     },
     "by_severity": {
       "HIGH": 3,
@@ -644,6 +644,15 @@
           "excerpt": "net.ipv4.tcp_syncookies = 1"
         }
       ]
+    },
+    {
+      "check_id": "KERNEL-0017",
+      "module": "KERNEL",
+      "result": "NOT_APPLICABLE",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "7d71d29a02e0790504bff640a0e6d5f0",
+      "detail": "No sysctl configuration file exists on this host: neither /etc/sysctl.conf nor any .conf file in the sysctl.d directories. There is no persistent kernel configuration to report on, and what the running kernel currently does is KERNEL-0006's subject."
     },
     {
       "check_id": "LOGGING-0001",

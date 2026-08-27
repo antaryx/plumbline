@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 24 · 94 checks · 11 modules**
+**Catalog version 25 · 95 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -2646,6 +2646,85 @@ sysctl net.ipv4.tcp_syncookies
 **References**
 
 - [Linux kernel documentation — ip-sysctl tcp\_syncookies](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+
+---
+
+### KERNEL-0017 — BPF hardening is written to the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | HIGH |
+| Since | catalog 25 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `bpf`, `sysctl`, `persistence`, `privilege-escalation` |
+
+This is a check about files, not about the running kernel.
+KERNEL-0006 asks whether unprivileged bpf() is refused *now*; this one asks
+whether it will still be refused after the next reboot.
+
+The gap between those is real and is not covered by KERNEL-0007. That check
+compares each running parameter against its configured value and reports drift
+— but a parameter that no file mentions at all is skipped, because there is
+nothing to compare it to. So a host hardened with
+
+	sysctl -w kernel.unprivileged_bpf_disabled=1
+
+and nothing written to disk passes KERNEL-0006 and passes KERNEL-0007, and
+comes back after a reboot with unprivileged BPF wide open. Runtime hardening
+that nobody persisted is the most common way a host silently un-hardens itself,
+and it is invisible to every check that reads only /proc/sys.
+
+Two parameters have to be on disk, and they do different jobs:
+
+  - **kernel.unprivileged_bpf_disabled** decides who may call bpf() at all. At
+    1 the call is refused for unprivileged users and the setting is locked
+    until reboot; at 2 it is refused and the value may still be raised to 1.
+    Either persists, and 1 is the stronger of the two.
+  - **net.core.bpf_jit_harden** decides what the JIT emits for the programs
+    that do get loaded. At 2 it blinds constants for every program, which
+    stops an attacker smuggling a chosen instruction sequence into the
+    kernel's instruction stream as an immediate operand and jumping into the
+    middle of it. At 1 it does that for unprivileged programs only, which
+    leaves the case that matters once something has obtained privilege.
+
+They are independent settings and a host commonly has one without the other,
+which is why both are named rather than one standing in for the pair.
+
+**A conflict is not a verdict.** Where two files set the same parameter to
+different values, which one wins depends on whether systemd-sysctl or procps
+applied them, and this check will not guess — it reports UNKNOWN and names both
+files. Getting that wrong would be a confident claim about what the host does
+after a reboot, which is the one thing this check exists to describe.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write both parameters to a file in /etc/sysctl.d/ and apply them.
+
+1. Create /etc/sysctl.d/60-bpf-hardening.conf containing two lines: kernel.unprivileged\_bpf\_disabled = 1 and net.core.bpf\_jit\_harden = 2.
+2. Number the file so it sorts after anything that might set the same keys. Drop-ins are applied in lexicographic order of filename across the directories, so 60- beats 10- and a file in /etc/sysctl.d beats one in /usr/lib/sysctl.d only because of the directory order, not the number.
+3. Check nothing else sets them to something weaker first: grep -rn 'unprivileged\_bpf\_disabled\\|bpf\_jit\_harden' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Two files disagreeing is worse than neither setting it, because which wins depends on which tool applied them.
+4. Apply without rebooting: sysctl --system, then confirm with sysctl kernel.unprivileged\_bpf\_disabled net.core.bpf\_jit\_harden.
+5. Note that unprivileged\_bpf\_disabled can be raised but never lowered while the kernel runs. If it is currently 0, the file makes the next boot correct and sysctl --system will set it now; if it is already 1, it is locked and the file simply makes that survive.
+6. Verify the file is what takes effect rather than something else: systemd-analyze cat-config sysctl.d shows the merged configuration in application order on a systemd host.
+
+```sh
+sysctl kernel.unprivileged_bpf_disabled net.core.bpf_jit_harden
+grep -rn 'unprivileged_bpf_disabled\|bpf_jit_harden' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+systemd-analyze cat-config sysctl.d
+```
+
+> **Caution.** Disabling unprivileged BPF breaks unprivileged tooling that uses it — some observability agents, and seccomp-bpf is unaffected but eBPF-based tracing run as a normal user is not. Check what on this host loads BPF programs before changing it. JIT hardening costs a little throughput on hot paths for programs that are loaded, which is rarely measurable outside a packet-processing workload.
+
+**Controls** — `nist-800-53-r5 CM-6`, `nist-800-53-r5 SI-16`, `nist-800-53-r5 AC-6`
+
+**References**
+
+- [Linux kernel — unprivileged\_bpf\_disabled](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#unprivileged-bpf-disabled)
+- [Linux kernel — bpf\_jit\_harden](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/net.html#bpf-jit-harden)
+- [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
 
 ---
 

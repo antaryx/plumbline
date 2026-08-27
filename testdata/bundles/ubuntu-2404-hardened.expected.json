@@ -1,7 +1,7 @@
 {
   "bundle": "ubuntu-2404-hardened.plb",
   "schema": "findings/v1",
-  "catalog_version": 24,
+  "catalog_version": 25,
   "scan": {
     "started": "2026-08-25T21:31:55.438565245Z",
     "finished": "2026-08-25T21:31:55.619481732Z",
@@ -18,15 +18,15 @@
       "fail": 4,
       "not_applicable": 5,
       "skipped": 0,
-      "unknown": 7,
-      "total": 94
+      "unknown": 8,
+      "total": 95
     },
     "by_severity": {
       "LOW": 2,
       "MEDIUM": 2
     },
     "posture": 96.7741935483871,
-    "coverage": 92.13483146067416
+    "coverage": 91.11111111111111
   },
   "findings": [
     {
@@ -709,6 +709,23 @@
         {
           "source": "/proc/sys/net/ipv4/tcp_syncookies",
           "excerpt": "net.ipv4.tcp_syncookies = 1"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0017",
+      "module": "KERNEL",
+      "result": "UNKNOWN",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "unknown_reason": "ambiguous_system_state",
+      "subject": "sysctl configuration",
+      "fingerprint": "f06b835487ba567b7aad0f99677cce01",
+      "detail": "This verdict would rest on not finding the BPF parameters in any configuration file, and /etc/sysctl.d/99-sysctl.conf could not be read — so a setting for them may be in a file this scan never opened. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0006's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/etc/sysctl.d/99-sysctl.conf",
+          "excerpt": "internal: not a regular file"
         }
       ]
     },

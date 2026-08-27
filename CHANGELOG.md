@@ -11,6 +11,45 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+### Added
+- **`KERNEL-0017` (BPF hardening written to the sysctl configuration).**
+  Catalog 25, 95 checks. `HIGH`, above `KERNEL-0006`'s `MEDIUM` on purpose: that
+  one describes a boundary that is up right now, this one describes one that is
+  scheduled to fall down on a host whose operator believes it is hardened and
+  whose other checks agree.
+
+  **The gap it closes is a real one and neither existing check sees it.**
+  `KERNEL-0006` reads the running value and passes. `KERNEL-0007` compares
+  running against configured and *skips a parameter no file mentions*, because
+  there is nothing to compare it to. So a host hardened with `sysctl -w` and
+  nothing written to disk passes both and reverts at the next reboot. It is in
+  the golden corpus, not just in a fixture: `ubuntu-2404-stock` runs with
+  `unprivileged_bpf_disabled = 2` and no file setting it.
+
+  Two parameters are required and they do different jobs — who may call
+  `bpf()`, and what the JIT emits for the programs that get loaded. **`2` is
+  accepted for `kernel.unprivileged_bpf_disabled`** and noted as the weaker of
+  the two: it refuses unprivileged `bpf()` exactly as `1` does and merely
+  leaves the value raisable, so failing it would be a finding against a host
+  that is not exposed. **Only `2` is accepted for `net.core.bpf_jit_harden`**,
+  because `1` blinds constants for unprivileged programs only — the case that
+  stops mattering once an attacker has privilege.
+
+  A parameter set to different values in two files is `UNKNOWN`, not a verdict:
+  procps and systemd-sysctl walk the drop-in directories in different orders,
+  so which wins after a reboot depends on which applied them, and guessing
+  would be a confident claim about the one thing the check reports on.
+
+- **`net.core.bpf_jit_harden` is now probed.** It was the only half of the BPF
+  pair the collector did not read.
+
+### Changed
+- **Golden posture scores moved for the first time in this cycle**, on four of
+  the six bundles, because `KERNEL-0017` finds something real on them. It is
+  also the first check in five work packages to *raise* coverage rather than
+  lower it: it reads `kernel.sysctl`, a fact the corpus already carries, rather
+  than one recorded after it.
+
 ### Security
 - **`ParseProtectSystem` accepted enum names in the wrong case**, which could
   report `PASS` for a service systemd left unprotected. `ProtectSystem=Full` is

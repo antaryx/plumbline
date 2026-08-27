@@ -697,6 +697,47 @@ containers rather than the daemon that would start them.
 
 ---
 
+## KERNEL, persistence
+
+`KERNEL-0017` is the module's first check about the sysctl *files* rather than
+`/proc/sys`, and it exists because of a gap between two checks that both look
+correct on their own.
+
+`KERNEL-0006` reads the running value of `kernel.unprivileged_bpf_disabled` and
+passes when it is hardened. `KERNEL-0007` compares every running parameter
+against its configured value and reports drift — but it skips a parameter that
+no file mentions, because there is nothing to compare it against, and that skip
+is right for what it is doing. Between them sits the host hardened with
+`sysctl -w` and never written to disk: two passes, and an unhardened kernel
+after the next reboot.
+
+**A gap between two correct checks is not visible from either of them.** Both
+were reviewed, both are right about their own subject, and the hole is in the
+space between the subjects. The thing that found it was writing down what each
+check *does not* claim — which is the same discipline that produced the caveat
+sentences on every CONTAINERS and SERVICES verdict, arriving at a missing check
+instead of a missing sentence. Worth doing deliberately for the rest of the
+catalog rather than waiting to trip over the next one.
+
+**The corpus earned its keep here.** `ubuntu-2404-stock` fails the new check:
+its running kernel has `unprivileged_bpf_disabled` at 2 because that is the
+Ubuntu kernel's default, and no file sets it, so the host's hardening is an
+accident of the kernel package rather than a decision. That is exactly the trap
+the check was written for, found in a recording of a real host rather than in a
+fixture built to demonstrate it.
+
+**The next work package here is a symlink.** `/etc/sysctl.d/99-sysctl.conf` is
+a symlink to `/etc/sysctl.conf` on every Debian-family host; the seam opens with
+`O_NOFOLLOW`, and the sysctl collector does not resolve terminal symlinks by
+hand the way `internal/collect/unit` does. So `KERNEL-0007` and now
+`KERNEL-0017` both decline to answer on that whole distribution family —
+visible in the pins as `ubuntu-2404-hardened`'s `UNKNOWN`. The fix is about
+twenty lines of a pattern already in the tree; it was left out of this work
+package because it changes an existing check's verdict on the corpus and
+deserves its own diff.
+
+---
+
 ## SERVICES, sandboxing
 
 `SERVICES-0006` audits `NoNewPrivileges` on `cron.service`,

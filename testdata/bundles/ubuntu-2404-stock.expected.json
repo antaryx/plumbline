@@ -1,7 +1,7 @@
 {
   "bundle": "ubuntu-2404-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 24,
+  "catalog_version": 25,
   "scan": {
     "started": "2026-08-25T21:31:57.77690799Z",
     "finished": "2026-08-25T21:31:57.807262853Z",
@@ -15,19 +15,19 @@
   "summary": {
     "counts": {
       "pass": 39,
-      "fail": 12,
+      "fail": 13,
       "not_applicable": 37,
       "skipped": 0,
       "unknown": 6,
-      "total": 94
+      "total": 95
     },
     "by_severity": {
-      "HIGH": 3,
+      "HIGH": 4,
       "LOW": 4,
       "MEDIUM": 5
     },
-    "posture": 80.50847457627118,
-    "coverage": 89.47368421052632
+    "posture": 78.51239669421489,
+    "coverage": 89.65517241379311
   },
   "findings": [
     {
@@ -650,6 +650,78 @@
         {
           "source": "/proc/sys/net/ipv4/tcp_syncookies",
           "excerpt": "net.ipv4.tcp_syncookies = 1"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0017",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "sysctl configuration",
+      "fingerprint": "f06b835487ba567b7aad0f99677cce01",
+      "detail": "BPF hardening is not written to this host's sysctl configuration: kernel.unprivileged_bpf_disabled is not set in any sysctl configuration file; net.core.bpf_jit_harden is not set in any sysctl configuration file. The running kernel is currently hardened — kernel.unprivileged_bpf_disabled is 2 — so this host is protected now and will not be after the next reboot. That is the case KERNEL-0006 reports as a pass and KERNEL-0007 does not see at all, because a parameter no file mentions has nothing to drift from. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0006's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/99-protect-links.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        },
+        {
+          "source": "/lib/sysctl.d/99-protect-links.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        },
+        {
+          "source": "/etc/sysctl.d/10-bufferbloat.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "763c2e237645fb7c3fecf16a54479e49c39aab229c2a646a42f16c83b9dd2974"
+        },
+        {
+          "source": "/etc/sysctl.d/10-console-messages.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "14524a83a266454d517b7cdbfb2141dbc4b884570543da5f65e3f08da0b814c0"
+        },
+        {
+          "source": "/etc/sysctl.d/10-ipv6-privacy.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "e07c86211944a534c6418fe0eb5896926e09a13b56162d8cb642866f37e83b04"
+        },
+        {
+          "source": "/etc/sysctl.d/10-kernel-hardening.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "2bbc2c5684414517eba9da8d2fbff0a678026d944eb8fcfd6287281e11282e2f"
+        },
+        {
+          "source": "/etc/sysctl.d/10-magic-sysrq.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "f9107778c619246fb2a5a7e2a05c9419951752238ede04c771173832dd296128"
+        },
+        {
+          "source": "/etc/sysctl.d/10-map-count.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "867f4371a9cc5a79cab3b350aee03d067857b69e3cbf556a4a19aed057f9e954"
+        },
+        {
+          "source": "/etc/sysctl.d/10-network-security.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "258805ec72eada3c24a923de1c5bd8ed0fd11fe21f3673628ec78f221c31e934"
+        },
+        {
+          "source": "/etc/sysctl.d/10-ptrace.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "4add0d9ecbcc91e4018ed08e8dc66c69d4d9d142f9e31461178dcd7da0fd73c2"
+        },
+        {
+          "source": "/etc/sysctl.d/10-zeropage.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "5c745f62d086d9b9cf2ec23e4164f510cdba206c7aa6f11d2256f3f9be64c950"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "97c5b93ecd5329df5318b981bbf78117a8bbc1c3644603dc65d0226fc54a340a"
         }
       ]
     },

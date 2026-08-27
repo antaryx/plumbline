@@ -35,7 +35,7 @@ var all = []catalog.Check{
 	checks.Check0013,
 	checks.Check0014,
 	checks.Check0015,
-	checks.Check0016,
+	checks.Check0016, checks.Check0017,
 }
 
 // collectFixture runs the real collector against a fixture tree.
@@ -534,12 +534,17 @@ func TestCheckIdentityIsWellFormed(t *testing.T) {
 		if check.Remediation == nil {
 			t.Errorf("%s has no remediation; every check that can FAIL ships a fix", check.ID)
 		}
-		// The module spans two catalog versions: 2 introduced it, 3 completed
-		// it. SinceCatalog lets `plumbline diff` tell "newly failing" from
-		// "newly existing", so it must record when the check actually entered
-		// the catalog and never be bulk-updated to the current version.
-		if check.SinceCatalog != 2 && check.SinceCatalog != 3 {
-			t.Errorf("%s declares SinceCatalog %d, want 2 or 3", check.ID, check.SinceCatalog)
+		// The module spans three catalog versions now: 2 introduced it, 3
+		// completed the runtime checks, and 25 added the first check about the
+		// configuration files rather than /proc/sys. SinceCatalog lets
+		// `plumbline diff` tell "newly failing" from "newly existing", so it
+		// must record when the check actually entered the catalog and never be
+		// bulk-updated to the current version — which is what this assertion
+		// is guarding, and why it names the versions rather than accepting any.
+		switch check.SinceCatalog {
+		case 2, 3, 25:
+		default:
+			t.Errorf("%s declares SinceCatalog %d, want 2, 3 or 25", check.ID, check.SinceCatalog)
 		}
 		if check.SinceCatalog > catalog.Version {
 			t.Errorf("%s declares SinceCatalog %d, which is ahead of catalog.Version %d",
@@ -595,5 +600,198 @@ func TestDeterminism(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// KERNEL-0017, the module's first check about the files rather than /proc/sys
+// ---------------------------------------------------------------------------
+
+func TestKernel0017PersistentBPFHardening(t *testing.T) {
+	run(t, checks.Check0017, []tc{
+		// Both keys on disk, in one file.
+		{fixture: "kernel-hardened", result: finding.Pass,
+			detailContains: "Both BPF hardening parameters are written"},
+
+		// Both on disk, split across /etc/sysctl.conf and a drop-in.
+		{fixture: "kernel-bpf-persisted", result: finding.Pass,
+			detailContains: "Both BPF hardening parameters are written"},
+
+		// The case the check exists for: hardened now, gone at reboot.
+		{fixture: "kernel-bpf-runtime-only", result: finding.Fail, severity: finding.High,
+			detailContains: "is not set in any sysctl configuration file"},
+
+		// Two files disagree; which wins depends on the tool.
+		{fixture: "kernel-bpf-conflict", result: finding.Unknown,
+			reason: finding.ReasonAmbiguousState, detailContains: "different values in more than one"},
+
+		// 2 for the caller half is fine; 1 for the JIT half is not.
+		{fixture: "kernel-bpf-weak", result: finding.Fail, severity: finding.High,
+			detailContains: "unprivileged programs only"},
+
+		// No configuration file anywhere is not a finding about a file.
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+
+		// A kernel with no BPF at all has nothing to persist.
+		{fixture: "kernel-absent", result: finding.NotApplicable,
+			detailContains: "implements neither"},
+
+		// A file we could not open may hold either setting.
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+// TestRuntimeHardeningWithoutPersistenceIsTheWholePoint.
+//
+// kernel-bpf-runtime-only has both parameters hardened in /proc/sys and
+// neither in any file. It is the shape three checks disagree about, and the
+// disagreement is correct in every case: KERNEL-0006 reports the running value
+// and passes; KERNEL-0007 skips a parameter no file mentions, because there is
+// nothing to compare it against; KERNEL-0017 is the only one that says this
+// host un-hardens itself at the next reboot.
+//
+// If this ever stops holding, the most likely cause is KERNEL-0007 being
+// "improved" to treat unconfigured-but-running as drift — which would be a
+// reasonable-looking change that silently makes this check redundant and
+// reports the finding against the wrong subject.
+func TestRuntimeHardeningWithoutPersistenceIsTheWholePoint(t *testing.T) {
+	const fixture = "kernel-bpf-runtime-only"
+
+	if got := evalFixture(t, checks.Check0006, fixture); got.Result != finding.Pass {
+		t.Errorf("KERNEL-0006 = %s over a host hardened at runtime, want PASS: %s", got.Result, got.Detail)
+	}
+	if got := evalFixture(t, checks.Check0007, fixture); got.Result != finding.Pass {
+		t.Errorf("KERNEL-0007 = %s, want PASS: a parameter no file sets has nothing to drift from: %s", got.Result, got.Detail)
+	}
+
+	got := evalFixture(t, checks.Check0017, fixture)
+	if got.Result != finding.Fail {
+		t.Fatalf("KERNEL-0017 = %s, want FAIL: %s", got.Result, got.Detail)
+	}
+	// And it has to say *why* this is not a duplicate of the two passes above,
+	// or an operator reading three findings will act on the wrong one.
+	if !strings.Contains(got.Detail, "protected now and will not be after the next reboot") {
+		t.Errorf("the verdict does not explain the trap it caught: %s", got.Detail)
+	}
+	for _, key := range []string{"kernel.unprivileged_bpf_disabled", "net.core.bpf_jit_harden"} {
+		if !strings.Contains(got.Detail, key) {
+			t.Errorf("%s is not named: %s", key, got.Detail)
+		}
+	}
+}
+
+// TestBothBPFParametersAreRequiredSeparately. They are independent settings
+// doing different jobs — who may call bpf(), and what the JIT emits for the
+// programs that are loaded — so one standing in for the other would report a
+// half-hardened host as hardened.
+func TestBothBPFParametersAreRequiredSeparately(t *testing.T) {
+	got := evalFixture(t, checks.Check0017, "kernel-bpf-weak")
+
+	if got.Result != finding.Fail {
+		t.Fatalf("= %s, want FAIL: %s", got.Result, got.Detail)
+	}
+	// The JIT half fails.
+	if !strings.Contains(got.Detail, "net.core.bpf_jit_harden is 1") {
+		t.Errorf("the failing parameter is not named with its value: %s", got.Detail)
+	}
+	// The caller half at 2 must not be reported as a failure: it refuses
+	// unprivileged bpf() exactly as 1 does, and failing it would be a finding
+	// against a host that is not exposed.
+	if strings.Contains(got.Detail, "kernel.unprivileged_bpf_disabled is 2 at") &&
+		strings.Contains(got.Detail, "any local user may load BPF programs") {
+		t.Errorf("unprivileged_bpf_disabled = 2 was reported as a failure: %s", got.Detail)
+	}
+}
+
+// TestTheWeakerAcceptedValueIsStillNamed.
+//
+// unprivileged_bpf_disabled = 2 passes and buys slightly less than 1: both
+// refuse unprivileged bpf(), and only 1 locks the setting for the rest of the
+// boot. The same two-tier shape SERVICES-0008 uses for ProtectHome=read-only —
+// pass, and say what it did not buy, rather than failing a host that is not
+// exposed or passing it silently.
+func TestTheWeakerAcceptedValueIsStillNamed(t *testing.T) {
+	// Built by hand: the fixture corpus has no host with 2 for the caller half
+	// and 2 for the JIT half, and inventing one for a wording assertion is
+	// less honest than saying what is being tested.
+	sc := fact.Sysctl{
+		Running:    map[string]fact.SysctlRunning{},
+		Configured: map[string][]fact.SysctlSetting{},
+		Digests:    map[string]string{},
+		Files:      []string{"/etc/sysctl.d/60-hardening.conf"},
+	}
+	sc.Configured["kernel.unprivileged_bpf_disabled"] = []fact.SysctlSetting{{
+		Key: "kernel.unprivileged_bpf_disabled", Value: "2",
+		File: "/etc/sysctl.d/60-hardening.conf", Line: 1,
+	}}
+	sc.Configured["net.core.bpf_jit_harden"] = []fact.SysctlSetting{{
+		Key: "net.core.bpf_jit_harden", Value: "2",
+		File: "/etc/sysctl.d/60-hardening.conf", Line: 2,
+	}}
+
+	fs := fact.NewSet()
+	fs.Put(sc)
+	got := catalog.MustNew(checks.Check0017).Evaluate(fs)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(got))
+	}
+	if got[0].Result != finding.Pass {
+		t.Fatalf("= %s, want PASS: 2 refuses unprivileged bpf(): %s", got[0].Result, got[0].Detail)
+	}
+	if !strings.Contains(got[0].Detail, "1 additionally locks the setting") {
+		t.Errorf("the pass does not say what 2 did not buy: %s", got[0].Detail)
+	}
+}
+
+// TestAConflictIsNotAVerdict. procps and systemd-sysctl walk the drop-in
+// directories in different orders, so two files disagreeing means the next
+// boot depends on which tool applies them. Guessing would be a confident claim
+// about exactly the thing this check reports on.
+func TestAConflictIsNotAVerdict(t *testing.T) {
+	got := evalFixture(t, checks.Check0017, "kernel-bpf-conflict")
+
+	if got.Result != finding.Unknown {
+		t.Fatalf("= %s, want UNKNOWN: %s", got.Result, got.Detail)
+	}
+	// Both files named, because the remedy is to delete one of them and the
+	// operator needs to know which two are in play.
+	for _, file := range []string{"/etc/sysctl.d/60-hardening.conf", "/run/sysctl.d/50-cloud.conf"} {
+		if !strings.Contains(got.Detail, file) {
+			t.Errorf("%s is not named: %s", file, got.Detail)
+		}
+	}
+	if len(got.Evidence) < 2 {
+		t.Errorf("evidence cites %d lines, want both sides of the conflict", len(got.Evidence))
+	}
+}
+
+// TestTheConfiguredCheckCitesFilesAndLines. Its whole subject is a file, so a
+// finding that did not say which file and which line would send an operator
+// grepping five directories.
+func TestTheConfiguredCheckCitesFilesAndLines(t *testing.T) {
+	got := evalFixture(t, checks.Check0017, "kernel-bpf-persisted")
+
+	if got.Result != finding.Pass {
+		t.Fatalf("= %s, want PASS: %s", got.Result, got.Detail)
+	}
+	if len(got.Evidence) != 2 {
+		t.Fatalf("evidence = %d entries, want one per parameter: %+v", len(got.Evidence), got.Evidence)
+	}
+	// The two parameters come from two different sources in this fixture, which
+	// is what proves the collector merges them rather than reading one.
+	sources := map[string]bool{}
+	for _, e := range got.Evidence {
+		sources[e.Source] = true
+		if e.Line == 0 {
+			t.Errorf("evidence cites no line: %+v", e)
+		}
+		if e.SHA256 == "" {
+			t.Errorf("evidence cites no digest, so an auditor cannot verify it: %+v", e)
+		}
+	}
+	if len(sources) != 2 {
+		t.Errorf("both parameters were read from one file; the fixture splits them: %v", sources)
 	}
 }

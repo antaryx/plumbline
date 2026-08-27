@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 24 · 94 checks · 11 modules**
+**Catalog version 25 · 95 checks · 11 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 
@@ -17,14 +17,14 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | `CONTAINERS` | 8 | 2 | 0 | 3 | 3 | 0 |
 | `CRON` | 5 | 0 | 2 | 2 | 1 | 0 |
 | `FILESYS` | 10 | 2 | 3 | 4 | 1 | 0 |
-| `KERNEL` | 16 | 0 | 1 | 13 | 2 | 0 |
+| `KERNEL` | 17 | 0 | 2 | 13 | 2 | 0 |
 | `LOGGING` | 5 | 0 | 0 | 4 | 1 | 0 |
 | `MEMORY` | 4 | 0 | 0 | 3 | 1 | 0 |
 | `NETWORK` | 3 | 0 | 2 | 1 | 0 | 0 |
 | `SERVICES` | 8 | 0 | 4 | 4 | 0 | 0 |
 | `SSHD` | 19 | 1 | 7 | 8 | 3 | 0 |
 | `USERS` | 10 | 2 | 4 | 2 | 2 | 0 |
-| **total** | **94** | 7 | 26 | 46 | 15 | 0 |
+| **total** | **95** | 7 | 27 | 46 | 15 | 0 |
 
 Severity is the check's **base** severity, before any context adjustment a finding may carry.
 
@@ -99,6 +99,7 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`KERNEL-0014`](CHECK-REFERENCE.md#kernel-0014--core-dumps-are-not-written-to-an-attacker-influenced-location) Core dumps are not written to an attacker-influenced location | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0015`](CHECK-REFERENCE.md#kernel-0015--source-routed-packets-are-refused-on-every-network-interface) Source-routed packets are refused on every network interface | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0016`](CHECK-REFERENCE.md#kernel-0016--tcp-syn-cookies-are-enabled) TCP SYN cookies are enabled | LOW | `kernel.sysctl` |
+| [`KERNEL-0017`](CHECK-REFERENCE.md#kernel-0017--bpf-hardening-is-written-to-the-sysctl-configuration) BPF hardening is written to the sysctl configuration | HIGH | `kernel.sysctl` |
 
 ## LOGGING
 

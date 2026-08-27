@@ -66,6 +66,14 @@ var probedKeys = []string{
 	"kernel.randomize_va_space",
 	"kernel.unprivileged_bpf_disabled",
 	"kernel.yama.ptrace_scope",
+	// net.core.bpf_jit_harden is the other half of the BPF story. It is not
+	// about who may call bpf() — that is unprivileged_bpf_disabled — but about
+	// what the JIT emits once one is loaded: constant blinding, so an attacker
+	// cannot smuggle a chosen instruction sequence into the kernel's
+	// instruction stream as an immediate operand and jump into the middle of
+	// it. The two are set independently and a host commonly has one without
+	// the other.
+	"net.core.bpf_jit_harden",
 	"net.ipv4.tcp_syncookies",
 }
 

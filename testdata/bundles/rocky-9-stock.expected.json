@@ -1,7 +1,7 @@
 {
   "bundle": "rocky-9-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 24,
+  "catalog_version": 25,
   "scan": {
     "started": "2026-08-25T21:31:51.893733451Z",
     "finished": "2026-08-25T21:31:52.46518356Z",
@@ -15,19 +15,19 @@
   "summary": {
     "counts": {
       "pass": 37,
-      "fail": 11,
+      "fail": 12,
       "not_applicable": 39,
       "skipped": 0,
       "unknown": 7,
-      "total": 94
+      "total": 95
     },
     "by_severity": {
-      "HIGH": 2,
+      "HIGH": 3,
       "LOW": 3,
       "MEDIUM": 6
     },
-    "posture": 81.25,
-    "coverage": 87.27272727272727
+    "posture": 79.13043478260869,
+    "coverage": 87.5
   },
   "findings": [
     {
@@ -680,6 +680,38 @@
         {
           "source": "/proc/sys/net/ipv4/tcp_syncookies",
           "excerpt": "net.ipv4.tcp_syncookies = 1"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0017",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "sysctl configuration",
+      "fingerprint": "f06b835487ba567b7aad0f99677cce01",
+      "detail": "BPF hardening is not written to this host's sysctl configuration: kernel.unprivileged_bpf_disabled is not set in any sysctl configuration file; net.core.bpf_jit_harden is not set in any sysctl configuration file. The running kernel is currently hardened — kernel.unprivileged_bpf_disabled is 2 — so this host is protected now and will not be after the next reboot. That is the case KERNEL-0006 reports as a pass and KERNEL-0007 does not see at all, because a parameter no file mentions has nothing to drift from. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0006's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/usr/lib/sysctl.d/50-redhat.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/50-redhat.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
         }
       ]
     },

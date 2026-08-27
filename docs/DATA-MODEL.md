@@ -707,6 +707,29 @@ target absent from `Binaries` was never looked at, which no check may read as a
 statement about the host.
 
 
+#### `kernel.sysctl` — running and configured, kept apart
+
+`Running` is `/proc/sys`; `Configured` is every setting found in the five
+`sysctl.d` directories and `/etc/sysctl.conf`, keyed by parameter and **kept as
+a list rather than reduced to a winner**. That is what lets a check tell "one
+file sets this" from "two files disagree": procps `sysctl --system` and
+systemd-sysctl walk the directories in different orders, so a parameter set
+twice to different values has no determinable outcome and
+`ConfiguredConflict` is how a check notices it must not guess.
+`EffectiveConfigured` returns the last entry for the common case where they
+agree.
+
+`Files`, `Digests` and `UnreadableFiles` make an absence checkable. A check
+concluding "this parameter is not configured" — which `KERNEL-0017` does — must
+not reach that conclusion while a file it could not open is outstanding, and
+`UnreadableFiles` carries the reason so the right `UNKNOWN` code comes out.
+
+Unlike unit fragments, these files are read through the ordinary `ReadFile`, so
+their bytes *are* in the evidence store and a cited digest can be followed. That
+is deliberate and is the same trade `daemon.json` gets: sysctl configuration is
+policy rather than credentials, and the bytes are what makes a finding about a
+file verifiable.
+
 #### `containers.docker_daemon` — what daemon.json says, and only that
 
 Two distinctions carry this fact, and both are ones a scaffold gets wrong.

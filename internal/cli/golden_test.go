@@ -95,6 +95,27 @@ type pin struct {
 // in which either became a PASS would mean the symbol reading had started
 // inventing evidence, which is a worse failure than the false positive.
 //
+// **KERNEL-0017 is the first check in five work packages to raise coverage
+// rather than lower it**, because it reads kernel.sysctl — a fact these bundles
+// already carry — rather than one recorded after them. It is also the first to
+// move a posture score: it fails four of the six, and the failures are real.
+// ubuntu-2404-stock is the instructive one. Its running kernel has
+// unprivileged_bpf_disabled at 2 and no file sets it, so KERNEL-0006 passes,
+// KERNEL-0007 sees nothing to compare, and the host reverts to whatever the
+// next kernel's default is. That is precisely the trap the check was written
+// for, found in the corpus rather than in a fixture.
+//
+// ubuntu-2404-hardened is UNKNOWN for a reason worth naming rather than
+// pinning silently: /etc/sysctl.d/99-sysctl.conf is the symlink to
+// /etc/sysctl.conf that the Debian family ships, the seam opens with
+// O_NOFOLLOW, and the sysctl collector does not resolve terminal symlinks by
+// hand the way internal/collect/unit does. So on every Debian-family host both
+// KERNEL-0007 and now KERNEL-0017 decline to answer. It is a pre-existing
+// limitation this check inherits rather than one it introduces, the fix is
+// about twenty lines of a pattern already in the tree, and it changes an
+// existing check's verdict — which is why docs/ROADMAP.md carries it as a work
+// package of its own rather than it being done here.
+//
 // **Every bundle carries six UNKNOWN from two causes, and both are the corpus
 // reporting its own age.** CONTAINERS-0006, -0007 and -0008 require
 // containers.docker_service; SERVICES-0006, -0007 and -0008 require
@@ -139,8 +160,8 @@ var pinned = map[string]pin{
 	// syslog daemon, and a check that declines to judge an absent subject is
 	// the behaviour, not a gap.
 	"ubuntu-2404-stock": {
-		catalog: 24, pass: 39, fail: 12, notApplicable: 37, unknown: 6, skipped: 0,
-		posture: 80.50847457627118, coverage: 89.47368421052632,
+		catalog: 25, pass: 39, fail: 13, notApplicable: 37, unknown: 6, skipped: 0,
+		posture: 78.51239669421489, coverage: 89.65517241379311,
 		why: "the unhardened baseline every other number is measured against",
 	},
 
@@ -148,7 +169,7 @@ var pinned = map[string]pin{
 	// check cares about. One PASS and one NOT_APPLICABLE separate them here,
 	// and which ones is the interesting part of any diff on this pair.
 	"debian-13-stock": {
-		catalog: 24, pass: 37, fail: 13, notApplicable: 38, unknown: 6, skipped: 0,
+		catalog: 25, pass: 37, fail: 13, notApplicable: 39, unknown: 6, skipped: 0,
 		posture: 78.44827586206897, coverage: 89.28571428571429,
 		why: "Debian's defaults, which are not Ubuntu's",
 	},
@@ -157,8 +178,8 @@ var pinned = map[string]pin{
 	// is the bundle that catches a check quietly assuming a Debian-shaped /etc
 	// and reporting a verdict about a file that was never there.
 	"alpine-320-stock": {
-		catalog: 24, pass: 30, fail: 8, notApplicable: 50, unknown: 6, skipped: 0,
-		posture: 84.0909090909091, coverage: 86.36363636363636,
+		catalog: 25, pass: 30, fail: 9, notApplicable: 50, unknown: 6, skipped: 0,
+		posture: 81.31868131868131, coverage: 86.66666666666667,
 		why: "the distribution least like the others, where guessing shows up",
 	},
 
@@ -170,8 +191,8 @@ var pinned = map[string]pin{
 	// binary, not of any file on the host. AUTH-0002 says it does not know.
 	// Every other scanner reports the documented default and calls it a PASS.
 	"fedora-44-stock": {
-		catalog: 24, pass: 37, fail: 12, notApplicable: 38, unknown: 7, skipped: 0,
-		posture: 79.13043478260869, coverage: 87.5,
+		catalog: 25, pass: 37, fail: 13, notApplicable: 38, unknown: 7, skipped: 0,
+		posture: 77.11864406779661, coverage: 87.71929824561403,
 		why: "the RPM family's leading edge, where authselect owns the PAM stack",
 	},
 
@@ -179,8 +200,8 @@ var pinned = map[string]pin{
 	// point of it. One FAIL and one NOT_APPLICABLE separate the two, and which
 	// ones is the interesting part of any diff on this pair.
 	"rocky-9-stock": {
-		catalog: 24, pass: 37, fail: 11, notApplicable: 39, unknown: 7, skipped: 0,
-		posture: 81.25, coverage: 87.27272727272727,
+		catalog: 25, pass: 37, fail: 12, notApplicable: 39, unknown: 7, skipped: 0,
+		posture: 79.13043478260869, coverage: 87.5,
 		why: "the enterprise RPM baseline most real audits run against",
 	},
 
@@ -197,17 +218,17 @@ var pinned = map[string]pin{
 	//
 	// The 4 FAIL are the four a container cannot fix — /tmp and /home are not
 	// separate mounts, and /proc/sys is read-only so dmesg_restrict and the
-	// core pattern cannot be set. Of the 7 UNKNOWN, one is KERNEL-0007
-	// declining to claim the running kernel matches its configuration when one
-	// of the configuration files was a symlink it would not follow, three are
+	// core pattern cannot be set. Of the 8 UNKNOWN, two are KERNEL-0007
+	// and KERNEL-0017 declining to read a configuration that includes a symlink
+	// the seam will not follow — one file, two checks — three are
 	// the checks requiring containers.docker_service, and three are
 	// SERVICES-0006, -0007 and -0008 requiring services.hardening — both facts
-	// this bundle predates. All sixteen are correct, and a run in which any of
+	// this bundle predates. All seventeen are correct, and a run in which any of
 	// them became a PASS would be a serious regression rather than an
 	// improvement.
 	"ubuntu-2404-hardened": {
-		catalog: 24, pass: 78, fail: 4, notApplicable: 5, unknown: 7, skipped: 0,
-		posture: 96.7741935483871, coverage: 92.13483146067416,
+		catalog: 25, pass: 78, fail: 4, notApplicable: 5, unknown: 8, skipped: 0,
+		posture: 96.7741935483871, coverage: 91.11111111111111,
 		why: "the only bundle on which every check in the catalog evaluates",
 	},
 }
