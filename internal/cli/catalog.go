@@ -111,6 +111,7 @@ func buildCatalog() *catalog.Catalog {
 		serviceschecks.Check0003,
 		serviceschecks.Check0004,
 		serviceschecks.Check0005,
+		serviceschecks.Check0006,
 		sshdchecks.Check0002,
 		sshdchecks.Check0003,
 		sshdchecks.Check0004,

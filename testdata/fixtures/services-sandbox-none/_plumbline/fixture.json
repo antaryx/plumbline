@@ -1,0 +1,3 @@
+{
+  "description": "A systemd host on which none of the audited units is installed — a container image with no cron, no journald unit and no message bus. NOT_APPLICABLE rather than PASS: there is nothing whose sandboxing to report on, and the host may well run the same functions under other unit names this check does not look for."
+}

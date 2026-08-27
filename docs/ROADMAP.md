@@ -471,7 +471,7 @@ and `docs/PERFORMANCE.md` carries the measured baseline.
 | `USERS` | 10 | **10** | Complete |
 | `SSHD` | 20 | **19** | Resolving `Include`, `Match` blocks and compiled defaults was the real work, and it is done |
 | `NETWORK` | 12 | **3** | Firewall state only so far. Listeners need a `/proc/net/*` collector, not a check |
-| `SERVICES` | 10 | **5** | systemd enablement symlinks read offline. OpenRC and sysvinit degrade gracefully but have no checks |
+| `SERVICES` | 10 | **6** | systemd enablement symlinks read offline. OpenRC and sysvinit degrade gracefully but have no checks. `-0006` (WP-30) is the first to read unit *bodies*, for three sandboxing directives on three named units |
 | `FILESYS` | 14 | **9** | Consumes the shared walk. Unowned files needed walker aggregation and landed after the tag (WP-25) |
 | `LOGGING` | 8 | **5** | |
 | `CRON` | 8 | **5** | |
@@ -694,6 +694,60 @@ its detail strings say so.
 What remains for v2 is everything that is not a configuration file: Podman's
 configuration, K8s node hardening, and the checks that need to inspect running
 containers rather than the daemon that would start them.
+
+---
+
+## SERVICES, sandboxing
+
+`SERVICES-0006` audits `NoNewPrivileges` on `cron.service`,
+`systemd-journald.service` and `dbus.service`. It is the module's sixth check
+and its first to open a unit body, which the other five deliberately do not.
+
+Three things it produced that outlive the check:
+
+- **One implementation of systemd's unit assembly, `internal/collect/unit`.**
+  Search-root precedence, drop-in gathering, basename shadowing, lexical
+  ordering across directories, masked and symlinked units. It came out of the
+  Docker collector, which had it first and now calls it. The rules are
+  systemd's, they move verdicts rather than details, and two implementations
+  would have been two answers on the same host — the same argument that put
+  `dockerd`'s socket grammar in one file for `CONTAINERS-0006` and `-0007`.
+- **A directive allowlist enforced during the parse is a privacy boundary, not
+  a filter.** `unit.Request.Directives` names what to keep and everything else
+  is discarded as the file is read, so `Environment=` is never held. A filter
+  applied afterwards is one a later collector forgets; there is nothing here to
+  forget. It is what makes "the SERVICES module reads no unit bodies" turn into
+  a bounded exception rather than an abandoned rule.
+- **systemd's boolean grammar is wider than its documentation and is not
+  uniformly case-insensitive.** `parse_boolean` takes `1/0` compared exactly and
+  `yes/y/true/t/on` and `no/n/false/f/off` compared case-insensitively — and an
+  unparseable value is *ignored with a warning*, not read as false, so the file
+  can say one thing while the host does another. Any later check reading a
+  systemd boolean should use the same parser rather than inventing a rule.
+
+The module's honest limits here are three:
+
+**The unit list is fixed and small.** Auditing every unit means reading every
+unit body, which is what the enablement collector exists in order not to do.
+Growing the list is a work package with a fixture per addition, not a constant
+to extend casually — and the interesting question is not how to read more units
+but which ones are worth the disclosure.
+
+**`NoNewPrivileges` is not free for every service, and the check does not know
+which.** `dbus.service` activates system services through a setuid
+`dbus-daemon-launch-helper`, and `cron.service` runs whatever operators put in
+crontabs, which frequently includes `sudo`. Setting the bit on either breaks
+them — at the helper rather than at startup, so possibly long after the
+restart. The check reports both as failures and its remediation leads with
+establishing that, but a finding whose fix can cause an outage wants an
+exemption mechanism the catalog does not have yet: a way for a check to carry
+"known-incompatible on this unit, and here is why". That is the next work
+package in this area and it is worth more than a seventh check.
+
+**The corpus does not exercise it.** All six golden bundles predate
+`services.hardening`, so `SERVICES-0006` is `UNKNOWN` on every one. Unlike the
+CONTAINERS three this needs no new software to fix — every one of those hosts
+has a `systemd-journald.service` — so a re-recording clears it on its own.
 
 ---
 

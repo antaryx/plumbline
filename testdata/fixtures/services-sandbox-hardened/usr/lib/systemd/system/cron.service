@@ -1,0 +1,12 @@
+[Unit]
+Description=Regular background program processing daemon
+
+[Service]
+EnvironmentFile=-/etc/default/cron
+ExecStart=/usr/sbin/cron -f $EXTRA_OPTS
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

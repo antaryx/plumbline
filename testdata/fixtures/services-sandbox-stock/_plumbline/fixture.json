@@ -1,0 +1,3 @@
+{
+  "description": "The shape of an ordinary host: journald ships hardened by systemd upstream, cron.service does not, and dbus.service is not installed at all. Two of the three states this check distinguishes in one fixture — a unit that fails and a unit that is absent and therefore skipped rather than failed. cron's IgnoreSIGPIPE=false is a boolean the collector must not confuse with the one it was asked for."
+}

@@ -11,6 +11,91 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+### Added
+- **`SERVICES-0006` (NoNewPrivileges on audited system services).** Catalog 22,
+  92 checks. `MEDIUM`.
+
+  `NoNewPrivileges=yes` sets the kernel's `no_new_privs` bit, which cannot be
+  cleared once set and makes the kernel refuse to grant privileges the process
+  did not already hold — a setuid binary runs as the calling user and file
+  capabilities are ignored. It turns "find any local escalation" into
+  "escalate with what you already have".
+
+  It reads a fixed list — `cron.service`, `systemd-journald.service`,
+  `dbus.service` — rather than every unit on the host, because reading every
+  unit means reading every unit *body*, which is what the SERVICES module
+  exists in order not to do.
+
+  A unit that is not installed is skipped rather than failed; if none is
+  installed the check is `NOT_APPLICABLE`. A masked unit is skipped too: systemd
+  refuses to start one, so the unhardened vendor file underneath describes no
+  process. An unreadable unit or drop-in is `UNKNOWN` when nothing else failed,
+  and does not suppress a failure that was found — ADR-0014.
+
+  The three ways of not having the bit are told apart in the finding, because
+  they are three different conversations: never written, written as `no` (a
+  decision somebody made), and written as a value systemd rejects (which it
+  logs and ignores, so the file looks configured and the host is not).
+
+- **`internal/collect/unit`, one implementation of systemd's unit assembly.**
+  Search-root precedence, drop-in gathering, basename shadowing, lexical
+  ordering across directories, masked and symlinked units, `ReadOpaque`
+  fragment reads. Extracted from the Docker service collector, which now calls
+  it; the new SERVICES sandboxing collector calls it too.
+
+  `Request.Directives` is the privacy boundary rather than a convenience
+  filter: a directive whose name was not asked for is discarded during the
+  parse and never held, so `Environment=` cannot reach a fact by omission. That
+  is what makes it safe for two collectors to read unit bodies at all.
+
+  `Unit.List` and `Unit.Last` are systemd's two folds — list-valued settings
+  accumulate and are cleared by a bare assignment, scalars are overwritten and
+  a bare assignment restores the default.
+
+- **`services.hardening` fact**, recording `NoNewPrivileges`, `ProtectSystem`
+  and `ProtectHome` for the audited units, plus which of them systemd would
+  refuse to parse. Separate from `services.units` so the older fact keeps its
+  promise to read no unit bodies at all.
+
+### Changed
+- **`fact.DockerUnitState` is now `fact.UnitState`**, with `UnitPresent`,
+  `UnitAbsent`, `UnitMasked`, `UnitDenied`, `UnitNotRegular`, `UnitTruncated`
+  and `UnitError`. The type was generic in everything but its name once a
+  second collector needed it. **The wire values are unchanged**, so a `.plb`
+  recorded before the rename decodes into it unaltered. `UnitFragment`,
+  `UnitFragmentKind` and the fragment kinds moved to `internal/fact/unit.go`
+  alongside it.
+
+- **The Docker service collector is 724 lines shorter by half** and keeps
+  everything about dockerd: the `ExecStart` fold, the argument split, and the
+  `--log-opt` scrubber, which runs at the single point where a command line
+  becomes fact data. It was deliberately not moved into `collect/unit` — it is
+  a statement about dockerd's flag grammar, not about unit files, and a generic
+  redaction hook would have been a place for a later caller to forget to pass
+  one.
+
+- **The SERVICES collector package doc no longer says unit bodies are never
+  read.** It states the four bounds that make the exception safe instead — a
+  named list rather than a walk, a directive allowlist enforced during the
+  parse, `ReadOpaque`, and values recorded only where a check reads them — and
+  says plainly that none of them holds for a collector that reads units in
+  bulk.
+
+### Fixed
+- **A refused stat during unit lookup is now recorded rather than skipped
+  silently.** A unit file in a higher-precedence directory *replaces* the one
+  below it, so a location that could not be examined may hold a file that
+  changes everything; `findUnit` treated that as "not here" and recorded
+  nothing, though its own comment promised otherwise. It now returns a fragment,
+  which makes `Unit.Complete` false and stops a caller reporting an absence it
+  did not establish. Affects `CONTAINERS-0006`, `-0007`, `-0008` and
+  `SERVICES-0006`.
+
+- **A continued directive joins with a single space.** The old code left two
+  where the backslash had been, which was invisible while the only consumer
+  split the value into arguments and would have carried the file's layout into
+  a scalar directive's value.
+
 ### Security
 - **`--log-opt` values are scrubbed out of the recorded `ExecStart`.**
   `dockerd` takes log options on its command line as well as in

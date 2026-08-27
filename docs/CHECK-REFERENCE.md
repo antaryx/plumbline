@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 21 · 91 checks · 11 modules**
+**Catalog version 22 · 92 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -3716,6 +3716,85 @@ chown root:root <path> && chmod go-w <path>
 **References**
 
 - [systemd.unit(5) — unit load path and precedence](https://man7.org/linux/man-pages/man5/systemd.unit.5.html)
+
+---
+
+### SERVICES-0006 — Audited system services set NoNewPrivileges
+
+| | |
+|---|---|
+| Module | `SERVICES` |
+| Base severity | MEDIUM |
+| Since | catalog 22 |
+| Reads | `services.hardening` |
+| Tags | `services`, `systemd`, `sandboxing`, `privilege-escalation` |
+
+NoNewPrivileges=yes sets the kernel's no_new_privs bit on a
+unit's processes. Once set it cannot be cleared — not by the process, not by
+any child it forks, not by exec — and while it is set the kernel refuses to
+grant privileges the process did not already have: a setuid binary runs as the
+calling user, file capabilities are ignored, and an SELinux or AppArmor
+transition that would raise privilege is denied.
+
+What it buys is a smaller second step. A daemon that is compromised through
+its own network-facing code has whatever privileges its unit gave it; without
+no_new_privs it also has every setuid binary on the host as a way to get more.
+The bit turns "find any local escalation" into "escalate with what you already
+hold", and it costs nothing at runtime.
+
+**It is not free for every service, and that is the point of reading the unit
+rather than assuming.** A daemon that legitimately relies on a setuid helper
+breaks outright when the bit is set — the helper simply runs without its
+privileges. The remediation below insists on establishing that first, because
+setting NoNewPrivileges on the wrong unit is an outage rather than a
+regression.
+
+This check reads a fixed, small list of long-lived root daemons rather than
+every unit on the host. Reading every unit would mean reading every unit body,
+which is what this module exists in order not to do — a bundle would then carry
+every ExecStart and every Environment= on the machine.
+
+**A unit that is not installed is skipped, not failed.** cron.service is absent
+on a host that uses cronie under another name, and dbus.service on a container
+image with no message bus; neither is a finding. If none of the audited units
+is installed the check is NOT_APPLICABLE, because there is nothing to have an
+opinion about.
+
+Silence is a failure here, and deliberately so. The default is off, so a unit
+that never mentions NoNewPrivileges is running without it — the same posture as
+one that sets it to no. The two are told apart in the finding anyway, because
+they are different acts: an operator who wrote NoNewPrivileges=no had a reason,
+and that reason is the first thing to establish before changing it.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort MEDIUM
+
+Add NoNewPrivileges=yes to a drop-in for each service, after establishing that it uses no setuid helper.
+
+1. Establish what the service needs before changing it. NoNewPrivileges neuters setuid binaries and file capabilities for everything the unit starts, so a daemon that shells out to a setuid helper stops working the moment it is set — and it fails at the helper rather than at startup, so the breakage may not appear until something rare happens.
+2. Two of the units commonly audited here are exactly that case and are worth naming. dbus.service activates system services through dbus-daemon-launch-helper, which is setuid root; setting NoNewPrivileges on it breaks activation. cron.service runs whatever operators put in crontabs, which frequently includes sudo, su or a setuid binary; setting it there breaks those jobs and nothing else reports why.
+3. Where the service is self-contained, add the setting as a drop-in rather than editing the vendor unit, so a package upgrade does not undo it: systemctl edit <unit>, then a [Service] section containing NoNewPrivileges=yes.
+4. Reload and restart: systemctl daemon-reload, then systemctl restart <unit>.
+5. Confirm the assembled unit rather than the file you edited: systemctl show -p NoNewPrivileges <unit> reports what systemd actually loaded, drop-ins and precedence included.
+6. Exercise the service afterwards, including the paths that are rare. A setuid helper that is called once a day will not fail during the restart.
+7. If a service genuinely requires a setuid helper, treat that as the finding and record the exception. The alternative is often to give the unit the one capability it needs — AmbientCapabilities= — and set NoNewPrivileges anyway, which is a smaller grant than every setuid binary on the host.
+
+```sh
+systemctl show -p NoNewPrivileges -p ProtectSystem -p ProtectHome cron.service systemd-journald.service dbus.service
+systemctl cat cron.service
+systemd-analyze security cron.service
+```
+
+> **Caution.** Setting NoNewPrivileges on a unit that relies on a setuid helper breaks it, sometimes long after the restart that introduced the change. dbus.service and cron.service are both in that category on most distributions. Establish what each unit actually executes before changing it, and restart services one at a time.
+
+**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-7`, `nist-800-53-r5 SI-16`
+
+**References**
+
+- [systemd.exec(5) — NoNewPrivileges](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
+- [Linux kernel — no\_new\_privs](https://docs.kernel.org/userspace-api/no_new_privs.html)
+- [systemd-analyze(1) — security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
 
 ---
 

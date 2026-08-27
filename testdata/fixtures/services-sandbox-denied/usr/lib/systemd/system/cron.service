@@ -1,0 +1,6 @@
+[Unit]
+Description=Regular background program processing daemon
+
+[Service]
+ExecStart=/usr/sbin/cron -f
+NoNewPrivileges=yes

@@ -1,1 +1,10 @@
-# systemd-journald.service (fixture placeholder; contents are never read)
+# Fixture unit with real contents, unlike the placeholders beside it:
+# systemd-journald.service is in fact.SandboxTargets, so SERVICES-0006 reads
+# this file.
+[Unit]
+Description=Journal Service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-journald
+NoNewPrivileges=yes
+ProtectSystem=strict

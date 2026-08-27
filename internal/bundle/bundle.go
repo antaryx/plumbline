@@ -305,6 +305,16 @@ var registry = map[fact.ID]decoder{
 			return f, nil
 		},
 	},
+	fact.ServiceHardeningID: {
+		version: fact.ServiceHardening{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.ServiceHardening
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
 	fact.CronID: {
 		version: fact.Cron{}.FactVersion(),
 		decode: func(raw json.RawMessage) (fact.Fact, error) {

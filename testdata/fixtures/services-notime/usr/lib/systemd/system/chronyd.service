@@ -1,1 +1,2 @@
-# chronyd.service (fixture placeholder; contents are never read)
+# chronyd.service (fixture placeholder). Its contents are never read: it is not
+# in fact.SandboxTargets, and the enablement checks work from symlinks alone.

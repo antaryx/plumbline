@@ -370,3 +370,161 @@ func (s Services) Unresolved() []UnitLink {
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out
 }
+
+// ---------------------------------------------------------------------------
+// services.hardening
+// ---------------------------------------------------------------------------
+
+// ServiceHardeningID names the systemd service sandboxing fact.
+const ServiceHardeningID ID = "services.hardening"
+
+// SandboxTargets are the units whose sandboxing is read, in record order.
+//
+// It is a fixed list rather than every unit on the host, and both halves of
+// that are deliberate. Reading every unit means reading every unit *body*,
+// which is the thing services.units exists in order not to do — a bundle would
+// then carry every ExecStart and every Environment= on the machine. A named
+// list keeps the exception to that rule small enough to state in
+// docs/PRIVACY.md.
+//
+// The three here are the starting set and not a claim to be the right one.
+// They are long-lived root daemons that exist on almost every host, which
+// makes them comparable across a fleet; extending the list is a work package
+// with a fixture per addition, not a constant to grow casually.
+var SandboxTargets = []string{
+	"cron.service",
+	"systemd-journald.service",
+	"dbus.service",
+}
+
+// ServiceSandbox is one unit's sandboxing directives, as written.
+//
+// The fields are a subset chosen for the checks that read them, which is the
+// rule every collector in the tree follows: what is not read is not recorded,
+// so a unit's ExecStart, its Environment= and everything else in it are absent
+// from this fact by construction rather than by filtering afterwards.
+type ServiceSandbox struct {
+	// Unit is the unit name looked for, e.g. "cron.service".
+	Unit string `json:"unit"`
+	// State is what became of the unit file. The directive fields below are
+	// meaningful only when it is UnitPresent.
+	State UnitState `json:"state"`
+	// Path is the unit file that won, or where one was looked for when none
+	// did.
+	Path   string `json:"path,omitempty"`
+	Digest string `json:"digest,omitempty"`
+	Msg    string `json:"msg,omitempty"`
+	// Fragments is every file that contributed or was meant to, in systemd's
+	// application order.
+	Fragments []UnitFragment `json:"fragments,omitempty"`
+
+	// NoNewPrivileges is the no_new_privs bit, which stops any process in the
+	// unit from gaining privileges through a setuid binary or file
+	// capabilities — and which, once set, cannot be unset by the process or
+	// any of its children.
+	//
+	// **A pointer, because nil and false are different findings.** Its default
+	// is off, so an unset directive and an explicit "no" leave the same
+	// posture — but they are different acts, and an operator who wrote
+	// NoNewPrivileges=no did so for a reason worth asking about before it is
+	// changed. See OptBool.
+	NoNewPrivileges *bool `json:"no_new_privileges,omitempty"`
+
+	// ProtectSystem mounts /usr and the boot loader read-only ("yes"), adds
+	// /etc ("full"), or makes the whole filesystem read-only except /dev,
+	// /proc and /sys ("strict"). Empty means the directive was not set, whose
+	// effect is "no", and the value is kept as written because the three
+	// levels are not interchangeable.
+	ProtectSystem string `json:"protect_system,omitempty"`
+
+	// ProtectHome makes /home, /root and /run/user inaccessible ("yes"),
+	// read-only ("read-only"), or replaces them with empty tmpfs mounts
+	// ("tmpfs"). Empty means unset, whose effect is "no".
+	ProtectHome string `json:"protect_home,omitempty"`
+
+	// Malformed names the directives whose values systemd would refuse to
+	// parse, e.g. NoNewPrivileges=maybe.
+	//
+	// It is recorded because systemd's response is to log a warning and
+	// *ignore the assignment*, leaving the previous value or the default in
+	// force — so the effective posture is the unhardened one while the file
+	// says otherwise. An operator reading "NoNewPrivileges is not set" about a
+	// unit where they can see the line needs to be told which of the two is
+	// true. Names only: a value systemd rejected is still operator text.
+	Malformed []string `json:"malformed,omitempty"`
+}
+
+// Judgeable reports whether the directive fields may be read as the unit's
+// configuration.
+func (s ServiceSandbox) Judgeable() bool { return s.State == UnitPresent }
+
+// Installed reports whether the unit exists on this host at all.
+//
+// Masked counts as installed and is deliberately not judgeable: the unit file
+// is there, systemd refuses to start it, and its sandboxing is not a statement
+// about anything running.
+func (s ServiceSandbox) Installed() bool { return s.State != UnitAbsent }
+
+// Incomplete returns the fragments that were not read, shadowed ones excluded.
+func (s ServiceSandbox) Incomplete() []UnitFragment {
+	return IncompleteFragments(s.Fragments)
+}
+
+// ServiceHardening is the sandboxing of the units in SandboxTargets.
+//
+// It is a separate fact from services.units, which records enablement and
+// reads no unit bodies at all. The split is what keeps that promise legible:
+// one fact is built from symlinks and directory listings, the other opens a
+// named handful of unit files and keeps three directives out of them.
+type ServiceHardening struct {
+	// Systemd reports whether any unit directory exists. When false the checks
+	// are NOT_APPLICABLE: "cron.service does not set NoNewPrivileges" is not a
+	// sentence about a host running OpenRC.
+	Systemd bool `json:"systemd"`
+	// Services are the units looked for, in SandboxTargets order, including
+	// the ones that are not installed.
+	Services []ServiceSandbox `json:"services"`
+}
+
+func (ServiceHardening) FactID() ID       { return ServiceHardeningID }
+func (ServiceHardening) FactVersion() int { return 1 }
+
+// Installed returns the units that exist on this host.
+func (h ServiceHardening) Installed() []ServiceSandbox {
+	var out []ServiceSandbox
+	for _, s := range h.Services {
+		if s.Installed() {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// Judgeable returns the units whose directives may be read.
+func (h ServiceHardening) Judgeable() []ServiceSandbox {
+	var out []ServiceSandbox
+	for _, s := range h.Services {
+		if s.Judgeable() {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// Unreadable returns the units that are installed and could not be read in
+// full — the unit file itself, or a drop-in beside it.
+//
+// Masked units are excluded: systemd will not start one, so what its file says
+// is not a gap in this scan's knowledge of the host.
+func (h ServiceHardening) Unreadable() []ServiceSandbox {
+	var out []ServiceSandbox
+	for _, s := range h.Services {
+		if !s.Installed() || s.State == UnitMasked {
+			continue
+		}
+		if s.State != UnitPresent || len(s.Incomplete()) > 0 {
+			out = append(out, s)
+		}
+	}
+	return out
+}

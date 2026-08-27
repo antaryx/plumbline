@@ -1,0 +1,7 @@
+[Unit]
+Description=Regular background program processing daemon
+
+[Service]
+ExecStart=/usr/sbin/cron -f
+# Disabled 2024-03: the backup job calls sudo.
+NoNewPrivileges=no

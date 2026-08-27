@@ -800,11 +800,11 @@ func evalHandBuilt(t *testing.T, argv []string) finding.Finding {
 		Installed: true, DaemonPath: "/usr/bin/dockerd",
 	})
 	fs.Put(fact.DockerService{
-		State: fact.DockerUnitPresent,
+		State: fact.UnitPresent,
 		Unit:  fact.DockerServiceUnit,
 		Path:  "/lib/systemd/system/docker.service",
 		Fragments: []fact.UnitFragment{
-			{Path: "/lib/systemd/system/docker.service", Kind: fact.FragmentUnit, State: fact.DockerUnitPresent},
+			{Path: "/lib/systemd/system/docker.service", Kind: fact.FragmentUnit, State: fact.UnitPresent},
 		},
 		ExecStart: []fact.DockerExec{{
 			Origin: "/lib/systemd/system/docker.service", Line: 9, Argv: argv,
@@ -1112,7 +1112,7 @@ func evalConfiguredHosts(t *testing.T, hosts []string) finding.Finding {
 		Hosts: hosts,
 	})
 	fs.Put(fact.DockerService{
-		State: fact.DockerUnitAbsent,
+		State: fact.UnitAbsent,
 		Unit:  fact.DockerServiceUnit,
 		Path:  "/usr/lib/systemd/system/docker.service",
 	})

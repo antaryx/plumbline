@@ -1,0 +1,3 @@
+{
+  "description": "cron.service is masked — a symlink to /dev/null — so systemd refuses to start it and the vendor unit underneath is not in force. The unhardened file below it must not be read as a finding: there is no process to gain privileges in. dbus.service is installed and hardened, so the check still reaches a real verdict rather than being excused."
+}

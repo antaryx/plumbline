@@ -1,0 +1,3 @@
+{
+  "description": "The reason a collector that reads only the unit file is wrong. cron.service itself sets nothing; the answer is in a drop-in. Two drop-ins share the basename 50-hardening.conf and disagree — /etc wins and /usr/lib is discarded entirely, which is how an administrator neutralises a vendor drop-in without editing a file they do not own. Applying the loser would report NoNewPrivileges=no on a host that set it to yes."
+}

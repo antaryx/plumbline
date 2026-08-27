@@ -1,0 +1,7 @@
+[Unit]
+Description=Journal Service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-journald
+NoNewPrivileges=yes
+ProtectSystem=strict

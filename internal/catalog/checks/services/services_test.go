@@ -19,6 +19,14 @@ const fixtureRoot = "../../../../testdata/fixtures"
 // all is the SERVICES module as this work package leaves it.
 var all = []catalog.Check{
 	checks.Check0001, checks.Check0002, checks.Check0003,
+	checks.Check0004, checks.Check0005, checks.Check0006,
+}
+
+// enablement is the five checks built on services.units. They share a gate and
+// a fixture corpus; SERVICES-0006 shares neither, because it reads unit bodies
+// out of a second fact and its fixtures are units rather than symlink trees.
+var enablement = []catalog.Check{
+	checks.Check0001, checks.Check0002, checks.Check0003,
 	checks.Check0004, checks.Check0005,
 }
 
@@ -30,8 +38,14 @@ func collectFixture(t *testing.T, name string) *fact.Set {
 		t.Fatalf("load fixture %s: %v", name, err)
 	}
 	facts := fact.NewSet()
+	// Both collectors, because the module now reads two facts and a check
+	// tested against only one of them is a check tested against a fact set no
+	// scan ever produces.
 	if err := collector.New().Collect(context.Background(), sys, facts); err != nil {
 		t.Fatalf("collect fixture %s: %v", name, err)
+	}
+	if err := collector.NewSandbox().Collect(context.Background(), sys, facts); err != nil {
+		t.Fatalf("collect sandbox fixture %s: %v", name, err)
 	}
 	return facts
 }
@@ -138,10 +152,17 @@ func TestNonSystemdHostIsNotApplicableEverywhere(t *testing.T) {
 
 // TestUnreadableUnitDirectoryIsUnknownEverywhere: enablement is a symlink and
 // nothing else records it, so a /etc/systemd/system we could not traverse is a
-// host whose service configuration was never observed. Every check must say so
-// rather than report the vendor units it happened to be able to read.
+// host whose service configuration was never observed. Every check that reads
+// enablement must say so rather than report the vendor units it happened to be
+// able to read.
+//
+// SERVICES-0006 is deliberately not in this loop. Its subject is a unit's
+// *body*, and a vendor unit that reads perfectly is a real answer about that
+// unit whatever became of /etc — the gap that invalidates its verdict is an
+// unreadable unit file or drop-in, which is
+// TestAnUnreadableDropInIsNotAPass over services-sandbox-denied.
 func TestUnreadableUnitDirectoryIsUnknownEverywhere(t *testing.T) {
-	for _, check := range all {
+	for _, check := range enablement {
 		got := evalCheck(t, check, "services-denied")
 		if got.Result != finding.Unknown {
 			t.Errorf("%s = %s over services-denied, want UNKNOWN:\n  %s",
@@ -153,18 +174,30 @@ func TestUnreadableUnitDirectoryIsUnknownEverywhere(t *testing.T) {
 	}
 }
 
-// TestEveryCheckIsRegisteredAtCatalogNine guards the one piece of metadata a
+// TestEveryCheckDeclaresItsVintageAndItsFact guards the one piece of metadata a
 // reviewer cannot see from the diff: a check whose SinceCatalog is wrong claims
 // to have existed in a version that never shipped it, and suppression files
 // written against that version silently do not match.
-func TestEveryCheckIsRegisteredAtCatalogNine(t *testing.T) {
-	for _, check := range all {
+//
+// The module now has two vintages and two facts, which is why this is a table
+// rather than one loop. SERVICES-0006 arrived at catalog 22 on a second fact,
+// and a copy-paste that gave it catalog 9 would claim it had been in the
+// v0.2.0 release.
+func TestEveryCheckDeclaresItsVintageAndItsFact(t *testing.T) {
+	for _, check := range enablement {
 		if check.SinceCatalog != 9 {
 			t.Errorf("%s SinceCatalog = %d, want 9", check.ID, check.SinceCatalog)
 		}
 		if len(check.Requires) != 1 || check.Requires[0] != fact.ServicesID {
 			t.Errorf("%s requires %v, want [%s]", check.ID, check.Requires, fact.ServicesID)
 		}
+	}
+
+	if checks.Check0006.SinceCatalog != 22 {
+		t.Errorf("SERVICES-0006 SinceCatalog = %d, want 22", checks.Check0006.SinceCatalog)
+	}
+	if len(checks.Check0006.Requires) != 1 || checks.Check0006.Requires[0] != fact.ServiceHardeningID {
+		t.Errorf("SERVICES-0006 requires %v, want [%s]", checks.Check0006.Requires, fact.ServiceHardeningID)
 	}
 }
 
@@ -301,6 +334,205 @@ func TestUsrMergeDirectoryIsCountedOnce(t *testing.T) {
 	for name, n := range seen {
 		if n > 1 {
 			t.Errorf("%s recorded %d times; the usr-merge duplicate was not detected", name, n)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SERVICES-0006, which reads unit bodies rather than symlinks
+// ---------------------------------------------------------------------------
+
+func TestCheck0006NoNewPrivileges(t *testing.T) {
+	run(t, checks.Check0006, []tc{
+		// All three audited units set it, in three different spellings.
+		{fixture: "services-sandbox-hardened", result: finding.Pass,
+			detailContains: "All 3 audited services set NoNewPrivileges"},
+
+		// The ordinary host: journald ships hardened, cron does not, dbus is
+		// not installed and is therefore skipped rather than failed.
+		{fixture: "services-sandbox-stock", result: finding.Fail, severity: finding.Medium,
+			detailContains: "cron.service does not set NoNewPrivileges"},
+
+		// Written down and turned off, plus a value systemd rejects.
+		{fixture: "services-sandbox-explicit-off", result: finding.Fail, severity: finding.Medium,
+			detailContains: "written down and set to no"},
+
+		// The answer is in a drop-in, and in the drop-in that wins.
+		{fixture: "services-sandbox-dropin", result: finding.Pass,
+			detailContains: "set NoNewPrivileges"},
+
+		// A drop-in that could not be read could be carrying the no.
+		{fixture: "services-sandbox-denied", result: finding.Unknown,
+			reason: finding.ReasonPermission, detailContains: "not every unit was read in full"},
+
+		// A masked unit describes no process, so its unhardened vendor file is
+		// not a finding.
+		{fixture: "services-sandbox-masked", result: finding.Pass,
+			detailContains: "masked"},
+
+		// The gates.
+		{fixture: "services-sandbox-none", result: finding.NotApplicable,
+			detailContains: "None of the units this check audits is installed"},
+		{fixture: "services-absent", result: finding.NotApplicable,
+			detailContains: "does not run systemd"},
+	})
+}
+
+// TestTheThreeWaysOfNotHavingTheBitAreDistinguished.
+//
+// All three leave the same posture — no_new_privs is off — and they are three
+// different conversations to have with an operator. One never wrote the
+// directive; one wrote it and chose no, for a reason worth hearing before it is
+// changed; one wrote a value systemd rejects, so the file looks configured and
+// the host is not. A report that rendered all three as "NoNewPrivileges is not
+// set" would be wrong twice.
+func TestTheThreeWaysOfNotHavingTheBitAreDistinguished(t *testing.T) {
+	unset := evalCheck(t, checks.Check0006, "services-sandbox-stock")
+	if !strings.Contains(unset.Detail, "does not set NoNewPrivileges") {
+		t.Errorf("an unset directive does not read as unset: %s", unset.Detail)
+	}
+	if strings.Contains(unset.Detail, "written down") {
+		t.Errorf("an unset directive was reported as a decision: %s", unset.Detail)
+	}
+
+	written := evalCheck(t, checks.Check0006, "services-sandbox-explicit-off")
+	if !strings.Contains(written.Detail, "written down and set to no rather than absent") {
+		t.Errorf("an explicit no does not read as a decision: %s", written.Detail)
+	}
+	if !strings.Contains(written.Detail, "systemd cannot parse") {
+		t.Errorf("a value systemd rejects is not called out: %s", written.Detail)
+	}
+
+	// And the evidence keeps them apart per unit, which is where an operator
+	// looks to find out which of their services is which.
+	var excerpts []string
+	for _, e := range written.Evidence {
+		excerpts = append(excerpts, e.Excerpt)
+	}
+	joined := strings.Join(excerpts, " | ")
+	for _, want := range []string{
+		"cron.service: NoNewPrivileges=no (explicitly disabled)",
+		"dbus.service: NoNewPrivileges set to a value systemd cannot parse",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("evidence does not carry %q: %s", want, joined)
+		}
+	}
+}
+
+// TestAnAbsentUnitIsSkippedRatherThanFailed.
+//
+// cron.service is absent on a host running cronie under another name, and
+// dbus.service on a container image with no message bus. Failing a host for
+// not having installed something is a finding an operator cannot act on and
+// would not want to.
+func TestAnAbsentUnitIsSkippedRatherThanFailed(t *testing.T) {
+	got := evalCheck(t, checks.Check0006, "services-sandbox-stock")
+
+	if strings.Contains(got.Detail, "dbus.service") {
+		t.Errorf("an uninstalled unit appears in the verdict: %s", got.Detail)
+	}
+	// And when every audited unit is absent there is nothing to judge at all.
+	none := evalCheck(t, checks.Check0006, "services-sandbox-none")
+	if none.Result != finding.NotApplicable {
+		t.Errorf("a host with none of them installed = %s, want NOT_APPLICABLE: %s", none.Result, none.Detail)
+	}
+}
+
+// TestAnUnreadableDropInIsNotAPass is ADR-0014 in the direction it points for
+// this check.
+//
+// The unit file in services-sandbox-denied sets NoNewPrivileges=yes and the
+// drop-in beside it cannot be read. A pass drawn from the file that was opened
+// would be a verdict about a configuration this scan only partly saw — and a
+// drop-in is exactly where a NoNewPrivileges=no would live.
+func TestAnUnreadableDropInIsNotAPass(t *testing.T) {
+	got := evalCheck(t, checks.Check0006, "services-sandbox-denied")
+
+	if got.Result != finding.Unknown {
+		t.Fatalf("= %s, want UNKNOWN: %s", got.Result, got.Detail)
+	}
+	if got.UnknownReason != finding.ReasonPermission {
+		t.Errorf("reason = %q, want %q", got.UnknownReason, finding.ReasonPermission)
+	}
+	if !strings.Contains(got.Detail, "override.conf") {
+		t.Errorf("the verdict does not name the file it could not read: %s", got.Detail)
+	}
+}
+
+// TestAFoundFailureOutranksAnUnreadFile is the other half of ADR-0014: a unit
+// that was read and does not set the bit is a finding whatever else went
+// unread, because an incomplete examination invalidates a negative result and
+// never a positive one. The verdict still says what it could not see.
+func TestAFoundFailureOutranksAnUnreadFile(t *testing.T) {
+	facts := collectFixture(t, "services-sandbox-denied")
+	h, _, _ := fact.Get[fact.ServiceHardening](facts, fact.ServiceHardeningID)
+
+	// Turn the passing unit into a failing one, leaving the denied drop-in
+	// exactly where it is. Built by hand because the property is about the
+	// interaction of two states that no single fixture can hold at once for
+	// the same unit.
+	for i := range h.Services {
+		if h.Services[i].Unit == "cron.service" {
+			h.Services[i].NoNewPrivileges = nil
+		}
+	}
+	facts.Put(h)
+
+	got := catalog.MustNew(checks.Check0006).Evaluate(facts)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(got))
+	}
+	if got[0].Result != finding.Fail {
+		t.Errorf("= %s, want FAIL; a found failure stands whatever else went unread: %s", got[0].Result, got[0].Detail)
+	}
+	if !strings.Contains(got[0].Detail, "could not be read in full") {
+		t.Errorf("the FAIL does not admit what it could not see: %s", got[0].Detail)
+	}
+}
+
+// TestTheVerdictNamesItsOwnLimits. The unit list is fixed and NoNewPrivileges
+// is one directive of a dozen, so neither a pass nor a failure here is a
+// statement about the host's services in general.
+func TestTheVerdictNamesItsOwnLimits(t *testing.T) {
+	for _, fixture := range []string{
+		"services-sandbox-hardened",
+		"services-sandbox-stock",
+		"services-sandbox-explicit-off",
+		"services-sandbox-dropin",
+		"services-sandbox-denied",
+		"services-sandbox-masked",
+	} {
+		got := evalCheck(t, checks.Check0006, fixture)
+		if !strings.Contains(got.Detail, "fixed list of units") {
+			t.Errorf("over %s the verdict does not say the list is fixed: %s", fixture, got.Detail)
+		}
+		if !strings.Contains(got.Detail, "other sandboxing directives") {
+			t.Errorf("over %s the verdict claims more than one directive: %s", fixture, got.Detail)
+		}
+	}
+}
+
+// TestTheSandboxCheckIsIndependentOfEnablement.
+//
+// The two facts answer different questions and a check reading the wrong one
+// would be hard to spot: services-sandbox-hardened has no enablement symlinks
+// at all, and services-compliant has every symlink and hardened units. Each
+// check must follow its own fact.
+func TestTheSandboxCheckIsIndependentOfEnablement(t *testing.T) {
+	// Units present and hardened, nothing enabled. SERVICES-0006 passes on the
+	// bodies; the enablement checks have their own opinions and none of them
+	// may be UNKNOWN for want of a fact this fixture does carry.
+	if got := evalCheck(t, checks.Check0006, "services-sandbox-hardened"); got.Result != finding.Pass {
+		t.Errorf("SERVICES-0006 over hardened units = %s: %s", got.Result, got.Detail)
+	}
+
+	// And the inverse: a fixture built for the enablement checks, whose two
+	// audited units are hardened, passes SERVICES-0006 without any of the
+	// enablement checks moving.
+	for _, check := range enablement {
+		if got := evalCheck(t, check, "services-sandbox-hardened"); got.Result == finding.Unknown {
+			t.Errorf("%s = UNKNOWN over a fixture with no enablement problem: %s", check.ID, got.Detail)
 		}
 	}
 }

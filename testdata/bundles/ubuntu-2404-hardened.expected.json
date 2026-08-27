@@ -1,7 +1,7 @@
 {
   "bundle": "ubuntu-2404-hardened.plb",
   "schema": "findings/v1",
-  "catalog_version": 21,
+  "catalog_version": 22,
   "scan": {
     "started": "2026-08-25T21:31:55.438565245Z",
     "finished": "2026-08-25T21:31:55.619481732Z",
@@ -18,15 +18,15 @@
       "fail": 4,
       "not_applicable": 5,
       "skipped": 0,
-      "unknown": 4,
-      "total": 91
+      "unknown": 5,
+      "total": 92
     },
     "by_severity": {
       "LOW": 2,
       "MEDIUM": 2
     },
     "posture": 96.7741935483871,
-    "coverage": 95.34883720930233
+    "coverage": 94.25287356321839
   },
   "findings": [
     {
@@ -1129,6 +1129,16 @@
       "base_severity": "HIGH",
       "fingerprint": "2723a481302af6f3044c11208e17c65a",
       "detail": "All 18 unit directories and 240 unit files are owned by root and writable by root alone, so nothing but root decides what starts at boot."
+    },
+    {
+      "check_id": "SERVICES-0006",
+      "module": "SERVICES",
+      "result": "UNKNOWN",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "5f1a4e0fc84db17615c979449dd63a9e",
+      "detail": "required fact services.hardening was not collected"
     },
     {
       "check_id": "SSHD-0002",

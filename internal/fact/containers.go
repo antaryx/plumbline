@@ -256,96 +256,6 @@ const DockerServiceID ID = "containers.docker_service"
 // this unit.
 const DockerServiceUnit = "docker.service"
 
-// DockerUnitState is what the collector was able to observe about a unit file
-// or one of its drop-ins.
-//
-// It is a separate enumeration from DockerConfigState and not a reuse of it,
-// even though four of the values have the same names. The states a JSON
-// document can be in are not the states a systemd unit can be in — a unit can
-// be *masked*, which has no analogue in a configuration file and is the one
-// state here that means "this file exists and systemd deliberately ignores it".
-type DockerUnitState string
-
-const (
-	// DockerUnitPresent means the unit was found and read. The typed fields
-	// are meaningful only in this state.
-	DockerUnitPresent DockerUnitState = "present"
-	// DockerUnitAbsent means no docker.service exists in any unit search
-	// directory.
-	//
-	// Unlike DockerConfigAbsent this really is an absence rather than a
-	// configuration. A unit file that does not exist starts nothing, and there
-	// are no compiled-in defaults for systemd to fall back on. It does not
-	// follow that the daemon is not running — a dockerd started by hand, by
-	// another init system, or by a unit under a different name is invisible
-	// here — which is why a check reading this may not say the daemon is not
-	// listening on anything. It may only say this host has no docker.service.
-	DockerUnitAbsent DockerUnitState = "absent"
-	// DockerUnitMasked means the unit is a symbolic link to /dev/null.
-	//
-	// That is what `systemctl mask docker` writes, and systemd refuses to
-	// start a masked unit at all, by hand or as a dependency. Whatever the
-	// vendor unit underneath says is not in force, so its ExecStart is not
-	// evidence of anything about this host.
-	DockerUnitMasked DockerUnitState = "masked"
-	// DockerUnitDenied means the file exists and could not be read.
-	DockerUnitDenied DockerUnitState = "denied"
-	// DockerUnitNotRegular means something is at the path and it is neither a
-	// regular file nor a symlink to one.
-	DockerUnitNotRegular DockerUnitState = "not_regular"
-	// DockerUnitTruncated means the read hit the cap, so directives past the
-	// cut are unread and no absence may be concluded.
-	DockerUnitTruncated DockerUnitState = "truncated"
-	// DockerUnitError means the read failed for a reason worth recording
-	// verbatim.
-	DockerUnitError DockerUnitState = "error"
-)
-
-// UnitFragmentKind distinguishes the parts a systemd unit is assembled from.
-type UnitFragmentKind string
-
-const (
-	// FragmentUnit is the unit file itself.
-	FragmentUnit UnitFragmentKind = "unit"
-	// FragmentDropIn is one .conf under a docker.service.d directory.
-	FragmentDropIn UnitFragmentKind = "drop_in"
-	// FragmentDropInDir is a docker.service.d directory whose listing failed.
-	// It is recorded because a directory that could not be listed may hold a
-	// drop-in that changes the answer, and nothing may conclude absence from a
-	// listing that did not happen.
-	FragmentDropInDir UnitFragmentKind = "drop_in_dir"
-)
-
-// UnitFragment is one file that did, or would have, contributed to the
-// effective unit.
-//
-// The list exists so that a check can say *why* it does not know. "The unit
-// binds no TCP socket" and "the unit binds no TCP socket that I could see" are
-// different claims, and an override.conf that could not be read is exactly the
-// file most likely to contain the binding — adding one is the documented way
-// to change a vendor unit's ExecStart.
-type UnitFragment struct {
-	Path  string           `json:"path"`
-	Kind  UnitFragmentKind `json:"kind"`
-	State DockerUnitState  `json:"state"`
-	// Resolved is where a symlinked fragment actually pointed. Empty when the
-	// path was not a link.
-	Resolved string `json:"resolved,omitempty"`
-	// Digest is the sha256 of the bytes read, so a finding can cite the exact
-	// text it drew a conclusion from. See DockerService for why the bytes
-	// themselves are not in the bundle.
-	Digest string `json:"digest,omitempty"`
-	Msg    string `json:"msg,omitempty"`
-	// Shadowed marks a drop-in systemd would not apply, because a
-	// higher-precedence directory holds a .conf of the same name. It is
-	// recorded rather than dropped: a shadowed override is a file an operator
-	// edited and a daemon never read, which is a mistake worth being able to
-	// see.
-	Shadowed bool `json:"shadowed,omitempty"`
-	// ShadowedBy is the path that won.
-	ShadowedBy string `json:"shadowed_by,omitempty"`
-}
-
 // DockerExec is one effective ExecStart directive, split into arguments.
 //
 // Argv is the command line as systemd would split it — whitespace separated,
@@ -427,7 +337,7 @@ type DockerHostBinding struct {
 //     in docker.socket's ListenStream= exposes the API exactly as -H tcp://
 //     would and is not read here.
 type DockerService struct {
-	State DockerUnitState `json:"state"`
+	State UnitState `json:"state"`
 	// Unit is the unit name looked for, always DockerServiceUnit.
 	Unit string `json:"unit"`
 	// Path is the unit file that won, or where one was looked for last when
@@ -436,7 +346,7 @@ type DockerService struct {
 	// Digest is the sha256 of the unit file's bytes. Empty when it was not
 	// read.
 	Digest string `json:"digest,omitempty"`
-	// Msg carries the reason for any state other than DockerUnitPresent.
+	// Msg carries the reason for any state other than UnitPresent.
 	Msg string `json:"msg,omitempty"`
 
 	// Fragments is every file that contributed or was meant to, in systemd's
@@ -459,7 +369,7 @@ func (DockerService) FactVersion() int { return 1 }
 
 // Judgeable reports whether ExecStart may be read as the daemon's command
 // line. False for every state in which some part of the unit was not seen.
-func (s DockerService) Judgeable() bool { return s.State == DockerUnitPresent }
+func (s DockerService) Judgeable() bool { return s.State == UnitPresent }
 
 // Complete reports whether every fragment that would have contributed was
 // actually read.
@@ -475,14 +385,7 @@ func (s DockerService) Complete() bool { return len(s.Incomplete()) == 0 }
 // — systemd would not have applied those, so failing to read one changes
 // nothing.
 func (s DockerService) Incomplete() []UnitFragment {
-	var out []UnitFragment
-	for _, f := range s.Fragments {
-		if f.Shadowed || f.State == DockerUnitPresent {
-			continue
-		}
-		out = append(out, f)
-	}
-	return out
+	return IncompleteFragments(s.Fragments)
 }
 
 // Hosts returns every -H/--host value in the effective ExecStart, in order.

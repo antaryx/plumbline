@@ -1,0 +1,7 @@
+{
+  "description": "The unit reads and its drop-in does not, as under an unprivileged scan. The file on disk sets NoNewPrivileges=yes, deliberately: a check reporting PASS here would be reporting a verdict drawn from a file it never opened, and a drop-in is the single most likely place for the NoNewPrivileges=no that changes the answer.",
+  "euid": 1000,
+  "unreadable": [
+    "/etc/systemd/system/cron.service.d/override.conf"
+  ]
+}

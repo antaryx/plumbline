@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 21 · 91 checks · 11 modules**
+**Catalog version 22 · 92 checks · 11 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 
@@ -21,10 +21,10 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | `LOGGING` | 5 | 0 | 0 | 4 | 1 | 0 |
 | `MEMORY` | 4 | 0 | 0 | 3 | 1 | 0 |
 | `NETWORK` | 3 | 0 | 2 | 1 | 0 | 0 |
-| `SERVICES` | 5 | 0 | 2 | 3 | 0 | 0 |
+| `SERVICES` | 6 | 0 | 2 | 4 | 0 | 0 |
 | `SSHD` | 19 | 1 | 7 | 8 | 3 | 0 |
 | `USERS` | 10 | 2 | 4 | 2 | 2 | 0 |
-| **total** | **91** | 7 | 24 | 45 | 15 | 0 |
+| **total** | **92** | 7 | 24 | 46 | 15 | 0 |
 
 Severity is the check's **base** severity, before any context adjustment a finding may carry.
 
@@ -136,6 +136,7 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`SERVICES-0003`](CHECK-REFERENCE.md#services-0003--exactly-one-time-synchronisation-daemon-is-enabled) Exactly one time synchronisation daemon is enabled | MEDIUM | `services.units` |
 | [`SERVICES-0004`](CHECK-REFERENCE.md#services-0004--every-enabled-unit-resolves-to-a-unit-file-that-exists) Every enabled unit resolves to a unit file that exists | MEDIUM | `services.units` |
 | [`SERVICES-0005`](CHECK-REFERENCE.md#services-0005--unit-directories-and-unit-files-are-writable-by-root-alone) Unit directories and unit files are writable by root alone | HIGH | `services.units` |
+| [`SERVICES-0006`](CHECK-REFERENCE.md#services-0006--audited-system-services-set-nonewprivileges) Audited system services set NoNewPrivileges | MEDIUM | `services.hardening` |
 
 ## SSHD
 

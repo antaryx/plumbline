@@ -379,11 +379,11 @@ func unitMayHide(u fact.DockerService, d fact.DockerDaemon, lead, what, question
 	}
 
 	reason := finding.ReasonAmbiguousState
-	if u.State == fact.DockerUnitDenied {
+	if u.State == fact.UnitDenied {
 		reason = finding.ReasonPermission
 	}
 	for _, f := range u.Incomplete() {
-		if f.State == fact.DockerUnitDenied {
+		if f.State == fact.UnitDenied {
 			reason = finding.ReasonPermission
 			break
 		}

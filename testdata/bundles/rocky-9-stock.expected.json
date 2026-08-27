@@ -1,7 +1,7 @@
 {
   "bundle": "rocky-9-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 21,
+  "catalog_version": 22,
   "scan": {
     "started": "2026-08-25T21:31:51.893733451Z",
     "finished": "2026-08-25T21:31:52.46518356Z",
@@ -18,8 +18,8 @@
       "fail": 11,
       "not_applicable": 39,
       "skipped": 0,
-      "unknown": 4,
-      "total": 91
+      "unknown": 5,
+      "total": 92
     },
     "by_severity": {
       "HIGH": 2,
@@ -27,7 +27,7 @@
       "MEDIUM": 6
     },
     "posture": 81.25,
-    "coverage": 92.3076923076923
+    "coverage": 90.56603773584906
   },
   "findings": [
     {
@@ -997,6 +997,16 @@
       "base_severity": "HIGH",
       "fingerprint": "2723a481302af6f3044c11208e17c65a",
       "detail": "All 1 unit directory and 8 unit files are owned by root and writable by root alone, so nothing but root decides what starts at boot."
+    },
+    {
+      "check_id": "SERVICES-0006",
+      "module": "SERVICES",
+      "result": "UNKNOWN",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "5f1a4e0fc84db17615c979449dd63a9e",
+      "detail": "required fact services.hardening was not collected"
     },
     {
       "check_id": "SSHD-0002",

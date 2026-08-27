@@ -1,0 +1,3 @@
+{
+  "description": "The two failures that are not oversights. cron.service writes NoNewPrivileges=no with a comment saying why, which is a decision somebody made rather than a default nobody changed. dbus.service writes a value systemd's parse_boolean rejects: systemd logs a warning and ignores the assignment, so the line is in the file and the bit is not set — the case an operator most needs telling apart from an absent directive."
+}

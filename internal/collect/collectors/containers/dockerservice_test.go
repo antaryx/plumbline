@@ -90,7 +90,7 @@ func TestReadsTheVendorUnit(t *testing.T) {
 	u := collectService(t, "containers-docker-service-stock")
 
 	if !u.Judgeable() {
-		t.Fatalf("state = %s (%s), want %s", u.State, u.Msg, fact.DockerUnitPresent)
+		t.Fatalf("state = %s (%s), want %s", u.State, u.Msg, fact.UnitPresent)
 	}
 	if got, want := u.Path, "/lib/systemd/system/docker.service"; got != want {
 		t.Errorf("path = %q, want %q", got, want)
@@ -228,13 +228,13 @@ func TestAnUnreadableDropInLeavesTheFactIncomplete(t *testing.T) {
 	u := collectService(t, "containers-docker-service-denied")
 
 	if !u.Judgeable() {
-		t.Fatalf("state = %s, want %s: the unit itself was readable", u.State, fact.DockerUnitPresent)
+		t.Fatalf("state = %s, want %s: the unit itself was readable", u.State, fact.UnitPresent)
 	}
 	if u.Complete() {
 		t.Fatal("Complete = true, but a drop-in was refused")
 	}
 	gaps := u.Incomplete()
-	if len(gaps) != 1 || gaps[0].State != fact.DockerUnitDenied {
+	if len(gaps) != 1 || gaps[0].State != fact.UnitDenied {
 		t.Fatalf("Incomplete = %+v, want one denied drop-in", gaps)
 	}
 	if !strings.HasSuffix(gaps[0].Path, "/override.conf") {
@@ -272,7 +272,7 @@ func TestAnUnexpandedVariableIsAnAmbiguityNotAnAbsence(t *testing.T) {
 func TestAMaskedUnitIsNotReadAsRunning(t *testing.T) {
 	u := collectService(t, "containers-docker-service-masked")
 
-	if got, want := u.State, fact.DockerUnitMasked; got != want {
+	if got, want := u.State, fact.UnitMasked; got != want {
 		t.Fatalf("state = %s, want %s", got, want)
 	}
 	if len(u.ExecStart) != 0 {
@@ -292,7 +292,7 @@ func TestAMaskedUnitIsNotReadAsRunning(t *testing.T) {
 func TestNoUnitIsAbsentRatherThanEmpty(t *testing.T) {
 	for _, name := range []string{"containers-docker-hardened", "containers-absent"} {
 		u := collectService(t, name)
-		if got, want := u.State, fact.DockerUnitAbsent; got != want {
+		if got, want := u.State, fact.UnitAbsent; got != want {
 			t.Errorf("%s: state = %s, want %s", name, got, want)
 		}
 		if len(u.ExecStart) != 0 {
@@ -396,7 +396,7 @@ func TestAbandonedScanRecordsWhyItStopped(t *testing.T) {
 		t.Fatalf("Collect returned %v; the state belongs on the fact", err)
 	}
 	u, _, _ := fact.Get[fact.DockerService](facts, fact.DockerServiceID)
-	if got, want := u.State, fact.DockerUnitError; got != want {
+	if got, want := u.State, fact.UnitError; got != want {
 		t.Errorf("state = %s, want %s", got, want)
 	}
 	if u.Msg == "" {
@@ -469,7 +469,7 @@ func TestUnitBytesDoNotEnterTheBundle(t *testing.T) {
 	// is checkable against the running system rather than against a copy.
 	u, _, _ := fact.Get[fact.DockerService](facts, fact.DockerServiceID)
 	for _, f := range u.Fragments {
-		if f.State == fact.DockerUnitPresent && !f.Shadowed && f.Digest == "" {
+		if f.State == fact.UnitPresent && !f.Shadowed && f.Digest == "" {
 			t.Errorf("%s was read and carries no digest; there is nothing left to cite", f.Path)
 		}
 	}
@@ -558,7 +558,7 @@ func TestARepeatedFlagKeepsEveryOccurrence(t *testing.T) {
 func TestLogOptionValuesAreScrubbedFromTheCommandLine(t *testing.T) {
 	u := collectService(t, "containers-docker-log-secret")
 
-	if u.State != fact.DockerUnitPresent {
+	if u.State != fact.UnitPresent {
 		t.Fatalf("state = %s, want present: %s", u.State, u.Msg)
 	}
 

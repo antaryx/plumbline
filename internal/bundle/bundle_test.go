@@ -797,7 +797,7 @@ func TestDockerDaemonRoundTrip(t *testing.T) {
 // still look right in a report while being unreadable to the flag parsing.
 func TestDockerServiceRoundTrip(t *testing.T) {
 	src := fact.DockerService{
-		State:  fact.DockerUnitPresent,
+		State:  fact.UnitPresent,
 		Unit:   "docker.service",
 		Path:   "/lib/systemd/system/docker.service",
 		Digest: "1f2e3d4c5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a",
@@ -805,20 +805,20 @@ func TestDockerServiceRoundTrip(t *testing.T) {
 			{
 				Path:   "/lib/systemd/system/docker.service",
 				Kind:   fact.FragmentUnit,
-				State:  fact.DockerUnitPresent,
+				State:  fact.UnitPresent,
 				Digest: "1f2e3d4c5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a",
 			},
 			{
 				Path:       "/lib/systemd/system/docker.service.d/override.conf",
 				Kind:       fact.FragmentDropIn,
-				State:      fact.DockerUnitPresent,
+				State:      fact.UnitPresent,
 				Shadowed:   true,
 				ShadowedBy: "/etc/systemd/system/docker.service.d/override.conf",
 			},
 			{
 				Path:  "/etc/systemd/system/docker.service.d/50-tcp.conf",
 				Kind:  fact.FragmentDropIn,
-				State: fact.DockerUnitDenied,
+				State: fact.UnitDenied,
 				Msg:   "the file exists and could not be read",
 			},
 		},

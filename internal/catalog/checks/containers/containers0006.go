@@ -213,7 +213,7 @@ func incomplete(u fact.DockerService, unrecognised []binding) *catalog.Outcome {
 
 	reason := finding.ReasonAmbiguousState
 	for _, f := range u.Incomplete() {
-		if f.State == fact.DockerUnitDenied {
+		if f.State == fact.UnitDenied {
 			reason = finding.ReasonPermission
 			break
 		}

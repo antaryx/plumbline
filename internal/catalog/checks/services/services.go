@@ -20,9 +20,15 @@
 //     because another unit names it in Wants=. Determining that means parsing
 //     the whole unit graph. Where it matters, the check says so.
 //
-// The module reads no unit file contents, for the reason the CRON module reads
-// no crontab: ExecStart command lines and Environment= assignments are
-// operator data, frequently credentials, and no check here looks at them.
+// SERVICES-0006 rests on a different fact and reads unit *bodies*, which the
+// five checks above deliberately do not. It asks what a unit's sandboxing
+// directives say, and that question cannot be answered from a symlink. The
+// exception is bounded the way the collector's package doc describes — a named
+// list of units, an allowlist of directives applied during the parse,
+// ReadOpaque so the bytes stay out of the bundle — and the two gates in this
+// package differ accordingly: `applicable` asks whether the host runs systemd
+// at all, and `sandboxApplicable` additionally asks whether any of the units
+// it was looking for is installed.
 package services
 
 import (

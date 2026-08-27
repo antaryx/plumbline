@@ -170,6 +170,7 @@ gets produced.
 | `users.nsswitch` | 1 | `collect/collectors/users` | `Databases[]`, `State`, `Path`, `Malformed[]`, `Digest` |
 | `memory.elf` | 1 | `collect/collectors/memory` | `Binaries[]`, `Truncated` |
 | `containers.docker_daemon` | 1 | `collect/collectors/containers` | `State`, `Path`, `Digest`, `Installed`, `DaemonPath`, `Keys[]`, `LogOpts[]`, plus the modelled options |
+| `services.hardening` | 1 | `collect/collectors/services` | Per audited unit: `State`, `Path`, `Digest`, `Fragments[]`, `NoNewPrivileges`, `ProtectSystem`, `ProtectHome`, `Malformed[]` |
 | `containers.docker_service` | 1 | `collect/collectors/containers` | `State`, `Unit`, `Path`, `Digest`, `Fragments[]`, `ExecStart[]` |
 
 Every fact added later is listed here with its version history.
@@ -851,6 +852,17 @@ the fact rather than work the collector does, so that a bundle recorded today is
 re-read by a later build's understanding of `dockerd`'s flag grammar — §6.1's
 promise, which a collector-side extraction would quietly break.
 
+The assembly itself — which of the four search roots wins, which drop-ins
+systemd would apply and in what order, what became of each file — is
+`internal/collect/unit` and is shared with `services.hardening`. The rules are
+systemd's rather than any one daemon's, and two implementations of them would
+be two sets of verdicts on the same host. `unit.Request.Directives` names the
+directives to keep and everything else is discarded **during the parse**, which
+is why a collector can open a unit body at all: an `Environment=` assignment is
+never held, so it cannot reach a fact by omission. What each collector keeps
+afterwards is its own business — CONTAINERS turns `ExecStart` into argv and
+scrubs the log-option values out of it, SERVICES keeps three enum-ish settings.
+
 `Hosts()` is the first of those methods and not the only one. `BoolFlag` reads
 the `pflag` booleans, which are true when named alone and take a value only in
 `--flag=value` form, so `--tlsverify=false` is a real way to write *off*;
@@ -860,6 +872,39 @@ spellings `pflag` accepts, the plural keeping every occurrence because
 `CONTAINERS-0008`'s verdict is rarely the last written. Each of them is a
 reading of a flag grammar that can improve, which is why all of them live on
 this side of the bundle.
+
+#### `services.hardening` — the sandboxing of a named handful of units
+
+The second fact in the SERVICES module, and it exists separately from
+`services.units` in order to keep that one's promise. Enablement is answered
+from symlinks and directory listings; sandboxing cannot be, so this collector
+opens unit bodies — for the three units in `fact.SandboxTargets` and no others.
+
+**Every target is recorded whether or not it is installed.** A check counting
+targets is never handed a short list it would have to read as something else,
+and an absent unit still says where it was looked for.
+
+Four states have to stay distinct and a boolean for any of them would collapse
+two: *installed and hardened*, *installed and not*, *masked* — systemd refuses
+to start it, so the unhardened file underneath describes no process — and *not
+installed*, which is not a finding. `Installed()`, `Judgeable()` and
+`Unreadable()` are the accessors, and `Unreadable()` excludes masked units
+deliberately: a unit systemd will not start is not a gap in what the scan knows
+about the host.
+
+`NoNewPrivileges` is a `*bool` for the reason `icc` is one in
+`containers.docker_daemon`, arrived at from the other side. Its default is off,
+so an unset directive and an explicit `no` leave the same posture — but they
+are different acts, and an operator who wrote `NoNewPrivileges=no` had a reason
+worth hearing before it is changed.
+
+`Malformed` names the directives systemd would refuse to parse. It is there
+because **systemd's response to a bad boolean is to log a warning and ignore
+the line**, leaving the previous value or the default in force — so a unit
+whose only `NoNewPrivileges=` reads `maybe` is running unhardened while its
+file appears to say otherwise. Names only: a value systemd rejected is still
+operator text. `ProtectSystem` and `ProtectHome` are recorded as written, since
+`yes`, `full` and `strict` are not interchangeable; no check reads them yet.
 
 ---
 

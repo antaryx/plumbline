@@ -1,0 +1,3 @@
+{
+  "description": "All three audited units set NoNewPrivileges, each in a different one of the spellings systemd's parse_boolean accepts: yes, True (mixed case, folded), and 1 (compared exactly). One PASS fixture that also proves the boolean grammar is not just yes/no. cron.service carries an EnvironmentFile= and a $EXTRA_OPTS in its ExecStart deliberately: neither directive is requested, so neither may appear anywhere in the fact."
+}

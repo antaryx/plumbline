@@ -26,17 +26,41 @@
 //   - What a preset would do at next boot. Presets apply when a package is
 //     installed, not at boot, so the symlinks on disk already reflect them.
 //
-// Like the CRON collector, this one reads no unit file contents. Every check
-// here asks whether a unit is enabled and who may edit it, never what it runs.
-// A unit body is operator data — ExecStart command lines, Environment=
-// assignments that routinely carry credentials — and collecting it would put
-// all of that into a travelling bundle for checks that never look at it.
+// # Unit bodies, and the rule for reading one
 //
-// The CONTAINERS collector does read one unit body, and the shape of the
-// exception is what keeps this rule intact rather than what breaks it: it
-// reads a single named unit, keeps only its ExecStart, parses no Environment=
-// or EnvironmentFile=, and reads through ReadOpaque so the bytes stay out of
-// the bundle. Nothing here is a precedent for reading unit bodies in bulk.
+// This collector reads no unit file contents at all. Every check built on
+// services.units asks whether a unit is enabled and who may edit it, never
+// what it runs — and a unit body is operator data. ExecStart is a command
+// line, Environment= routinely carries credentials, and collecting either for
+// checks that never look at them would put all of it in a travelling bundle.
+//
+// **systemd.go in this package does read unit bodies**, and so does the
+// CONTAINERS collector. That is an exception with a shape rather than an
+// abandonment of the rule, and the shape is what makes it safe to have twice:
+//
+//   - **A named list, never a walk.** fact.SandboxTargets is three units and
+//     CONTAINERS reads one. Nothing enumerates the units on the host and opens
+//     what it finds, so the bytes read are bounded by a constant in the source
+//     rather than by what somebody installed.
+//   - **A directive allowlist enforced during the parse.** unit.Assemble is
+//     given the names to keep and discards everything else as it goes, so an
+//     Environment= assignment is never held in memory, let alone recorded.
+//     That is structural: a caller cannot forget to filter, because there is
+//     nothing to filter afterwards.
+//   - **ReadOpaque, so the bytes are not evidence.** collect.recordingSystem
+//     puts everything read through ReadFile into the bundle's evidence store.
+//     Unit fragments go through the opaque path instead, so what travels is a
+//     digest an auditor reproduces on the host and the handful of directive
+//     values a check actually reads.
+//   - **Values are recorded only where a check reads them.** The sandboxing
+//     fact keeps three enum-ish settings; CONTAINERS keeps a command line and
+//     scrubs the log-option values out of it first.
+//
+// Read in bulk, none of that holds. A collector that opened every unit on the
+// host would be carrying every ExecStart and every Environment= on it, and no
+// allowlist would help because the point of such a collector is not knowing
+// in advance what it will find. docs/PRIVACY.md states the exception in the
+// terms a bundle's reader needs.
 package services
 
 import (
