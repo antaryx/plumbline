@@ -155,9 +155,14 @@ func TestEverySpellingReachesTheFact(t *testing.T) {
 // able to be told. Recording it as an explicit false would merge those into
 // one wrong sentence.
 func TestAValueSystemdRejectsIsNotFalse(t *testing.T) {
-	h := collectSandbox(t, "services-sandbox-explicit-off")
+	// The malformed value and the explicit no live in different fixtures now,
+	// because SERVICES-0006 exempts cron and dbus and the interesting unit for
+	// a *check* assertion is the one that can fail. The collector does not
+	// care which unit it is — it records both the same way — so this asserts
+	// the recording rather than the verdict.
+	h := collectSandbox(t, "services-sandbox-malformed")
 
-	bad := unitIn(t, h, "dbus.service")
+	bad := unitIn(t, h, "systemd-journald.service")
 	if _, set := fact.OptBool(bad.NoNewPrivileges); set {
 		t.Errorf("a value systemd rejects was recorded as a boolean: %v", bad.NoNewPrivileges)
 	}
@@ -165,9 +170,9 @@ func TestAValueSystemdRejectsIsNotFalse(t *testing.T) {
 		t.Errorf("Malformed = %v, want [NoNewPrivileges]", bad.Malformed)
 	}
 
-	// And the neighbouring unit, which wrote the directive down and chose off.
-	// Same posture, different act, and the fact keeps them apart.
-	off := unitIn(t, h, "cron.service")
+	// And the unit that wrote the directive down and chose off. Same posture,
+	// different act, and the fact keeps them apart.
+	off := unitIn(t, collectSandbox(t, "services-sandbox-explicit-off"), "cron.service")
 	on, set := fact.OptBool(off.NoNewPrivileges)
 	if !set || on {
 		t.Errorf("cron.service NoNewPrivileges = %v/set=%v, want false/set=true", on, set)

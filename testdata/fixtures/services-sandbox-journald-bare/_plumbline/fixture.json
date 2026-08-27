@@ -1,0 +1,3 @@
+{
+  "description": "journald with no NoNewPrivileges line at all — the plain failure, and the one an operator can act on without an argument. It is the third of the three ways of not having the bit: never written, as against written-as-no and written-as-something-systemd-rejects, which have their own fixtures. All three are on journald because it is the only audited unit that is not exempt."
+}

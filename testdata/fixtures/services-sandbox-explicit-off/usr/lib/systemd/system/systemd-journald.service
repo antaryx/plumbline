@@ -1,0 +1,8 @@
+[Unit]
+Description=Journal Service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-journald
+# Turned off 2024-06 while debugging a capability problem. Never turned back on.
+NoNewPrivileges=no
+ProtectSystem=strict

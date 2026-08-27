@@ -344,22 +344,34 @@ func TestUsrMergeDirectoryIsCountedOnce(t *testing.T) {
 
 func TestCheck0006NoNewPrivileges(t *testing.T) {
 	run(t, checks.Check0006, []tc{
-		// All three audited units set it, in three different spellings.
+		// All three audited units set it, in three different spellings. Two of
+		// them are exempt and set it anyway, which must be credited rather
+		// than reported as skipped.
 		{fixture: "services-sandbox-hardened", result: finding.Pass,
-			detailContains: "All 3 audited services set NoNewPrivileges"},
+			detailContains: "3 of the 3 audited services installed here set NoNewPrivileges"},
 
-		// The ordinary host: journald ships hardened, cron does not, dbus is
-		// not installed and is therefore skipped rather than failed.
-		{fixture: "services-sandbox-stock", result: finding.Fail, severity: finding.Medium,
-			detailContains: "cron.service does not set NoNewPrivileges"},
+		// The ordinary host: journald ships hardened, cron does not and is
+		// exempt, dbus is not installed. A pass that names what it skipped.
+		{fixture: "services-sandbox-stock", result: finding.Pass,
+			detailContains: "Not held to this standard: cron.service"},
 
-		// Written down and turned off, plus a value systemd rejects.
+		// journald written down and turned off. Not exempt, so it fails.
 		{fixture: "services-sandbox-explicit-off", result: finding.Fail, severity: finding.Medium,
 			detailContains: "written down and set to no"},
 
-		// The answer is in a drop-in, and in the drop-in that wins.
+		// A value systemd rejects, on a unit that is not exempt.
+		{fixture: "services-sandbox-malformed", result: finding.Fail, severity: finding.Medium,
+			detailContains: "systemd cannot parse"},
+
+		// Every installed unit exempt: nothing was verified, so nothing may be
+		// claimed.
+		{fixture: "services-sandbox-all-exempt", result: finding.NotApplicable,
+			detailContains: "nothing to examine"},
+
+		// The answer is in a drop-in, and in the drop-in that wins. cron is
+		// exempt and hardened anyway, so it is credited rather than skipped.
 		{fixture: "services-sandbox-dropin", result: finding.Pass,
-			detailContains: "set NoNewPrivileges"},
+			detailContains: "sets NoNewPrivileges: cron.service"},
 
 		// A drop-in that could not be read could be carrying the no.
 		{fixture: "services-sandbox-denied", result: finding.Unknown,
@@ -387,7 +399,9 @@ func TestCheck0006NoNewPrivileges(t *testing.T) {
 // the host is not. A report that rendered all three as "NoNewPrivileges is not
 // set" would be wrong twice.
 func TestTheThreeWaysOfNotHavingTheBitAreDistinguished(t *testing.T) {
-	unset := evalCheck(t, checks.Check0006, "services-sandbox-stock")
+	// All three are on journald, because it is the one audited unit that is
+	// not exempt — which is itself worth noticing about this check.
+	unset := evalCheck(t, checks.Check0006, "services-sandbox-journald-bare")
 	if !strings.Contains(unset.Detail, "does not set NoNewPrivileges") {
 		t.Errorf("an unset directive does not read as unset: %s", unset.Detail)
 	}
@@ -399,23 +413,28 @@ func TestTheThreeWaysOfNotHavingTheBitAreDistinguished(t *testing.T) {
 	if !strings.Contains(written.Detail, "written down and set to no rather than absent") {
 		t.Errorf("an explicit no does not read as a decision: %s", written.Detail)
 	}
-	if !strings.Contains(written.Detail, "systemd cannot parse") {
-		t.Errorf("a value systemd rejects is not called out: %s", written.Detail)
+
+	rejected := evalCheck(t, checks.Check0006, "services-sandbox-malformed")
+	if !strings.Contains(rejected.Detail, "systemd cannot parse") {
+		t.Errorf("a value systemd rejects is not called out: %s", rejected.Detail)
 	}
 
 	// And the evidence keeps them apart per unit, which is where an operator
 	// looks to find out which of their services is which.
-	var excerpts []string
-	for _, e := range written.Evidence {
-		excerpts = append(excerpts, e.Excerpt)
-	}
-	joined := strings.Join(excerpts, " | ")
-	for _, want := range []string{
-		"cron.service: NoNewPrivileges=no (explicitly disabled)",
-		"dbus.service: NoNewPrivileges set to a value systemd cannot parse",
+	for _, c := range []struct {
+		got  finding.Finding
+		want string
+	}{
+		{unset, "systemd-journald.service: NoNewPrivileges not set; the default is off"},
+		{written, "systemd-journald.service: NoNewPrivileges=no (explicitly disabled)"},
+		{rejected, "systemd-journald.service: NoNewPrivileges set to a value systemd cannot parse"},
 	} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("evidence does not carry %q: %s", want, joined)
+		var excerpts []string
+		for _, e := range c.got.Evidence {
+			excerpts = append(excerpts, e.Excerpt)
+		}
+		if joined := strings.Join(excerpts, " | "); !strings.Contains(joined, c.want) {
+			t.Errorf("evidence does not carry %q: %s", c.want, joined)
 		}
 	}
 }
@@ -429,6 +448,9 @@ func TestTheThreeWaysOfNotHavingTheBitAreDistinguished(t *testing.T) {
 func TestAnAbsentUnitIsSkippedRatherThanFailed(t *testing.T) {
 	got := evalCheck(t, checks.Check0006, "services-sandbox-stock")
 
+	// dbus.service is not installed here. It is also exempt, so this asserts
+	// the two are not confused: an absent unit is not named at all, where an
+	// exempt one is named with its reason.
 	if strings.Contains(got.Detail, "dbus.service") {
 		t.Errorf("an uninstalled unit appears in the verdict: %s", got.Detail)
 	}
@@ -468,13 +490,17 @@ func TestAFoundFailureOutranksAnUnreadFile(t *testing.T) {
 	facts := collectFixture(t, "services-sandbox-denied")
 	h, _, _ := fact.Get[fact.ServiceHardening](facts, fact.ServiceHardeningID)
 
-	// Turn the passing unit into a failing one, leaving the denied drop-in
-	// exactly where it is. Built by hand because the property is about the
-	// interaction of two states that no single fixture can hold at once for
-	// the same unit.
+	// Add a failing unit that is *not* exempt, leaving the denied drop-in on
+	// cron.service exactly where it is. Built by hand because the property is
+	// about the interaction of two states that no single fixture holds at
+	// once, and because journald is the only audited unit that can fail.
 	for i := range h.Services {
-		if h.Services[i].Unit == "cron.service" {
-			h.Services[i].NoNewPrivileges = nil
+		if h.Services[i].Unit == "systemd-journald.service" {
+			h.Services[i] = fact.ServiceSandbox{
+				Unit:  "systemd-journald.service",
+				State: fact.UnitPresent,
+				Path:  "/usr/lib/systemd/system/systemd-journald.service",
+			}
 		}
 	}
 	facts.Put(h)
@@ -499,6 +525,8 @@ func TestTheVerdictNamesItsOwnLimits(t *testing.T) {
 		"services-sandbox-hardened",
 		"services-sandbox-stock",
 		"services-sandbox-explicit-off",
+		"services-sandbox-malformed",
+		"services-sandbox-all-exempt",
 		"services-sandbox-dropin",
 		"services-sandbox-denied",
 		"services-sandbox-masked",
@@ -533,6 +561,157 @@ func TestTheSandboxCheckIsIndependentOfEnablement(t *testing.T) {
 	for _, check := range enablement {
 		if got := evalCheck(t, check, "services-sandbox-hardened"); got.Result == finding.Unknown {
 			t.Errorf("%s = UNKNOWN over a fixture with no enablement problem: %s", check.ID, got.Detail)
+		}
+	}
+}
+
+// TestAnExemptServiceIsSkippedAndSaidSo is the mechanism's headline property.
+//
+// cron.service does not set NoNewPrivileges in this fixture and setting it
+// would break user cron jobs that call sudo. The check must not fail it — and
+// must not go quiet about it either. A pass that silently omitted the unit
+// would read as "the audited services are hardened" when it means "one of them
+// is and one was not examined", and the operator who later finds cron running
+// without no_new_privs would be right to say the tool told them otherwise.
+func TestAnExemptServiceIsSkippedAndSaidSo(t *testing.T) {
+	got := evalCheck(t, checks.Check0006, "services-sandbox-stock")
+
+	if got.Result != finding.Pass {
+		t.Fatalf("= %s, want PASS: an exempt service without the bit is not a finding\n  %s", got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "Not held to this standard: cron.service") {
+		t.Errorf("the verdict does not say cron.service was skipped: %s", got.Detail)
+	}
+	// The reason, not merely the fact of an exemption. The operator's next
+	// question after "why was this skipped" is "what breaks if I do it
+	// anyway", and the answer has to be in the same sentence.
+	if !strings.Contains(got.Detail, "sudo") {
+		t.Errorf("the verdict does not say what setting it would break: %s", got.Detail)
+	}
+	// And the distinction from a suppression, which is what stops this reading
+	// as "somebody turned this finding off".
+	if !strings.Contains(got.Detail, "not a finding that was suppressed") {
+		t.Errorf("the verdict does not distinguish an exemption from a suppression: %s", got.Detail)
+	}
+	// The unit is still cited, so the evidence shows its actual state rather
+	// than leaving the reader to trust the sentence.
+	var sources []string
+	for _, e := range got.Evidence {
+		sources = append(sources, e.Excerpt)
+	}
+	if !strings.Contains(strings.Join(sources, " | "), "cron.service: NoNewPrivileges not set") {
+		t.Errorf("an exempt unit is not cited: %v", sources)
+	}
+}
+
+// TestAnExemptionNeverHidesAnUnreadableUnit.
+//
+// An exemption says "the standard does not apply here", which is a claim about
+// a configuration that was seen. A unit whose drop-in was denied has no known
+// configuration, and excusing it would turn "I could not look" into "it is
+// fine" — the exact substitution the UNKNOWN result exists to prevent.
+//
+// cron.service is exempt *and* unreadable in this fixture. The verdict must be
+// UNKNOWN, not a pass with an exemption note.
+func TestAnExemptionNeverHidesAnUnreadableUnit(t *testing.T) {
+	got := evalCheck(t, checks.Check0006, "services-sandbox-denied")
+
+	if got.Result != finding.Unknown {
+		t.Fatalf("= %s, want UNKNOWN; an exemption excused a file nobody opened\n  %s", got.Result, got.Detail)
+	}
+	if strings.Contains(got.Detail, "Not held to this standard") {
+		t.Errorf("an unreadable unit was reported as exempt: %s", got.Detail)
+	}
+}
+
+// TestAnExemptionNeverDowngradesAServiceThatComplies.
+//
+// The exemption is a floor rather than a ceiling. A host whose dbus.service
+// does set NoNewPrivileges has a stronger posture than the exemption assumes,
+// and reporting it as skipped would hide work somebody did — and would make
+// the check unable to tell an improving fleet from a static one.
+func TestAnExemptionNeverDowngradesAServiceThatComplies(t *testing.T) {
+	got := evalCheck(t, checks.Check0006, "services-sandbox-hardened")
+
+	if got.Result != finding.Pass {
+		t.Fatalf("= %s, want PASS: %s", got.Result, got.Detail)
+	}
+	if strings.Contains(got.Detail, "Not held to this standard") {
+		t.Errorf("a unit that satisfies the check was reported as exempt: %s", got.Detail)
+	}
+	for _, unit := range []string{"cron.service", "dbus.service", "systemd-journald.service"} {
+		if !strings.Contains(got.Detail, unit) {
+			t.Errorf("%s is not credited with setting the bit: %s", unit, got.Detail)
+		}
+	}
+}
+
+// TestExemptionsCannotMakeTheCheckVacuous is the guard on the mechanism
+// itself, and the reason it is worth having a test rather than a convention.
+//
+// With cron and dbus exempt, journald is the only audited unit that can fail.
+// An exemption list that grew until it covered every target would turn this
+// check into a green tick that means nothing — and it would do so silently,
+// one reasonable-looking entry at a time. So a host on which nothing was
+// actually held to the standard is NOT_APPLICABLE: the check reports that it
+// had nothing to examine rather than that the host satisfied it.
+//
+// The failure this prevents is the one CONTRIBUTING.md rule 3 is about.
+// Reporting PASS for something never examined is worse than reporting nothing.
+func TestExemptionsCannotMakeTheCheckVacuous(t *testing.T) {
+	got := evalCheck(t, checks.Check0006, "services-sandbox-all-exempt")
+
+	if got.Result == finding.Pass {
+		t.Fatalf("a host where every audited unit is exempt reported PASS, which claims a standard nothing was held to:\n  %s", got.Detail)
+	}
+	if got.Result != finding.NotApplicable {
+		t.Fatalf("= %s, want NOT_APPLICABLE: %s", got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "nothing to examine, not that the host satisfied it") {
+		t.Errorf("the verdict does not say why it is silent: %s", got.Detail)
+	}
+	// Both exemptions are still named, so the reader can see what would have
+	// been examined and decide whether they agree.
+	for _, unit := range []string{"cron.service", "dbus.service"} {
+		if !strings.Contains(got.Detail, unit) {
+			t.Errorf("%s is not named: %s", unit, got.Detail)
+		}
+	}
+}
+
+// TestAFailureStillNamesTheExemptions. An operator reading a failure that
+// lists journald and nothing else needs to know that cron and dbus were
+// skipped on purpose, not that they were overlooked or that they passed.
+func TestAFailureStillNamesTheExemptions(t *testing.T) {
+	got := evalCheck(t, checks.Check0006, "services-sandbox-explicit-off")
+
+	if got.Result != finding.Fail {
+		t.Fatalf("= %s, want FAIL: %s", got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "systemd-journald.service") {
+		t.Errorf("the failing unit is not named: %s", got.Detail)
+	}
+	if !strings.Contains(got.Detail, "Not held to this standard: cron.service") {
+		t.Errorf("a failure does not name the exemptions: %s", got.Detail)
+	}
+}
+
+// TestEveryExemptionSaysWhatBreaks. The bar for an exemption is that applying
+// the setting breaks the service, so each reason has to name the thing that
+// stops working — otherwise the list becomes a place to put services nobody
+// got round to, which is a finding rather than an exemption.
+func TestEveryExemptionSaysWhatBreaks(t *testing.T) {
+	// Reached through the verdict rather than the variable, because the
+	// property is about what an operator reads.
+	got := evalCheck(t, checks.Check0006, "services-sandbox-all-exempt")
+
+	for _, want := range []string{
+		"sudo",                      // what breaks for cron
+		"dbus-daemon-launch-helper", // what breaks for dbus
+		"setuid",                    // why, in both cases
+	} {
+		if !strings.Contains(got.Detail, want) {
+			t.Errorf("no exemption reason mentions %q: %s", want, got.Detail)
 		}
 	}
 }

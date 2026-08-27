@@ -3,4 +3,3 @@ Description=D-Bus System Message Bus
 
 [Service]
 ExecStart=/usr/bin/dbus-daemon --system --nofork
-NoNewPrivileges=maybe

@@ -12,6 +12,46 @@ explanation in this file is a defect.
 ## [Unreleased]
 
 ### Added
+- **Exemptions for SERVICES checks.** A check can now declare units it
+  deliberately does not hold to its standard, with the reason. `SERVICES-0006`
+  exempts `cron.service` and `dbus.service` from `NoNewPrivileges`, because
+  setting it there breaks the service rather than hardening it: cron's jobs
+  inherit `no_new_privs` and stop being able to call `sudo`, and dbus activates
+  system services through a setuid `dbus-daemon-launch-helper`.
+
+  **An exemption is not a suppression.** A suppression is an operator accepting
+  a finding on their host and lives in a suppressions file; an exemption is the
+  catalog saying the remediation would break the service — a property of the
+  software, true everywhere it runs. Only one of those should be invisible to
+  the next operator, and it is not this one: exempt units are named in every
+  verdict with their reason, whether the check passes or fails, and the detail
+  says in as many words that this is not a suppressed finding.
+
+  Three properties are enforced rather than left to an author's care:
+
+  - **An exemption never hides a unit that could not be read.** It is a claim
+    about a configuration that was *seen*; excusing an unreadable file would
+    turn "I could not look" into "it is fine". `services-sandbox-denied` is
+    `UNKNOWN` even though the unit it cannot read is exempt.
+  - **An exemption never downgrades a unit that complies anyway.** A host whose
+    `dbus.service` does set the bit is credited with it. The exemption is a
+    floor, not a ceiling.
+  - **Exemptions cannot make a check vacuous.** If no unit on a host was
+    actually held to the standard, the result is `NOT_APPLICABLE` and says so
+    — "the check reporting that it had nothing to examine, not that the host
+    satisfied it". With two of three units exempt, one more reasonable-looking
+    entry would otherwise turn this check into a green tick that means nothing,
+    silently. That is the failure CONTRIBUTING.md rule 3 exists for, and an
+    exemption list is the most plausible way to reach it by accident.
+
+### Changed
+- **`SERVICES-0006` passes on a stock host** where it used to fail, because the
+  two units it used to fail are now exempt. `systemd-journald.service` is the
+  only audited unit that can still fail, which is a real reduction in what the
+  check claims and is stated in its description rather than left to be
+  inferred from the exemption list.
+
+### Added
 - **`SERVICES-0006` (NoNewPrivileges on audited system services).** Catalog 22,
   92 checks. `MEDIUM`.
 

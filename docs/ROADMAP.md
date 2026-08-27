@@ -733,16 +733,36 @@ Growing the list is a work package with a fixture per addition, not a constant
 to extend casually — and the interesting question is not how to read more units
 but which ones are worth the disclosure.
 
-**`NoNewPrivileges` is not free for every service, and the check does not know
-which.** `dbus.service` activates system services through a setuid
-`dbus-daemon-launch-helper`, and `cron.service` runs whatever operators put in
-crontabs, which frequently includes `sudo`. Setting the bit on either breaks
-them — at the helper rather than at startup, so possibly long after the
-restart. The check reports both as failures and its remediation leads with
-establishing that, but a finding whose fix can cause an outage wants an
-exemption mechanism the catalog does not have yet: a way for a check to carry
-"known-incompatible on this unit, and here is why". That is the next work
-package in this area and it is worth more than a seventh check.
+**The exemption mechanism is the interesting part, and it needed a guard.**
+`NoNewPrivileges` breaks `cron.service` (jobs inherit `no_new_privs` and stop
+being able to call `sudo`) and `dbus.service` (setuid
+`dbus-daemon-launch-helper`), so both are exempt and named with the reason in
+every verdict. Three properties turned out to be worth enforcing in code rather
+than trusting an author with, and they generalise to any check that grows an
+exemption list:
+
+  - **An exemption is not a suppression.** A suppression belongs to a host and
+    may reasonably be invisible; an exemption is a claim about the software and
+    must not be. Exempt units are named whether the check passes or fails, and
+    the verdict says in as many words that nothing was suppressed.
+  - **It never excuses what could not be read**, because it is a claim about a
+    configuration that was seen. Excusing an unreadable file turns "I could not
+    look" into "it is fine", which is the substitution `UNKNOWN` exists to
+    prevent.
+  - **It cannot make the check vacuous.** If nothing on a host was actually
+    held to the standard the result is `NOT_APPLICABLE`, not `PASS`. With two
+    of three units exempt, one more reasonable entry would otherwise convert
+    this check into a green tick that means nothing — silently, and with each
+    step looking defensible. That is rule 3's failure mode arrived at by
+    increments, and it is the thing to watch for in every later module that
+    wants exemptions.
+
+What the mechanism has *not* solved is that the check is now thin:
+`systemd-journald.service` is the only audited unit that can fail. Widening it
+means finding daemons where the setting is both appropriate and not already
+shipped, which is a research task rather than a coding one — and the answer may
+be that `NoNewPrivileges` is the wrong first directive and `ProtectSystem` or
+`PrivateTmp` is a better one. The fact already records those.
 
 **The corpus does not exercise it.** All six golden bundles predate
 `services.hardening`, so `SERVICES-0006` is `UNKNOWN` on every one. Unlike the

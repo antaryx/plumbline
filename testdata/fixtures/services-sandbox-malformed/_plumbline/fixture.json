@@ -1,0 +1,3 @@
+{
+  "description": "A NoNewPrivileges value systemd's parse_boolean rejects, on a unit that is not exempt. systemd logs a warning and ignores the assignment, so the line is in the file and the bit is not set — the case an operator most needs told apart from an absent directive, because the file looks configured and the host is not. dbus.service beside it sets the bit despite being exempt, which must be credited rather than reported as skipped."
+}

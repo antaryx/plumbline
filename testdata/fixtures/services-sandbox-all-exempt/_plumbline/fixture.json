@@ -1,0 +1,3 @@
+{
+  "description": "Every audited unit installed here is exempt and none is hardened, so nothing was held to the standard. NOT_APPLICABLE rather than PASS, and that is the fixture's whole point: an exemption list that grew until it covered every target would otherwise turn this check into a green tick that means nothing. Adding an exemption has to be able to make the check stop claiming things, never start claiming everything."
+}

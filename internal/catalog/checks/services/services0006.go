@@ -28,19 +28,48 @@ no_new_privs it also has every setuid binary on the host as a way to get more.
 The bit turns "find any local escalation" into "escalate with what you already
 hold", and it costs nothing at runtime.
 
-**It is not free for every service, and that is the point of reading the unit
-rather than assuming.** A daemon that legitimately relies on a setuid helper
-breaks outright when the bit is set — the helper simply runs without its
-privileges. The remediation below insists on establishing that first, because
-setting NoNewPrivileges on the wrong unit is an outage rather than a
-regression.
+**It is not free for every service, and two of the units below are exactly
+that case.** A daemon that relies on a setuid helper breaks outright when the
+bit is set — the helper simply runs without its privileges — so those units are
+exempt and named as such in every verdict:
+
+  - **cron.service** runs user cron jobs in its own process tree, and
+    no_new_privs is inherited by every child. A job that calls sudo, su or any
+    setuid binary stops working, and fails at the job rather than at the
+    restart, so the breakage can appear days later.
+  - **dbus.service** activates system services through
+    dbus-daemon-launch-helper, which is setuid root. With the bit set the
+    helper runs unprivileged and activation fails.
+
+An exemption is not a suppression. A suppression is an operator accepting a
+finding on their host; an exemption is this catalog saying the remediation
+would break the service, which is a property of the software and true
+everywhere it runs. The distinction matters because only one of them should be
+invisible to the next operator, and it is not this one — the units are listed
+in the verdict with the reason, whether the check passes or fails.
+
+Two things follow, and both are enforced rather than left to the reader's
+trust. A unit that sets the bit anyway is credited with it rather than reported
+as skipped, because the exemption is a floor and not a ceiling. And a unit this
+scan could not read is never excused: an exemption is a claim about a
+configuration that was seen, and excusing an unreadable file would turn "I
+could not look" into "it is fine".
+
+**If nothing on a host was actually held to the standard, the result is
+NOT_APPLICABLE rather than PASS.** With two of three units exempt, an exemption
+list that grew by one more reasonable-looking entry would turn this check into
+a green tick that means nothing. Reporting PASS for something never examined is
+the failure this whole tool is built to avoid, and an exemption list is the
+most plausible way to arrive at it by accident.
 
 This check reads a fixed, small list of long-lived root daemons rather than
 every unit on the host. Reading every unit would mean reading every unit body,
 which is what this module exists in order not to do — a bundle would then carry
 every ExecStart and every Environment= on the machine.
 
-**A unit that is not installed is skipped, not failed.** cron.service is absent
+**A unit that is not installed is skipped without comment**, which is
+different again from being exempt — one is a host that does not run the
+software, the other a host that runs it and should not harden it. cron.service is absent
 on a host that uses cronie under another name, and dbus.service on a container
 image with no message bus; neither is a finding. If none of the audited units
 is installed the check is NOT_APPLICABLE, because there is nothing to have an
@@ -71,9 +100,10 @@ and that reason is the first thing to establish before changing it.`,
 		}
 
 		var (
-			failed []fact.ServiceSandbox
-			passed []string
-			masked []string
+			failed  []fact.ServiceSandbox
+			passed  []string
+			masked  []string
+			skipped []string
 		)
 		for _, s := range h.Services {
 			switch {
@@ -85,11 +115,21 @@ and that reason is the first thing to establish before changing it.`,
 				continue
 			case !s.Judgeable():
 				// Unreadable. Counted by Unreadable() below rather than here,
-				// because it is neither a pass nor a failure.
+				// because it is neither a pass nor a failure — and note the
+				// exemption test has not been reached yet, which is
+				// deliberate: an exemption is a claim about a configuration
+				// that was seen, so it must not excuse a file nobody opened.
 				continue
 			}
+			// The pass test runs before the exemption test, so a host whose
+			// dbus.service does set the bit is credited with it rather than
+			// reported as skipped. An exemption is a floor, not a ceiling.
 			if on, set := fact.OptBool(s.NoNewPrivileges); set && on {
 				passed = append(passed, s.Unit)
+				continue
+			}
+			if _, ok := nnpExemptions.reason(s.Unit); ok {
+				skipped = append(skipped, s.Unit)
 				continue
 			}
 			failed = append(failed, s)
@@ -102,7 +142,7 @@ and that reason is the first thing to establish before changing it.`,
 		// incomplete examination invalidates a negative result and never a
 		// positive one.
 		if len(failed) > 0 {
-			return sandboxFailure(failed, passed, masked, unread)
+			return sandboxFailure(failed, passed, masked, skipped, unread)
 		}
 
 		// No failures found, but the search was not exhaustive. Reporting a
@@ -111,16 +151,34 @@ and that reason is the first thing to establish before changing it.`,
 			return sandboxUnknown(unread, passed)
 		}
 
-		detail := fmt.Sprintf("All %d audited service%s set NoNewPrivileges: %s. A compromise of any of them cannot gain privileges through a setuid binary or file capabilities.",
-			len(passed), plural(len(passed), "", "s"), strings.Join(passed, ", "))
+		// **Nothing was verified.** Every unit this check audits on this host
+		// is exempt or masked, so a PASS would report that a standard was met
+		// by a set of units none of which was held to it — the false assurance
+		// CONTRIBUTING.md rule 3 forbids, and the specific way an exemption
+		// list turns a check into decoration. It has to be possible to add an
+		// exemption and watch the check stop claiming anything, rather than
+		// start claiming everything.
+		if len(passed) == 0 {
+			return catalog.Outcome{
+				Result: finding.NotApplicable,
+				Detail: fmt.Sprintf("No unit on this host was held to this standard: of the units this check audits, %s.%s This is the check reporting that it had nothing to examine, not that the host satisfied it.%s",
+					describeUnverified(skipped, masked), nnpExemptions.sentence(skipped), sandboxCaveat),
+				Evidence: sandboxEvidence(h, skipped),
+			}
+		}
+
+		detail := fmt.Sprintf("%d of the %d audited service%s installed here %s NoNewPrivileges: %s. A compromise of %s cannot gain privileges through a setuid binary or file capabilities.",
+			len(passed), len(h.Installed()), plural(len(h.Installed()), "", "s"),
+			plural(len(passed), "sets", "set"), strings.Join(passed, ", "), plural(len(passed), "it", "them"))
 		if len(masked) > 0 {
 			detail += fmt.Sprintf(" %s %s masked and %s not examined: systemd will not start %s.",
 				strings.Join(masked, " and "), plural(len(masked), "is", "are"), plural(len(masked), "is", "are"), plural(len(masked), "it", "them"))
 		}
+		detail += nnpExemptions.sentence(skipped)
 		return catalog.Outcome{
 			Result:   finding.Pass,
 			Detail:   detail + sandboxCaveat,
-			Evidence: sandboxEvidence(h, passed),
+			Evidence: sandboxEvidence(h, append(append([]string{}, passed...), skipped...)),
 		}
 	},
 
@@ -129,7 +187,7 @@ and that reason is the first thing to establish before changing it.`,
 		Effort:  "MEDIUM",
 		Steps: []string{
 			"Establish what the service needs before changing it. NoNewPrivileges neuters setuid binaries and file capabilities for everything the unit starts, so a daemon that shells out to a setuid helper stops working the moment it is set — and it fails at the helper rather than at startup, so the breakage may not appear until something rare happens.",
-			"Two of the units commonly audited here are exactly that case and are worth naming. dbus.service activates system services through dbus-daemon-launch-helper, which is setuid root; setting NoNewPrivileges on it breaks activation. cron.service runs whatever operators put in crontabs, which frequently includes sudo, su or a setuid binary; setting it there breaks those jobs and nothing else reports why.",
+			"Two of the units this check audits are exactly that case and are exempt from it: dbus.service, whose dbus-daemon-launch-helper is setuid root, and cron.service, whose jobs frequently call sudo. They appear in the verdict with the reason rather than as findings. If you have established that neither applies on your host — no setuid helper, no cron job that escalates — setting the bit on them is a real improvement, and this check will credit it.",
 			"Where the service is self-contained, add the setting as a drop-in rather than editing the vendor unit, so a package upgrade does not undo it: systemctl edit <unit>, then a [Service] section containing NoNewPrivileges=yes.",
 			"Reload and restart: systemctl daemon-reload, then systemctl restart <unit>.",
 			"Confirm the assembled unit rather than the file you edited: systemctl show -p NoNewPrivileges <unit> reports what systemd actually loaded, drop-ins and precedence included.",
@@ -155,6 +213,53 @@ and that reason is the first thing to establish before changing it.`,
 		{Title: "Linux kernel — no_new_privs", URL: "https://docs.kernel.org/userspace-api/no_new_privs.html"},
 		{Title: "systemd-analyze(1) — security", URL: "https://man7.org/linux/man-pages/man1/systemd-analyze.1.html"},
 	},
+}
+
+// nnpExemptions are the units this check does not hold to NoNewPrivileges,
+// because setting it there breaks the service rather than hardening it.
+//
+// Both entries are properties of the software rather than of any one host, and
+// both were established before the check shipped rather than in response to a
+// complaint. The bar is an outage, not an inconvenience: a service that merely
+// has not got round to it is a finding, and a service that stops working is
+// not.
+//
+// **This list is the check's blast radius and should be read as one.** With
+// cron and dbus on it the only unit left that can fail is journald, which is
+// why the Eval refuses to report PASS when nothing was actually verified — an
+// exemption list that grew until every target was on it would otherwise turn
+// this check into a green tick that means nothing. Adding an entry is a
+// deliberate reduction in what the catalog claims and belongs in the
+// changelog, alongside the reasoning.
+var nnpExemptions = exemptions{
+	{
+		unit: "cron.service",
+		reason: "runs user cron jobs in its own process tree, and no_new_privs is inherited by every child — " +
+			"so a job that calls sudo, su, or any setuid binary stops working, and fails at the job rather than at the restart",
+	},
+	{
+		unit: "dbus.service",
+		reason: "activates system services through dbus-daemon-launch-helper, which is setuid root — " +
+			"with no_new_privs set the helper runs unprivileged and activation fails",
+	},
+}
+
+// describeUnverified renders why no unit was held to the standard, which is
+// two different situations that must not read alike.
+//
+// It counts rather than names the exempt units, because the sentence that
+// follows it names them with their reasons and a verdict that listed them
+// twice reads as though it had found two separate things.
+func describeUnverified(skipped, masked []string) string {
+	var parts []string
+	if len(skipped) > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s exempt", len(skipped), plural(len(skipped), "is", "are")))
+	}
+	if len(masked) > 0 {
+		parts = append(parts, fmt.Sprintf("%s %s masked, so systemd will not start %s",
+			join(masked), plural(len(masked), "is", "are"), plural(len(masked), "it", "them")))
+	}
+	return strings.Join(parts, " and ")
 }
 
 // sandboxCaveat is appended to every verdict this check draws.
@@ -193,7 +298,7 @@ func sandboxApplicable(h fact.ServiceHardening) *catalog.Outcome {
 
 // sandboxFailure builds the FAIL, naming every unit and telling the two
 // silences apart.
-func sandboxFailure(failed []fact.ServiceSandbox, passed, masked []string, unread []fact.ServiceSandbox) catalog.Outcome {
+func sandboxFailure(failed []fact.ServiceSandbox, passed, masked, skipped []string, unread []fact.ServiceSandbox) catalog.Outcome {
 	var (
 		names []string
 		ev    []finding.Evidence
@@ -249,6 +354,10 @@ func sandboxFailure(failed []fact.ServiceSandbox, passed, masked []string, unrea
 		detail += fmt.Sprintf(" %s could not be read in full, so %s may or may not set it.",
 			strings.Join(u, " and "), plural(len(unread), "it", "them"))
 	}
+	// The exemptions are named in a failure too. An operator reading "cron and
+	// dbus are missing from this list" needs to know they were skipped on
+	// purpose rather than not looked at.
+	detail += nnpExemptions.sentence(skipped)
 
 	return catalog.Outcome{
 		Result:   finding.Fail,

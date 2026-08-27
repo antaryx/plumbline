@@ -232,3 +232,79 @@ func sentence(s string) string {
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
 }
+
+// ---------------------------------------------------------------------------
+// exemptions
+// ---------------------------------------------------------------------------
+
+// exemption records a unit a check deliberately does not hold to its standard,
+// and why.
+//
+// **An exemption is not a suppression, and the difference is the whole reason
+// this is in the catalog rather than in a config file.** A suppression is an
+// operator saying "I have seen this finding and I am accepting it", which
+// belongs to the host and lives in a suppressions file. An exemption is this
+// tool saying "applying this setting here would break the service, so it is not
+// a defect that it is unset" — a property of the software, true on every host
+// that runs it, and therefore something the catalog should know rather than
+// something every operator should have to rediscover by causing an outage.
+//
+// The bar for adding one is that the remediation would *break the service*, not
+// that it is inconvenient or that a fleet has not got round to it. Two things
+// follow, and both are enforced below rather than left to authors:
+//
+//   - **An exemption never hides a unit this scan could not read.** It says the
+//     standard does not apply, which is a claim about a configuration we have
+//     seen. A unit whose file was denied has no known configuration, and
+//     excusing it would turn "I could not look" into "it is fine".
+//   - **An exemption never downgrades a unit that satisfies the check anyway.**
+//     A host whose dbus.service does set NoNewPrivileges has a stronger posture
+//     than the exemption assumes, and reporting it as skipped would hide work
+//     somebody did.
+type exemption struct {
+	// unit is the unit name, e.g. "dbus.service".
+	unit string
+	// reason completes the sentence "not held to this standard: it …". It says
+	// what breaks, not that something breaks, because the operator's next
+	// question is always which of their things stops working.
+	reason string
+}
+
+// exemptions is a check's exemption list.
+//
+// A slice rather than a map so the order is the author's and every detail
+// string built from it reads the same way on every run; ranging over a map is
+// randomised, and a finding whose wording changes between two scans of an
+// unchanged host is a finding somebody will diff and misread.
+type exemptions []exemption
+
+// reason returns the justification for a unit, and whether it has one.
+func (e exemptions) reason(unit string) (string, bool) {
+	for _, x := range e {
+		if x.unit == unit {
+			return x.reason, true
+		}
+	}
+	return "", false
+}
+
+// sentence renders the units that were exempted on this host, in list order.
+//
+// It is always appended when any exemption applied, including to a PASS. A pass
+// that did not say which units it skipped would read as "these services are
+// hardened" when it means "one of them is, and two were not examined" — and the
+// operator who later discovers dbus running without no_new_privs would be right
+// to conclude the tool had told them otherwise.
+func (e exemptions) sentence(applied []string) string {
+	if len(applied) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(applied))
+	for _, u := range applied {
+		if why, ok := e.reason(u); ok {
+			parts = append(parts, fmt.Sprintf("%s (%s)", u, why))
+		}
+	}
+	return fmt.Sprintf(" Not held to this standard: %s. An exemption is a documented reason the setting would break the service, not a finding that was suppressed.",
+		strings.Join(parts, "; "))
+}
