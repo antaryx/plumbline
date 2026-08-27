@@ -1,0 +1,3 @@
+{
+  "description": "The vendor docker.service every distribution ships, with no drop-ins: the daemon is started with -H fd://, so its API is on the socket systemd hands over and nothing is on the network. The good case for CONTAINERS-0006, and the shape of the overwhelming majority of Docker hosts. The unit's ExecReload line carries a $MAINPID that must not be mistaken for an unexpanded ExecStart variable."
+}

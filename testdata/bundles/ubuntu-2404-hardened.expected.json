@@ -1,7 +1,7 @@
 {
   "bundle": "ubuntu-2404-hardened.plb",
   "schema": "findings/v1",
-  "catalog_version": 18,
+  "catalog_version": 19,
   "scan": {
     "started": "2026-08-25T21:31:55.438565245Z",
     "finished": "2026-08-25T21:31:55.619481732Z",
@@ -18,15 +18,15 @@
       "fail": 4,
       "not_applicable": 5,
       "skipped": 0,
-      "unknown": 1,
-      "total": 88
+      "unknown": 2,
+      "total": 89
     },
     "by_severity": {
       "LOW": 2,
       "MEDIUM": 2
     },
     "posture": 96.7741935483871,
-    "coverage": 98.79518072289156
+    "coverage": 97.61904761904762
   },
   "findings": [
     {
@@ -197,6 +197,16 @@
       "base_severity": "LOW",
       "fingerprint": "4e3012571d5172ead64bd0f5a929bee4",
       "detail": "No dockerd binary was found on this host, so there is no Docker daemon configuration to report on."
+    },
+    {
+      "check_id": "CONTAINERS-0006",
+      "module": "CONTAINERS",
+      "result": "UNKNOWN",
+      "severity": "CRITICAL",
+      "base_severity": "CRITICAL",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "4c92f8bc337c9228ef90b3197522075a",
+      "detail": "required fact containers.docker_service was not collected"
     },
     {
       "check_id": "CRON-0001",

@@ -395,6 +395,16 @@ var registry = map[fact.ID]decoder{
 			return f, nil
 		},
 	},
+	fact.DockerServiceID: {
+		version: fact.DockerService{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.DockerService
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
 }
 
 // fsMatchesDecoder handles the fs.* namespace, whose IDs cannot be listed in

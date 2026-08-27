@@ -19,13 +19,14 @@
 // start when an option is given in both places, so the two cannot disagree
 // silently, but a flag the file never mentions is in force and unrecorded.
 // fact.DockerDaemon says so at length; a check reading it may state what the
-// file says and not what the daemon is doing. Joining against the systemd unit
-// is the SERVICES module's territory and a later work package.
+// file says and not what the daemon is doing.
 //
-// No CONTAINERS check exists yet. This is the collector half of the module and
-// it lands first, because a check may not be written against facts that are not
-// collected. It is deliberately not imported by internal/cli/catalog.go, so it
-// does not run in a scan until the checks that consume it are ready.
+// dockerservice.go is the other half of that sentence. It reads docker.service
+// and its drop-ins, which is where the command line actually lives, and the
+// two collectors together cover both places a daemon option can be set. They
+// stay separate deliberately — see ServiceID — and every check still says
+// which of the two it read, because a verdict drawn from one file must not be
+// phrased as a verdict about the daemon.
 package containers
 
 import (
@@ -235,6 +236,8 @@ func readConfig(s system.System, d *fact.DockerDaemon) {
 	d.Experimental = doc.Experimental
 	d.LiveRestore = doc.LiveRestore
 	d.NoNewPrivileges = doc.NoNewPrivileges
+	d.TLS = doc.TLS
+	d.TLSVerify = doc.TLSVerify
 	d.Hosts = doc.Hosts
 }
 
@@ -254,5 +257,7 @@ type daemonDoc struct {
 	Experimental    *bool    `json:"experimental"`
 	LiveRestore     *bool    `json:"live-restore"`
 	NoNewPrivileges *bool    `json:"no-new-privileges"`
+	TLS             *bool    `json:"tls"`
+	TLSVerify       *bool    `json:"tlsverify"`
 	Hosts           []string `json:"hosts"`
 }

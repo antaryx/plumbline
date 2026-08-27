@@ -1,0 +1,7 @@
+{
+  "description": "The vendor unit reads and its drop-in does not, as under an unprivileged scan. The file on disk binds nothing but fd://, deliberately: a check that reported PASS here would be reporting a verdict drawn from a file it never opened, and a drop-in is the single most likely place for the -H tcp:// that changes the answer.",
+  "euid": 1000,
+  "unreadable": [
+    "/etc/systemd/system/docker.service.d/override.conf"
+  ]
+}

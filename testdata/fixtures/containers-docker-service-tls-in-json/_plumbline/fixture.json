@@ -1,0 +1,3 @@
+{
+  "description": "The socket is bound in the unit and the certificates are configured in daemon.json. dockerd only refuses a *single* option given in both places, so splitting them across the two files is legal and not unusual. CONTAINERS-0006 has to read both or it would report a mutually authenticated endpoint as an open one, which is a critical false positive on a host that did the work."
+}

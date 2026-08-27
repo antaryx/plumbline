@@ -1,0 +1,3 @@
+{
+  "description": "The API on the network the supported way: tcp://0.0.0.0:2376 with --tlsverify, so a client must present a certificate signed by the configured CA. CONTAINERS-0006 passes it. The ExecStart is written across continuation lines, which is how anyone writes a command line this long and which the collector has to join before it can see the flags."
+}

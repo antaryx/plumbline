@@ -31,6 +31,12 @@
 // A unit body is operator data — ExecStart command lines, Environment=
 // assignments that routinely carry credentials — and collecting it would put
 // all of that into a travelling bundle for checks that never look at it.
+//
+// The CONTAINERS collector does read one unit body, and the shape of the
+// exception is what keeps this rule intact rather than what breaks it: it
+// reads a single named unit, keeps only its ExecStart, parses no Environment=
+// or EnvironmentFile=, and reads through ReadOpaque so the bytes stay out of
+// the bundle. Nothing here is a precedent for reading unit bodies in bulk.
 package services
 
 import (

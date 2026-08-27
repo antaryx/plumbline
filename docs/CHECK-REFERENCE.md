@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 18 · 88 checks · 11 modules**
+**Catalog version 19 · 89 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -687,6 +687,95 @@ docker info --format '{{.ExperimentalBuild}}'
 **References**
 
 - [Docker — daemon configuration file reference](https://docs.docker.com/reference/cli/dockerd/)
+
+---
+
+### CONTAINERS-0006 — The Docker daemon is not started with an unauthenticated TCP socket
+
+| | |
+|---|---|
+| Module | `CONTAINERS` |
+| Base severity | CRITICAL |
+| Since | catalog 19 |
+| Reads | `containers.docker_daemon`, `containers.docker_service` |
+| Tags | `containers`, `docker`, `remote-access`, `authentication`, `attack-surface` |
+
+The Docker API is root on the host. Anything that can reach
+it can start a container with the root filesystem bind-mounted and the SYS_ADMIN
+capability, which is not privilege escalation so much as the API working
+exactly as designed. The single line
+
+	docker -H tcp://target:2375 run -v /:/host --privileged -it alpine chroot /host
+
+is a root shell, and it needs no exploit and no credential.
+
+Nothing in the daemon authenticates a plain TCP client. There is no password,
+no token and no per-user access control: dockerd's own documentation is
+explicit that its API is intended to be reached over a unix socket whose file
+permissions are the access control, and that exposing it over TCP without TLS
+client verification hands the host to the network. Port 2375 is scanned
+continuously for exactly this reason, and an exposed daemon is typically mining
+cryptocurrency within hours rather than days.
+
+The stock unit every distribution ships binds -H fd://, which is the socket
+systemd hands over from docker.socket, and that is safe. The exposure is
+something an operator added, almost always through a drop-in:
+
+	/etc/systemd/system/docker.service.d/override.conf
+	    [Service]
+	    ExecStart=
+	    ExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375
+
+That is what "how do I connect Docker from another machine" answers with, and
+what remote-build, CI-runner and IDE-integration guides ask for. This check
+reads the effective ExecStart — the vendor unit with every drop-in folded onto
+it, in systemd's own precedence order — and reports a tcp:// binding that is
+not protected by client-certificate verification.
+
+**--tls is not enough and --tlsverify is.** The first encrypts the connection
+and asks nothing of the client, so anyone who can reach the port still gets a
+root shell over a nicely encrypted channel. Only --tlsverify makes the daemon
+require a certificate signed by the CA it was given, which is what turns the
+port from an open door into an authenticated one. A daemon.json that sets
+tlsverify counts here too: it and the -H flag are different options, so dockerd
+accepts them from different places.
+
+A binding to loopback is rated below one to a routable address, and it is still
+a finding. tcp://127.0.0.1:2375 is unreachable from the network and reachable
+by every local user on the host, by every container started with
+--network=host, and by anything that can be talked into making an HTTP request
+on the host's behalf — which is the standard second half of a server-side
+request forgery.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort MEDIUM
+
+Stop the daemon listening on TCP, or require client certificates on the socket that must stay.
+
+1. Find out what connects to it before removing it: a CI runner, a remote docker context, an IDE, or an orchestrator may depend on the port, and each of them needs a route to the daemon afterwards.
+2. See exactly what systemd is running, drop-ins and all: systemctl cat docker.service, and systemctl show -p ExecStart docker.service for the assembled line.
+3. If nothing needs remote access, remove the -H tcp:// argument from the ExecStart in the drop-in that added it — systemctl edit docker will open it — leaving -H fd:// on its own.
+4. If remote access is genuinely needed, do not simply add --tls: it encrypts without authenticating and leaves the port open to anyone who can reach it. Generate a CA and a server certificate, start the daemon with --tlsverify --tlscacert --tlscert --tlskey, and issue each client its own signed certificate.
+5. Prefer a route that needs no open port at all where one exists: docker context create --docker host=ssh://user@host carries the API over SSH and authenticates with the keys already deployed.
+6. Reload and restart: systemctl daemon-reload, then systemctl restart docker.
+7. Verify from another machine that the old port is closed, not merely firewalled off from where you happened to test.
+8. Treat any host that was exposed as suspect rather than fixed: an unauthenticated daemon is compromised in hours, so audit docker ps -a, the image list and the host's crontabs before considering the incident closed.
+
+```sh
+systemctl cat docker.service
+systemctl show -p ExecStart docker.service
+ss -lntp | grep -E ':(2375|2376)'
+```
+
+> **Caution.** Removing the binding disconnects every remote client immediately, and restarting the daemon stops every running container unless live-restore is enabled. A firewall in front of the port is a mitigation and not a fix: the API is still unauthenticated to anything inside the perimeter, including every container on the host.
+
+**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 IA-2`, `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`
+
+**References**
+
+- [Docker — protect the Docker daemon socket](https://docs.docker.com/engine/security/protect-access/)
+- [Docker — dockerd command line reference](https://docs.docker.com/reference/cli/dockerd/)
 
 ---
 

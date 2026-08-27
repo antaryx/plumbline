@@ -767,3 +767,85 @@ func TestDockerDaemonRoundTrip(t *testing.T) {
 		t.Errorf("accessors broke across the round trip: Parsed=%v Configurable=%v", d.Parsed(), d.Configurable())
 	}
 }
+
+// TestDockerServiceRoundTrip proves the containers.docker_service decoder
+// registration.
+//
+// It matters more here than for most facts because CONTAINERS-0006 is the
+// module's only Critical check and the failure would be silent in the worst
+// direction: an unregistered decoder reads the fact back as an UnknownFact, the
+// runner sees a required fact it cannot type, and a host whose Docker API is on
+// the network comes back as UNKNOWN from a bundle that recorded the binding
+// perfectly well.
+//
+// The nested slices are what a hand-written decoder gets wrong. Fragments and
+// ExecStart both carry the provenance a finding cites — which file, which line
+// — and an argv that survived as a joined string rather than as tokens would
+// still look right in a report while being unreadable to the flag parsing.
+func TestDockerServiceRoundTrip(t *testing.T) {
+	src := fact.DockerService{
+		State:  fact.DockerUnitPresent,
+		Unit:   "docker.service",
+		Path:   "/lib/systemd/system/docker.service",
+		Digest: "1f2e3d4c5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a",
+		Fragments: []fact.UnitFragment{
+			{
+				Path:   "/lib/systemd/system/docker.service",
+				Kind:   fact.FragmentUnit,
+				State:  fact.DockerUnitPresent,
+				Digest: "1f2e3d4c5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a",
+			},
+			{
+				Path:       "/lib/systemd/system/docker.service.d/override.conf",
+				Kind:       fact.FragmentDropIn,
+				State:      fact.DockerUnitPresent,
+				Shadowed:   true,
+				ShadowedBy: "/etc/systemd/system/docker.service.d/override.conf",
+			},
+			{
+				Path:  "/etc/systemd/system/docker.service.d/50-tcp.conf",
+				Kind:  fact.FragmentDropIn,
+				State: fact.DockerUnitDenied,
+				Msg:   "the file exists and could not be read",
+			},
+		},
+		ExecStart: []fact.DockerExec{{
+			Origin:   "/etc/systemd/system/docker.service.d/override.conf",
+			Line:     4,
+			Prefixes: "-",
+			Argv:     []string{"/usr/bin/dockerd", "-H", "fd://", "-H", "tcp://0.0.0.0:2375"},
+		}},
+	}
+
+	s := fact.NewSet()
+	s.Put(src)
+	got := read(t, write(t, testBundle(s)))
+
+	u, ferr, ok := fact.Get[fact.DockerService](got.Facts, fact.DockerServiceID)
+	if !ok {
+		t.Fatalf("containers.docker_service not readable after round trip: err=%v", ferr)
+	}
+	if !reflect.DeepEqual(u, src) {
+		t.Errorf("containers.docker_service changed:\n want %#v\n  got %#v", src, u)
+	}
+
+	// The derived readings a check actually calls, exercised on the far side
+	// of the bundle. These are the reason the extraction lives on the fact
+	// rather than in the collector: a bundle recorded today is re-read by a
+	// later build's understanding of dockerd's flag grammar.
+	hosts := u.Hosts()
+	if len(hosts) != 2 || hosts[1].Spec != "tcp://0.0.0.0:2375" {
+		t.Errorf("Hosts() = %+v, want fd:// and tcp://0.0.0.0:2375", hosts)
+	}
+	if hosts[1].Line != 4 {
+		t.Errorf("the binding lost its line number: %+v", hosts[1])
+	}
+	// A shadowed fragment is not a gap; a denied one is.
+	gaps := u.Incomplete()
+	if len(gaps) != 1 || gaps[0].Path != "/etc/systemd/system/docker.service.d/50-tcp.conf" {
+		t.Errorf("Incomplete() = %+v, want only the denied drop-in", gaps)
+	}
+	if u.Complete() {
+		t.Error("Complete() = true across a round trip that carried an unread drop-in")
+	}
+}

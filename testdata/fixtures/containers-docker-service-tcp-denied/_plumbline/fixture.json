@@ -1,0 +1,7 @@
+{
+  "description": "An exposed daemon seen through an unprivileged scan: one drop-in binds tcp://0.0.0.0:2375 and can be read, a second drop-in beside it cannot. ADR-0014 decides the verdict - an incomplete examination invalidates a negative result and never a positive one - so the binding that was found is a FAIL whatever the unread file might have said.",
+  "euid": 1000,
+  "unreadable": [
+    "/etc/systemd/system/docker.service.d/20-extra.conf"
+  ]
+}

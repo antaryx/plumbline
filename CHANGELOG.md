@@ -12,6 +12,76 @@ explanation in this file is a defect.
 ## [Unreleased]
 
 ### Added
+- **`CONTAINERS-0006` (unauthenticated TCP socket) and the `docker.service`
+  collector it reads.** Catalog 19, 89 checks. The module's only `CRITICAL`,
+  and the first check in the tree that reads a systemd unit body.
+
+  The Docker API is root on the host and authenticates nobody over plain TCP:
+  a reachable `tcp://…:2375` is `docker run -v /:/host --privileged` away from a
+  root shell, with no exploit and no credential involved. Port 2375 is scanned
+  continuously and an exposed daemon is mining cryptocurrency within hours.
+  Severity drops to `HIGH`, not to a pass, when every binding is to loopback:
+  that is unreachable from the network and reachable by every local user, by
+  every `--network=host` container, and by the second half of an SSRF.
+
+  `--tls` does not clear the check and `--tlsverify` does. The first encrypts
+  and asks the client for nothing, so anyone who can reach the port still gets
+  a root shell over a well-encrypted channel; only the second requires a
+  certificate the daemon's CA signed. `tlsverify` is honoured from
+  `daemon.json` as well as from the unit — they are different options, so
+  `dockerd` accepts the split, and reading only the unit would report a
+  mutually authenticated endpoint as an open one.
+
+- **`containers.docker_service`, the other half of the daemon's configuration.**
+  `fact.DockerDaemon` has said since it landed that an option passed on
+  `dockerd`'s command line is invisible to it. This is that command line:
+  `docker.service` plus its drop-ins, folded in systemd's own order, with the
+  `ExecStart` arguments split the way systemd splits them.
+
+  **Reading the drop-ins is the collector, not a refinement of it.** Every
+  distribution ships the same vendor unit binding `-H fd://`, so the unit file
+  on an exposed host is byte-identical to the unit file on a safe one — the
+  exposure lives in `/etc/systemd/system/docker.service.d/override.conf`, which
+  is what `systemctl edit docker` writes and what every "reach Docker from
+  another machine" guide asks for. A collector that read only the unit file
+  would report the stock answer on the hosts this check exists for.
+
+  Two systemd precedence rules are implemented rather than approximated,
+  because both change verdicts. A drop-in whose *filename* appears in a
+  higher-precedence directory is ignored entirely, which is how an
+  administrator neutralises a vendor drop-in; applying it anyway would report a
+  critical exposure on a host somebody had deliberately fixed. And the
+  surviving set is applied in lexical order *by filename across all
+  directories*, not in directory order, so `10-foo.conf` from `/usr/lib`
+  applies before `20-bar.conf` from `/etc` — and the last `ExecStart` to be
+  applied is the one that runs.
+
+- **Unit bodies are read through `ReadOpaque`, so they never enter a bundle.**
+  Only the `ExecStart` arguments and a digest travel. This is the one place the
+  new collector departs from its sibling, which reads `daemon.json` through the
+  ordinary `ReadFile` and stores the bytes: a Docker host's `override.conf` is
+  where `Environment="HTTPS_PROXY=https://user:password@proxy"` lives, and that
+  is the ADR-0015 concern rather than a theoretical one. `Environment=` and
+  `EnvironmentFile=` are not parsed at all, and a `$DOCKER_OPTS` left in the
+  command line is reported as an ambiguity rather than resolved by reading a
+  file full of secrets. `TestUnitBytesDoNotEnterTheBundle` asserts the method.
+
+- **`TLS` and `TLSVerify` on `fact.DockerDaemon`.** Additive optional fields, so
+  `containers.docker_daemon` stays at version 1 per §2.2 of the data model.
+  They exist for where they are *not*: the socket is bound in the unit and the
+  certificates are often configured in `daemon.json`, and without them a host
+  that did the work would be reported as an open one.
+
+### Changed
+- **`CONTAINERS-0006` is `UNKNOWN` on all six golden bundles**, and the pins
+  record it. Every one was recorded before `containers.docker_service` existed,
+  so the fact the check requires is not in them and the runner resolves it to
+  `UNKNOWN(fact_not_collected)` — DATA-MODEL §6.1 working as promised. Coverage
+  falls on each bundle; no verdict moves, and every posture score is unchanged.
+  Clearing it means a recording recipe that installs Docker, which the roadmap
+  already names as its own work package.
+
+### Added
 - **`MEMORY` module completed.** `MEMORY-0002` (full RELRO), `MEMORY-0003`
   (stack protection) and `MEMORY-0004` (`_FORTIFY_SOURCE`) join `MEMORY-0001`.
   Catalog 15, 83 checks. None is in the `cis-l1` profile: the CIS Level 1 server

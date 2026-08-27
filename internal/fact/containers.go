@@ -1,5 +1,10 @@
 package fact
 
+import (
+	"fmt"
+	"strings"
+)
+
 // DockerDaemonID names the Docker daemon configuration fact.
 const DockerDaemonID ID = "containers.docker_daemon"
 
@@ -153,6 +158,25 @@ type DockerDaemon struct {
 	// Default false.
 	NoNewPrivileges *bool `json:"no_new_privileges,omitempty"`
 
+	// TLS and TLSVerify are the daemon's transport security for its API
+	// socket. Default false, so both are pointers for the reason the rest are.
+	//
+	// They are here because of where they are *not*. A host that exposes the
+	// API over the network does it with -H tcp:// on the dockerd command line,
+	// which lives in the systemd unit and not in this file — but it may well
+	// turn TLS on here, since the two are different options and dockerd only
+	// refuses a *single* option given in both places. CONTAINERS-0006 reads
+	// the unit for the binding and these two for whether it is protected, and
+	// without them it would report a mutually authenticated endpoint as an
+	// open one.
+	//
+	// The distinction between them is not cosmetic. tls encrypts; tlsverify
+	// encrypts *and* requires a client certificate signed by the configured
+	// CA. Only the second is authentication, and an API that is encrypted and
+	// unauthenticated is reachable by anyone who can reach the port.
+	TLS       *bool `json:"tls,omitempty"`
+	TLSVerify *bool `json:"tls_verify,omitempty"`
+
 	// Hosts are the sockets the daemon listens on, as written.
 	//
 	// The Docker API is root-equivalent and unauthenticated by default, so a
@@ -189,4 +213,354 @@ func (d DockerDaemon) HasKey(name string) bool {
 		}
 	}
 	return false
+}
+
+// ---------------------------------------------------------------------------
+// containers.docker_service
+// ---------------------------------------------------------------------------
+
+// DockerServiceID names the Docker systemd unit fact.
+const DockerServiceID ID = "containers.docker_service"
+
+// DockerServiceUnit is the unit this fact is about. It is fixed rather than
+// discovered: the question being answered is "how is the Docker daemon on this
+// host started", and on every distribution that ships Docker the answer is
+// this unit.
+const DockerServiceUnit = "docker.service"
+
+// DockerUnitState is what the collector was able to observe about a unit file
+// or one of its drop-ins.
+//
+// It is a separate enumeration from DockerConfigState and not a reuse of it,
+// even though four of the values have the same names. The states a JSON
+// document can be in are not the states a systemd unit can be in — a unit can
+// be *masked*, which has no analogue in a configuration file and is the one
+// state here that means "this file exists and systemd deliberately ignores it".
+type DockerUnitState string
+
+const (
+	// DockerUnitPresent means the unit was found and read. The typed fields
+	// are meaningful only in this state.
+	DockerUnitPresent DockerUnitState = "present"
+	// DockerUnitAbsent means no docker.service exists in any unit search
+	// directory.
+	//
+	// Unlike DockerConfigAbsent this really is an absence rather than a
+	// configuration. A unit file that does not exist starts nothing, and there
+	// are no compiled-in defaults for systemd to fall back on. It does not
+	// follow that the daemon is not running — a dockerd started by hand, by
+	// another init system, or by a unit under a different name is invisible
+	// here — which is why a check reading this may not say the daemon is not
+	// listening on anything. It may only say this host has no docker.service.
+	DockerUnitAbsent DockerUnitState = "absent"
+	// DockerUnitMasked means the unit is a symbolic link to /dev/null.
+	//
+	// That is what `systemctl mask docker` writes, and systemd refuses to
+	// start a masked unit at all, by hand or as a dependency. Whatever the
+	// vendor unit underneath says is not in force, so its ExecStart is not
+	// evidence of anything about this host.
+	DockerUnitMasked DockerUnitState = "masked"
+	// DockerUnitDenied means the file exists and could not be read.
+	DockerUnitDenied DockerUnitState = "denied"
+	// DockerUnitNotRegular means something is at the path and it is neither a
+	// regular file nor a symlink to one.
+	DockerUnitNotRegular DockerUnitState = "not_regular"
+	// DockerUnitTruncated means the read hit the cap, so directives past the
+	// cut are unread and no absence may be concluded.
+	DockerUnitTruncated DockerUnitState = "truncated"
+	// DockerUnitError means the read failed for a reason worth recording
+	// verbatim.
+	DockerUnitError DockerUnitState = "error"
+)
+
+// UnitFragmentKind distinguishes the parts a systemd unit is assembled from.
+type UnitFragmentKind string
+
+const (
+	// FragmentUnit is the unit file itself.
+	FragmentUnit UnitFragmentKind = "unit"
+	// FragmentDropIn is one .conf under a docker.service.d directory.
+	FragmentDropIn UnitFragmentKind = "drop_in"
+	// FragmentDropInDir is a docker.service.d directory whose listing failed.
+	// It is recorded because a directory that could not be listed may hold a
+	// drop-in that changes the answer, and nothing may conclude absence from a
+	// listing that did not happen.
+	FragmentDropInDir UnitFragmentKind = "drop_in_dir"
+)
+
+// UnitFragment is one file that did, or would have, contributed to the
+// effective unit.
+//
+// The list exists so that a check can say *why* it does not know. "The unit
+// binds no TCP socket" and "the unit binds no TCP socket that I could see" are
+// different claims, and an override.conf that could not be read is exactly the
+// file most likely to contain the binding — adding one is the documented way
+// to change a vendor unit's ExecStart.
+type UnitFragment struct {
+	Path  string           `json:"path"`
+	Kind  UnitFragmentKind `json:"kind"`
+	State DockerUnitState  `json:"state"`
+	// Resolved is where a symlinked fragment actually pointed. Empty when the
+	// path was not a link.
+	Resolved string `json:"resolved,omitempty"`
+	// Digest is the sha256 of the bytes read, so a finding can cite the exact
+	// text it drew a conclusion from. See DockerService for why the bytes
+	// themselves are not in the bundle.
+	Digest string `json:"digest,omitempty"`
+	Msg    string `json:"msg,omitempty"`
+	// Shadowed marks a drop-in systemd would not apply, because a
+	// higher-precedence directory holds a .conf of the same name. It is
+	// recorded rather than dropped: a shadowed override is a file an operator
+	// edited and a daemon never read, which is a mistake worth being able to
+	// see.
+	Shadowed bool `json:"shadowed,omitempty"`
+	// ShadowedBy is the path that won.
+	ShadowedBy string `json:"shadowed_by,omitempty"`
+}
+
+// DockerExec is one effective ExecStart directive, split into arguments.
+//
+// Argv is the command line as systemd would split it — whitespace separated,
+// honouring single and double quotes — with the executable at index 0 and
+// systemd's own prefix characters stripped into Prefixes. It is *not*
+// expanded: a $VARIABLE stays a $VARIABLE, because what it expands to lives in
+// an Environment= assignment or an EnvironmentFile that this collector
+// deliberately does not read. See DockerService.Ambiguities.
+type DockerExec struct {
+	// Origin is the fragment this directive survived from.
+	Origin string `json:"origin"`
+	// Line is the 1-based line in that fragment, so evidence points somewhere.
+	Line int `json:"line"`
+	// Prefixes are the systemd modifier characters that preceded the
+	// executable ("@", "-", ":", "+", "!", "!!"), as written. Recorded because
+	// "-" makes a failure non-fatal and "+" runs without the unit's sandbox,
+	// and both change what the line means.
+	Prefixes string   `json:"prefixes,omitempty"`
+	Argv     []string `json:"argv"`
+}
+
+// DockerHostBinding is one -H/--host value from the effective ExecStart.
+type DockerHostBinding struct {
+	// Spec is the socket specification as written: "fd://", "unix:///var/run/
+	// docker.sock", "tcp://0.0.0.0:2375". Never normalised — "tcp://0.0.0.0"
+	// and "tcp://127.0.0.1" are the same option and opposite exposures.
+	Spec   string `json:"spec"`
+	Origin string `json:"origin"`
+	Line   int    `json:"line"`
+}
+
+// DockerService is how systemd starts the Docker daemon, as written.
+//
+// It is the other half of the pair DockerDaemon warned about. That fact
+// records /etc/docker/daemon.json and says at length that an option passed to
+// dockerd on its command line is invisible to it; this one reads the command
+// line. Between them the two cover both places a daemon option can be set,
+// which matters most for the sockets the API listens on: the stock unit passes
+// -H fd:// and the documented way to expose the API over the network is to add
+// a drop-in that passes -H tcp://, neither of which appears in daemon.json at
+// all. dockerd refuses to start when an option is given in both places, so the
+// two facts cannot describe conflicting live configurations.
+//
+// **The bytes of these files are not in the bundle.** They are read through
+// ReadOpaque, so what travels is the digest and the ExecStart arguments and
+// nothing else. That is not the trade DockerDaemon makes, and the reason is
+// what else lives in a unit: an override.conf is where a fleet puts
+// Environment="HTTPS_PROXY=https://user:password@proxy", which is the single
+// most common way a credential ends up in /etc on a Docker host. Storing the
+// whole fragment as an evidence blob would put those in an artifact designed
+// to travel, which is the concern ADR-0015 exists for. Only ExecStart is kept,
+// because only ExecStart is read.
+//
+// **What is not modelled**, and would change the answer if it were set:
+//
+//   - EnvironmentFile= and Environment=, so a $DOCKER_OPTS in the command line
+//     is recorded unexpanded and reported as an ambiguity rather than guessed
+//     at. See Ambiguities.
+//   - systemd's % specifiers, which are not expanded either. None of them
+//     appear in any distribution's docker.service.
+//   - Top-level drop-in directories (/etc/systemd/system/service.d/), which
+//     apply to every service on the host rather than to this unit.
+//   - socket activation. The stock unit binds fd://, which means the listening
+//     socket comes from docker.socket rather than from dockerd. A tcp:// entry
+//     in docker.socket's ListenStream= exposes the API exactly as -H tcp://
+//     would and is not read here.
+type DockerService struct {
+	State DockerUnitState `json:"state"`
+	// Unit is the unit name looked for, always DockerServiceUnit.
+	Unit string `json:"unit"`
+	// Path is the unit file that won, or where one was looked for last when
+	// none did.
+	Path string `json:"path,omitempty"`
+	// Digest is the sha256 of the unit file's bytes. Empty when it was not
+	// read.
+	Digest string `json:"digest,omitempty"`
+	// Msg carries the reason for any state other than DockerUnitPresent.
+	Msg string `json:"msg,omitempty"`
+
+	// Fragments is every file that contributed or was meant to, in systemd's
+	// own application order: the unit first, then its drop-ins.
+	Fragments []UnitFragment `json:"fragments,omitempty"`
+
+	// ExecStart is the effective list, after drop-ins and after the resets
+	// they use to clear it.
+	//
+	// systemd folds ExecStart across fragments: a non-empty assignment appends
+	// and an empty one ("ExecStart=") clears the list, which is why every
+	// documented Docker override starts with a bare ExecStart= line. What is
+	// recorded here is the result of that fold and not the lines that produced
+	// it, because the result is what runs.
+	ExecStart []DockerExec `json:"exec_start,omitempty"`
+}
+
+func (DockerService) FactID() ID       { return DockerServiceID }
+func (DockerService) FactVersion() int { return 1 }
+
+// Judgeable reports whether ExecStart may be read as the daemon's command
+// line. False for every state in which some part of the unit was not seen.
+func (s DockerService) Judgeable() bool { return s.State == DockerUnitPresent }
+
+// Complete reports whether every fragment that would have contributed was
+// actually read.
+//
+// It is separate from State because the failure it describes is partial: the
+// unit itself can read perfectly while a drop-in beside it is unreadable, and
+// a drop-in is precisely where an operator puts the flag that changes the
+// answer. A check that looked only at State would report on a command line it
+// had only part of.
+func (s DockerService) Complete() bool { return len(s.Incomplete()) == 0 }
+
+// Incomplete returns the fragments that were not read, excluding shadowed ones
+// — systemd would not have applied those, so failing to read one changes
+// nothing.
+func (s DockerService) Incomplete() []UnitFragment {
+	var out []UnitFragment
+	for _, f := range s.Fragments {
+		if f.Shadowed || f.State == DockerUnitPresent {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// Hosts returns every -H/--host value in the effective ExecStart, in order.
+//
+// The extraction lives here rather than in the collector on purpose. A fact
+// records what was observed; which of those bytes constitute a socket binding
+// is a reading of dockerd's flag grammar, and readings improve. Keeping it on
+// this side of the bundle means a bundle recorded today is re-read by a later
+// build's understanding of the grammar, which is the promise DATA-MODEL.md
+// §6.1 makes and which a collector-side extraction would quietly break.
+//
+// pflag, which dockerd uses, accepts a shorthand's value in three forms —
+// "-H tcp://x", "-Htcp://x" and "-H=tcp://x" — and the long form in two. All
+// five are recognised. A clustered shorthand that hides an H ("-DH tcp://x")
+// is not, and is reported by Ambiguities instead of being read wrongly.
+func (s DockerService) Hosts() []DockerHostBinding {
+	var out []DockerHostBinding
+	for _, e := range s.ExecStart {
+		for i := 1; i < len(e.Argv); i++ {
+			spec, consumed, ok := hostFlagAt(e.Argv, i)
+			if !ok {
+				continue
+			}
+			i += consumed
+			out = append(out, DockerHostBinding{Spec: spec, Origin: e.Origin, Line: e.Line})
+		}
+	}
+	return out
+}
+
+// hostFlagAt reads a -H/--host at argv[i], returning its value and how many
+// extra tokens it consumed.
+func hostFlagAt(argv []string, i int) (spec string, consumed int, ok bool) {
+	tok := argv[i]
+
+	next := func() (string, int, bool) {
+		if i+1 < len(argv) {
+			return argv[i+1], 1, true
+		}
+		// A trailing "-H" with nothing after it. dockerd would refuse to
+		// start; there is no value to report and inventing one would be worse
+		// than reporting none.
+		return "", 0, false
+	}
+
+	switch {
+	case tok == "--host":
+		return next()
+	case strings.HasPrefix(tok, "--host="):
+		return strings.TrimPrefix(tok, "--host="), 0, true
+	case tok == "-H":
+		return next()
+	case strings.HasPrefix(tok, "-H"):
+		// "-Htcp://x" and "-H=tcp://x".
+		return strings.TrimPrefix(tok[2:], "="), 0, true
+	}
+	return "", 0, false
+}
+
+// BoolFlag reports whether a dockerd boolean long flag is in force in the
+// effective ExecStart. name is given without dashes ("tlsverify").
+//
+// pflag booleans are true when named alone and take a value only in the
+// --flag=value form, so "--tlsverify=false" is a real way to write off and is
+// read as one. A flag named more than once takes its last value, as pflag
+// does.
+func (s DockerService) BoolFlag(name string) bool {
+	on, _ := s.boolFlag(name)
+	return on
+}
+
+func (s DockerService) boolFlag(name string) (on, set bool) {
+	long, eq := "--"+name, "--"+name+"="
+	for _, e := range s.ExecStart {
+		for _, tok := range e.Argv {
+			switch {
+			case tok == long:
+				on, set = true, true
+			case strings.HasPrefix(tok, eq):
+				v := strings.TrimPrefix(tok, eq)
+				on = !(v == "false" || v == "0" || v == "f" || v == "no" || v == "off")
+				set = true
+			}
+		}
+	}
+	return on, set
+}
+
+// Ambiguities returns the reasons this build cannot claim to have read the
+// whole command line, one human-readable sentence each.
+//
+// There are two, and both are the same mistake avoided. An unexpanded
+// $DOCKER_OPTS may hold "-H tcp://0.0.0.0:2375" and this collector does not
+// read the environment file that would say; a clustered shorthand may hide an
+// -H that a naive scan of the token would miss. In either case the honest
+// answer to "does this unit bind a TCP socket" is that it cannot be
+// determined, and a check reading an empty list from Hosts must consult this
+// before calling that a pass.
+func (s DockerService) Ambiguities() []string {
+	var out []string
+	for _, e := range s.ExecStart {
+		for i := 1; i < len(e.Argv); i++ {
+			tok := e.Argv[i]
+			switch {
+			case strings.Contains(tok, "$"):
+				out = append(out, fmt.Sprintf("%s line %d passes %s, whose value comes from an environment file this scan does not read", e.Origin, e.Line, tok))
+			case clusterHidesHost(tok):
+				out = append(out, fmt.Sprintf("%s line %d passes %s, a clustered shorthand whose -H value this build will not guess at", e.Origin, e.Line, tok))
+			}
+		}
+	}
+	return out
+}
+
+// clusterHidesHost reports a single-dash token that contains an H somewhere
+// other than the front, where pflag would read it as a shorthand -H whose
+// value depends on what the letters before it consume.
+func clusterHidesHost(tok string) bool {
+	if len(tok) < 2 || tok[0] != '-' || tok[1] == '-' {
+		return false
+	}
+	return strings.Contains(tok[2:], "H")
 }

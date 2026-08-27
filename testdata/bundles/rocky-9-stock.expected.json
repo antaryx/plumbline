@@ -1,7 +1,7 @@
 {
   "bundle": "rocky-9-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 18,
+  "catalog_version": 19,
   "scan": {
     "started": "2026-08-25T21:31:51.893733451Z",
     "finished": "2026-08-25T21:31:52.46518356Z",
@@ -18,8 +18,8 @@
       "fail": 11,
       "not_applicable": 39,
       "skipped": 0,
-      "unknown": 1,
-      "total": 88
+      "unknown": 2,
+      "total": 89
     },
     "by_severity": {
       "HIGH": 2,
@@ -27,7 +27,7 @@
       "MEDIUM": 6
     },
     "posture": 81.25,
-    "coverage": 97.95918367346938
+    "coverage": 96
   },
   "findings": [
     {
@@ -223,6 +223,16 @@
       "base_severity": "LOW",
       "fingerprint": "4e3012571d5172ead64bd0f5a929bee4",
       "detail": "No dockerd binary was found on this host, so there is no Docker daemon configuration to report on."
+    },
+    {
+      "check_id": "CONTAINERS-0006",
+      "module": "CONTAINERS",
+      "result": "UNKNOWN",
+      "severity": "CRITICAL",
+      "base_severity": "CRITICAL",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "4c92f8bc337c9228ef90b3197522075a",
+      "detail": "required fact containers.docker_service was not collected"
     },
     {
       "check_id": "CRON-0001",

@@ -23,6 +23,7 @@ A `.plb` is host inventory. Treat it as sensitive.
 | PAM stack structure and module arguments | Policy, not credentials |
 | Kernel parameters | Running values and the configured files |
 | Mount table, firewall configuration, cron and logging configuration | |
+| The Docker daemon's `ExecStart` | From `docker.service` and its drop-ins — **that one line, and no other part of the unit** |
 | Filesystem **aggregates** | Counts of setuid, world-writable, unowned inodes, with a small number of example paths |
 | Hostname and OS release | Unless `--redact` |
 | Evidence blobs | The raw bytes of the configuration files a finding cites |
@@ -35,7 +36,16 @@ A `.plb` is host inventory. Treat it as sensitive.
 - **No private keys**, no `authorized_keys` contents, no certificates.
 - **No file contents from user home directories.** The filesystem walk records
   metadata — mode, owner, size — and never reads a file it walks.
-- **No process list, no command lines, no environment variables.**
+- **No process list and no environment variables.** One *configured* command
+  line is collected: the `ExecStart=` of `docker.service`, because the flags on
+  it decide whether the Docker API is exposed to the network, which is the
+  highest-severity finding this tool makes. Nothing else in the unit is kept —
+  the fragments are read through the seam's opaque path, so their bytes never
+  reach the evidence store, and `Environment=` and `EnvironmentFile=` are not
+  parsed at all. That is the specific concern rather than a general one: a
+  Docker host's `docker.service.d/override.conf` is the usual home of
+  `Environment="HTTPS_PROXY=https://user:password@proxy"`. No other unit on the
+  host is read for its contents by anything in the tree.
 - **No network addresses.** Firewall *configuration* is read; interfaces are
   named, addresses are not.
 

@@ -1,0 +1,3 @@
+{
+  "description": "The older Debian arrangement: the unit ends in $DOCKER_OPTS and the flags live in /etc/default/docker. The collector does not read environment files - that is where a Docker host's proxy credentials live - so it records the variable unexpanded and CONTAINERS-0006 answers UNKNOWN. The environment file here really does contain -H tcp://0.0.0.0:2375, which is the point: a check that ignored the unread token would have reported this exposed host as a pass."
+}

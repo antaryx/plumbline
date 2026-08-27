@@ -18,6 +18,22 @@ const fixtureRoot = "../../../../testdata/fixtures"
 
 // all is the CONTAINERS module as this work package leaves it.
 var all = []catalog.Check{
+	checks.Check0001, checks.Check0002, checks.Check0003, checks.Check0004,
+	checks.Check0005, checks.Check0006,
+}
+
+// daemonChecks are the checks that read /etc/docker/daemon.json, which is
+// every one of them except CONTAINERS-0006.
+//
+// The split exists because most of the invariants below are properties of
+// *that file* — that a missing one is judged rather than excused, that an
+// unreadable one produces no verdict, that every detail says it read only the
+// file — and none of them is a property of a systemd unit. CONTAINERS-0006
+// reads the unit and has the mirror image of each: a missing unit really is
+// NOT_APPLICABLE, because systemd has no compiled-in docker.service to fall
+// back on. Running the daemon invariants over it would assert the opposite of
+// what it is for.
+var daemonChecks = []catalog.Check{
 	checks.Check0001, checks.Check0002, checks.Check0003, checks.Check0004, checks.Check0005,
 }
 
@@ -39,8 +55,14 @@ func collectFixture(t *testing.T, name string) *fact.Set {
 		t.Fatalf("load fixture %s: %v", name, err)
 	}
 	facts := fact.NewSet()
+	// Both collectors, because the module now reads two files and a check
+	// tested against only one of them is a check tested against a fact set no
+	// scan ever produces.
 	if err := collector.New().Collect(context.Background(), sys, facts); err != nil {
 		t.Fatalf("collect fixture %s: %v", name, err)
+	}
+	if err := collector.NewService().Collect(context.Background(), sys, facts); err != nil {
+		t.Fatalf("collect service fixture %s: %v", name, err)
 	}
 	return facts
 }
@@ -269,7 +291,7 @@ func TestAMissingConfigIsJudgedNotExcused(t *testing.T) {
 	// The remedy differs by whether a file exists at all — "create the file"
 	// rather than "edit the line" — and a passing finding that hid the
 	// distinction would be describing a file that is not there.
-	for _, check := range all {
+	for _, check := range daemonChecks {
 		running := evalCheck(t, check, "containers-docker-defaults")
 		if running.Result == finding.NotApplicable || running.Result == finding.Unknown {
 			t.Errorf("%s = %s on a host with dockerd and no daemon.json; the defaults are a configuration: %s",
@@ -336,7 +358,7 @@ func TestUnreadableConfigNeverProducesAVerdict(t *testing.T) {
 		"containers-docker-wrongtype",
 		"containers-docker-notobject",
 	} {
-		for _, check := range all {
+		for _, check := range daemonChecks {
 			got := evalCheck(t, check, fixture)
 			if got.Result != finding.Unknown {
 				t.Errorf("%s = %s over %s, want UNKNOWN: %s", check.ID, got.Result, fixture, got.Detail)
@@ -405,7 +427,7 @@ func TestChecksAreIndependent(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.fixture, func(t *testing.T) {
-			for _, check := range all {
+			for _, check := range daemonChecks {
 				got := evalCheck(t, check, c.fixture)
 				if want := c.want[check.ID]; got.Result != want {
 					t.Errorf("%s = %s, want %s: %s", check.ID, got.Result, want, got.Detail)
@@ -459,7 +481,7 @@ func TestEveryVerdictCarriesTheReadingCaveat(t *testing.T) {
 		"containers-docker-no-live-restore",
 		"containers-docker-experimental-only",
 	} {
-		for _, check := range all {
+		for _, check := range daemonChecks {
 			got := evalCheck(t, check, fixture)
 			if !strings.Contains(got.Detail, "daemon.json only") {
 				t.Errorf("%s over %s does not say it read only the file: %s", check.ID, fixture, got.Detail)
@@ -473,7 +495,7 @@ func TestEveryVerdictCarriesTheReadingCaveat(t *testing.T) {
 // digest can be followed. A finding citing a digest the store does not hold
 // sends an auditor after something nobody kept.
 func TestEvidenceResolvesInTheEvidenceStore(t *testing.T) {
-	for _, check := range all {
+	for _, check := range daemonChecks {
 		withFile := evalCheck(t, check, "containers-docker-hardened")
 		if len(withFile.Evidence) == 0 || withFile.Evidence[0].SHA256 == "" {
 			t.Errorf("%s cites no digest for a file it read: %+v", check.ID, withFile.Evidence)
@@ -510,6 +532,256 @@ func TestMissingFactResolvesToUnknown(t *testing.T) {
 		}
 		if got[0].UnknownReason != finding.ReasonFactMissing {
 			t.Errorf("%s reason = %q, want %q", check.ID, got[0].UnknownReason, finding.ReasonFactMissing)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CONTAINERS-0006, which reads the unit rather than the file
+// ---------------------------------------------------------------------------
+
+func TestCheck0006SocketBinding(t *testing.T) {
+	run(t, checks.Check0006, []tc{
+		// The unit every distribution ships. -H fd:// is the socket systemd
+		// hands over, and nothing is on the network.
+		{fixture: "containers-docker-service-stock", result: finding.Pass,
+			detailContains: "no TCP socket"},
+
+		// The exposure, and the reason drop-ins are read: the unit file itself
+		// still says fd://.
+		{fixture: "containers-docker-service-tcp", result: finding.Fail,
+			severity: finding.Critical, detailContains: "tcp://0.0.0.0:2375"},
+
+		// Not reachable from the network. Reachable by every local user, by
+		// every --network=host container, and by anything that can be talked
+		// into making a request from this host.
+		{fixture: "containers-docker-service-loopback", result: finding.Fail,
+			severity: finding.High, detailContains: "loopback"},
+
+		// The supported way to put the API on the network.
+		{fixture: "containers-docker-service-tls", result: finding.Pass,
+			detailContains: "client-certificate verification"},
+
+		// The same, with the flag and the certificates configured in
+		// different files.
+		{fixture: "containers-docker-service-tls-in-json", result: finding.Pass,
+			detailContains: "/etc/docker/daemon.json"},
+
+		// systemd applies the higher-precedence file of the two and ignores
+		// the other, so the tcp:// in /lib is not in force.
+		{fixture: "containers-docker-service-shadowed", result: finding.Pass,
+			detailContains: "no TCP socket"},
+
+		// A drop-in is the single most likely place for the flag that changes
+		// the answer, so an unread one is not an absence.
+		{fixture: "containers-docker-service-denied", result: finding.Unknown,
+			reason: finding.ReasonPermission, detailContains: "was not read"},
+
+		// The flags are in /etc/default/docker, which this collector does not
+		// read. The variable survives as a token and the check says so.
+		{fixture: "containers-docker-service-envvar", result: finding.Unknown,
+			reason: finding.ReasonAmbiguousState, detailContains: "$DOCKER_OPTS"},
+
+		// A binding that was found outranks a file that was not read.
+		{fixture: "containers-docker-service-tcp-denied", result: finding.Fail,
+			severity: finding.Critical, detailContains: "tcp://0.0.0.0:2375"},
+
+		// systemd refuses to start a masked unit, so its command line is not
+		// in force and no verdict may be drawn from it.
+		{fixture: "containers-docker-service-masked", result: finding.NotApplicable,
+			detailContains: "masked"},
+
+		// Docker installed, started some other way. Not a pass: this check
+		// cannot see that command line and says so.
+		{fixture: "containers-docker-hardened", result: finding.NotApplicable,
+			detailContains: "started some other way"},
+
+		// No Docker at all.
+		{fixture: "containers-absent", result: finding.NotApplicable,
+			detailContains: "no docker.service"},
+	})
+}
+
+// TestTheVerdictComesFromTheEffectiveCommandLine is the property that
+// separates this check from a grep of docker.service.
+//
+// Both fixtures ship the identical vendor unit, which binds -H fd:// and
+// nothing else. The verdicts are opposite, and the whole of the difference is
+// a file in a .d directory that systemd folds on top.
+func TestTheVerdictComesFromTheEffectiveCommandLine(t *testing.T) {
+	stock := evalCheck(t, checks.Check0006, "containers-docker-service-stock")
+	exposed := evalCheck(t, checks.Check0006, "containers-docker-service-tcp")
+
+	if stock.Result != finding.Pass || exposed.Result != finding.Fail {
+		t.Fatalf("stock = %s, drop-in = %s; want PASS and FAIL", stock.Result, exposed.Result)
+	}
+	if !strings.Contains(exposed.Evidence[0].Source, "docker.service.d") {
+		t.Errorf("the finding cites %q rather than the drop-in that caused it", exposed.Evidence[0].Source)
+	}
+	if exposed.Evidence[0].Line == 0 {
+		t.Error("the finding cites no line; an operator has to be told where to look")
+	}
+}
+
+// TestAShadowedDropInDoesNotCauseAFinding. The same tcp:// binding is present
+// in both fixtures; in one of them systemd would never apply it. A check that
+// read every .conf it found would report a critical exposure on a host
+// somebody had deliberately fixed.
+func TestAShadowedDropInDoesNotCauseAFinding(t *testing.T) {
+	got := evalCheck(t, checks.Check0006, "containers-docker-service-shadowed")
+	if got.Result != finding.Pass {
+		t.Errorf("= %s, want PASS: the /lib drop-in is shadowed by the /etc one and is not applied: %s", got.Result, got.Detail)
+	}
+}
+
+// TestAFoundBindingOutranksAnUnreadFile is ADR-0014 applied to this check: an
+// incomplete examination invalidates a negative result and never a positive
+// one. The fixture has an unreadable drop-in *and* a binding in one that could
+// be read, and answering UNKNOWN there would suppress a critical finding on
+// the grounds that the host might have been worse.
+func TestAFoundBindingOutranksAnUnreadFile(t *testing.T) {
+	got := evalCheck(t, checks.Check0006, "containers-docker-service-tcp-denied")
+	if got.Result != finding.Fail {
+		t.Errorf("= %s, want FAIL: a binding that was found is a finding whatever else went unread: %s", got.Result, got.Detail)
+	}
+}
+
+// TestTLSVerifyIsHonouredFromEitherFile. -H lives in the unit and tlsverify
+// may live in daemon.json; they are different options, so dockerd accepts the
+// split. A check that read only the unit would call this host's mutually
+// authenticated endpoint an open one.
+func TestTLSVerifyIsHonouredFromEitherFile(t *testing.T) {
+	inUnit := evalCheck(t, checks.Check0006, "containers-docker-service-tls")
+	inJSON := evalCheck(t, checks.Check0006, "containers-docker-service-tls-in-json")
+
+	if inUnit.Result != finding.Pass || inJSON.Result != finding.Pass {
+		t.Fatalf("unit = %s, daemon.json = %s; want PASS from both", inUnit.Result, inJSON.Result)
+	}
+	if !strings.Contains(inJSON.Detail, "/etc/docker/daemon.json") {
+		t.Errorf("the pass does not say where the verification was configured: %s", inJSON.Detail)
+	}
+	// A pass reached this way is still an API on the network, and the
+	// certificates behind the flag were not examined. Saying so is what stops
+	// it reading as more assurance than it is.
+	for _, want := range []string{"on the network", "not examined here"} {
+		if !strings.Contains(inUnit.Detail, want) {
+			t.Errorf("the pass omits %q: %s", want, inUnit.Detail)
+		}
+	}
+}
+
+// TestEncryptionWithoutVerificationStillFails. --tls encrypts and asks nothing
+// of the client, so anyone who can reach the port still gets a root shell over
+// a nicely encrypted channel. An operator who set it believes the socket is
+// protected, and a finding that said "no TLS" would be both wrong and
+// unpersuasive.
+func TestEncryptionWithoutVerificationStillFails(t *testing.T) {
+	got := evalHandBuilt(t, []string{"/usr/bin/dockerd", "-H", "tcp://0.0.0.0:2376", "--tls"})
+	if got.Result != finding.Fail {
+		t.Fatalf("= %s, want FAIL: --tls without --tlsverify authenticates nobody: %s", got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "--tls is set and --tlsverify is not") {
+		t.Errorf("the finding does not address the flag the operator actually set: %s", got.Detail)
+	}
+}
+
+// TestABareHostPortIsStillTCP. dockerd accepts "-H 0.0.0.0:2375" and binds it
+// exactly as it binds the tcp:// form. Reading that as unrecognised would turn
+// the shortest way to write the finding into the one spelling that escapes it.
+func TestABareHostPortIsStillTCP(t *testing.T) {
+	got := evalHandBuilt(t, []string{"/usr/bin/dockerd", "-H", "0.0.0.0:2375"})
+	if got.Result != finding.Fail {
+		t.Fatalf("= %s, want FAIL: a bare host:port is a TCP binding: %s", got.Result, got.Detail)
+	}
+	if got.Severity != finding.Critical {
+		t.Errorf("severity = %s, want CRITICAL: 0.0.0.0 is every interface", got.Severity)
+	}
+}
+
+// evalHandBuilt runs CONTAINERS-0006 over a command line written here rather
+// than parsed out of a fixture.
+//
+// It is the exception to this file's rule of testing the vertical slice, and
+// it earns it: the properties below are about one token in an argv, and a
+// fixture per token would be eight directories of boilerplate to assert
+// something the collector has already been shown to parse correctly.
+func evalHandBuilt(t *testing.T, argv []string) finding.Finding {
+	t.Helper()
+
+	fs := fact.NewSet()
+	fs.Put(fact.DockerDaemon{
+		State: fact.DockerConfigAbsent, Path: "/etc/docker/daemon.json",
+		Installed: true, DaemonPath: "/usr/bin/dockerd",
+	})
+	fs.Put(fact.DockerService{
+		State: fact.DockerUnitPresent,
+		Unit:  fact.DockerServiceUnit,
+		Path:  "/lib/systemd/system/docker.service",
+		Fragments: []fact.UnitFragment{
+			{Path: "/lib/systemd/system/docker.service", Kind: fact.FragmentUnit, State: fact.DockerUnitPresent},
+		},
+		ExecStart: []fact.DockerExec{{
+			Origin: "/lib/systemd/system/docker.service", Line: 9, Argv: argv,
+		}},
+	})
+
+	got := catalog.MustNew(checks.Check0006).Evaluate(fs)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(got))
+	}
+	return got[0]
+}
+
+// TestUnitVerdictsCarryTheirOwnCaveat is TestEveryVerdictCarriesTheReadingCaveat
+// for the other half of the module, and it is the exact mirror.
+//
+// The daemon checks read daemon.json and have to say a flag in the unit is
+// invisible to them. This one reads the unit and has to say a socket in
+// daemon.json — or in docker.socket, which nothing here reads at all — is
+// invisible to it. Neither file is the whole answer.
+func TestUnitVerdictsCarryTheirOwnCaveat(t *testing.T) {
+	for _, fixture := range []string{
+		"containers-docker-service-stock",
+		"containers-docker-service-tcp",
+		"containers-docker-service-loopback",
+		"containers-docker-service-tls",
+		"containers-docker-service-shadowed",
+		"containers-docker-service-denied",
+		"containers-docker-service-envvar",
+		"containers-docker-service-tcp-denied",
+	} {
+		got := evalCheck(t, checks.Check0006, fixture)
+		if !strings.Contains(got.Detail, "docker.service and its drop-ins only") {
+			t.Errorf("over %s the verdict does not say what it read: %s", fixture, got.Detail)
+		}
+		if !strings.Contains(got.Detail, "docker.socket") {
+			t.Errorf("over %s the verdict does not name the socket unit it did not read: %s", fixture, got.Detail)
+		}
+	}
+}
+
+// TestTheUnitCheckIsSilentOnHostsWithoutOne. The daemon.json fixtures carry no
+// systemd unit, and CONTAINERS-0006 must decline to judge them rather than
+// report a daemon that binds nothing. The inverse also holds: the five daemon
+// checks are unaffected by a unit that is there.
+func TestTheUnitCheckIsSilentOnHostsWithoutOne(t *testing.T) {
+	for _, fixture := range []string{
+		"containers-docker-hardened",
+		"containers-docker-permissive",
+		"containers-docker-defaults",
+		"containers-docker-denied",
+	} {
+		if got := evalCheck(t, checks.Check0006, fixture); got.Result != finding.NotApplicable {
+			t.Errorf("CONTAINERS-0006 over %s = %s, want NOT_APPLICABLE: %s", fixture, got.Result, got.Detail)
+		}
+	}
+
+	// containers-docker-service-tls-in-json is hardened in daemon.json as well
+	// as in the unit, so every check in the module passes over it. A daemon
+	// check that had started reading the unit would show up here.
+	for _, check := range all {
+		if got := evalCheck(t, check, "containers-docker-service-tls-in-json"); got.Result != finding.Pass {
+			t.Errorf("%s over a host hardened in both files = %s: %s", check.ID, got.Result, got.Detail)
 		}
 	}
 }

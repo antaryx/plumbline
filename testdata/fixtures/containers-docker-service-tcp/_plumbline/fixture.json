@@ -1,0 +1,3 @@
+{
+  "description": "The stock vendor unit with the drop-in that exposes the API: override.conf resets ExecStart and re-adds it with -H tcp://0.0.0.0:2375. This is the shape of a real exposure and the reason the collector reads drop-ins at all - the unit file itself is untouched and says -H fd://, so a scan that read only /lib/systemd/system/docker.service would report this host as safe."
+}

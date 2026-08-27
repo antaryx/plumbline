@@ -583,9 +583,15 @@ Docker daemon's configuration is one file, so reading it needs nothing the v1
 architecture does not have. The collector reads `/etc/docker/daemon.json` into
 `containers.docker_daemon`; `CONTAINERS-0001` (user-namespace remapping),
 `-0002` (`no-new-privileges`), `-0003` (`icc`), `-0004` (`live-restore`) and
-`-0005` (experimental features) judge it. Catalog 18.
+`-0005` (experimental features) judge it.
 
-Three things it produced that outlive the checks:
+A second collector reads `docker.service` and its drop-ins into
+`containers.docker_service`, and `CONTAINERS-0006` judges the sockets the
+daemon is started with — the module's only `CRITICAL`, because a `tcp://`
+binding with no client-certificate verification is an unauthenticated
+root-equivalent API and not a weakened boundary. Catalog 19, six checks.
+
+Four things it produced that outlive the checks:
 
 - **The `NOT_APPLICABLE` gate is `Installed`, never the presence of the file.**
   A host with `dockerd` and no `daemon.json` runs on compiled-in defaults, and
@@ -600,20 +606,42 @@ Three things it produced that outlive the checks:
   proves it is not a synonym for "failing": `experimental` defaults to off, so
   there an unwritten key is a pass. Same rule, opposite verdict, because the
   rule is about the daemon's default rather than about silence.
-- **Every verdict states that it read the file and not the daemon.** `dockerd`
-  takes the same options as command-line flags and the stock unit passes some.
-  The two cannot silently disagree — `dockerd` refuses to start when an option
-  appears in both places — but a finding that claimed to describe the running
-  daemon would be claiming more than the scan checked.
+- **Every verdict states which file it read.** `dockerd` takes the same options
+  as command-line flags and the stock unit passes some. The two cannot silently
+  disagree — `dockerd` refuses to start when an option appears in both places —
+  but a finding that claimed to describe the running daemon would be claiming
+  more than the scan checked. Both caveats are now in the tree and they are
+  mirrors: the `daemon.json` checks say a flag in the unit is invisible to
+  them, and `CONTAINERS-0006` says a socket in `daemon.json` — or in
+  `docker.socket` — is invisible to it.
+- **A vendor file plus its drop-ins is not the same object as a file.** The
+  vendor `docker.service` is byte-identical on an exposed host and a safe one;
+  the whole of the difference is a `.conf` in a `.d` directory. Two systemd
+  rules are load-bearing rather than decorative — a drop-in whose *filename*
+  appears in a higher-precedence directory is dropped entirely, and the
+  survivors apply in lexical order by filename across all directories — and
+  getting either wrong moves verdicts. `INTEGRITY` and the v2 `CONTAINERS` work
+  will meet the same shape in `containerd`'s and `crio`'s units.
 
-The module's honest limit is the corpus. All six golden bundles were recorded
-inside containers, so none carries a Docker daemon and all five checks are
-`NOT_APPLICABLE` on every one. The fixtures cover the verdicts; nothing in the
+The module's honest limits are two, and both are worth stating plainly.
+
+**The corpus.** All six golden bundles were recorded inside containers, so none
+carries a Docker daemon: the five `daemon.json` checks are `NOT_APPLICABLE` on
+every one, and `CONTAINERS-0006` is `UNKNOWN` on every one because the bundles
+predate the fact it requires. The fixtures cover the verdicts; nothing in the
 recorded corpus does. Covering `CONTAINERS` against a real daemon needs a
 recording recipe that installs one, which is a work package of its own and is
 the prerequisite for the Podman and K8s-node work in v2.
 
-What remains for v2 is everything that is not a single JSON file: Podman's
+**The other two places a socket can be bound.** `CONTAINERS-0006` reads the
+unit. `daemon.json` has a `hosts` key that binds exactly the same sockets, and
+`docker.socket` has `ListenStream=`, which is what the stock `-H fd://`
+actually listens on. Both are collected or trivially collectable and neither is
+judged yet; each is a sibling check rather than an extension of this one, and
+until they exist every `CONTAINERS-0006` verdict says so in its own detail
+string.
+
+What remains for v2 is everything that is not a configuration file: Podman's
 configuration, K8s node hardening, and the checks that need to inspect running
 containers rather than the daemon that would start them.
 
@@ -634,7 +662,7 @@ Requires v1 to have been stable for at least one minor cycle. Do not start v2 wo
    - Every vulnerability finding states the vendor's fixed-version and links the vendor advisory — because "fixed in 3.0.2-0ubuntu1.15" is the actionable fact, not the CVSS score.
    - **Gate:** publish a measured false-positive comparison against a naive NVD matcher on stock Ubuntu LTS, Debian and Alpine hosts. If the numbers are not clearly better, the feature does not ship. This comparison is the feature's entire justification.
 
-2. **New modules** — `CONTAINERS` (Docker/Podman/K8s node config, ~15; **started early: the daemon.json collector and five checks landed in v1.x, see below**), `PRIVESC` (renamed from PENTEST, gated behind `--enable privesc` with an authorised-use notice, ~15), `MEMORY` (ELF hardening: RELRO, PIE, canaries, FORTIFY — self-contained and satisfying, ~10; **started early, see below**), `INTEGRITY` (package DB verification + bundle-to-bundle drift, ~9), `STORAGE`, `CRYPTO` (local certificate and key material only; still no network probing). Catalog to ~250 checks.
+2. **New modules** — `CONTAINERS` (Docker/Podman/K8s node config, ~15; **started early: the daemon.json and docker.service collectors and six checks landed in v1.x, see below**), `PRIVESC` (renamed from PENTEST, gated behind `--enable privesc` with an authorised-use notice, ~15), `MEMORY` (ELF hardening: RELRO, PIE, canaries, FORTIFY — self-contained and satisfying, ~10; **started early, see below**), `INTEGRITY` (package DB verification + bundle-to-bundle drift, ~9), `STORAGE`, `CRYPTO` (local certificate and key material only; still no network probing). Catalog to ~250 checks.
 
 3. **`CLOUD` module, carefully** — IMDS queries are network access, which breaks the v1 invariant. Therefore: off by default, requires `--enable cloud`, restricted to link-local metadata addresses by an explicit allowlist, and the bundle records that network was used. The offline test asserts that the *default* path still makes zero network syscalls.
 

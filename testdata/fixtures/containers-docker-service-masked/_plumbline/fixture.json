@@ -1,0 +1,6 @@
+{
+  "description": "docker.service masked: /etc/systemd/system/docker.service is a symlink to /dev/null, which is what `systemctl mask docker` writes and what systemd refuses to start. The vendor unit underneath is intact and binds -H fd://, and it is not in force, so CONTAINERS-0006 declines to draw a verdict from it and says why rather than reading a command line nothing runs.",
+  "symlinks": {
+    "/etc/systemd/system/docker.service": "/dev/null"
+  }
+}

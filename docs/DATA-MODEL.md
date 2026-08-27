@@ -170,6 +170,7 @@ gets produced.
 | `users.nsswitch` | 1 | `collect/collectors/users` | `Databases[]`, `State`, `Path`, `Malformed[]`, `Digest` |
 | `memory.elf` | 1 | `collect/collectors/memory` | `Binaries[]`, `Truncated` |
 | `containers.docker_daemon` | 1 | `collect/collectors/containers` | `State`, `Path`, `Digest`, `Installed`, `DaemonPath`, `Keys[]`, plus the modelled options |
+| `containers.docker_service` | 1 | `collect/collectors/containers` | `State`, `Unit`, `Path`, `Digest`, `Fragments[]`, `ExecStart[]` |
 
 Every fact added later is listed here with its version history.
 
@@ -755,10 +756,61 @@ report a broken daemon on a host that is merely more current than this build.
 as command-line flags, and the stock unit passes some — `ExecStart=/usr/bin/dockerd
 -H fd:// --containerd=…`. An option set only there is invisible here. `dockerd`
 refuses to start when one is given in both places, so the two cannot disagree
-silently, but a flag the file never mentions is in force and unrecorded. Until
-the join against the systemd unit exists, a check reading this fact may state
-what the file says and not what the daemon is doing. Rootless Docker's
-`~/.config/docker/daemon.json` is per-user and is not read.
+silently, but a flag the file never mentions is in force and unrecorded. That
+command line is `containers.docker_service` below; the two facts together cover
+both places a daemon option can be set, and a check reading either still says
+which of them it read. Rootless Docker's `~/.config/docker/daemon.json` is
+per-user and is not read.
+
+
+#### `containers.docker_service` — the command line the daemon is started with
+
+The other half of the sentence above. The collector reads `docker.service` and
+folds its drop-ins on top, in systemd's order, and records the effective
+`ExecStart` split into arguments.
+
+**A unit is not a file, and the difference is the whole point.** Every
+distribution ships the same vendor `docker.service`, binding `-H fd://`, so on
+an exposed host and on a safe one the unit file is byte-identical. What differs
+is a `.conf` in `/etc/systemd/system/docker.service.d/` — what `systemctl edit
+docker` writes, and what every guide to reaching Docker from another machine
+asks for. `Fragments[]` records each contributing file and what became of it,
+in application order.
+
+Two systemd rules are implemented rather than approximated, because both move
+verdicts. A drop-in whose *filename* also appears in a higher-precedence
+directory is discarded entirely — that is how an administrator neutralises a
+vendor drop-in, and applying it anyway reports a critical exposure on a host
+somebody deliberately fixed. The survivors are then applied in lexical order by
+filename *across all directories*, so a `10-` file from `/usr/lib` applies
+before a `20-` file from `/etc`. `ExecStart=` with an empty value clears the
+list and a non-empty one appends, which is why every documented Docker override
+opens with a bare `ExecStart=`.
+
+**`Complete()` is not `State`.** The unit can read perfectly while a drop-in
+beside it is refused, and a drop-in is the likeliest place for the flag that
+changes the answer. `Incomplete()` returns the fragments that were not read,
+excluding shadowed ones — systemd would not have applied those, so failing to
+read one changes nothing — and a check consults it before calling an empty
+socket list a pass. `masked` is a state with no analogue in a configuration
+file: a unit linked to `/dev/null` is one systemd refuses to start, so the
+vendor unit underneath is not in force and no verdict may be drawn from it.
+
+**Nothing is expanded.** `Environment=`, `EnvironmentFile=` and systemd's `%`
+specifiers are not read, so a `$DOCKER_OPTS` survives as a token and
+`Ambiguities()` reports it. That is deliberate in both directions: dropping it
+would render `dockerd -H fd:// $DOCKER_OPTS` as a command line with no options
+— an unread line silently rendered as a safe-looking one — and reading the
+environment file to resolve it would mean parsing the file where a Docker
+host's proxy credentials live.
+
+**The bytes do not travel.** Fragments are read through `ReadOpaque`, so unlike
+`daemon.json` their contents never enter the bundle's evidence store; what
+survives is the digest and the `ExecStart` arguments. `PRIVACY.md` records the
+exception. Reading the socket bindings out of those arguments is a *method* on
+the fact rather than work the collector does, so that a bundle recorded today is
+re-read by a later build's understanding of `dockerd`'s flag grammar — §6.1's
+promise, which a collector-side extraction would quietly break.
 
 ---
 
