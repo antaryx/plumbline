@@ -61,6 +61,7 @@ func buildCatalog() *catalog.Catalog {
 		containerschecks.Check0004,
 		containerschecks.Check0005,
 		containerschecks.Check0006,
+		containerschecks.Check0007,
 		cronchecks.Check0001,
 		cronchecks.Check0002,
 		cronchecks.Check0003,

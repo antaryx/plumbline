@@ -19,7 +19,7 @@ const fixtureRoot = "../../../../testdata/fixtures"
 // all is the CONTAINERS module as this work package leaves it.
 var all = []catalog.Check{
 	checks.Check0001, checks.Check0002, checks.Check0003, checks.Check0004,
-	checks.Check0005, checks.Check0006,
+	checks.Check0005, checks.Check0006, checks.Check0007,
 }
 
 // daemonChecks are the checks that read /etc/docker/daemon.json, which is
@@ -36,6 +36,19 @@ var all = []catalog.Check{
 var daemonChecks = []catalog.Check{
 	checks.Check0001, checks.Check0002, checks.Check0003, checks.Check0004, checks.Check0005,
 }
+
+// configGated is daemonChecks plus CONTAINERS-0007: every check whose verdict
+// is drawn from daemon.json and which therefore shares applicable() as its
+// gate.
+//
+// -0007 is here and not in daemonChecks because of one sentence it has to say
+// that the others do not. Its subject is the hosts key in daemon.json, but the
+// question "is that socket protected" is answered by tlsverify, which may be
+// set on dockerd's command line instead — so its verdicts cannot claim to have
+// read daemon.json *only*, and TestEveryVerdictCarriesTheReadingCaveat asserts
+// exactly that phrase. Everything else the daemon invariants assert is as true
+// of -0007 as of the other five.
+var configGated = append(append([]catalog.Check{}, daemonChecks...), checks.Check0007)
 
 // defaultIsUnsafe is the subset of the module whose option the daemon leaves
 // off, so that a host which says nothing is running the value the check
@@ -291,7 +304,7 @@ func TestAMissingConfigIsJudgedNotExcused(t *testing.T) {
 	// The remedy differs by whether a file exists at all — "create the file"
 	// rather than "edit the line" — and a passing finding that hid the
 	// distinction would be describing a file that is not there.
-	for _, check := range daemonChecks {
+	for _, check := range configGated {
 		running := evalCheck(t, check, "containers-docker-defaults")
 		if running.Result == finding.NotApplicable || running.Result == finding.Unknown {
 			t.Errorf("%s = %s on a host with dockerd and no daemon.json; the defaults are a configuration: %s",
@@ -358,7 +371,7 @@ func TestUnreadableConfigNeverProducesAVerdict(t *testing.T) {
 		"containers-docker-wrongtype",
 		"containers-docker-notobject",
 	} {
-		for _, check := range daemonChecks {
+		for _, check := range configGated {
 			got := evalCheck(t, check, fixture)
 			if got.Result != finding.Unknown {
 				t.Errorf("%s = %s over %s, want UNKNOWN: %s", check.ID, got.Result, fixture, got.Detail)
@@ -387,6 +400,7 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0003": finding.Fail, // icc absent, so permissive
 			"CONTAINERS-0004": finding.Fail, // live-restore absent, so off
 			"CONTAINERS-0005": finding.Pass, // experimental absent, so off
+			"CONTAINERS-0007": finding.Pass, // no hosts key, so this file binds nothing
 		}},
 		{"containers-docker-icc-only", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Pass,
@@ -394,6 +408,7 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0003": finding.Fail, // the only thing wrong
 			"CONTAINERS-0004": finding.Pass,
 			"CONTAINERS-0005": finding.Pass,
+			"CONTAINERS-0007": finding.Pass,
 		}},
 		{"containers-docker-no-live-restore", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Pass,
@@ -401,6 +416,7 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0003": finding.Pass,
 			"CONTAINERS-0004": finding.Fail, // the only thing wrong
 			"CONTAINERS-0005": finding.Pass,
+			"CONTAINERS-0007": finding.Pass,
 		}},
 		{"containers-docker-experimental-only", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Pass,
@@ -408,6 +424,7 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0003": finding.Pass,
 			"CONTAINERS-0004": finding.Pass,
 			"CONTAINERS-0005": finding.Fail, // the only thing wrong
+			"CONTAINERS-0007": finding.Pass,
 		}},
 		{"containers-docker-hardened", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Pass,
@@ -415,6 +432,15 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0003": finding.Pass,
 			"CONTAINERS-0004": finding.Pass,
 			"CONTAINERS-0005": finding.Pass,
+			"CONTAINERS-0007": finding.Pass, // hosts binds the unix socket only
+		}},
+		{"containers-docker-hosts-loopback", map[string]finding.Result{
+			"CONTAINERS-0001": finding.Pass,
+			"CONTAINERS-0002": finding.Pass,
+			"CONTAINERS-0003": finding.Pass,
+			"CONTAINERS-0004": finding.Pass,
+			"CONTAINERS-0005": finding.Pass,
+			"CONTAINERS-0007": finding.Fail, // the only thing wrong
 		}},
 		{"containers-docker-permissive", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Fail,
@@ -422,12 +448,13 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0003": finding.Fail,
 			"CONTAINERS-0004": finding.Fail,
 			"CONTAINERS-0005": finding.Fail,
+			"CONTAINERS-0007": finding.Fail, // hosts carries tcp://0.0.0.0:2375
 		}},
 	}
 
 	for _, c := range cases {
 		t.Run(c.fixture, func(t *testing.T) {
-			for _, check := range daemonChecks {
+			for _, check := range configGated {
 				got := evalCheck(t, check, c.fixture)
 				if want := c.want[check.ID]; got.Result != want {
 					t.Errorf("%s = %s, want %s: %s", check.ID, got.Result, want, got.Detail)
@@ -495,7 +522,7 @@ func TestEveryVerdictCarriesTheReadingCaveat(t *testing.T) {
 // digest can be followed. A finding citing a digest the store does not hold
 // sends an auditor after something nobody kept.
 func TestEvidenceResolvesInTheEvidenceStore(t *testing.T) {
-	for _, check := range daemonChecks {
+	for _, check := range configGated {
 		withFile := evalCheck(t, check, "containers-docker-hardened")
 		if len(withFile.Evidence) == 0 || withFile.Evidence[0].SHA256 == "" {
 			t.Errorf("%s cites no digest for a file it read: %+v", check.ID, withFile.Evidence)
@@ -784,4 +811,256 @@ func TestTheUnitCheckIsSilentOnHostsWithoutOne(t *testing.T) {
 			t.Errorf("%s over a host hardened in both files = %s: %s", check.ID, got.Result, got.Detail)
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// CONTAINERS-0007, the same exposure written in the other file
+// ---------------------------------------------------------------------------
+
+func TestCheck0007ConfiguredSocketBinding(t *testing.T) {
+	run(t, checks.Check0007, []tc{
+		// hosts binds the unix socket and nothing else.
+		{fixture: "containers-docker-hardened", result: finding.Pass,
+			detailContains: "local to the host"},
+
+		// hosts written down and left empty: it binds nothing.
+		{fixture: "containers-docker-hosts-empty", result: finding.Pass,
+			detailContains: "binds no TCP socket"},
+
+		// No hosts key. The sockets are the unit's business, and the check
+		// that reads the unit is named rather than left implicit.
+		{fixture: "containers-docker-nnp-only", result: finding.Pass,
+			detailContains: "CONTAINERS-0006"},
+
+		// No daemon.json at all, which is the same position by a different
+		// route, and the operator is told the file is missing.
+		{fixture: "containers-docker-defaults", result: finding.Pass,
+			detailContains: "no /etc/docker/daemon.json"},
+
+		// The exposure.
+		{fixture: "containers-docker-permissive", result: finding.Fail,
+			severity: finding.Critical, detailContains: "tcp://0.0.0.0:2375"},
+
+		// Sockets in the file, unit stripped of its -H so dockerd will start.
+		{fixture: "containers-docker-hosts-split", result: finding.Fail,
+			severity: finding.Critical, detailContains: "tcp://0.0.0.0:2375"},
+
+		// Reachable by every local user rather than by the network.
+		{fixture: "containers-docker-hosts-loopback", result: finding.Fail,
+			severity: finding.High, detailContains: "loopback"},
+
+		// The supported way to put the API on the network, configured here.
+		{fixture: "containers-docker-hosts-tls", result: finding.Pass,
+			detailContains: "client-certificate verification"},
+
+		// The module's ordinary gate, inherited unchanged.
+		{fixture: "containers-docker-denied", result: finding.Unknown,
+			reason: finding.ReasonPermission, detailContains: "could not be read"},
+		{fixture: "containers-docker-malformed", result: finding.Unknown,
+			reason: finding.ReasonParse, detailContains: "valid JSON"},
+		{fixture: "containers-absent", result: finding.NotApplicable,
+			detailContains: "no dockerd binary"},
+	})
+}
+
+// TestTheTwoSocketChecksAreIndependent is the property the pair exists for,
+// and the one a reader is most entitled to be sceptical about: two checks with
+// the same title, the same severity and the same shared socket parsing, whose
+// only difference is which file they read.
+//
+// Each fixture binds a TCP socket in exactly one of the two files. If either
+// check were answering for the other — reading the wrong fact, or falling back
+// to it when its own is silent — one of these four assertions fails.
+func TestTheTwoSocketChecksAreIndependent(t *testing.T) {
+	// The unit binds tcp://; this host has no daemon.json at all.
+	inUnit := "containers-docker-service-tcp"
+	if got := evalCheck(t, checks.Check0006, inUnit); got.Result != finding.Fail {
+		t.Errorf("CONTAINERS-0006 over %s = %s, want FAIL: %s", inUnit, got.Result, got.Detail)
+	}
+	if got := evalCheck(t, checks.Check0007, inUnit); got.Result != finding.Pass {
+		t.Errorf("CONTAINERS-0007 over %s = %s, want PASS: the binding is in the unit, not in this file: %s",
+			inUnit, got.Result, got.Detail)
+	}
+
+	// daemon.json binds tcp://; the unit has been stripped of its -H, which is
+	// what dockerd's refusal to take hosts from two places forces an operator
+	// to do.
+	inFile := "containers-docker-hosts-split"
+	if got := evalCheck(t, checks.Check0006, inFile); got.Result != finding.Pass {
+		t.Errorf("CONTAINERS-0006 over %s = %s, want PASS: the unit's command line binds nothing: %s",
+			inFile, got.Result, got.Detail)
+	}
+	if got := evalCheck(t, checks.Check0007, inFile); got.Result != finding.Fail {
+		t.Errorf("CONTAINERS-0007 over %s = %s, want FAIL: %s", inFile, got.Result, got.Detail)
+	}
+}
+
+// TestNeitherSocketCheckClaimsToBeTheWholeAnswer. Each reads one file and each
+// says so, naming the other's subject. A finding that implied it had covered
+// both would be the one way this pair could mislead: an operator reading a
+// PASS from either would believe the API is not on the network.
+func TestNeitherSocketCheckClaimsToBeTheWholeAnswer(t *testing.T) {
+	for _, fixture := range []string{
+		"containers-docker-hardened",
+		"containers-docker-permissive",
+		"containers-docker-hosts-empty",
+		"containers-docker-hosts-loopback",
+		"containers-docker-hosts-tls",
+		"containers-docker-hosts-split",
+		"containers-docker-defaults",
+	} {
+		got := evalCheck(t, checks.Check0007, fixture)
+		if !strings.Contains(got.Detail, "the hosts key in /etc/docker/daemon.json") {
+			t.Errorf("over %s the verdict does not say what it read: %s", fixture, got.Detail)
+		}
+		// The two things it did not read, named so a reader can go and look.
+		for _, want := range []string{"CONTAINERS-0006", "docker.socket"} {
+			if !strings.Contains(got.Detail, want) {
+				t.Errorf("over %s the verdict omits %q: %s", fixture, want, got.Detail)
+			}
+		}
+	}
+}
+
+// TestSilenceMovesTheQuestionRatherThanAnsweringIt is the reasoning behind
+// -0007's treatment of an absent hosts key, written down as a test because the
+// verdict is a PASS and a PASS is the answer that gets copied without thought.
+//
+// An absent hosts does not mean the daemon listens on nothing. It means this
+// file does not decide, and the systemd unit does. The pass is therefore only
+// sound because CONTAINERS-0006 exists to read that unit — so the assertion is
+// not just that -0007 passes, but that -0006 reaches a real verdict on the same
+// host. A future in which -0006 were removed or narrowed and -0007 kept its
+// pass would be a silent hole exactly where this module is most load-bearing.
+func TestSilenceMovesTheQuestionRatherThanAnsweringIt(t *testing.T) {
+	for _, fixture := range []string{
+		"containers-docker-service-stock", // a unit, no daemon.json
+		"containers-docker-service-tcp",   // a unit that binds tcp://
+	} {
+		quiet := evalCheck(t, checks.Check0007, fixture)
+		if quiet.Result != finding.Pass {
+			t.Errorf("CONTAINERS-0007 over %s = %s, want PASS: this file binds nothing: %s",
+				fixture, quiet.Result, quiet.Detail)
+		}
+		if !strings.Contains(quiet.Evidence[0].Excerpt, "the sockets come from the unit") {
+			t.Errorf("over %s the evidence does not record where the sockets actually come from: %q",
+				fixture, quiet.Evidence[0].Excerpt)
+		}
+
+		// The half that makes the pass sound.
+		covered := evalCheck(t, checks.Check0006, fixture)
+		if covered.Result != finding.Pass && covered.Result != finding.Fail {
+			t.Errorf("CONTAINERS-0007 passed %s by deferring to CONTAINERS-0006, which answered %s: %s",
+				fixture, covered.Result, covered.Detail)
+		}
+	}
+}
+
+// TestTheThreeWaysOfBindingNothingAreDistinguishable. `hosts` is a []string on
+// the fact, where nil and [] are one value, so the distinction survives only
+// because Keys records which top-level keys the document set. Three operators
+// are in three different positions — one asked for no sockets, one left it to
+// the unit, one has no configuration file — and a report that rendered all
+// three alike would be hiding the thing the evidence exists to show.
+func TestTheThreeWaysOfBindingNothingAreDistinguishable(t *testing.T) {
+	got := map[string]string{}
+	for name, fixture := range map[string]string{
+		"empty":  "containers-docker-hosts-empty", // "hosts": []
+		"unset":  "containers-docker-nnp-only",    // no hosts key
+		"nofile": "containers-docker-defaults",    // no daemon.json
+	} {
+		f := evalCheck(t, checks.Check0007, fixture)
+		if f.Result != finding.Pass {
+			t.Fatalf("%s: = %s, want PASS; the comparison below proves nothing otherwise", name, f.Result)
+		}
+		got[name] = f.Evidence[0].Excerpt
+	}
+
+	if got["empty"] == got["unset"] || got["unset"] == got["nofile"] || got["empty"] == got["nofile"] {
+		t.Errorf("the three ways of binding nothing are indistinguishable in the evidence: %v", got)
+	}
+	if !strings.Contains(got["empty"], "explicitly empty") {
+		t.Errorf("an explicitly empty hosts is not described as one: %q", got["empty"])
+	}
+}
+
+// TestTLSVerifyIsHonouredFromEitherFileForBothChecks is the shared reading in
+// sockets.go asserted from both sides.
+//
+// tlsverify and hosts are different options, so dockerd does not refuse the
+// split and an operator may reasonably bind in one file and configure the
+// certificates in the other. Either check reading only its own file would
+// report a mutually authenticated endpoint as an open one — a critical false
+// positive on a host that did the work.
+func TestTLSVerifyIsHonouredFromEitherFileForBothChecks(t *testing.T) {
+	// Socket in the unit, certificates in daemon.json.
+	if got := evalCheck(t, checks.Check0006, "containers-docker-service-tls-in-json"); got.Result != finding.Pass {
+		t.Errorf("CONTAINERS-0006 = %s over a unit socket verified from daemon.json: %s", got.Result, got.Detail)
+	}
+	// Socket and certificates both in daemon.json.
+	if got := evalCheck(t, checks.Check0007, "containers-docker-hosts-tls"); got.Result != finding.Pass {
+		t.Errorf("CONTAINERS-0007 = %s over a configured socket with tlsverify set: %s", got.Result, got.Detail)
+	}
+}
+
+// TestTheTwoSocketChecksReadASpecTheSameWay. They share sockets.go so that one
+// configuration cannot be Critical in one file and a pass in the other, and
+// this is that property rather than the sharing that implements it: swapping
+// the two for a second reading of dockerd's grammar would have to keep this
+// passing.
+func TestTheTwoSocketChecksReadASpecTheSameWay(t *testing.T) {
+	cases := []struct {
+		spec string
+		fail bool
+		sev  finding.Severity
+	}{
+		{"tcp://0.0.0.0:2375", true, finding.Critical},
+		{"tcp://127.0.0.1:2375", true, finding.High},
+		{"0.0.0.0:2375", true, finding.Critical}, // bare host:port is TCP
+		{"unix:///var/run/docker.sock", false, ""},
+		{"fd://", false, ""},
+	}
+
+	for _, c := range cases {
+		viaUnit := evalHandBuilt(t, []string{"/usr/bin/dockerd", "-H", c.spec})
+		viaFile := evalConfiguredHosts(t, []string{c.spec})
+
+		if (viaUnit.Result == finding.Fail) != c.fail || (viaFile.Result == finding.Fail) != c.fail {
+			t.Errorf("%s: unit = %s, daemon.json = %s, want fail=%v\n unit: %s\n file: %s",
+				c.spec, viaUnit.Result, viaFile.Result, c.fail, viaUnit.Detail, viaFile.Detail)
+			continue
+		}
+		if c.fail && (viaUnit.Severity != c.sev || viaFile.Severity != c.sev) {
+			t.Errorf("%s: severity unit = %s, daemon.json = %s, want %s",
+				c.spec, viaUnit.Severity, viaFile.Severity, c.sev)
+		}
+	}
+}
+
+// evalConfiguredHosts runs CONTAINERS-0007 over a hosts array written here.
+// It is evalHandBuilt's counterpart, and it exists for the same reason: the
+// property above is about one string, and a fixture per string would be five
+// directories of boilerplate.
+func evalConfiguredHosts(t *testing.T, hosts []string) finding.Finding {
+	t.Helper()
+
+	fs := fact.NewSet()
+	fs.Put(fact.DockerDaemon{
+		State: fact.DockerConfigPresent, Path: "/etc/docker/daemon.json",
+		Digest:    "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+		Installed: true, DaemonPath: "/usr/bin/dockerd",
+		Keys:  []string{"hosts"},
+		Hosts: hosts,
+	})
+	fs.Put(fact.DockerService{
+		State: fact.DockerUnitAbsent,
+		Unit:  fact.DockerServiceUnit,
+		Path:  "/usr/lib/systemd/system/docker.service",
+	})
+
+	got := catalog.MustNew(checks.Check0007).Evaluate(fs)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(got))
+	}
+	return got[0]
 }

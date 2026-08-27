@@ -1,0 +1,3 @@
+{
+  "description": "The API on the network the supported way, configured entirely in daemon.json: tcp://0.0.0.0:2376 alongside fd://, with tlsverify true and the certificates named. A client must present one signed by the configured CA, so CONTAINERS-0007 passes it. Without the TLSVerify field on the daemon fact this host would be reported as wide open, which is the false CRITICAL the field exists to prevent."
+}

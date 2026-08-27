@@ -586,12 +586,13 @@ architecture does not have. The collector reads `/etc/docker/daemon.json` into
 `-0005` (experimental features) judge it.
 
 A second collector reads `docker.service` and its drop-ins into
-`containers.docker_service`, and `CONTAINERS-0006` judges the sockets the
-daemon is started with — the module's only `CRITICAL`, because a `tcp://`
-binding with no client-certificate verification is an unauthenticated
-root-equivalent API and not a weakened boundary. Catalog 19, six checks.
+`containers.docker_service`. `CONTAINERS-0006` judges the sockets on the
+daemon's command line and `CONTAINERS-0007` the `hosts` key in `daemon.json` —
+the module's two `CRITICAL`s, because a `tcp://` binding with no
+client-certificate verification is an unauthenticated root-equivalent API and
+not a weakened boundary. Catalog 20, seven checks.
 
-Four things it produced that outlive the checks:
+Five things it produced that outlive the checks:
 
 - **The `NOT_APPLICABLE` gate is `Installed`, never the presence of the file.**
   A host with `dockerd` and no `daemon.json` runs on compiled-in defaults, and
@@ -622,24 +623,43 @@ Four things it produced that outlive the checks:
   survivors apply in lexical order by filename across all directories — and
   getting either wrong moves verdicts. `INTEGRITY` and the v2 `CONTAINERS` work
   will meet the same shape in `containerd`'s and `crio`'s units.
+- **One option in two files is one check split in two, not one check that reads
+  two files.** `hosts` can be set on the command line or in `daemon.json`, and
+  `dockerd` refuses to start when it is set in both — so on a running host at
+  most one file decides, and a pair of checks with one subject each is
+  exhaustive without double-counting. Each names the other in its own detail
+  string, so a `PASS` from one is never read as covering both. What the pair
+  must not do is disagree about what a socket specification *means*, which is
+  why the reading of `dockerd`'s grammar is one file both import rather than
+  two implementations that match today.
 
 The module's honest limits are two, and both are worth stating plainly.
 
 **The corpus.** All six golden bundles were recorded inside containers, so none
 carries a Docker daemon: the five `daemon.json` checks are `NOT_APPLICABLE` on
-every one, and `CONTAINERS-0006` is `UNKNOWN` on every one because the bundles
-predate the fact it requires. The fixtures cover the verdicts; nothing in the
-recorded corpus does. Covering `CONTAINERS` against a real daemon needs a
-recording recipe that installs one, which is a work package of its own and is
-the prerequisite for the Podman and K8s-node work in v2.
+every one, and both socket checks are `UNKNOWN` on every one because the
+bundles predate `containers.docker_service`. That is two `UNKNOWN` per bundle
+from a single cause, and the coverage it costs is the corpus reporting its own
+age rather than a defect to route around — declaring less than a check reads
+would trade it for a `CRITICAL` false positive. The fixtures cover the
+verdicts; nothing in the recorded corpus does. Covering `CONTAINERS` against a
+real daemon needs a recording recipe that installs one, which is a work package
+of its own, is the prerequisite for the Podman and K8s-node work in v2, and now
+clears both `UNKNOWN` at once.
 
-**The other two places a socket can be bound.** `CONTAINERS-0006` reads the
-unit. `daemon.json` has a `hosts` key that binds exactly the same sockets, and
-`docker.socket` has `ListenStream=`, which is what the stock `-H fd://`
-actually listens on. Both are collected or trivially collectable and neither is
-judged yet; each is a sibling check rather than an extension of this one, and
-until they exist every `CONTAINERS-0006` verdict says so in its own detail
-string.
+**The third place a socket can be bound.** `CONTAINERS-0006` reads the unit's
+`-H` flags and `-0007` reads `daemon.json`'s `hosts`. `docker.socket` has
+`ListenStream=`, which is what the stock `-H fd://` actually listens on, and a
+`tcp://` entry there exposes the API exactly as the other two would. Nothing
+reads it yet; it is a sibling check rather than an extension of either, and
+until it exists both verdicts say so in their own detail strings.
+
+**Two files that cannot both be right.** `dockerd` refuses to start when
+`hosts` is set as a flag and in `daemon.json` at once, and adding the key to a
+stock installation is the well-known way to make Docker stop starting. Neither
+check reports that conflict — each reads its own file and neither compares them
+— so a host in that state is one whose daemon is not running and which both
+checks describe as though it were. Detecting it is a check of its own.
 
 What remains for v2 is everything that is not a configuration file: Podman's
 configuration, K8s node hardening, and the checks that need to inspect running
@@ -662,7 +682,7 @@ Requires v1 to have been stable for at least one minor cycle. Do not start v2 wo
    - Every vulnerability finding states the vendor's fixed-version and links the vendor advisory — because "fixed in 3.0.2-0ubuntu1.15" is the actionable fact, not the CVSS score.
    - **Gate:** publish a measured false-positive comparison against a naive NVD matcher on stock Ubuntu LTS, Debian and Alpine hosts. If the numbers are not clearly better, the feature does not ship. This comparison is the feature's entire justification.
 
-2. **New modules** — `CONTAINERS` (Docker/Podman/K8s node config, ~15; **started early: the daemon.json and docker.service collectors and six checks landed in v1.x, see below**), `PRIVESC` (renamed from PENTEST, gated behind `--enable privesc` with an authorised-use notice, ~15), `MEMORY` (ELF hardening: RELRO, PIE, canaries, FORTIFY — self-contained and satisfying, ~10; **started early, see below**), `INTEGRITY` (package DB verification + bundle-to-bundle drift, ~9), `STORAGE`, `CRYPTO` (local certificate and key material only; still no network probing). Catalog to ~250 checks.
+2. **New modules** — `CONTAINERS` (Docker/Podman/K8s node config, ~15; **started early: the daemon.json and docker.service collectors and seven checks landed in v1.x, see below**), `PRIVESC` (renamed from PENTEST, gated behind `--enable privesc` with an authorised-use notice, ~15), `MEMORY` (ELF hardening: RELRO, PIE, canaries, FORTIFY — self-contained and satisfying, ~10; **started early, see below**), `INTEGRITY` (package DB verification + bundle-to-bundle drift, ~9), `STORAGE`, `CRYPTO` (local certificate and key material only; still no network probing). Catalog to ~250 checks.
 
 3. **`CLOUD` module, carefully** — IMDS queries are network access, which breaks the v1 invariant. Therefore: off by default, requires `--enable cloud`, restricted to link-local metadata addresses by an explicit allowlist, and the bundle records that network was used. The offline test asserts that the *default* path still makes zero network syscalls.
 

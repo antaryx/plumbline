@@ -1,7 +1,7 @@
 {
   "bundle": "debian-13-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 19,
+  "catalog_version": 20,
   "scan": {
     "started": "2026-08-25T21:31:46.550601813Z",
     "finished": "2026-08-25T21:31:46.799731954Z",
@@ -18,8 +18,8 @@
       "fail": 13,
       "not_applicable": 38,
       "skipped": 0,
-      "unknown": 1,
-      "total": 89
+      "unknown": 2,
+      "total": 90
     },
     "by_severity": {
       "HIGH": 3,
@@ -27,7 +27,7 @@
       "MEDIUM": 6
     },
     "posture": 78.44827586206897,
-    "coverage": 98.0392156862745
+    "coverage": 96.15384615384616
   },
   "findings": [
     {
@@ -188,6 +188,16 @@
       "base_severity": "CRITICAL",
       "unknown_reason": "fact_not_collected",
       "fingerprint": "4c92f8bc337c9228ef90b3197522075a",
+      "detail": "required fact containers.docker_service was not collected"
+    },
+    {
+      "check_id": "CONTAINERS-0007",
+      "module": "CONTAINERS",
+      "result": "UNKNOWN",
+      "severity": "CRITICAL",
+      "base_severity": "CRITICAL",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "4f4d00718243a3030e9dcdfdae85af5f",
       "detail": "required fact containers.docker_service was not collected"
     },
     {

@@ -81,17 +81,7 @@ request forgery.`,
 			return *out
 		}
 
-		var exposed, local, unrecognised []fact.DockerHostBinding
-		for _, b := range u.Hosts() {
-			switch classify(b.Spec) {
-			case socketTCP:
-				exposed = append(exposed, b)
-			case socketLocal:
-				local = append(local, b)
-			default:
-				unrecognised = append(unrecognised, b)
-			}
-		}
+		exposed, local, unrecognised := partition(unitBindings(u.Hosts()))
 
 		// tlsverify is honoured from either file. The -H flag lives in the
 		// unit and tlsverify may live in daemon.json; they are different
@@ -105,12 +95,12 @@ request forgery.`,
 				return catalog.Outcome{
 					Result:  finding.Pass,
 					Subject: u.Path,
-					Detail: fmt.Sprintf("The daemon is started with %s, which puts the API on the network, and with client-certificate verification enabled in %s. Access therefore requires a certificate signed by the configured CA rather than only the ability to reach the port.%s%s",
+					Detail: fmt.Sprintf("The daemon is started with -H %s, which puts the API on the network, and with client-certificate verification enabled in %s. Access therefore requires a certificate signed by the configured CA rather than only the ability to reach the port.%s%s",
 						specList(exposed), verifiedBy, unitCaveat, certCaveat),
 					Evidence: bindingEvidence(u, exposed),
 				}
 			}
-			return failure(u, exposed)
+			return failure(u, d, exposed)
 		}
 
 		// Nothing binds TCP. Before that becomes a pass, everything that could
@@ -124,7 +114,7 @@ request forgery.`,
 
 		detail := "The daemon is started with no TCP socket, so its API is reachable only through the local socket and the file permissions on it."
 		if len(local) > 0 {
-			detail = fmt.Sprintf("The daemon is started with %s, which is local to the host, and with no TCP socket. Its API is reachable only through that socket and the file permissions on it.", specList(local))
+			detail = fmt.Sprintf("The daemon is started with -H %s, which is local to the host, and with no TCP socket. Its API is reachable only through that socket and the file permissions on it.", specList(local))
 		}
 		return catalog.Outcome{
 			Result:   finding.Pass,
@@ -168,120 +158,13 @@ request forgery.`,
 	},
 }
 
-// certCaveat qualifies a pass reached by way of --tlsverify.
-//
-// The flag being present is a fact about the command line. Whether the CA is
-// one this operator controls, whether the key is 0644, and whether any
-// certificate has expired are facts about files this check does not read, and
-// a pass that did not say so would be read as more assurance than it is.
-const certCaveat = " Whether the certificates themselves are sound — the CA, the key's permissions, the expiry — is not examined here."
-
-// socketKind is what a -H value points at.
-type socketKind int
-
-const (
-	socketLocal socketKind = iota
-	socketTCP
-	socketOther
-)
-
-// classify reads a dockerd socket specification.
-//
-// A bare host:port with no scheme is TCP: dockerd accepts "-H 0.0.0.0:2375"
-// and binds it exactly as it binds the tcp:// form. Reading that as
-// unrecognised would turn the shortest way to write the finding into the one
-// spelling that escapes it.
-func classify(spec string) socketKind {
-	s := strings.ToLower(strings.TrimSpace(spec))
-	switch {
-	case strings.HasPrefix(s, "tcp://"):
-		return socketTCP
-	case strings.HasPrefix(s, "unix://"), strings.HasPrefix(s, "fd://"), strings.HasPrefix(s, "npipe://"):
-		return socketLocal
-	case strings.Contains(s, "://"):
-		return socketOther
-	case strings.Contains(s, ":"):
-		return socketTCP
-	}
-	return socketOther
-}
-
-// addrOf returns the address part of a socket specification, without its
-// scheme or port.
-//
-// Written with strings rather than net.SplitHostPort because a check may not
-// import net — the purity rule in CONTRIBUTING.md — and because the input is
-// not necessarily a well-formed address in the first place. It is a line from
-// a unit file, and the job here is to read what an operator wrote.
-func addrOf(spec string) string {
-	s := strings.ToLower(strings.TrimSpace(spec))
-	if i := strings.Index(s, "://"); i >= 0 {
-		s = s[i+3:]
-	}
-	if i := strings.IndexByte(s, '/'); i >= 0 {
-		s = s[:i]
-	}
-	// A bracketed IPv6 literal keeps its colons; everything after the closing
-	// bracket is the port.
-	if strings.HasPrefix(s, "[") {
-		if i := strings.IndexByte(s, ']'); i >= 0 {
-			return s[1:i]
-		}
-		return strings.TrimPrefix(s, "[")
-	}
-	if i := strings.LastIndexByte(s, ':'); i >= 0 {
-		s = s[:i]
-	}
-	return s
-}
-
-// loopbackOnly reports whether every binding is to the host's own loopback
-// interface.
-//
-// An empty address is not loopback: "tcp://:2375" binds every interface, and
-// so does "tcp://0.0.0.0:2375". Treating either as local would downgrade the
-// two most common ways of writing the worst case.
-func loopbackOnly(bindings []fact.DockerHostBinding) bool {
-	for _, b := range bindings {
-		a := addrOf(b.Spec)
-		switch {
-		case a == "localhost", a == "::1", a == "0:0:0:0:0:0:0:1":
-		case strings.HasPrefix(a, "127."):
-		default:
-			return false
-		}
-	}
-	return len(bindings) > 0
-}
-
-// tlsVerified reports whether client-certificate verification is in force, and
-// which file said so.
-func tlsVerified(u fact.DockerService, d fact.DockerDaemon) (bool, string) {
-	if u.BoolFlag("tlsverify") {
-		return true, "the unit's command line"
-	}
-	// daemon.json is only consulted when it was actually read. An unreadable
-	// or absent configuration says nothing, and nothing is not a yes.
-	if d.Parsed() {
-		if on, set := fact.OptBool(d.TLSVerify); set && on {
-			return true, d.Path
-		}
-	}
-	return false, ""
-}
-
 // failure builds the FAIL for an unprotected TCP binding.
-func failure(u fact.DockerService, exposed []fact.DockerHostBinding) catalog.Outcome {
+func failure(u fact.DockerService, d fact.DockerDaemon, exposed []binding) catalog.Outcome {
 	out := catalog.Outcome{
 		Result:   finding.Fail,
 		Subject:  u.Path,
 		Evidence: bindingEvidence(u, exposed),
 	}
-
-	// --tls without --tlsverify is its own finding and deserves its own
-	// sentence. An operator who set it believes the socket is protected, and
-	// telling them "no TLS" would be both wrong and unpersuasive.
-	encrypted := u.BoolFlag("tls")
 
 	switch {
 	case loopbackOnly(exposed):
@@ -289,15 +172,20 @@ func failure(u fact.DockerService, exposed []fact.DockerHostBinding) catalog.Out
 		// every container on the host network. High rather than Critical, and
 		// still a root-equivalent socket with no authentication on it.
 		out.Severity = finding.High
-		out.Detail = fmt.Sprintf("The daemon is started with %s, which is a root-equivalent API with no authentication on it. The binding is to loopback, so it is not reachable from the network, but every local user on this host can use it to start a privileged container and become root — as can any container run with --network=host, and anything that can be induced to make an HTTP request from this host.",
+		out.Detail = fmt.Sprintf("The daemon is started with -H %s, which is a root-equivalent API with no authentication on it. The binding is to loopback, so it is not reachable from the network, but every local user on this host can use it to start a privileged container and become root — as can any container run with --network=host, and anything that can be induced to make an HTTP request from this host.",
 			specList(exposed))
 	default:
-		out.Detail = fmt.Sprintf("The daemon is started with %s, which publishes a root-equivalent API to the network with no authentication on it. Anyone who can reach the port can start a privileged container with the host filesystem mounted, which is a root shell on this machine.",
+		out.Detail = fmt.Sprintf("The daemon is started with -H %s, which publishes a root-equivalent API to the network with no authentication on it. Anyone who can reach the port can start a privileged container with the host filesystem mounted, which is a root shell on this machine.",
 			specList(exposed))
 	}
 
-	if encrypted {
+	if tlsEncryptedOnly(u, d) {
 		out.Detail += " --tls is set and --tlsverify is not, so the connection is encrypted and the client is never asked to prove who it is; encryption without verification does not restrict who may connect."
+	}
+	if unread := unitCouldSetTLS(u); len(unread) > 0 {
+		// The binding is established and the mitigation is not. Saying so is
+		// what keeps the finding from asserting the half it could not see.
+		out.Detail += fmt.Sprintf(" %s could not be read, so if client-certificate verification is configured anywhere it is there.", strings.Join(unread, " and "))
 	}
 	out.Detail += unitCaveat
 	return out
@@ -310,14 +198,14 @@ func failure(u fact.DockerService, exposed []fact.DockerHostBinding) catalog.Out
 // ADR-0014: a binding that was found is a finding whatever else went unread,
 // because an incomplete examination invalidates a negative result and never a
 // positive one.
-func incomplete(u fact.DockerService, unrecognised []fact.DockerHostBinding) *catalog.Outcome {
+func incomplete(u fact.DockerService, unrecognised []binding) *catalog.Outcome {
 	var reasons []string
 	for _, f := range u.Incomplete() {
 		reasons = append(reasons, fmt.Sprintf("%s was not read (%s)", f.Path, f.State))
 	}
 	reasons = append(reasons, u.Ambiguities()...)
 	for _, b := range unrecognised {
-		reasons = append(reasons, fmt.Sprintf("%s line %d binds %s, which is not a socket specification this build recognises", b.Origin, b.Line, b.Spec))
+		reasons = append(reasons, fmt.Sprintf("%s line %d binds %s, which is not a socket specification this build recognises", b.source, b.line, b.spec))
 	}
 	if len(reasons) == 0 {
 		return nil
@@ -341,35 +229,18 @@ func incomplete(u fact.DockerService, unrecognised []fact.DockerHostBinding) *ca
 	}
 }
 
-// specList renders socket specifications for a detail string.
-func specList(bindings []fact.DockerHostBinding) string {
-	seen := make(map[string]bool, len(bindings))
-	var parts []string
-	for _, b := range bindings {
-		if seen[b.Spec] {
-			continue
-		}
-		seen[b.Spec] = true
-		parts = append(parts, "-H "+b.Spec)
-	}
-	if len(parts) == 1 {
-		return parts[0]
-	}
-	return strings.Join(parts[:len(parts)-1], ", ") + " and " + parts[len(parts)-1]
-}
-
 // bindingEvidence cites the ExecStart line each binding came from, once per
 // line rather than once per binding.
-func bindingEvidence(u fact.DockerService, bindings []fact.DockerHostBinding) []finding.Evidence {
+func bindingEvidence(u fact.DockerService, bindings []binding) []finding.Evidence {
 	seen := make(map[string]bool, len(bindings))
 	var out []finding.Evidence
 	for _, b := range bindings {
-		key := fmt.Sprintf("%s:%d", b.Origin, b.Line)
+		key := fmt.Sprintf("%s:%d", b.source, b.line)
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		out = append(out, unitEvidenceAt(u, b.Origin, b.Line, execLine(u, b.Origin, b.Line)))
+		out = append(out, unitEvidenceAt(u, b.source, b.line, execLine(u, b.source, b.line)))
 	}
 	if len(out) == 0 {
 		out = append(out, execEvidence(u))

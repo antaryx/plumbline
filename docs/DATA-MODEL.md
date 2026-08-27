@@ -744,6 +744,15 @@ parsed or is not running at all. Recording such a file as "no options set" would
 hand a check the compiled-in defaults for a host whose real configuration is
 unknown. `Parsed()` is the gate.
 
+`Hosts` is the sockets the daemon was asked to listen on, recorded as written
+rather than normalised: `tcp://0.0.0.0:2375` and `tcp://127.0.0.1:2375` are the
+same option and opposite exposures. Because it is a `[]string`, `nil` and `[]`
+are one value on the fact — so the distinction between "the operator wrote
+`hosts` and asked for nothing" and "the operator never wrote `hosts`" survives
+only through `Keys`, and `CONTAINERS-0007` reads it there. The two are
+different positions: the first host decided, the second left the sockets to the
+systemd unit.
+
 `Keys` lists the top-level key names the document set, **names only, never
 values**. It lets a check tell "the operator did not set this" from "this build
 does not model that option", without `registry-mirrors`, proxy URLs or storage

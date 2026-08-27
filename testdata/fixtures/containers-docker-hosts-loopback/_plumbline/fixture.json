@@ -1,0 +1,3 @@
+{
+  "description": "Hardened everywhere except that hosts adds a loopback TCP binding. Not reachable from the network and reachable by every local user and every --network=host container, so CONTAINERS-0007 rates it below a routable binding and still fails it. The pair with containers-docker-permissive is what proves the check reads the address and not just the scheme, and it is the isolating fixture for -0007: nothing else in the module moves over it."
+}

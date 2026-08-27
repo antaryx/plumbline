@@ -12,6 +12,60 @@ explanation in this file is a defect.
 ## [Unreleased]
 
 ### Added
+- **`CONTAINERS-0007` (unauthenticated TCP socket in `daemon.json`).** Catalog
+  20, 90 checks. `CRITICAL`, identical to `CONTAINERS-0006` deliberately: the
+  two are one exposure written in two files, and rating them differently would
+  tell an operator that where they typed it changes what it does.
+
+  `{"hosts": ["tcp://0.0.0.0:2375"]}` is the same open door as `-H
+  tcp://0.0.0.0:2375`, and an audit that read only the systemd unit was a
+  scanner you could pass by moving a line between two files. That was the gap
+  `CONTAINERS-0006` shipped with and named in its own detail string; this
+  closes it.
+
+  **`dockerd` refuses to start when an option is given as a flag and in the
+  configuration file at once**, and `hosts` is the option it refuses over most
+  often. So on any host whose daemon is actually running, at most one of the
+  two files decides the sockets — which is what makes the pair exhaustive
+  without double-counting, and what makes an absent `hosts` key a pass rather
+  than a hole.
+
+- **`checks/containers/sockets.go`, one reading of dockerd's socket grammar for
+  both checks.** `classify`, `addrOf`, `loopbackOnly`, `specList`,
+  `tlsVerified` and the loopback/`--tls`/`--tlsverify` rules were
+  `CONTAINERS-0006`'s and are now shared. Two readings that agree today and
+  drift later would not be a cosmetic inconsistency: the same configuration
+  would be `CRITICAL` in one file and a pass in the other.
+  `TestTheTwoSocketChecksReadASpecTheSameWay` asserts the property rather than
+  the sharing that implements it.
+
+  `tlsverify` is honoured from either file by both checks. The socket may be
+  bound in the unit and the certificates configured in `daemon.json`, or the
+  other way round — different options, so `dockerd` accepts the split — and a
+  check reading only its own file would report a mutually authenticated
+  endpoint as an open one.
+
+### Changed
+- **A `FAIL` from either socket check now names the fragment it could not
+  read**, when one went unread. The binding is established and the mitigation
+  is not: a `--tlsverify` could be sitting in a denied `override.conf`. The
+  verdict stays `FAIL` — ADR-0014, a binding that was found is a finding
+  whatever else went unread — but the sentence claiming "with no authentication
+  on it" no longer stands unqualified when the scan could not see everywhere
+  authentication might be configured.
+
+- **`CONTAINERS-0007` is `UNKNOWN` on all six golden bundles**, for
+  `CONTAINERS-0006`'s reason and not a second one: it declares
+  `containers.docker_service`, which the bundles predate. That dependency is
+  not incidental — its subject is `hosts` in `daemon.json`, which every bundle
+  does carry, but whether a socket found there is protected turns on
+  `tlsverify`, which may be set on the command line instead. Declaring only the
+  fact it would like to read would have kept coverage up and produced a
+  `CRITICAL` false positive on the first re-evaluated bundle from a host that
+  had configured TLS properly. Coverage falls again on each bundle; no verdict
+  moves and no posture score changes.
+
+### Added
 - **`CONTAINERS-0006` (unauthenticated TCP socket) and the `docker.service`
   collector it reads.** Catalog 19, 89 checks. The module's only `CRITICAL`,
   and the first check in the tree that reads a systemd unit body.

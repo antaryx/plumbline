@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 19 · 89 checks · 11 modules**
+**Catalog version 20 · 90 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -776,6 +776,87 @@ ss -lntp | grep -E ':(2375|2376)'
 
 - [Docker — protect the Docker daemon socket](https://docs.docker.com/engine/security/protect-access/)
 - [Docker — dockerd command line reference](https://docs.docker.com/reference/cli/dockerd/)
+
+---
+
+### CONTAINERS-0007 — The Docker daemon configuration does not bind an unauthenticated TCP socket
+
+| | |
+|---|---|
+| Module | `CONTAINERS` |
+| Base severity | CRITICAL |
+| Since | catalog 20 |
+| Reads | `containers.docker_daemon`, `containers.docker_service` |
+| Tags | `containers`, `docker`, `remote-access`, `authentication`, `attack-surface` |
+
+This is CONTAINERS-0006's other half. That check reads the -H
+flags on dockerd's command line in the systemd unit; this one reads the hosts
+key in /etc/docker/daemon.json. They are two spellings of one option, they
+produce exactly the same exposure, and an audit that read only one of them
+would be a scanner an operator could pass by moving a line between two files.
+
+	{
+	  "hosts": ["unix:///var/run/docker.sock", "tcp://0.0.0.0:2375"]
+	}
+
+is the same open door as -H tcp://0.0.0.0:2375, and everything CONTAINERS-0006
+says about it applies unchanged: the API is root on the host, nothing
+authenticates a plain TCP client, and reaching the port is the whole of the
+attack. Port 2375 is scanned continuously and an exposed daemon is typically
+mining cryptocurrency within hours.
+
+**The two never both apply on a running host.** dockerd refuses to start when
+an option is given as a flag and in the configuration file at once, and hosts
+is the option it refuses over most often — adding it to daemon.json on a stock
+installation is the well-known way to make Docker stop starting, because the
+unit already passes -H fd://. So on any host whose daemon is running, at most
+one of these two files decides the sockets, and the pair of checks covers both
+without double-counting.
+
+That is also why an absent hosts key is a pass here rather than a gap. It does
+not mean the daemon listens on nothing; it means this file is not where the
+listening is configured, and the unit is. CONTAINERS-0006 reads the unit. The
+two are a pair, and neither is complete on its own.
+
+**--tls is not enough and --tlsverify is.** Setting "tls": true encrypts the
+connection and asks the client for nothing, so anyone who can reach the port
+still gets a root shell over a well-encrypted channel. Only "tlsverify": true
+makes the daemon require a certificate signed by the CA it was given.
+Verification set on dockerd's command line counts here, for the reason the
+sockets count in the other direction: tlsverify and hosts are different
+options, so dockerd accepts them from different places.
+
+A binding to loopback is rated below one to a routable address, and it is still
+a finding, for the reasons CONTAINERS-0006 gives.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort MEDIUM
+
+Remove the tcp:// entry from the hosts array, or require client certificates on the socket that must stay.
+
+1. Find out what connects to it before removing it: a CI runner, a remote docker context, an IDE, or an orchestrator may depend on the port, and each of them needs a route to the daemon afterwards.
+2. Edit /etc/docker/daemon.json and delete the tcp:// entry from hosts, leaving the unix socket. Removing the key entirely is also correct and hands the decision back to the systemd unit.
+3. If remote access is genuinely needed, do not simply set "tls": true: it encrypts without authenticating and leaves the port open to anyone who can reach it. Generate a CA and a server certificate, set "tlsverify": true with tlscacert, tlscert and tlskey, and issue each client its own signed certificate.
+4. Prefer a route that needs no open port at all where one exists: docker context create --docker host=ssh://user@host carries the API over SSH and authenticates with the keys already deployed.
+5. Restart the daemon: systemctl restart docker. If it refuses to start with a message about hosts being specified both as a flag and in the configuration file, the systemd unit is passing -H as well — decide which of the two files owns the sockets and remove it from the other.
+6. Verify from another machine that the old port is closed, not merely firewalled off from where you happened to test.
+7. Treat any host that was exposed as suspect rather than fixed: an unauthenticated daemon is compromised in hours, so audit docker ps -a, the image list and the host's crontabs before considering the incident closed.
+
+```sh
+docker info --format '{{.Name}}' >/dev/null && ss -lntp | grep -E ':(2375|2376)'
+systemctl show -p ExecStart docker.service
+systemctl restart docker
+```
+
+> **Caution.** Removing the binding disconnects every remote client immediately, and restarting the daemon stops every running container unless live-restore is enabled. A firewall in front of the port is a mitigation and not a fix: the API is still unauthenticated to anything inside the perimeter, including every container on the host.
+
+**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 IA-2`, `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`
+
+**References**
+
+- [Docker — protect the Docker daemon socket](https://docs.docker.com/engine/security/protect-access/)
+- [Docker — daemon configuration file reference](https://docs.docker.com/reference/cli/dockerd/)
 
 ---
 

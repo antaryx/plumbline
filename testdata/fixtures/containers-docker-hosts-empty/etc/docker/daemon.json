@@ -1,0 +1,9 @@
+{
+  "userns-remap": "default",
+  "icc": false,
+  "log-driver": "journald",
+  "experimental": false,
+  "live-restore": true,
+  "no-new-privileges": true,
+  "hosts": []
+}

@@ -1,0 +1,3 @@
+{
+  "description": "The sockets are in daemon.json and the unit has been stripped of its -H so that dockerd will start at all, which is the documented resolution of that conflict and a configuration real hosts are in. It is the independence fixture for the pair: CONTAINERS-0006 reads a command line that binds nothing and passes, CONTAINERS-0007 reads the tcp://0.0.0.0:2375 in the file and fails. Either check answering for the other would show up here and nowhere else."
+}

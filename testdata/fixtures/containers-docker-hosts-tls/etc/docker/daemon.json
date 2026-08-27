@@ -1,0 +1,13 @@
+{
+  "userns-remap": "default",
+  "icc": false,
+  "log-driver": "journald",
+  "experimental": false,
+  "live-restore": true,
+  "no-new-privileges": true,
+  "hosts": ["fd://", "tcp://0.0.0.0:2376"],
+  "tlsverify": true,
+  "tlscacert": "/etc/docker/ca.pem",
+  "tlscert": "/etc/docker/server-cert.pem",
+  "tlskey": "/etc/docker/server-key.pem"
+}
