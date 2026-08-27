@@ -169,7 +169,7 @@ gets produced.
 | `fs.tally.<tally>` | 1 | `collect/walker` (`fswalk`) | `Tally`, `Roots[]`, `Buckets[]`, `Truncated`, `TruncationReasons[]`, `KeysDropped`, `InodesTallied`, `InodesVisited` |
 | `users.nsswitch` | 1 | `collect/collectors/users` | `Databases[]`, `State`, `Path`, `Malformed[]`, `Digest` |
 | `memory.elf` | 1 | `collect/collectors/memory` | `Binaries[]`, `Truncated` |
-| `containers.docker_daemon` | 1 | `collect/collectors/containers` | `State`, `Path`, `Digest`, `Installed`, `DaemonPath`, `Keys[]`, plus the modelled options |
+| `containers.docker_daemon` | 1 | `collect/collectors/containers` | `State`, `Path`, `Digest`, `Installed`, `DaemonPath`, `Keys[]`, `LogOpts[]`, plus the modelled options |
 | `containers.docker_service` | 1 | `collect/collectors/containers` | `State`, `Unit`, `Path`, `Digest`, `Fragments[]`, `ExecStart[]` |
 
 Every fact added later is listed here with its version history.
@@ -761,6 +761,19 @@ is recorded and judged by nothing: `dockerd` does refuse to start on one, but
 the valid key set differs by release, and calling a newer option a fault would
 report a broken daemon on a host that is merely more current than this build.
 
+`LogOpts` is the same arrangement one level down, and the privacy argument is
+sharper. `log-opts` is where a logging driver's credentials live —
+`splunk-token` is an authentication token, `awslogs-credentials-endpoint` is a
+path to one, and a `gelf-` or `loki-` address is an internal hostname — so the
+key names travel and the values do not. The names alone answer the only
+question a check asks: `json-file` writes without a size limit unless
+`max-size` is set, so whether that key is present is the difference between a
+log directory that rotates and one that fills the disk. What the limit *is* —
+`10m` or `10g` — is a judgement about whether the bound is sensible rather than
+whether there is one, and this build does not make it. A consequence worth
+stating: a log option written with the wrong value type does not make the
+document `malformed`, because the values are never decoded.
+
 **The file is not the running configuration.** `dockerd` takes the same options
 as command-line flags, and the stock unit passes some — `ExecStart=/usr/bin/dockerd
 -H fd:// --containerd=…`. An option set only there is invisible here. `dockerd`
@@ -820,6 +833,16 @@ exception. Reading the socket bindings out of those arguments is a *method* on
 the fact rather than work the collector does, so that a bundle recorded today is
 re-read by a later build's understanding of `dockerd`'s flag grammar — §6.1's
 promise, which a collector-side extraction would quietly break.
+
+`Hosts()` is the first of those methods and not the only one. `BoolFlag` reads
+the `pflag` booleans, which are true when named alone and take a value only in
+`--flag=value` form, so `--tlsverify=false` is a real way to write *off*;
+`StringFlag` and `StringFlags` read the value-taking long flags in both
+spellings `pflag` accepts, the plural keeping every occurrence because
+`--log-opt` is given once per option and the one that decides
+`CONTAINERS-0008`'s verdict is rarely the last written. Each of them is a
+reading of a flag grammar that can improve, which is why all of them live on
+this side of the bundle.
 
 ---
 

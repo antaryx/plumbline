@@ -1,0 +1,12 @@
+{
+  "userns-remap": "default",
+  "icc": false,
+  "log-driver": "loki",
+  "log-opts": {
+    "loki-url": "https://loki.example.internal/loki/api/v1/push"
+  },
+  "experimental": false,
+  "live-restore": true,
+  "no-new-privileges": true,
+  "hosts": ["unix:///var/run/docker.sock"]
+}

@@ -1,0 +1,13 @@
+{
+  "userns-remap": "default",
+  "icc": false,
+  "log-driver": "json-file",
+  "log-opts": {
+    "labels": "environment,service",
+    "tag": "{{.Name}}"
+  },
+  "experimental": false,
+  "live-restore": true,
+  "no-new-privileges": true,
+  "hosts": ["unix:///var/run/docker.sock"]
+}

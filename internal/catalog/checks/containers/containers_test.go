@@ -19,7 +19,7 @@ const fixtureRoot = "../../../../testdata/fixtures"
 // all is the CONTAINERS module as this work package leaves it.
 var all = []catalog.Check{
 	checks.Check0001, checks.Check0002, checks.Check0003, checks.Check0004,
-	checks.Check0005, checks.Check0006, checks.Check0007,
+	checks.Check0005, checks.Check0006, checks.Check0007, checks.Check0008,
 }
 
 // daemonChecks are the checks that read /etc/docker/daemon.json, which is
@@ -37,18 +37,20 @@ var daemonChecks = []catalog.Check{
 	checks.Check0001, checks.Check0002, checks.Check0003, checks.Check0004, checks.Check0005,
 }
 
-// configGated is daemonChecks plus CONTAINERS-0007: every check whose verdict
-// is drawn from daemon.json and which therefore shares applicable() as its
-// gate.
+// configGated is daemonChecks plus CONTAINERS-0007 and -0008: every check
+// whose verdict is drawn from daemon.json and which therefore shares
+// applicable() as its gate.
 //
-// -0007 is here and not in daemonChecks because of one sentence it has to say
-// that the others do not. Its subject is the hosts key in daemon.json, but the
+// The last two are here and not in daemonChecks because of one sentence each
+// has to say that the others do not. -0007's subject is the hosts key, but the
 // question "is that socket protected" is answered by tlsverify, which may be
-// set on dockerd's command line instead — so its verdicts cannot claim to have
-// read daemon.json *only*, and TestEveryVerdictCarriesTheReadingCaveat asserts
-// exactly that phrase. Everything else the daemon invariants assert is as true
-// of -0007 as of the other five.
-var configGated = append(append([]catalog.Check{}, daemonChecks...), checks.Check0007)
+// set on dockerd's command line instead. -0008's subject is the log-driver
+// key, and the driver itself may be set on that command line. Neither can
+// claim to have read daemon.json *only*, and
+// TestEveryVerdictCarriesTheReadingCaveat asserts exactly that phrase.
+// Everything else the daemon invariants assert is as true of both as of the
+// other five.
+var configGated = append(append([]catalog.Check{}, daemonChecks...), checks.Check0007, checks.Check0008)
 
 // defaultIsUnsafe is the subset of the module whose option the daemon leaves
 // off, so that a host which says nothing is running the value the check
@@ -57,7 +59,7 @@ var configGated = append(append([]catalog.Check{}, daemonChecks...), checks.Chec
 // The split is the module's one real asymmetry and several invariants below
 // turn on it.
 var defaultIsUnsafe = []catalog.Check{
-	checks.Check0001, checks.Check0002, checks.Check0003, checks.Check0004,
+	checks.Check0001, checks.Check0002, checks.Check0003, checks.Check0004, checks.Check0008,
 }
 
 func collectFixture(t *testing.T, name string) *fact.Set {
@@ -401,6 +403,7 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0004": finding.Fail, // live-restore absent, so off
 			"CONTAINERS-0005": finding.Pass, // experimental absent, so off
 			"CONTAINERS-0007": finding.Pass, // no hosts key, so this file binds nothing
+			"CONTAINERS-0008": finding.Pass, // log-driver journald
 		}},
 		{"containers-docker-icc-only", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Pass,
@@ -409,6 +412,7 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0004": finding.Pass,
 			"CONTAINERS-0005": finding.Pass,
 			"CONTAINERS-0007": finding.Pass,
+			"CONTAINERS-0008": finding.Pass,
 		}},
 		{"containers-docker-no-live-restore", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Pass,
@@ -417,6 +421,7 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0004": finding.Fail, // the only thing wrong
 			"CONTAINERS-0005": finding.Pass,
 			"CONTAINERS-0007": finding.Pass,
+			"CONTAINERS-0008": finding.Pass,
 		}},
 		{"containers-docker-experimental-only", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Pass,
@@ -425,6 +430,7 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0004": finding.Pass,
 			"CONTAINERS-0005": finding.Fail, // the only thing wrong
 			"CONTAINERS-0007": finding.Pass,
+			"CONTAINERS-0008": finding.Pass,
 		}},
 		{"containers-docker-hardened", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Pass,
@@ -433,6 +439,7 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0004": finding.Pass,
 			"CONTAINERS-0005": finding.Pass,
 			"CONTAINERS-0007": finding.Pass, // hosts binds the unix socket only
+			"CONTAINERS-0008": finding.Pass, // log-driver journald
 		}},
 		{"containers-docker-hosts-loopback", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Pass,
@@ -441,6 +448,7 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0004": finding.Pass,
 			"CONTAINERS-0005": finding.Pass,
 			"CONTAINERS-0007": finding.Fail, // the only thing wrong
+			"CONTAINERS-0008": finding.Pass,
 		}},
 		{"containers-docker-permissive", map[string]finding.Result{
 			"CONTAINERS-0001": finding.Fail,
@@ -449,6 +457,57 @@ func TestChecksAreIndependent(t *testing.T) {
 			"CONTAINERS-0004": finding.Fail,
 			"CONTAINERS-0005": finding.Fail,
 			"CONTAINERS-0007": finding.Fail, // hosts carries tcp://0.0.0.0:2375
+			"CONTAINERS-0008": finding.Fail, // no log-driver, so json-file unbounded
+		}},
+
+		// The logging fixtures, each hardened everywhere else so that only
+		// CONTAINERS-0008 moves. They are the other half of the same property:
+		// a check that responded to an option it does not own would show up
+		// here as a second verdict changing.
+		{"containers-docker-log-rotated", map[string]finding.Result{
+			"CONTAINERS-0001": finding.Pass,
+			"CONTAINERS-0002": finding.Pass,
+			"CONTAINERS-0003": finding.Pass,
+			"CONTAINERS-0004": finding.Pass,
+			"CONTAINERS-0005": finding.Pass,
+			"CONTAINERS-0007": finding.Pass,
+			"CONTAINERS-0008": finding.Pass, // json-file bounded by max-size
+		}},
+		{"containers-docker-log-unbounded", map[string]finding.Result{
+			"CONTAINERS-0001": finding.Pass,
+			"CONTAINERS-0002": finding.Pass,
+			"CONTAINERS-0003": finding.Pass,
+			"CONTAINERS-0004": finding.Pass,
+			"CONTAINERS-0005": finding.Pass,
+			"CONTAINERS-0007": finding.Pass,
+			"CONTAINERS-0008": finding.Fail, // the only thing wrong
+		}},
+		{"containers-docker-log-none", map[string]finding.Result{
+			"CONTAINERS-0001": finding.Pass,
+			"CONTAINERS-0002": finding.Pass,
+			"CONTAINERS-0003": finding.Pass,
+			"CONTAINERS-0004": finding.Pass,
+			"CONTAINERS-0005": finding.Pass,
+			"CONTAINERS-0007": finding.Pass,
+			"CONTAINERS-0008": finding.Fail, // the only thing wrong
+		}},
+		{"containers-docker-log-plugin", map[string]finding.Result{
+			"CONTAINERS-0001": finding.Pass,
+			"CONTAINERS-0002": finding.Pass,
+			"CONTAINERS-0003": finding.Pass,
+			"CONTAINERS-0004": finding.Pass,
+			"CONTAINERS-0005": finding.Pass,
+			"CONTAINERS-0007": finding.Pass,
+			"CONTAINERS-0008": finding.Unknown, // a driver this build does not know
+		}},
+		{"containers-docker-log-in-unit", map[string]finding.Result{
+			"CONTAINERS-0001": finding.Pass,
+			"CONTAINERS-0002": finding.Pass,
+			"CONTAINERS-0003": finding.Pass,
+			"CONTAINERS-0004": finding.Pass,
+			"CONTAINERS-0005": finding.Pass,
+			"CONTAINERS-0007": finding.Pass,
+			"CONTAINERS-0008": finding.Pass, // the driver is in the drop-in
 		}},
 	}
 
@@ -1063,4 +1122,306 @@ func evalConfiguredHosts(t *testing.T, hosts []string) finding.Finding {
 		t.Fatalf("expected 1 finding, got %d", len(got))
 	}
 	return got[0]
+}
+
+// ---------------------------------------------------------------------------
+// CONTAINERS-0008, which reads both files for one option
+// ---------------------------------------------------------------------------
+
+func TestCheck0008LoggingDriver(t *testing.T) {
+	run(t, checks.Check0008, []tc{
+		// The driver named and safe. journald hands the output to the daemon
+		// that already owns rotation on this host.
+		{fixture: "containers-docker-hardened", result: finding.Pass,
+			detailContains: "systemd journal"},
+
+		// No daemon.json at all, and no unit to have set the flag either. The
+		// compiled-in default is json-file with no size limit, and the default
+		// is the finding.
+		{fixture: "containers-docker-defaults", result: finding.Fail, severity: finding.Low,
+			detailContains: "No logging driver is configured"},
+
+		// The file exists and is silent on logging. Same verdict as a host
+		// with no file at all, and the same sentence, because the position is
+		// the same one: nothing named a driver, so the daemon's own default
+		// is in force. What separates the two is defaultsNote, which says
+		// whether there is a file to add the key to.
+		{fixture: "containers-docker-permissive", result: finding.Fail, severity: finding.Low,
+			detailContains: "No logging driver is configured"},
+
+		// json-file written down and bounded, which is Docker's own advice for
+		// keeping the default driver.
+		{fixture: "containers-docker-log-rotated", result: finding.Pass,
+			detailContains: "rotates at a fixed size"},
+
+		// json-file written down, log-opts written down, and nothing in them
+		// limits the size. The host somebody configured and still left
+		// unbounded.
+		{fixture: "containers-docker-log-unbounded", result: finding.Fail, severity: finding.Low,
+			detailContains: "no max-size log option"},
+
+		// Logging turned off outright.
+		{fixture: "containers-docker-log-none", result: finding.Fail, severity: finding.Low,
+			detailContains: "discarded as it is produced"},
+
+		// A logging plugin. Not a pass, because this build cannot say what it
+		// does; not a fail, because it is almost certainly the operator's own
+		// answer to this check.
+		{fixture: "containers-docker-log-plugin", result: finding.Unknown,
+			reason: finding.ReasonAmbiguousState, detailContains: "not a driver this build recognises"},
+
+		// The driver configured on dockerd's command line rather than in the
+		// file. A check reading only daemon.json reports the default here.
+		{fixture: "containers-docker-log-in-unit", result: finding.Pass,
+			detailContains: "max-size log option is set"},
+
+		// A log option of the wrong type must not cost the key names, and the
+		// document still sets no bound.
+		{fixture: "containers-docker-log-numeric-opt", result: finding.Fail, severity: finding.Low,
+			detailContains: "no max-size log option"},
+
+		// A drop-in that could not be read could be carrying the flag.
+		{fixture: "containers-docker-service-denied", result: finding.Unknown,
+			reason: finding.ReasonPermission, detailContains: "could be carrying a --log-driver flag"},
+
+		// So could a $DOCKER_OPTS this scan does not expand.
+		{fixture: "containers-docker-service-envvar", result: finding.Unknown,
+			reason: finding.ReasonAmbiguousState, detailContains: "environment file this scan does not read"},
+
+		// The gates, which are the module's and not this check's.
+		{fixture: "containers-absent", result: finding.NotApplicable,
+			detailContains: "No dockerd binary"},
+		{fixture: "containers-docker-denied", result: finding.Unknown,
+			reason: finding.ReasonPermission, detailContains: "could not be read"},
+		{fixture: "containers-docker-malformed", result: finding.Unknown,
+			reason: finding.ReasonParse, detailContains: "not valid JSON"},
+	})
+}
+
+// TestTheTwoUnboundedHostsAreToldApart.
+//
+// Both fail and the operators are in different positions. One host never named
+// a driver, so the remedy is to choose one; the other named json-file and did
+// not bound it, so the remedy is a log option on a line that already exists. A
+// report that gave both the same sentence would send the second operator
+// looking for a log-driver key they can already see.
+func TestTheTwoUnboundedHostsAreToldApart(t *testing.T) {
+	unset := evalCheck(t, checks.Check0008, "containers-docker-permissive")
+	named := evalCheck(t, checks.Check0008, "containers-docker-log-unbounded")
+
+	if unset.Result != finding.Fail || named.Result != finding.Fail {
+		t.Fatalf("expected both to fail: %s / %s", unset.Result, named.Result)
+	}
+	if !strings.Contains(unset.Detail, "No logging driver is configured") {
+		t.Errorf("a silent file does not say nothing named a driver: %s", unset.Detail)
+	}
+	if !strings.Contains(named.Detail, "The default logging driver is json-file with no max-size log option") {
+		t.Errorf("a named json-file does not say the key is there and the bound is not: %s", named.Detail)
+	}
+	if unset.Detail == named.Detail {
+		t.Errorf("an unset driver and an unbounded one read identically: %s", unset.Detail)
+	}
+
+	// And the evidence says which of the two the reader is looking at,
+	// including the log-opts the second host did write.
+	if !strings.Contains(unset.Evidence[0].Excerpt, "not set in this file") {
+		t.Errorf("evidence does not show the key is unset: %q", unset.Evidence[0].Excerpt)
+	}
+	if !strings.Contains(named.Evidence[0].Excerpt, "log-opts keys: labels, tag") {
+		t.Errorf("evidence does not show what was configured instead: %q", named.Evidence[0].Excerpt)
+	}
+}
+
+// TestABoundIsWhatSeparatesTwoJsonFileHosts.
+//
+// containers-docker-log-rotated and containers-docker-log-unbounded both name
+// json-file and both write log-opts. The only difference is max-size, and it
+// has to be the whole difference: a check that passed on "log-opts is present"
+// would pass the host whose options are a tag and a label set, which is the
+// most common way of configuring json-file without bounding it.
+func TestABoundIsWhatSeparatesTwoJsonFileHosts(t *testing.T) {
+	if got := evalCheck(t, checks.Check0008, "containers-docker-log-rotated"); got.Result != finding.Pass {
+		t.Errorf("json-file with max-size = %s, want PASS: %s", got.Result, got.Detail)
+	}
+	if got := evalCheck(t, checks.Check0008, "containers-docker-log-unbounded"); got.Result != finding.Fail {
+		t.Errorf("json-file with log-opts that bound nothing = %s, want FAIL: %s", got.Result, got.Detail)
+	}
+}
+
+// TestADriverInTheUnitIsNotTheDefault is this check's version of the reasoning
+// CONTAINERS-0007 applies to sockets.
+//
+// dockerd takes --log-driver on its command line, and configuration management
+// that owns the unit but not daemon.json puts it there. Reading only the file
+// would report the compiled-in default on a host that configured the thing
+// being asked for — a FAIL against somebody who did the work, which is the
+// class of finding that teaches an operator to stop reading the report.
+//
+// The verdict also has to say where it looked, because the remedy is in the
+// drop-in and an operator sent to daemon.json finds nothing there.
+func TestADriverInTheUnitIsNotTheDefault(t *testing.T) {
+	got := evalCheck(t, checks.Check0008, "containers-docker-log-in-unit")
+
+	if got.Result != finding.Pass {
+		t.Fatalf("a driver set in a drop-in = %s, want PASS: %s", got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "logging.conf") {
+		t.Errorf("the verdict does not name the file that set it: %s", got.Detail)
+	}
+	if !strings.Contains(got.Detail, "rather than in /etc/docker/daemon.json") {
+		t.Errorf("the verdict does not say the file it is filed against is not where the setting is: %s", got.Detail)
+	}
+
+	// Two evidence entries: the file this check is about, and the line that
+	// actually decided it.
+	if len(got.Evidence) != 2 {
+		t.Fatalf("evidence = %d entries, want 2: %+v", len(got.Evidence), got.Evidence)
+	}
+	if got.Evidence[0].Source != "/etc/docker/daemon.json" {
+		t.Errorf("first evidence is not the file the check is filed against: %q", got.Evidence[0].Source)
+	}
+	if !strings.HasSuffix(got.Evidence[1].Source, "logging.conf") || got.Evidence[1].Line == 0 {
+		t.Errorf("second evidence does not point at the drop-in line: %+v", got.Evidence[1])
+	}
+	if !strings.Contains(got.Evidence[1].Excerpt, "--log-driver=json-file") {
+		t.Errorf("second evidence does not carry the flag: %q", got.Evidence[1].Excerpt)
+	}
+}
+
+// TestAnUnreadCommandLineIsNotADefault.
+//
+// The failure this check makes most often is an absence — nothing named a
+// driver, so the default applies — and an absence is the one conclusion an
+// incomplete reading can overturn (ADR-0014). A drop-in that could not be
+// opened and a $DOCKER_OPTS that was not expanded are both places a
+// --log-driver lives, and neither may be reported as a host running the
+// default.
+func TestAnUnreadCommandLineIsNotADefault(t *testing.T) {
+	for _, c := range []struct {
+		fixture string
+		reason  finding.UnknownReason
+	}{
+		{"containers-docker-service-denied", finding.ReasonPermission},
+		{"containers-docker-service-envvar", finding.ReasonAmbiguousState},
+	} {
+		got := evalCheck(t, checks.Check0008, c.fixture)
+		if got.Result != finding.Unknown {
+			t.Errorf("%s = %s, want UNKNOWN: %s", c.fixture, got.Result, got.Detail)
+		}
+		if got.UnknownReason != c.reason {
+			t.Errorf("%s reason = %q, want %q", c.fixture, got.UnknownReason, c.reason)
+		}
+	}
+
+	// The inverse, so the check cannot pass this test by never reaching a
+	// verdict on a unit at all: the stock unit reads completely, names no
+	// driver, and is therefore a host running the unbounded default.
+	stock := evalCheck(t, checks.Check0008, "containers-docker-service-stock")
+	if stock.Result != finding.Fail {
+		t.Errorf("a fully-read unit that names no driver = %s, want FAIL: %s", stock.Result, stock.Detail)
+	}
+}
+
+// TestAnUnknownDriverIsNeitherAPassNorAFail.
+//
+// Docker supports third-party logging plugins. A name this build does not know
+// is far more likely to be one somebody installed to ship logs — which is this
+// check's own remedy — than a mistake, so failing it would report the answer as
+// the finding. Passing it would be worse: it would be asserting a property of
+// software this build has never heard of.
+func TestAnUnknownDriverIsNeitherAPassNorAFail(t *testing.T) {
+	got := evalCheck(t, checks.Check0008, "containers-docker-log-plugin")
+
+	if got.Result != finding.Unknown {
+		t.Fatalf("an unrecognised driver = %s, want UNKNOWN: %s", got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "loki") {
+		t.Errorf("the verdict does not name the driver it did not recognise: %s", got.Detail)
+	}
+}
+
+// TestNoLogOptionValueReachesAFinding is the collector's privacy trade carried
+// through to the report.
+//
+// log-opts is where splunk-token and awslogs-credentials-endpoint live, so the
+// fact records the key names and never the values. A finding renders the fact,
+// and a check that had reached for a value would put it in a terminal, in
+// --json output and in whatever an operator pastes into a ticket — which is
+// the same disclosure the bundle was designed to avoid.
+func TestNoLogOptionValueReachesAFinding(t *testing.T) {
+	got := evalCheck(t, checks.Check0008, "containers-docker-log-plugin")
+
+	const secret = "loki.example.internal"
+	if strings.Contains(got.Detail, secret) {
+		t.Errorf("a log-opt value reached the detail: %s", got.Detail)
+	}
+	for _, e := range got.Evidence {
+		if strings.Contains(e.Excerpt, secret) {
+			t.Errorf("a log-opt value reached an evidence excerpt: %q", e.Excerpt)
+		}
+	}
+	// The key name is not a secret and is worth showing: it is how an operator
+	// sees that they configured the driver and still did not bound it.
+	if !strings.Contains(got.Evidence[0].Excerpt, "loki-url") {
+		t.Errorf("evidence hides the key name as well as the value: %q", got.Evidence[0].Excerpt)
+	}
+}
+
+// TestTheLoggingVerdictNamesItsOwnLimit.
+//
+// Every other caveat in this module is about which file was read. This one has
+// a different limit to disclose: what it found is the daemon's *default*, and
+// any container started with its own --log-driver, or with a logging block in
+// a compose file, overrides it for itself. That is not in either file and is
+// not in any fact this build collects, so a verdict that did not say so would
+// be claiming to have audited the containers rather than the daemon.
+func TestTheLoggingVerdictNamesItsOwnLimit(t *testing.T) {
+	for _, fixture := range []string{
+		"containers-docker-hardened",
+		"containers-docker-defaults",
+		"containers-docker-log-rotated",
+		"containers-docker-log-unbounded",
+		"containers-docker-log-none",
+		"containers-docker-log-plugin",
+		"containers-docker-log-in-unit",
+		"containers-docker-service-denied",
+	} {
+		got := evalCheck(t, checks.Check0008, fixture)
+		if !strings.Contains(got.Detail, "the daemon's default") {
+			t.Errorf("over %s the verdict does not say it read a default: %s", fixture, got.Detail)
+		}
+		if !strings.Contains(got.Detail, "overrides it for itself") {
+			t.Errorf("over %s the verdict does not name the per-container override: %s", fixture, got.Detail)
+		}
+	}
+}
+
+// TestTheLoggingCheckIsIndependentOfTheSocketChecks.
+//
+// All three read both files now, and all three could plausibly be written to
+// share a gate they should not. containers-docker-log-none is hardened in
+// every socket-related way and has no logging; containers-docker-service-tcp
+// has the opposite shape. Each must move exactly its own check.
+func TestTheLoggingCheckIsIndependentOfTheSocketChecks(t *testing.T) {
+	logging := evalCheck(t, checks.Check0008, "containers-docker-log-none")
+	if logging.Result != finding.Fail {
+		t.Errorf("CONTAINERS-0008 over a host with logging off = %s, want FAIL: %s", logging.Result, logging.Detail)
+	}
+	if got := evalCheck(t, checks.Check0007, "containers-docker-log-none"); got.Result != finding.Pass {
+		t.Errorf("CONTAINERS-0007 responded to the logging driver: %s", got.Detail)
+	}
+
+	// And the other way. The tcp fixture has no daemon.json, so its logging
+	// verdict is the unbounded default — a FAIL that must be the default's and
+	// not an echo of the socket finding beside it.
+	if got := evalCheck(t, checks.Check0006, "containers-docker-service-tcp"); got.Result != finding.Fail {
+		t.Errorf("CONTAINERS-0006 over the tcp fixture = %s, want FAIL: %s", got.Result, got.Detail)
+	}
+	sock := evalCheck(t, checks.Check0008, "containers-docker-service-tcp")
+	if sock.Result != finding.Fail || sock.Severity != finding.Low {
+		t.Errorf("CONTAINERS-0008 over the tcp fixture = %s/%s, want FAIL/LOW: %s", sock.Result, sock.Severity, sock.Detail)
+	}
+	if strings.Contains(sock.Detail, "tcp://") {
+		t.Errorf("the logging verdict repeats the socket finding: %s", sock.Detail)
+	}
 }

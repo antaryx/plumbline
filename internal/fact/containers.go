@@ -144,6 +144,23 @@ type DockerDaemon struct {
 	// Docker's own default is "json-file".
 	LogDriver string `json:"log_driver,omitempty"`
 
+	// LogOpts lists the keys the log-opts object set, sorted. **Names only,
+	// never values**, for the reason Keys gives and rather more urgently.
+	//
+	// log-opts is where a logging driver's credentials live. "splunk-token"
+	// is an authentication token, "awslogs-credentials-endpoint" is a path to
+	// one, and "gelf-address" and "fluentd-address" are internal hostnames.
+	// A bundle travels (docs/PRIVACY.md, ADR-0015), so the values do not go
+	// in it.
+	//
+	// The names alone answer the one question a check has to ask: json-file
+	// writes without a size limit unless max-size is set, so whether that key
+	// is present is the difference between a log directory that rotates and
+	// one that fills the disk. What the limit actually is — 10m or 10g — is a
+	// judgement about whether the bound is sensible rather than whether there
+	// is one, and this build does not make it.
+	LogOpts []string `json:"log_opts,omitempty"`
+
 	// Experimental enables unstable daemon features. Default false.
 	Experimental *bool `json:"experimental,omitempty"`
 
@@ -208,6 +225,17 @@ func (d DockerDaemon) Configurable() bool { return d.Installed }
 // name ("userns-remap", not "UsernsRemap").
 func (d DockerDaemon) HasKey(name string) bool {
 	for _, k := range d.Keys {
+		if k == name {
+			return true
+		}
+	}
+	return false
+}
+
+// HasLogOpt reports whether the log-opts object set a key, by its Docker name
+// ("max-size"). Names only: see LogOpts for why the value is not here.
+func (d DockerDaemon) HasLogOpt(name string) bool {
+	for _, k := range d.LogOpts {
 		if k == name {
 			return true
 		}
@@ -527,6 +555,56 @@ func (s DockerService) boolFlag(name string) (on, set bool) {
 		}
 	}
 	return on, set
+}
+
+// StringFlag reports the value of a dockerd long flag that takes one, and
+// whether the command line set it at all. name is given without dashes
+// ("log-driver").
+//
+// Both spellings pflag accepts are read — "--log-driver journald" and
+// "--log-driver=journald" — and a flag named more than once takes its last
+// value, as pflag does. There is no shorthand form here: unlike -H, the flags
+// this is used for have no single-letter alias, so the clustered-shorthand
+// ambiguity Hosts has to worry about does not arise.
+//
+// The "set" return is the point of the signature. An empty string is a value
+// an operator can write ("--log-driver=") and is not the same as a flag that
+// was never passed, and for a check whose whole subject is what the daemon
+// falls back to, merging the two would be the error worth avoiding.
+func (s DockerService) StringFlag(name string) (value string, set bool) {
+	vals := s.StringFlags(name)
+	if len(vals) == 0 {
+		return "", false
+	}
+	return vals[len(vals)-1], true
+}
+
+// StringFlags returns every value given for a long flag, in command-line
+// order.
+//
+// It exists for the flags dockerd accepts more than once — --log-opt is the
+// one that matters here, since each option is its own occurrence — where
+// taking the last would discard the rest.
+func (s DockerService) StringFlags(name string) []string {
+	long, eq := "--"+name, "--"+name+"="
+	var out []string
+	for _, e := range s.ExecStart {
+		for i := 1; i < len(e.Argv); i++ {
+			switch tok := e.Argv[i]; {
+			case tok == long:
+				// A trailing flag with nothing after it is a command line
+				// dockerd would refuse to start on. There is no value to
+				// report and inventing one would be worse than reporting none.
+				if i+1 < len(e.Argv) {
+					out = append(out, e.Argv[i+1])
+					i++
+				}
+			case strings.HasPrefix(tok, eq):
+				out = append(out, strings.TrimPrefix(tok, eq))
+			}
+		}
+	}
+	return out
 }
 
 // Ambiguities returns the reasons this build cannot claim to have read the

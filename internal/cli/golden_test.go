@@ -95,21 +95,25 @@ type pin struct {
 // in which either became a PASS would mean the symbol reading had started
 // inventing evidence, which is a worse failure than the false positive.
 //
-// **Every bundle carries two UNKNOWN for the socket checks**, CONTAINERS-0006
-// and -0007, and they are one fact rather than two problems. All six were
-// recorded before containers.docker_service was collected, so the fact both
-// checks require is not in them; the runner resolves a required fact it cannot
-// find to UNKNOWN(fact_not_collected), which is DATA-MODEL.md §6.1 working as
-// promised. A bundle cannot answer a question nobody asked the host at the
-// time, and the alternative — letting a check assume the unit was fine — would
-// be a scanner that reports PASS for something never examined.
+// **Every bundle carries three UNKNOWN from one cause.** CONTAINERS-0006,
+// -0007 and -0008 all require containers.docker_service, and all six bundles
+// were recorded before that fact was collected, so it is not in them. The
+// runner resolves a required fact it cannot find to UNKNOWN(fact_not_collected),
+// which is DATA-MODEL.md §6.1 working as promised. A bundle cannot answer a
+// question nobody asked the host at the time, and the alternative — letting a
+// check assume the unit was fine — would be a scanner that reports PASS for
+// something never examined.
 //
-// -0007's dependency on the unit is not incidental. Its subject is the hosts
-// key in daemon.json, which every bundle *does* carry, but whether a socket it
-// finds there is protected turns on tlsverify, which may be set on dockerd's
-// command line instead. Declaring only the fact it would like to read would
-// have kept these numbers up and produced a Critical false positive on the
-// first re-evaluated bundle from a host that had configured TLS properly.
+// Two of the three could have declared less and kept these numbers up. -0007's
+// subject is the hosts key in daemon.json, which every bundle *does* carry, but
+// whether a socket it finds there is protected turns on tlsverify, which may be
+// set on dockerd's command line instead: declaring only the fact it would like
+// to read produces a Critical false positive on the first re-evaluated bundle
+// from a host that configured TLS properly. -0008's subject is the log-driver
+// key, and the driver may be named by a --log-driver flag in a drop-in instead:
+// the same trade, a Low false positive, and the same answer. Coverage is a
+// number; a finding against a host that did the work is what stops an operator
+// reading the report.
 //
 // It costs coverage on every bundle and moves no verdict: pass, fail and
 // not-applicable are unchanged on all six, and so is every posture score.
@@ -121,8 +125,8 @@ var pinned = map[string]pin{
 	// syslog daemon, and a check that declines to judge an absent subject is
 	// the behaviour, not a gap.
 	"ubuntu-2404-stock": {
-		catalog: 20, pass: 39, fail: 12, notApplicable: 37, unknown: 2, skipped: 0,
-		posture: 80.50847457627118, coverage: 96.22641509433963,
+		catalog: 21, pass: 39, fail: 12, notApplicable: 37, unknown: 3, skipped: 0,
+		posture: 80.50847457627118, coverage: 94.44444444444444,
 		why: "the unhardened baseline every other number is measured against",
 	},
 
@@ -130,8 +134,8 @@ var pinned = map[string]pin{
 	// check cares about. One PASS and one NOT_APPLICABLE separate them here,
 	// and which ones is the interesting part of any diff on this pair.
 	"debian-13-stock": {
-		catalog: 20, pass: 37, fail: 13, notApplicable: 38, unknown: 2, skipped: 0,
-		posture: 78.44827586206897, coverage: 96.15384615384616,
+		catalog: 21, pass: 37, fail: 13, notApplicable: 38, unknown: 3, skipped: 0,
+		posture: 78.44827586206897, coverage: 94.33962264150944,
 		why: "Debian's defaults, which are not Ubuntu's",
 	},
 
@@ -139,8 +143,8 @@ var pinned = map[string]pin{
 	// is the bundle that catches a check quietly assuming a Debian-shaped /etc
 	// and reporting a verdict about a file that was never there.
 	"alpine-320-stock": {
-		catalog: 20, pass: 30, fail: 8, notApplicable: 50, unknown: 2, skipped: 0,
-		posture: 84.0909090909091, coverage: 95,
+		catalog: 21, pass: 30, fail: 8, notApplicable: 50, unknown: 3, skipped: 0,
+		posture: 84.0909090909091, coverage: 92.6829268292683,
 		why: "the distribution least like the others, where guessing shows up",
 	},
 
@@ -152,8 +156,8 @@ var pinned = map[string]pin{
 	// binary, not of any file on the host. AUTH-0002 says it does not know.
 	// Every other scanner reports the documented default and calls it a PASS.
 	"fedora-44-stock": {
-		catalog: 20, pass: 37, fail: 12, notApplicable: 38, unknown: 3, skipped: 0,
-		posture: 79.13043478260869, coverage: 94.23076923076923,
+		catalog: 21, pass: 37, fail: 12, notApplicable: 38, unknown: 4, skipped: 0,
+		posture: 79.13043478260869, coverage: 92.45283018867924,
 		why: "the RPM family's leading edge, where authselect owns the PAM stack",
 	},
 
@@ -161,8 +165,8 @@ var pinned = map[string]pin{
 	// point of it. One FAIL and one NOT_APPLICABLE separate the two, and which
 	// ones is the interesting part of any diff on this pair.
 	"rocky-9-stock": {
-		catalog: 20, pass: 37, fail: 11, notApplicable: 39, unknown: 3, skipped: 0,
-		posture: 81.25, coverage: 94.11764705882352,
+		catalog: 21, pass: 37, fail: 11, notApplicable: 39, unknown: 4, skipped: 0,
+		posture: 81.25, coverage: 92.3076923076923,
 		why: "the enterprise RPM baseline most real audits run against",
 	},
 
@@ -170,7 +174,7 @@ var pinned = map[string]pin{
 	// verdict on a host does so here, which no fixture and no stock image
 	// manages on its own.
 	//
-	// The 5 NOT_APPLICABLE are the five daemon.json checks: the recipe
+	// The 5 NOT_APPLICABLE are CONTAINERS-0001 to -0005: the recipe
 	// installs no Docker, so there is no daemon to judge. That is the correct
 	// answer and the honest limit of a container-recorded corpus — a bundle
 	// recorded inside a container cannot carry a container runtime's
@@ -179,15 +183,16 @@ var pinned = map[string]pin{
 	//
 	// The 4 FAIL are the four a container cannot fix — /tmp and /home are not
 	// separate mounts, and /proc/sys is read-only so dmesg_restrict and the
-	// core pattern cannot be set. Of the 3 UNKNOWN, one is KERNEL-0007
+	// core pattern cannot be set. Of the 4 UNKNOWN, one is KERNEL-0007
 	// declining to claim the running kernel matches its configuration when one
 	// of the configuration files was a symlink it would not follow, and the
-	// other two are the socket checks on a fact this bundle predates. All
-	// twelve are correct, and a run in which any of them became a PASS would be
-	// a serious regression rather than an improvement.
+	// other three are the checks requiring containers.docker_service, a fact
+	// this bundle predates. All thirteen are correct, and a run in which any of
+	// them became a PASS would be a serious regression rather than an
+	// improvement.
 	"ubuntu-2404-hardened": {
-		catalog: 20, pass: 78, fail: 4, notApplicable: 5, unknown: 3, skipped: 0,
-		posture: 96.7741935483871, coverage: 96.47058823529412,
+		catalog: 21, pass: 78, fail: 4, notApplicable: 5, unknown: 4, skipped: 0,
+		posture: 96.7741935483871, coverage: 95.34883720930233,
 		why: "the only bundle on which every check in the catalog evaluates",
 	},
 }

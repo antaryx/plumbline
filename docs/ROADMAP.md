@@ -590,9 +590,10 @@ A second collector reads `docker.service` and its drop-ins into
 daemon's command line and `CONTAINERS-0007` the `hosts` key in `daemon.json` —
 the module's two `CRITICAL`s, because a `tcp://` binding with no
 client-certificate verification is an unauthenticated root-equivalent API and
-not a weakened boundary. Catalog 20, seven checks.
+not a weakened boundary. `CONTAINERS-0008` reads both files for one option —
+the logging driver — and is the module's only `LOW`. Catalog 21, eight checks.
 
-Five things it produced that outlive the checks:
+Six things it produced that outlive the checks:
 
 - **The `NOT_APPLICABLE` gate is `Installed`, never the presence of the file.**
   A host with `dockerd` and no `daemon.json` runs on compiled-in defaults, and
@@ -632,20 +633,31 @@ Five things it produced that outlive the checks:
   must not do is disagree about what a socket specification *means*, which is
   why the reading of `dockerd`'s grammar is one file both import rather than
   two implementations that match today.
+- **Names travel, values do not — one level below the top-level keys.** `Keys`
+  established that a fact can record which options a document set without
+  carrying what they were set to. `log-opts` is where that stops being a
+  precaution: `splunk-token` is an authentication token and
+  `awslogs-credentials-endpoint` is the path to one, so the values are never
+  decoded at all. The test of whether the trade is affordable is whether the
+  names still answer the question, and here they do — `json-file` is unbounded
+  unless `max-size` is set. Where they would not, the answer is to record less
+  and say `UNKNOWN`, not to record the value. Every nested-object option a
+  later module models should be read this way first and widened only with a
+  reason.
 
-The module's honest limits are two, and both are worth stating plainly.
+The module's honest limits are four, and all of them are worth stating plainly.
 
 **The corpus.** All six golden bundles were recorded inside containers, so none
-carries a Docker daemon: the five `daemon.json` checks are `NOT_APPLICABLE` on
-every one, and both socket checks are `UNKNOWN` on every one because the
-bundles predate `containers.docker_service`. That is two `UNKNOWN` per bundle
-from a single cause, and the coverage it costs is the corpus reporting its own
-age rather than a defect to route around — declaring less than a check reads
-would trade it for a `CRITICAL` false positive. The fixtures cover the
-verdicts; nothing in the recorded corpus does. Covering `CONTAINERS` against a
-real daemon needs a recording recipe that installs one, which is a work package
-of its own, is the prerequisite for the Podman and K8s-node work in v2, and now
-clears both `UNKNOWN` at once.
+carries a Docker daemon: `CONTAINERS-0001` to `-0005` are `NOT_APPLICABLE` on
+every one, and `-0006`, `-0007` and `-0008` are `UNKNOWN` on every one because
+the bundles predate `containers.docker_service`. That is three `UNKNOWN` per
+bundle from a single cause, and the coverage it costs is the corpus reporting
+its own age rather than a defect to route around — declaring less than a check
+reads would trade it for a `CRITICAL` false positive in `-0007` and a `LOW` one
+in `-0008`. The fixtures cover the verdicts; nothing in the recorded corpus
+does. Covering `CONTAINERS` against a real daemon needs a recording recipe that
+installs one, which is a work package of its own, is the prerequisite for the
+Podman and K8s-node work in v2, and now clears all three `UNKNOWN` at once.
 
 **The third place a socket can be bound.** `CONTAINERS-0006` reads the unit's
 `-H` flags and `-0007` reads `daemon.json`'s `hosts`. `docker.socket` has
@@ -660,6 +672,25 @@ stock installation is the well-known way to make Docker stop starting. Neither
 check reports that conflict — each reads its own file and neither compares them
 — so a host in that state is one whose daemon is not running and which both
 checks describe as though it were. Detecting it is a check of its own.
+
+**A credential can still reach a bundle through the one command line.**
+`ExecStart=` is stored argument by argument because the flags on it decide the
+API's exposure, and `dockerd` accepts `--log-opt` there as well as in
+`daemon.json`. So `--log-opt splunk-token=…` in a drop-in travels, where the
+`daemon.json` spelling of the same option has its value dropped. Nothing
+redacts it today. The fix is narrow — replace the value of a log option this
+build does not read with a visible marker in the recorded argv — and it is a
+work package rather than a footnote, because it is the first place the tree
+would deliberately record something other than what the file says, and the cost
+lands on `CONTAINERS-0006`'s evidence excerpt. `docs/PRIVACY.md` states the
+limit meanwhile.
+
+**What the logging check cannot see.** `CONTAINERS-0008` reads the daemon's
+*default* driver. A container started with its own `--log-driver`, or with a
+`logging:` block in a compose file, overrides it for itself, and neither is in
+either file or in any fact this build collects. Reaching those means inspecting
+running containers, which is the v2 boundary rather than a gap in this check —
+its detail strings say so.
 
 What remains for v2 is everything that is not a configuration file: Podman's
 configuration, K8s node hardening, and the checks that need to inspect running
@@ -682,7 +713,7 @@ Requires v1 to have been stable for at least one minor cycle. Do not start v2 wo
    - Every vulnerability finding states the vendor's fixed-version and links the vendor advisory — because "fixed in 3.0.2-0ubuntu1.15" is the actionable fact, not the CVSS score.
    - **Gate:** publish a measured false-positive comparison against a naive NVD matcher on stock Ubuntu LTS, Debian and Alpine hosts. If the numbers are not clearly better, the feature does not ship. This comparison is the feature's entire justification.
 
-2. **New modules** — `CONTAINERS` (Docker/Podman/K8s node config, ~15; **started early: the daemon.json and docker.service collectors and seven checks landed in v1.x, see below**), `PRIVESC` (renamed from PENTEST, gated behind `--enable privesc` with an authorised-use notice, ~15), `MEMORY` (ELF hardening: RELRO, PIE, canaries, FORTIFY — self-contained and satisfying, ~10; **started early, see below**), `INTEGRITY` (package DB verification + bundle-to-bundle drift, ~9), `STORAGE`, `CRYPTO` (local certificate and key material only; still no network probing). Catalog to ~250 checks.
+2. **New modules** — `CONTAINERS` (Docker/Podman/K8s node config, ~15; **started early: the daemon.json and docker.service collectors and eight checks landed in v1.x, see below**), `PRIVESC` (renamed from PENTEST, gated behind `--enable privesc` with an authorised-use notice, ~15), `MEMORY` (ELF hardening: RELRO, PIE, canaries, FORTIFY — self-contained and satisfying, ~10; **started early, see below**), `INTEGRITY` (package DB verification + bundle-to-bundle drift, ~9), `STORAGE`, `CRYPTO` (local certificate and key material only; still no network probing). Catalog to ~250 checks.
 
 3. **`CLOUD` module, carefully** — IMDS queries are network access, which breaks the v1 invariant. Therefore: off by default, requires `--enable cloud`, restricted to link-local metadata addresses by an explicit allowlist, and the bundle records that network was used. The offline test asserts that the *default* path still makes zero network syscalls.
 

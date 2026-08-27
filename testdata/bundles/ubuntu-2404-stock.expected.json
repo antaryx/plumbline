@@ -1,7 +1,7 @@
 {
   "bundle": "ubuntu-2404-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 20,
+  "catalog_version": 21,
   "scan": {
     "started": "2026-08-25T21:31:57.77690799Z",
     "finished": "2026-08-25T21:31:57.807262853Z",
@@ -18,8 +18,8 @@
       "fail": 12,
       "not_applicable": 37,
       "skipped": 0,
-      "unknown": 2,
-      "total": 90
+      "unknown": 3,
+      "total": 91
     },
     "by_severity": {
       "HIGH": 3,
@@ -27,7 +27,7 @@
       "MEDIUM": 5
     },
     "posture": 80.50847457627118,
-    "coverage": 96.22641509433963
+    "coverage": 94.44444444444444
   },
   "findings": [
     {
@@ -198,6 +198,16 @@
       "base_severity": "CRITICAL",
       "unknown_reason": "fact_not_collected",
       "fingerprint": "4f4d00718243a3030e9dcdfdae85af5f",
+      "detail": "required fact containers.docker_service was not collected"
+    },
+    {
+      "check_id": "CONTAINERS-0008",
+      "module": "CONTAINERS",
+      "result": "UNKNOWN",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "fe61d551f735a3568b146cc5405c83ef",
       "detail": "required fact containers.docker_service was not collected"
     },
     {

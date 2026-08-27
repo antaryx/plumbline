@@ -254,6 +254,38 @@ func unitEvidenceAt(u fact.DockerService, origin string, line int, excerpt strin
 	return finding.NewEvidence(origin, line, excerpt, digest)
 }
 
+// unreadFragments returns the unit fragments that were not read and could
+// therefore be carrying a flag this scan did not find.
+//
+// Every check that reads the command line needs it, and each needs it for a
+// different flag: CONTAINERS-0006 and -0007 for the --tlsverify that would
+// make an exposed socket safe, CONTAINERS-0008 for the --log-driver or
+// --log-opt that would make an unbounded log bounded. What they share is the
+// shape of the mistake avoided — asserting the absence of something out of a
+// file nobody opened — so the list of files nobody opened lives in one place.
+//
+// It is not the same question as Complete(). A finding that was *found* stands
+// whatever else went unread (ADR-0014), so this never downgrades a positive
+// result; it qualifies a negative one, and the caller decides which it has.
+//
+// An absent unit has no command line and a masked one has a command line
+// systemd will not run, so neither can be hiding a flag that is in force.
+func unreadFragments(u fact.DockerService) []string {
+	switch u.State {
+	case fact.DockerUnitAbsent, fact.DockerUnitMasked:
+		return nil
+	case fact.DockerUnitPresent:
+		var out []string
+		for _, f := range u.Incomplete() {
+			out = append(out, f.Path)
+		}
+		return out
+	default:
+		// The unit itself was not read, so the whole command line is unseen.
+		return []string{u.Path}
+	}
+}
+
 // unitCaveat is appended to every verdict drawn from the unit, and it is the
 // exact mirror of flagsCaveat.
 //

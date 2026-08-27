@@ -1,0 +1,3 @@
+{
+  "description": "The logging driver configured on dockerd's command line instead of in daemon.json, which dockerd accepts and which a check reading only the file would report as the unbounded default. Both halves come from the drop-in: --log-driver names the driver and --log-opt max-size bounds it. daemon.json is present and says nothing about logging, so the fixture also proves the check does not mistake a silent file for a missing one."
+}

@@ -734,9 +734,12 @@ func TestDockerDaemonRoundTrip(t *testing.T) {
 		Digest:     "6a1f2e3d4c5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9",
 		Installed:  true,
 		DaemonPath: "/usr/bin/dockerd",
-		Keys:       []string{"icc", "insecure-registries", "userns-remap"},
+		Keys:       []string{"icc", "insecure-registries", "log-driver", "log-opts", "userns-remap"},
 
 		UsernsRemap: "default",
+		LogDriver:   "json-file",
+		// Names only, never values. See fact.DockerDaemon.LogOpts.
+		LogOpts:     []string{"labels", "max-file", "tag"},
 		ICC:         &no,
 		LiveRestore: &yes,
 		// Experimental and NoNewPrivileges are deliberately nil: the document
@@ -765,6 +768,16 @@ func TestDockerDaemonRoundTrip(t *testing.T) {
 	}
 	if !d.Parsed() || !d.Configurable() {
 		t.Errorf("accessors broke across the round trip: Parsed=%v Configurable=%v", d.Parsed(), d.Configurable())
+	}
+
+	// The log options, through the accessor CONTAINERS-0008 uses. The absence
+	// of max-size is what makes that host a failure, so a decoder that dropped
+	// the slice and one that invented an entry both change a verdict.
+	if !d.HasLogOpt("max-file") {
+		t.Errorf("log-opts lost a key across the round trip: %v", d.LogOpts)
+	}
+	if d.HasLogOpt("max-size") {
+		t.Errorf("log-opts gained a key the source never had: %v", d.LogOpts)
 	}
 }
 

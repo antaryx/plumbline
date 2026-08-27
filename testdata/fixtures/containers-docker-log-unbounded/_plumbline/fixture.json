@@ -1,0 +1,3 @@
+{
+  "description": "json-file configured at length and still unbounded. The operator set labels and a tag, so they went to the trouble of writing log-opts, and none of what they wrote limits the size — which is exactly the host a check that read only \"is log-opts present\" would pass. The verdict has to turn on max-size specifically."
+}

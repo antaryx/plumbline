@@ -1,7 +1,7 @@
 {
   "bundle": "fedora-44-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 20,
+  "catalog_version": 21,
   "scan": {
     "started": "2026-08-25T21:31:49.097645827Z",
     "finished": "2026-08-25T21:31:49.817305111Z",
@@ -18,8 +18,8 @@
       "fail": 12,
       "not_applicable": 38,
       "skipped": 0,
-      "unknown": 3,
-      "total": 90
+      "unknown": 4,
+      "total": 91
     },
     "by_severity": {
       "HIGH": 3,
@@ -27,7 +27,7 @@
       "MEDIUM": 6
     },
     "posture": 79.13043478260869,
-    "coverage": 94.23076923076923
+    "coverage": 92.45283018867924
   },
   "findings": [
     {
@@ -230,6 +230,16 @@
       "base_severity": "CRITICAL",
       "unknown_reason": "fact_not_collected",
       "fingerprint": "4f4d00718243a3030e9dcdfdae85af5f",
+      "detail": "required fact containers.docker_service was not collected"
+    },
+    {
+      "check_id": "CONTAINERS-0008",
+      "module": "CONTAINERS",
+      "result": "UNKNOWN",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "fe61d551f735a3568b146cc5405c83ef",
       "detail": "required fact containers.docker_service was not collected"
     },
     {

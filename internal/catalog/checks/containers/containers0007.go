@@ -203,7 +203,7 @@ func hostsFailure(u fact.DockerService, d fact.DockerDaemon, exposed []binding) 
 	if tlsEncryptedOnly(u, d) {
 		out.Detail += " tls is enabled and tlsverify is not, so the connection is encrypted and the client is never asked to prove who it is; encryption without verification does not restrict who may connect."
 	}
-	if unread := unitCouldSetTLS(u); len(unread) > 0 {
+	if unread := unreadFragments(u); len(unread) > 0 {
 		out.Detail += fmt.Sprintf(" %s could not be read, so if client-certificate verification is configured anywhere it is there.", strings.Join(unread, " and "))
 	}
 	out.Detail += hostsCaveat

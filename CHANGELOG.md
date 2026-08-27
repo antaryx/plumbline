@@ -12,6 +12,72 @@ explanation in this file is a defect.
 ## [Unreleased]
 
 ### Added
+- **`CONTAINERS-0008` (logging driver bounded and retrievable).** Catalog 21,
+  91 checks. `LOW`: nothing here is a privilege boundary, and both failure
+  modes — a full filesystem and a missing log — are recoverable in a way
+  `CONTAINERS-0006`'s is not.
+
+  Docker's default driver is `json-file` and `json-file` has no size limit
+  unless one is configured. Every byte a container writes to stdout is
+  appended to a file in `/var/lib/docker` that nothing rotates: not logrotate,
+  which does not know about it, not journald, which does not own it, and not
+  the daemon, which will not trim it. A full `/var/lib/docker` is not a
+  logging incident but an outage — the daemon cannot write container state and
+  on most hosts `/var` is the same filesystem the journal and the package
+  manager use — and it is reachable by anything that can make a containerised
+  service log.
+
+  Four shapes pass: `local`, which rotates by default; `journald` and
+  `syslog`, which hand the output to the daemon that already owns rotation
+  here; a shipping driver (`fluentd`, `gelf`, `awslogs`, `splunk`, `gcplogs`),
+  which keeps the logs beyond this host's own lifetime; and `json-file` with a
+  `max-size` log option, which is Docker's own documented way to keep the
+  default driver and bound it.
+
+  `"none"` fails, and for the opposite reason: it bounds the logs perfectly by
+  keeping none of them, so `docker logs` returns nothing and a compromised
+  container that restarts takes its own evidence with it.
+
+  A driver this build does not recognise is `UNKNOWN` rather than a failure.
+  Docker supports logging plugins, and a plugin named here is almost certainly
+  a log shipper somebody installed on purpose — reporting the operator's own
+  answer to this check as the finding is worse than saying so.
+
+- **`log-opts` key names in `containers.docker_daemon`.** Names only, never
+  values, and rather more urgently than `Keys`: `log-opts` is where
+  `splunk-token` and `awslogs-credentials-endpoint` live, and a bundle
+  travels (ADR-0015). The names alone answer the only question a check asks —
+  `json-file` is unbounded unless `max-size` is set — which is what makes the
+  trade affordable rather than merely cautious. A log option written with the
+  wrong value type does not make the document `malformed`, because the values
+  are not read.
+
+- **`DockerService.StringFlag` and `StringFlags`.** The value-taking long
+  flags on `dockerd`'s command line, in both spellings `pflag` accepts, with
+  every occurrence kept for the repeatable ones — `--log-opt` is given once
+  per option, so taking the last would discard the one that decides the
+  verdict.
+
+### Changed
+- **`CONTAINERS-0008` reads the systemd unit as well as `daemon.json`**, and
+  declares `containers.docker_service` for it. `dockerd` takes `--log-driver`
+  and `--log-opt` on its command line, and configuration management that owns
+  the unit but not `daemon.json` puts them there. Reading only the file would
+  report the compiled-in default on a host that configured the thing being
+  asked for — a `FAIL` against somebody who did the work, which is the class of
+  finding that teaches an operator to stop reading the report. It is the same
+  trade `CONTAINERS-0007` made, at a lower severity and with the same answer.
+
+  Where the verdict rests on an *absence* — no driver named, no bound set — an
+  unread drop-in or an unexpanded `$DOCKER_OPTS` makes it `UNKNOWN` instead.
+  That is ADR-0014 in the direction it actually points: an incomplete
+  examination invalidates a negative result and never a positive one.
+
+- **`unitCouldSetTLS` is now `unreadFragments`** and lives in
+  `checks/containers/containers.go` rather than `sockets.go`. Three checks now
+  need the list of unit fragments nobody opened, each for a different flag, and
+  the shape of the mistake being avoided is the same for all of them.
+
 - **`CONTAINERS-0007` (unauthenticated TCP socket in `daemon.json`).** Catalog
   20, 90 checks. `CRITICAL`, identical to `CONTAINERS-0006` deliberately: the
   two are one exposure written in two files, and rating them differently would

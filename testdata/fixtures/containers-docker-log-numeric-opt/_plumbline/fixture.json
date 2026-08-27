@@ -1,0 +1,3 @@
+{
+  "description": "A log option written as a number where Docker wants a string. dockerd would object to it; this collector must not, because it reads log-opts for its key names alone and turning a value's type into DockerConfigMalformed would resolve every check in the module to UNKNOWN over something none of them reads. The document also has no max-size, so CONTAINERS-0008 still fails it."
+}

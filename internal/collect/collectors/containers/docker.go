@@ -233,6 +233,13 @@ func readConfig(s system.System, d *fact.DockerDaemon) {
 	d.UsernsRemap = doc.UsernsRemap
 	d.ICC = doc.ICC
 	d.LogDriver = doc.LogDriver
+	if len(doc.LogOpts) > 0 {
+		d.LogOpts = make([]string, 0, len(doc.LogOpts))
+		for k := range doc.LogOpts {
+			d.LogOpts = append(d.LogOpts, k)
+		}
+		sort.Strings(d.LogOpts)
+	}
 	d.Experimental = doc.Experimental
 	d.LiveRestore = doc.LiveRestore
 	d.NoNewPrivileges = doc.NoNewPrivileges
@@ -250,10 +257,18 @@ func readConfig(s system.System, d *fact.DockerDaemon) {
 //
 // Unknown keys are ignored by encoding/json, which is the behaviour wanted
 // here: they are recorded by name in DockerDaemon.Keys and judged by nothing.
+// logOpts is decoded for its key names and never for its values. json.RawMessage
+// rather than string because a value of the wrong type — a bare number where
+// Docker wants "10m" — must not turn the whole document into DockerConfigMalformed
+// over a key whose values this build has no use for. See fact.DockerDaemon.LogOpts
+// for why the values do not travel.
+type logOpts map[string]json.RawMessage
+
 type daemonDoc struct {
 	UsernsRemap     string   `json:"userns-remap"`
 	ICC             *bool    `json:"icc"`
 	LogDriver       string   `json:"log-driver"`
+	LogOpts         logOpts  `json:"log-opts"`
 	Experimental    *bool    `json:"experimental"`
 	LiveRestore     *bool    `json:"live-restore"`
 	NoNewPrivileges *bool    `json:"no-new-privileges"`

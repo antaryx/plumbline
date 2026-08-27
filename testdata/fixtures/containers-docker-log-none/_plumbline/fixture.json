@@ -1,0 +1,3 @@
+{
+  "description": "A host hardened everywhere else that has turned logging off outright. \"log-driver\": \"none\" bounds the logs perfectly by keeping none of them: docker logs returns nothing and a container's output is discarded as it is produced. It is the FAIL that is a deliberate act rather than a default nobody changed, and it is usually a disk-pressure problem solved by deleting the evidence. Only CONTAINERS-0008 moves."
+}

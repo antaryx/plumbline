@@ -1,0 +1,3 @@
+{
+  "description": "A third-party logging plugin. Docker supports logging plugins and loki is the common one; a plugin named here is almost certainly a log shipper somebody installed on purpose, so calling it a failure would report the operator's own answer to this check as the finding. UNKNOWN is the honest verdict. The loki-url in log-opts is here to prove the collector records the key name and never the value."
+}

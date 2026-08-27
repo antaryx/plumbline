@@ -472,3 +472,68 @@ func TestUnitBytesDoNotEnterTheBundle(t *testing.T) {
 		}
 	}
 }
+
+// TestStringFlagSpellings.
+//
+// The flags CONTAINERS-0008 reads take values and have no shorthand, so the
+// grammar is smaller than Hosts has to handle: pflag's "--flag value" and
+// "--flag=value", last occurrence winning. What has to be right is the "set"
+// return — "--log-driver=" is a value an operator can write, and dockerd
+// treats it as unset, so a check that read only the string would see an empty
+// driver either way and could not tell the two apart if it needed to.
+func TestStringFlagSpellings(t *testing.T) {
+	cases := []struct {
+		argv []string
+		want string
+		set  bool
+	}{
+		{[]string{"dockerd", "--log-driver", "journald"}, "journald", true},
+		{[]string{"dockerd", "--log-driver=journald"}, "journald", true},
+		// Last wins, as pflag does.
+		{[]string{"dockerd", "--log-driver=json-file", "--log-driver", "local"}, "local", true},
+		// Written and left empty. Set, and empty.
+		{[]string{"dockerd", "--log-driver="}, "", true},
+		// Nothing to consume: dockerd would refuse to start and there is no
+		// value to report.
+		{[]string{"dockerd", "--log-driver"}, "", false},
+		{[]string{"dockerd", "-H", "fd://"}, "", false},
+		// A prefix is not the flag.
+		{[]string{"dockerd", "--log-driver-plugin=x"}, "", false},
+	}
+
+	for _, c := range cases {
+		u := fact.DockerService{ExecStart: []fact.DockerExec{{Origin: "u", Line: 1, Argv: c.argv}}}
+		got, set := u.StringFlag("log-driver")
+		if got != c.want || set != c.set {
+			t.Errorf("StringFlag(%v) = %q/%v, want %q/%v", c.argv, got, set, c.want, c.set)
+		}
+	}
+}
+
+// TestARepeatedFlagKeepsEveryOccurrence.
+//
+// --log-opt is given once per option, so taking the last would discard every
+// option but one — and the one that decides CONTAINERS-0008's verdict,
+// max-size, is rarely the last one written.
+func TestARepeatedFlagKeepsEveryOccurrence(t *testing.T) {
+	u := fact.DockerService{ExecStart: []fact.DockerExec{{Origin: "u", Line: 1, Argv: []string{
+		"dockerd", "-H", "fd://",
+		"--log-opt", "max-size=10m",
+		"--log-opt=max-file=3",
+		"--log-opt", "tag={{.Name}}",
+	}}}}
+
+	want := []string{"max-size=10m", "max-file=3", "tag={{.Name}}"}
+	if got := u.StringFlags("log-opt"); !reflect.DeepEqual(got, want) {
+		t.Errorf("StringFlags = %v, want %v", got, want)
+	}
+
+	// And across fragments, in the order the effective command line has them.
+	split := fact.DockerService{ExecStart: []fact.DockerExec{
+		{Origin: "unit", Line: 9, Argv: []string{"dockerd", "--log-opt", "max-file=3"}},
+		{Origin: "drop-in", Line: 4, Argv: []string{"dockerd", "--log-opt", "max-size=50m"}},
+	}}
+	if got := split.StringFlags("log-opt"); !reflect.DeepEqual(got, []string{"max-file=3", "max-size=50m"}) {
+		t.Errorf("StringFlags across fragments = %v", got)
+	}
+}

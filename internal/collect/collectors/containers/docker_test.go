@@ -350,3 +350,74 @@ func sortedStrings(s []string) bool {
 	}
 	return true
 }
+
+// TestLogOptionNamesTravelAndValuesDoNot.
+//
+// log-opts is the one place in daemon.json where the values are routinely
+// credentials rather than policy: splunk-token is an authentication token,
+// awslogs-credentials-endpoint is the path to one, and a gelf or loki address
+// is an internal hostname. A bundle is written to travel (docs/PRIVACY.md,
+// ADR-0015), so the names go in it and the values do not.
+//
+// The names are enough for the only question CONTAINERS-0008 asks — json-file
+// is unbounded unless max-size is set — which is what makes the trade
+// affordable rather than merely cautious.
+func TestLogOptionNamesTravelAndValuesDoNot(t *testing.T) {
+	d := collectFixture(t, "containers-docker-log-plugin")
+
+	if !d.HasLogOpt("loki-url") {
+		t.Errorf("LogOpts omits loki-url, which the document sets: %v", d.LogOpts)
+	}
+	if d.HasLogOpt("max-size") {
+		t.Errorf("LogOpts claims a max-size the document does not set: %v", d.LogOpts)
+	}
+
+	// The whole fact, not merely the field the value came from. A value that
+	// leaked into Msg or into Keys would travel just as far.
+	const secret = "loki.example.internal"
+	for _, field := range []string{
+		d.LogDriver, d.Msg, d.UsernsRemap,
+		strings.Join(d.LogOpts, " "), strings.Join(d.Keys, " "), strings.Join(d.Hosts, " "),
+	} {
+		if strings.Contains(field, secret) {
+			t.Errorf("a log-opt value reached the fact: %q", field)
+		}
+	}
+
+	// And the key itself is recorded at the top level too, so a check can tell
+	// "no log options at all" from "log options that do not bound anything".
+	if !d.HasKey("log-opts") {
+		t.Errorf("Keys omits log-opts: %v", d.Keys)
+	}
+
+	// Sorted, so two collections of an unchanged host produce byte-identical
+	// facts. Ranging over a map is randomised.
+	bounded := collectFixture(t, "containers-docker-log-rotated")
+	if !sortedStrings(bounded.LogOpts) {
+		t.Errorf("LogOpts is not sorted: %v", bounded.LogOpts)
+	}
+	if !bounded.HasLogOpt("max-size") || !bounded.HasLogOpt("max-file") {
+		t.Errorf("LogOpts = %v, want both max-size and max-file", bounded.LogOpts)
+	}
+}
+
+// TestALogOptionOfTheWrongTypeIsNotAMalformedDocument.
+//
+// Docker wants strings in log-opts. A value that is a bare number is a file
+// dockerd would object to, and it is not this collector's business to turn
+// that into DockerConfigMalformed — which would resolve every check in the
+// module to UNKNOWN over a key whose values this build has no use for. The
+// names are what is read, so the names are what a wrong type must not cost.
+func TestALogOptionOfTheWrongTypeIsNotAMalformedDocument(t *testing.T) {
+	d := collectFixture(t, "containers-docker-log-numeric-opt")
+
+	if d.State != fact.DockerConfigPresent {
+		t.Fatalf("state = %s, want present: %s", d.State, d.Msg)
+	}
+	if d.LogDriver != "json-file" {
+		t.Errorf("LogDriver = %q, want json-file", d.LogDriver)
+	}
+	if !d.HasLogOpt("max-file") {
+		t.Errorf("LogOpts omits max-file: %v", d.LogOpts)
+	}
+}

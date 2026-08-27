@@ -1,7 +1,7 @@
 {
   "bundle": "rocky-9-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 20,
+  "catalog_version": 21,
   "scan": {
     "started": "2026-08-25T21:31:51.893733451Z",
     "finished": "2026-08-25T21:31:52.46518356Z",
@@ -18,8 +18,8 @@
       "fail": 11,
       "not_applicable": 39,
       "skipped": 0,
-      "unknown": 3,
-      "total": 90
+      "unknown": 4,
+      "total": 91
     },
     "by_severity": {
       "HIGH": 2,
@@ -27,7 +27,7 @@
       "MEDIUM": 6
     },
     "posture": 81.25,
-    "coverage": 94.11764705882352
+    "coverage": 92.3076923076923
   },
   "findings": [
     {
@@ -242,6 +242,16 @@
       "base_severity": "CRITICAL",
       "unknown_reason": "fact_not_collected",
       "fingerprint": "4f4d00718243a3030e9dcdfdae85af5f",
+      "detail": "required fact containers.docker_service was not collected"
+    },
+    {
+      "check_id": "CONTAINERS-0008",
+      "module": "CONTAINERS",
+      "result": "UNKNOWN",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "fe61d551f735a3568b146cc5405c83ef",
       "detail": "required fact containers.docker_service was not collected"
     },
     {

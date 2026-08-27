@@ -182,7 +182,7 @@ func failure(u fact.DockerService, d fact.DockerDaemon, exposed []binding) catal
 	if tlsEncryptedOnly(u, d) {
 		out.Detail += " --tls is set and --tlsverify is not, so the connection is encrypted and the client is never asked to prove who it is; encryption without verification does not restrict who may connect."
 	}
-	if unread := unitCouldSetTLS(u); len(unread) > 0 {
+	if unread := unreadFragments(u); len(unread) > 0 {
 		// The binding is established and the mitigation is not. Saying so is
 		// what keeps the finding from asserting the half it could not see.
 		out.Detail += fmt.Sprintf(" %s could not be read, so if client-certificate verification is configured anywhere it is there.", strings.Join(unread, " and "))

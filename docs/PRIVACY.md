@@ -23,7 +23,8 @@ A `.plb` is host inventory. Treat it as sensitive.
 | PAM stack structure and module arguments | Policy, not credentials |
 | Kernel parameters | Running values and the configured files |
 | Mount table, firewall configuration, cron and logging configuration | |
-| The Docker daemon's `ExecStart` | From `docker.service` and its drop-ins — **that one line, and no other part of the unit** |
+| The Docker daemon's `ExecStart` | From `docker.service` and its drop-ins — **that one line, and no other part of the unit**. See the caveat below |
+| Docker `log-opts` **key names** | From `daemon.json` — names only; the values are never decoded |
 | Filesystem **aggregates** | Counts of setuid, world-writable, unowned inodes, with a small number of example paths |
 | Hostname and OS release | Unless `--redact` |
 | Evidence blobs | The raw bytes of the configuration files a finding cites |
@@ -46,8 +47,41 @@ A `.plb` is host inventory. Treat it as sensitive.
   Docker host's `docker.service.d/override.conf` is the usual home of
   `Environment="HTTPS_PROXY=https://user:password@proxy"`. No other unit on the
   host is read for its contents by anything in the tree.
+- **No `log-opts` values.** `/etc/docker/daemon.json`'s `log-opts` object is
+  read for its key names and never for what they are set to, because that is
+  where a logging driver's credentials live: `splunk-token` is an
+  authentication token, `awslogs-credentials-endpoint` is the path to one, and
+  a `gelf-` or `loki-` address is an internal hostname. The names are enough
+  for the only question asked of them — `json-file` is unbounded unless
+  `max-size` is set — which is what makes the trade affordable rather than
+  merely cautious.
+
 - **No network addresses.** Firewall *configuration* is read; interfaces are
   named, addresses are not.
+
+### The one command line, and its known edge
+
+The `ExecStart=` of `docker.service` is stored in full, argument by argument,
+because the flags on it decide whether the Docker API is exposed to the network
+and whether it requires a client certificate. That is a deliberate exception and
+the paragraph above explains it.
+
+It has an edge worth stating rather than leaving to be discovered. `dockerd`
+accepts `--log-opt` on that command line as well as in `daemon.json`, so an
+operator who wrote `--log-opt splunk-token=…` in a drop-in has put a credential
+on the one line this tool keeps — where the `daemon.json` spelling of the same
+option would have had its value dropped. Nothing in the tree redacts it today.
+
+If your fleet configures a logging driver's credentials on `dockerd`'s command
+line rather than in `daemon.json`, check the drop-in before sharing a bundle:
+
+```bash
+systemctl show -p ExecStart docker.service | grep -o -- '--log-opt [^ ]*'
+```
+
+Redacting the values of log options in the recorded `ExecStart` is a named work
+package in `docs/ROADMAP.md`. Until it lands, this is a limit rather than a
+protection.
 
 ### Filesystem aggregates, specifically
 

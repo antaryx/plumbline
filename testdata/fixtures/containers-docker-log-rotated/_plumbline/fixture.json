@@ -1,0 +1,3 @@
+{
+  "description": "The default driver, made to rotate. json-file with a max-size log option is Docker's own documented way to keep the default driver and bound it, and it is common enough in production that a check failing every json-file host would be wrong on the ones that did the work. The names of the log-opts keys reach the fact; their values deliberately do not, because log-opts is where a splunk token lives."
+}

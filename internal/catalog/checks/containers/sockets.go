@@ -209,33 +209,6 @@ func tlsEncryptedOnly(u fact.DockerService, d fact.DockerDaemon) bool {
 	return false
 }
 
-// unitCouldSetTLS returns the unit fragments that were not read and could
-// therefore be carrying the --tlsverify this scan did not find.
-//
-// A binding that was found is a finding whatever else went unread — ADR-0014,
-// and the reason a FAIL is not downgraded to UNKNOWN here. But the mitigation
-// is a different claim from the exposure, and a finding that said "with no
-// authentication on it" while a drop-in sat unread would be asserting the one
-// half it could not see.
-//
-// An absent unit has no command line and a masked one has a command line
-// systemd will not run, so neither can be hiding a flag that is in force.
-func unitCouldSetTLS(u fact.DockerService) []string {
-	switch u.State {
-	case fact.DockerUnitAbsent, fact.DockerUnitMasked:
-		return nil
-	case fact.DockerUnitPresent:
-		var out []string
-		for _, f := range u.Incomplete() {
-			out = append(out, f.Path)
-		}
-		return out
-	default:
-		// The unit itself was not read, so the whole command line is unseen.
-		return []string{u.Path}
-	}
-}
-
 // certCaveat qualifies a pass reached by way of tlsverify.
 //
 // The flag being set is a fact about a configuration. Whether the CA is one
