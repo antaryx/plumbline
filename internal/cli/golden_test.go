@@ -95,11 +95,11 @@ type pin struct {
 // in which either became a PASS would mean the symbol reading had started
 // inventing evidence, which is a worse failure than the false positive.
 //
-// **Every bundle carries four UNKNOWN from two causes, and both are the corpus
+// **Every bundle carries five UNKNOWN from two causes, and both are the corpus
 // reporting its own age.** CONTAINERS-0006, -0007 and -0008 require
-// containers.docker_service; SERVICES-0006 requires services.hardening. All six
-// bundles were recorded before either fact was collected, so neither is in
-// them. The
+// containers.docker_service; SERVICES-0006 and -0007 require
+// services.hardening. All six bundles were recorded before either fact was
+// collected, so neither is in them. The
 // runner resolves a required fact it cannot find to UNKNOWN(fact_not_collected),
 // which is DATA-MODEL.md §6.1 working as promised. A bundle cannot answer a
 // question nobody asked the host at the time, and the alternative — letting a
@@ -117,11 +117,13 @@ type pin struct {
 // number; a finding against a host that did the work is what stops an operator
 // reading the report.
 //
-// SERVICES-0006 is the cheaper of the two to clear and is not the same
+// The SERVICES pair is the cheaper of the two to clear and is not the same
 // problem. It needs no Docker: every one of these hosts has a
 // systemd-journald.service, so a re-recording with the sandboxing collector in
-// it produces a real verdict on every bundle. The Docker three need a recipe
-// that installs a daemon.
+// it produces a real verdict on every bundle — and SERVICES-0007 is the one
+// most worth having back, because it is the only High-severity check in the
+// catalog currently unable to evaluate. The Docker three need a recipe that
+// installs a daemon.
 //
 // It costs coverage on every bundle and moves no verdict: pass, fail and
 // not-applicable are unchanged on all six, and so is every posture score.
@@ -132,8 +134,8 @@ var pinned = map[string]pin{
 	// syslog daemon, and a check that declines to judge an absent subject is
 	// the behaviour, not a gap.
 	"ubuntu-2404-stock": {
-		catalog: 22, pass: 39, fail: 12, notApplicable: 37, unknown: 4, skipped: 0,
-		posture: 80.50847457627118, coverage: 92.72727272727272,
+		catalog: 23, pass: 39, fail: 12, notApplicable: 37, unknown: 5, skipped: 0,
+		posture: 80.50847457627118, coverage: 91.07142857142857,
 		why: "the unhardened baseline every other number is measured against",
 	},
 
@@ -141,8 +143,8 @@ var pinned = map[string]pin{
 	// check cares about. One PASS and one NOT_APPLICABLE separate them here,
 	// and which ones is the interesting part of any diff on this pair.
 	"debian-13-stock": {
-		catalog: 22, pass: 37, fail: 13, notApplicable: 38, unknown: 4, skipped: 0,
-		posture: 78.44827586206897, coverage: 92.5925925925926,
+		catalog: 23, pass: 37, fail: 13, notApplicable: 38, unknown: 5, skipped: 0,
+		posture: 78.44827586206897, coverage: 90.9090909090909,
 		why: "Debian's defaults, which are not Ubuntu's",
 	},
 
@@ -150,8 +152,8 @@ var pinned = map[string]pin{
 	// is the bundle that catches a check quietly assuming a Debian-shaped /etc
 	// and reporting a verdict about a file that was never there.
 	"alpine-320-stock": {
-		catalog: 22, pass: 30, fail: 8, notApplicable: 50, unknown: 4, skipped: 0,
-		posture: 84.0909090909091, coverage: 90.47619047619048,
+		catalog: 23, pass: 30, fail: 8, notApplicable: 50, unknown: 5, skipped: 0,
+		posture: 84.0909090909091, coverage: 88.37209302325581,
 		why: "the distribution least like the others, where guessing shows up",
 	},
 
@@ -163,8 +165,8 @@ var pinned = map[string]pin{
 	// binary, not of any file on the host. AUTH-0002 says it does not know.
 	// Every other scanner reports the documented default and calls it a PASS.
 	"fedora-44-stock": {
-		catalog: 22, pass: 37, fail: 12, notApplicable: 38, unknown: 5, skipped: 0,
-		posture: 79.13043478260869, coverage: 90.74074074074075,
+		catalog: 23, pass: 37, fail: 12, notApplicable: 38, unknown: 6, skipped: 0,
+		posture: 79.13043478260869, coverage: 89.0909090909091,
 		why: "the RPM family's leading edge, where authselect owns the PAM stack",
 	},
 
@@ -172,8 +174,8 @@ var pinned = map[string]pin{
 	// point of it. One FAIL and one NOT_APPLICABLE separate the two, and which
 	// ones is the interesting part of any diff on this pair.
 	"rocky-9-stock": {
-		catalog: 22, pass: 37, fail: 11, notApplicable: 39, unknown: 5, skipped: 0,
-		posture: 81.25, coverage: 90.56603773584906,
+		catalog: 23, pass: 37, fail: 11, notApplicable: 39, unknown: 6, skipped: 0,
+		posture: 81.25, coverage: 88.88888888888889,
 		why: "the enterprise RPM baseline most real audits run against",
 	},
 
@@ -190,16 +192,16 @@ var pinned = map[string]pin{
 	//
 	// The 4 FAIL are the four a container cannot fix — /tmp and /home are not
 	// separate mounts, and /proc/sys is read-only so dmesg_restrict and the
-	// core pattern cannot be set. Of the 5 UNKNOWN, one is KERNEL-0007
+	// core pattern cannot be set. Of the 6 UNKNOWN, one is KERNEL-0007
 	// declining to claim the running kernel matches its configuration when one
 	// of the configuration files was a symlink it would not follow, three are
-	// the checks requiring containers.docker_service, and one is SERVICES-0006
-	// requiring services.hardening — both facts this bundle predates. All
-	// fourteen are correct, and a run in which any of them became a PASS would
-	// be a serious regression rather than an improvement.
+	// the checks requiring containers.docker_service, and two are SERVICES-0006
+	// and -0007 requiring services.hardening — both facts this bundle predates.
+	// All fifteen are correct, and a run in which any of them became a PASS
+	// would be a serious regression rather than an improvement.
 	"ubuntu-2404-hardened": {
-		catalog: 22, pass: 78, fail: 4, notApplicable: 5, unknown: 5, skipped: 0,
-		posture: 96.7741935483871, coverage: 94.25287356321839,
+		catalog: 23, pass: 78, fail: 4, notApplicable: 5, unknown: 6, skipped: 0,
+		posture: 96.7741935483871, coverage: 93.18181818181817,
 		why: "the only bundle on which every check in the catalog evaluates",
 	},
 }

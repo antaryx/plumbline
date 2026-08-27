@@ -528,3 +528,127 @@ func (h ServiceHardening) Unreadable() []ServiceSandbox {
 	}
 	return out
 }
+
+// ParseSystemdBool reads a systemd boolean, returning the value and whether it
+// parsed.
+//
+// It is systemd's own grammar from parse_boolean(3), which is wider than the
+// yes/no most documentation shows and is not uniformly case-insensitive:
+//
+//	true:  1  yes  y  true  t  on
+//	false: 0  no   n  false f  off
+//
+// **"1" and "0" are compared exactly and every word is compared
+// case-insensitively**, which is what systemd does and is the sort of asymmetry
+// a re-implementation invents a rule for. Writing our own — folding everything,
+// or accepting only yes/no — would mean disagreeing with the host about what
+// its own configuration says, in one direction or the other, on the units
+// where somebody wrote "True".
+//
+// Anything else does not parse, and **is emphatically not false**. systemd logs
+// a warning and *ignores the assignment*, leaving the previous value or the
+// compiled-in default in force, so a unit whose only NoNewPrivileges= line
+// reads "maybe" is running with the setting off while its file appears to say
+// otherwise.
+//
+// It lives here rather than in the collector because a check may not import a
+// collector package — the purity rule in CONTRIBUTING.md — and both sides need
+// it: the collector to record an effective value, and SERVICES-0007 to read
+// the boolean half of ProtectSystem's grammar. One grammar, one
+// implementation.
+func ParseSystemdBool(v string) (value, ok bool) {
+	switch v {
+	case "1":
+		return true, true
+	case "0":
+		return false, true
+	}
+	switch asciiLower(v) {
+	case "yes", "y", "true", "t", "on":
+		return true, true
+	case "no", "n", "false", "f", "off":
+		return false, true
+	}
+	return false, false
+}
+
+// asciiLower folds ASCII only. systemd compares with strcaseeq, which is
+// locale-independent ASCII folding; unicode's would differ on a Turkish locale
+// for exactly the letters "t" and "on" contain.
+func asciiLower(s string) string {
+	b := []byte(s)
+	for i := range b {
+		if b[i] >= 'A' && b[i] <= 'Z' {
+			b[i] += 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
+// ProtectSystemLevel is the effective ProtectSystem setting, as systemd
+// resolves it.
+//
+// The four levels are cumulative and are not interchangeable, which is why the
+// fact records the value as written and this reads it rather than the other way
+// round.
+type ProtectSystemLevel string
+
+const (
+	// ProtectNo is the default: the service may write anywhere its
+	// credentials allow.
+	ProtectNo ProtectSystemLevel = "no"
+	// ProtectYes mounts /usr and the boot loader directories read-only.
+	ProtectYes ProtectSystemLevel = "yes"
+	// ProtectFull adds /etc, so a compromised daemon cannot rewrite the
+	// host's configuration either.
+	ProtectFull ProtectSystemLevel = "full"
+	// ProtectStrict makes the whole filesystem hierarchy read-only apart from
+	// /dev, /proc and /sys, and is what a daemon with an explicit
+	// ReadWritePaths list should use.
+	ProtectStrict ProtectSystemLevel = "strict"
+)
+
+// ParseProtectSystem reads a ProtectSystem value, returning the level and
+// whether it parsed.
+//
+// **The grammar is a superset of the booleans**, and in systemd's own order:
+// it tries parse_boolean first and falls back to the enum, so "true", "1" and
+// "on" are all ProtectYes and "off" is ProtectNo. A build that accepted only
+// yes/no/full/strict would report a host that wrote "ProtectSystem=true" as
+// having set nothing — a failure against a service that is in fact protected.
+func ParseProtectSystem(v string) (ProtectSystemLevel, bool) {
+	if on, ok := ParseSystemdBool(v); ok {
+		if on {
+			return ProtectYes, true
+		}
+		return ProtectNo, true
+	}
+	switch asciiLower(v) {
+	case "full":
+		return ProtectFull, true
+	case "strict":
+		return ProtectStrict, true
+	}
+	return ProtectNo, false
+}
+
+// SystemProtection returns the effective ProtectSystem level for a unit.
+//
+// An unset directive is ProtectNo, which is systemd's default and the whole
+// reason this check exists: a service that says nothing may write to /usr.
+//
+// The reading lives on the fact rather than in the collector so that a bundle
+// recorded today is re-read by a later build's understanding of the grammar,
+// which is the promise DATA-MODEL.md §6.1 makes. The collector records what the
+// file said; this decides what it means.
+func (s ServiceSandbox) SystemProtection() ProtectSystemLevel {
+	if s.ProtectSystem == "" {
+		return ProtectNo
+	}
+	level, _ := ParseProtectSystem(s.ProtectSystem)
+	return level
+}
+
+// Protected reports whether the unit's ProtectSystem is at least ProtectYes,
+// which is SERVICES-0007's bar.
+func (s ServiceSandbox) Protected() bool { return s.SystemProtection() != ProtectNo }

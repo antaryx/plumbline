@@ -1,0 +1,3 @@
+{
+  "description": "The two ways of leaving /usr writable, side by side on units that are not exempt: journald writes ProtectSystem=no with a comment saying why, and dbus never mentions it. Both fail and the finding says which is which, because one operator considered the question and the other did not. cron is unset too and is exempt, so it is named with its reason rather than counted as a third failure."
+}

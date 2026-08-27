@@ -130,13 +130,53 @@ func readSandbox(s system.System, name string) fact.ServiceSandbox {
 		out.NoNewPrivileges = &v
 	}
 
-	if d, ok := asm.Last("ProtectSystem"); ok {
-		out.ProtectSystem = d.Value
+	// ProtectSystem takes the last value systemd would accept, for the reason
+	// the boolean does: an unparseable one is logged and ignored, leaving the
+	// previous value or the default in force. Its grammar is a superset of the
+	// booleans, so "true" and "1" are as valid here as "full".
+	if v, set, bad := lastEnum(asm, "ProtectSystem", validProtectSystem); bad {
+		out.Malformed = append(out.Malformed, "ProtectSystem")
+	} else if set {
+		out.ProtectSystem = v
 	}
 	if d, ok := asm.Last("ProtectHome"); ok {
 		out.ProtectHome = d.Value
 	}
 	return out
+}
+
+// lastEnum reads the effective value of a directive whose values are a fixed
+// set, keeping the last one systemd would accept.
+//
+// It is lastBool's shape with the parser passed in, because the rule it
+// encodes is systemd's rather than any one directive's: an assignment that
+// does not parse is logged and skipped, so the effective value is the last
+// *valid* one and not the last one. bad reports that something was rejected
+// and nothing valid followed it — the case where the file looks configured and
+// the host is not.
+func lastEnum(asm unit.Unit, name string, valid func(string) bool) (value string, set, bad bool) {
+	for _, d := range asm.Directives {
+		if d.Name != name {
+			continue
+		}
+		// An empty assignment is systemd's reset: it restores the default and
+		// clears anything said before it, including a malformed line.
+		if d.Value == "" {
+			value, set, bad = "", false, false
+			continue
+		}
+		if !valid(d.Value) {
+			bad = true
+			continue
+		}
+		value, set, bad = d.Value, true, false
+	}
+	return value, set, bad
+}
+
+func validProtectSystem(v string) bool {
+	_, ok := fact.ParseProtectSystem(v)
+	return ok
 }
 
 // lastBool reads the effective value of a boolean directive.
@@ -162,7 +202,7 @@ func lastBool(asm unit.Unit, name string) (value, set, bad bool) {
 			value, set, bad = false, false, false
 			continue
 		}
-		v, ok := ParseBool(d.Value)
+		v, ok := fact.ParseSystemdBool(d.Value)
 		if !ok {
 			bad = true
 			continue
@@ -170,50 +210,4 @@ func lastBool(asm unit.Unit, name string) (value, set, bad bool) {
 		value, set, bad = v, true, false
 	}
 	return value, set, bad
-}
-
-// ParseBool reads a systemd boolean, returning the value and whether it parsed.
-//
-// It is systemd's own grammar from parse_boolean(3), which is wider than the
-// yes/no most documentation shows and is not uniformly case-insensitive:
-//
-//	true:  1  yes  y  true  t  on
-//	false: 0  no   n  false f  off
-//
-// **"1" and "0" are compared exactly and every word is compared
-// case-insensitively**, which is what systemd does and is the sort of asymmetry
-// a re-implementation invents a rule for. Writing our own — folding everything,
-// or accepting only yes/no — would mean disagreeing with the host about what
-// its own configuration says, in one direction or the other, on the units
-// where somebody wrote "True".
-//
-// Anything else does not parse. It is emphatically not false: see lastBool for
-// what systemd does with it.
-func ParseBool(v string) (value, ok bool) {
-	switch v {
-	case "1":
-		return true, true
-	case "0":
-		return false, true
-	}
-	switch lower(v) {
-	case "yes", "y", "true", "t", "on":
-		return true, true
-	case "no", "n", "false", "f", "off":
-		return false, true
-	}
-	return false, false
-}
-
-// lower folds ASCII only. systemd compares with strcaseeq, which is
-// locale-independent ASCII folding; using unicode's would differ on a Turkish
-// locale for exactly the letters "t" and "on" contain.
-func lower(s string) string {
-	b := []byte(s)
-	for i := range b {
-		if b[i] >= 'A' && b[i] <= 'Z' {
-			b[i] += 'a' - 'A'
-		}
-	}
-	return string(b)
 }

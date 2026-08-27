@@ -70,7 +70,12 @@ func TestSandboxCollectorContract(t *testing.T) {
 	}
 }
 
-// TestSystemdBooleanSpellings is the collector's central parsing property.
+// TestSystemdBooleanSpellings is the module's central parsing property.
+//
+// The parser lives in internal/fact rather than here, because a check may not
+// import a collector package and SERVICES-0007 needs the same grammar for the
+// boolean half of ProtectSystem. It is exercised from this file anyway: the
+// collector is where a wrong answer would reach a fact.
 //
 // systemd's parse_boolean accepts far more than yes/no, and it is not
 // uniformly case-insensitive: "1" and "0" are compared exactly, every word is
@@ -80,15 +85,15 @@ func TestSandboxCollectorContract(t *testing.T) {
 // other, on the units where somebody wrote "True".
 func TestSystemdBooleanSpellings(t *testing.T) {
 	for _, v := range []string{"1", "yes", "Yes", "YES", "y", "Y", "true", "True", "TRUE", "t", "T", "on", "On", "ON"} {
-		got, ok := collector.ParseBool(v)
+		got, ok := fact.ParseSystemdBool(v)
 		if !ok || !got {
-			t.Errorf("ParseBool(%q) = %v/%v, want true/true", v, got, ok)
+			t.Errorf("ParseSystemdBool(%q) = %v/%v, want true/true", v, got, ok)
 		}
 	}
 	for _, v := range []string{"0", "no", "No", "NO", "n", "N", "false", "False", "FALSE", "f", "F", "off", "Off", "OFF"} {
-		got, ok := collector.ParseBool(v)
+		got, ok := fact.ParseSystemdBool(v)
 		if !ok || got {
-			t.Errorf("ParseBool(%q) = %v/%v, want false/true", v, got, ok)
+			t.Errorf("ParseSystemdBool(%q) = %v/%v, want false/true", v, got, ok)
 		}
 	}
 
@@ -97,8 +102,8 @@ func TestSystemdBooleanSpellings(t *testing.T) {
 	// stays in force. A parser returning false here would report a unit as
 	// deliberately unhardened when the truth is that its line does nothing.
 	for _, v := range []string{"", "maybe", "2", "-1", "yes ", "y e s", "enabled", "01", "TRUE!", "оn"} {
-		if got, ok := collector.ParseBool(v); ok {
-			t.Errorf("ParseBool(%q) = %v/true, want not-parsed", v, got)
+		if got, ok := fact.ParseSystemdBool(v); ok {
+			t.Errorf("ParseSystemdBool(%q) = %v/true, want not-parsed", v, got)
 		}
 	}
 
@@ -107,8 +112,8 @@ func TestSystemdBooleanSpellings(t *testing.T) {
 	// one — a parser that lowercased first and then compared would accept
 	// nothing different here, but one that folded and compared "01" or " 1"
 	// would.
-	if _, ok := collector.ParseBool(" 1"); ok {
-		t.Error("ParseBool(\" 1\") parsed; systemd compares the value exactly")
+	if _, ok := fact.ParseSystemdBool(" 1"); ok {
+		t.Error("ParseSystemdBool(\" 1\") parsed; systemd compares the value exactly")
 	}
 }
 

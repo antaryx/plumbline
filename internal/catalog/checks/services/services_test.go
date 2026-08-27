@@ -19,8 +19,13 @@ const fixtureRoot = "../../../../testdata/fixtures"
 // all is the SERVICES module as this work package leaves it.
 var all = []catalog.Check{
 	checks.Check0001, checks.Check0002, checks.Check0003,
-	checks.Check0004, checks.Check0005, checks.Check0006,
+	checks.Check0004, checks.Check0005, checks.Check0006, checks.Check0007,
 }
+
+// sandbox is the pair built on services.hardening. They share a gate, a
+// fixture corpus and an exemption mechanism, and differ in the directive they
+// read and the exemptions they carry.
+var sandbox = []catalog.Check{checks.Check0006, checks.Check0007}
 
 // enablement is the five checks built on services.units. They share a gate and
 // a fixture corpus; SERVICES-0006 shares neither, because it reads unit bodies
@@ -193,11 +198,16 @@ func TestEveryCheckDeclaresItsVintageAndItsFact(t *testing.T) {
 		}
 	}
 
-	if checks.Check0006.SinceCatalog != 22 {
-		t.Errorf("SERVICES-0006 SinceCatalog = %d, want 22", checks.Check0006.SinceCatalog)
-	}
-	if len(checks.Check0006.Requires) != 1 || checks.Check0006.Requires[0] != fact.ServiceHardeningID {
-		t.Errorf("SERVICES-0006 requires %v, want [%s]", checks.Check0006.Requires, fact.ServiceHardeningID)
+	for _, c := range []struct {
+		check catalog.Check
+		since int
+	}{{checks.Check0006, 22}, {checks.Check0007, 23}} {
+		if c.check.SinceCatalog != c.since {
+			t.Errorf("%s SinceCatalog = %d, want %d", c.check.ID, c.check.SinceCatalog, c.since)
+		}
+		if len(c.check.Requires) != 1 || c.check.Requires[0] != fact.ServiceHardeningID {
+			t.Errorf("%s requires %v, want [%s]", c.check.ID, c.check.Requires, fact.ServiceHardeningID)
+		}
 	}
 }
 
@@ -712,6 +722,200 @@ func TestEveryExemptionSaysWhatBreaks(t *testing.T) {
 	} {
 		if !strings.Contains(got.Detail, want) {
 			t.Errorf("no exemption reason mentions %q: %s", want, got.Detail)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SERVICES-0007, the same fact and a different directive
+// ---------------------------------------------------------------------------
+
+func TestCheck0007ProtectSystem(t *testing.T) {
+	run(t, checks.Check0007, []tc{
+		// The three enum levels, all of which pass: the bar is yes and upward,
+		// not strict.
+		{fixture: "services-sandbox-protect-levels", result: finding.Pass,
+			detailContains: "3 of the 3 audited services installed here mount the system directories read-only"},
+
+		// The boolean spellings the enum is a superset of.
+		{fixture: "services-sandbox-protect-bool", result: finding.Pass,
+			detailContains: "systemd-journald.service (yes)"},
+
+		// Written down and turned off, and never written at all.
+		{fixture: "services-sandbox-protect-off", result: finding.Fail, severity: finding.High,
+			detailContains: "written down and turned off"},
+
+		// A host where the only unit that could be judged is exempt.
+		{fixture: "services-sandbox-dropin", result: finding.NotApplicable,
+			detailContains: "nothing to examine"},
+
+		// The gates, which are the module's.
+		{fixture: "services-sandbox-none", result: finding.NotApplicable,
+			detailContains: "None of the units this check audits is installed"},
+		{fixture: "services-absent", result: finding.NotApplicable,
+			detailContains: "does not run systemd"},
+		{fixture: "services-sandbox-denied", result: finding.Unknown,
+			reason: finding.ReasonPermission, detailContains: "not every unit was read in full"},
+	})
+}
+
+// TestProtectSystemAcceptsEveryLevelSystemdDoes.
+//
+// The value is a superset of the booleans and systemd tries parse_boolean
+// *first*, so true, 1 and on are all "yes". A check that accepted only the four
+// enum names would report a host that wrote ProtectSystem=true as having set
+// nothing — a High finding against a service that is in fact protected, which
+// is the worst kind of false positive this module can produce.
+func TestProtectSystemAcceptsEveryLevelSystemdDoes(t *testing.T) {
+	for _, c := range []struct {
+		value string
+		want  fact.ProtectSystemLevel
+	}{
+		{"yes", fact.ProtectYes}, {"true", fact.ProtectYes}, {"1", fact.ProtectYes},
+		{"on", fact.ProtectYes}, {"y", fact.ProtectYes}, {"TRUE", fact.ProtectYes},
+		{"full", fact.ProtectFull}, {"Full", fact.ProtectFull},
+		{"strict", fact.ProtectStrict}, {"STRICT", fact.ProtectStrict},
+		{"no", fact.ProtectNo}, {"false", fact.ProtectNo}, {"0", fact.ProtectNo}, {"off", fact.ProtectNo},
+	} {
+		got, ok := fact.ParseProtectSystem(c.value)
+		if !ok || got != c.want {
+			t.Errorf("ParseProtectSystem(%q) = %q/%v, want %q", c.value, got, ok, c.want)
+		}
+	}
+
+	// Not values systemd would take. Emphatically not "no": systemd logs and
+	// ignores the line, which the collector records as Malformed.
+	for _, v := range []string{"readonly", "read-only", "partial", "2", "", "yes full"} {
+		if _, ok := fact.ParseProtectSystem(v); ok {
+			t.Errorf("ParseProtectSystem(%q) parsed", v)
+		}
+	}
+
+	// And the bar the check applies: anything from yes upward protects.
+	for _, c := range []struct {
+		value     string
+		protected bool
+	}{
+		{"", false}, {"no", false}, {"off", false}, {"0", false},
+		{"yes", true}, {"true", true}, {"full", true}, {"strict", true},
+	} {
+		s := fact.ServiceSandbox{ProtectSystem: c.value}
+		if s.Protected() != c.protected {
+			t.Errorf("Protected(%q) = %v, want %v", c.value, s.Protected(), c.protected)
+		}
+	}
+}
+
+// TestTheTwoSandboxChecksCarryTheirOwnExemptions is the property that makes
+// exemptions per-check rather than a shared "awkward services" list.
+//
+// dbus.service is exempt from SERVICES-0006 because its launch helper is
+// setuid, and that has nothing whatever to do with where the daemon may write
+// — on a systemd host dbus-activated services are started by systemd as their
+// own units and do not inherit its mount namespace. A shared list would have
+// exempted dbus from both and cost SERVICES-0007 half of what it can verify.
+func TestTheTwoSandboxChecksCarryTheirOwnExemptions(t *testing.T) {
+	// A host where dbus sets neither directive. -0006 excuses it; -0007 fails
+	// it, and that difference is the whole test.
+	nnp := evalCheck(t, checks.Check0006, "services-sandbox-protect-off")
+	if strings.Contains(nnp.Detail, "dbus.service") && !strings.Contains(nnp.Detail, "Not held to this standard") {
+		t.Errorf("SERVICES-0006 did not excuse dbus: %s", nnp.Detail)
+	}
+
+	ps := evalCheck(t, checks.Check0007, "services-sandbox-protect-off")
+	if ps.Result != finding.Fail {
+		t.Fatalf("SERVICES-0007 over an unprotected dbus = %s, want FAIL: %s", ps.Result, ps.Detail)
+	}
+	if !strings.Contains(ps.Detail, "dbus.service") {
+		t.Errorf("SERVICES-0007 excused dbus, which is SERVICES-0006's exemption and not its own: %s", ps.Detail)
+	}
+	// cron is exempt from both, for different reasons, and -0007's reason has
+	// to be its own rather than a copy.
+	if !strings.Contains(ps.Detail, "arbitrary operator-supplied jobs inside its own mount namespace") {
+		t.Errorf("SERVICES-0007 does not give its own reason for exempting cron: %s", ps.Detail)
+	}
+}
+
+// TestTheTwoWaysOfLeavingUsrWritableAreDistinguished. One operator considered
+// the question and turned it off; the other never wrote the directive. Same
+// posture, different conversation.
+func TestTheTwoWaysOfLeavingUsrWritableAreDistinguished(t *testing.T) {
+	got := evalCheck(t, checks.Check0007, "services-sandbox-protect-off")
+
+	if !strings.Contains(got.Detail, "systemd-journald.service (no)") {
+		t.Errorf("the explicit off does not show its value: %s", got.Detail)
+	}
+	var excerpts []string
+	for _, e := range got.Evidence {
+		excerpts = append(excerpts, e.Excerpt)
+	}
+	joined := strings.Join(excerpts, " | ")
+	for _, want := range []string{
+		"systemd-journald.service: ProtectSystem=no (no)",
+		"dbus.service: ProtectSystem not set; the default is no",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("evidence does not carry %q: %s", want, joined)
+		}
+	}
+}
+
+// TestTheLevelIsRenderedAlongsideTheText.
+//
+// "true" and "yes" are the same setting, and an operator comparing two hosts
+// should not have to know that. The evidence carries both so a diff of two
+// reports shows a real difference rather than a spelling one.
+func TestTheLevelIsRenderedAlongsideTheText(t *testing.T) {
+	got := evalCheck(t, checks.Check0007, "services-sandbox-protect-bool")
+
+	var excerpts []string
+	for _, e := range got.Evidence {
+		excerpts = append(excerpts, e.Excerpt)
+	}
+	joined := strings.Join(excerpts, " | ")
+	for _, want := range []string{
+		"systemd-journald.service: ProtectSystem=true (yes)",
+		"dbus.service: ProtectSystem=1 (yes)",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("evidence does not resolve the spelling: %s", joined)
+		}
+	}
+}
+
+// TestBothSandboxChecksRefuseToBeVacuous applies SERVICES-0006's guard to its
+// neighbour, because the failure mode is the mechanism's rather than any one
+// check's: an exemption list that grows until it covers every auditable unit
+// turns a check into a green tick, silently.
+func TestBothSandboxChecksRefuseToBeVacuous(t *testing.T) {
+	// Only cron.service is installed here, and it is exempt from both.
+	for _, check := range sandbox {
+		got := evalCheck(t, check, "services-sandbox-dropin-bare")
+		if got.Result == finding.Pass {
+			t.Errorf("%s reported PASS on a host whose only audited unit is exempt:\n  %s", check.ID, got.Detail)
+		}
+		if got.Result != finding.NotApplicable {
+			t.Errorf("%s = %s, want NOT_APPLICABLE: %s", check.ID, got.Result, got.Detail)
+		}
+	}
+}
+
+// TestBothSandboxChecksNameTheirLimits. Each reads one directive from a fixed
+// list of units, and neither may be read as a statement about the host's
+// services in general.
+func TestBothSandboxChecksNameTheirLimits(t *testing.T) {
+	for _, check := range sandbox {
+		for _, fixture := range []string{
+			"services-sandbox-hardened",
+			"services-sandbox-protect-levels",
+			"services-sandbox-protect-off",
+			"services-sandbox-all-exempt",
+			"services-sandbox-denied",
+		} {
+			got := evalCheck(t, check, fixture)
+			if !strings.Contains(got.Detail, "fixed list of units") {
+				t.Errorf("%s over %s does not say the list is fixed: %s", check.ID, fixture, got.Detail)
+			}
 		}
 	}
 }

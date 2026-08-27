@@ -1,0 +1,3 @@
+{
+  "description": "ProtectSystem written as booleans. systemd tries parse_boolean before the enum, so \"true\" and \"1\" both resolve to yes and both protect the host — a build that accepted only no/yes/full/strict would fail two services that are in fact protected. The evidence renders the level alongside the text so an operator comparing hosts does not have to know the two spellings mean the same thing."
+}

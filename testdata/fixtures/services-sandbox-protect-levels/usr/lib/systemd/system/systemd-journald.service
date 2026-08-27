@@ -1,0 +1,8 @@
+[Unit]
+Description=Journal Service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-journald
+ProtectSystem=strict
+ReadWritePaths=/var/log/journal /run/log/journal
+NoNewPrivileges=yes

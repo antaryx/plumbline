@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 22 · 92 checks · 11 modules**
+**Catalog version 23 · 93 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -3823,6 +3823,88 @@ systemd-analyze security cron.service
 
 - [systemd.exec(5) — NoNewPrivileges](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
 - [Linux kernel — no\_new\_privs](https://docs.kernel.org/userspace-api/no_new_privs.html)
+- [systemd-analyze(1) — security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
+
+---
+
+### SERVICES-0007 — Audited system services run with the system directories read-only
+
+| | |
+|---|---|
+| Module | `SERVICES` |
+| Base severity | HIGH |
+| Since | catalog 23 |
+| Reads | `services.hardening` |
+| Tags | `services`, `systemd`, `sandboxing`, `persistence` |
+
+ProtectSystem mounts the directories a daemon has no business
+writing into read-only, in a mount namespace private to that service. It has
+four levels and they are cumulative:
+
+  - no       — the default. The service may write anywhere its uid allows.
+  - yes      — /usr and the boot loader directories are read-only.
+  - full     — adds /etc.
+  - strict   — the entire hierarchy is read-only except /dev, /proc and /sys,
+               which is what a daemon with an explicit ReadWritePaths should use.
+
+**Write access to /usr is a persistence vector, not an untidiness.** A daemon
+compromised through its own network-facing code can replace a binary that
+something else runs as root — a package's helper, a shell that a login invokes,
+a systemd generator — and survive the restart of the service that was actually
+exploited. Write access to /etc is the same idea one level up: rewrite a PAM
+line, a sudoers drop-in, or a unit file, and the next boot hands the attacker
+everything. Read-only mounts remove the step entirely rather than making it
+harder, which is why this rates above the rest of the sandboxing directives.
+
+Anything from yes upward passes. The check does not insist on strict, because
+the right level depends on what the daemon legitimately writes, and a host that
+chose yes deliberately is not the problem this exists to find — the problem is
+the service that never considered the question and is running with the whole
+filesystem writable.
+
+**The value is a superset of the booleans**, in systemd's own resolution order:
+true, 1 and on are all yes, and off is no. A build that accepted only the four
+enum names would fail a service whose unit says ProtectSystem=true, which is
+protected.
+
+**One unit is exempt and one that you might expect to be is not**, and the
+contrast is the useful part. cron.service is exempt: it executes arbitrary
+operator-supplied jobs inside its own mount namespace, so any filesystem
+restriction on the unit silently becomes a restriction on code the packager
+never saw. dbus.service is *not* exempt, unlike its exemption from
+SERVICES-0006 — its own writes go to /run and /var, and on a systemd host
+dbus-activated services are started by systemd as their own units rather than
+as children of dbus, so they do not inherit its namespace. The setuid launch
+helper that makes NoNewPrivileges unsafe there has nothing to do with where the
+daemon may write.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Set ProtectSystem in a drop-in for each service, starting at full and using ReadWritePaths for what the daemon legitimately writes.
+
+1. Find out what the service writes before restricting it: systemd-analyze security <unit> gives an overall picture, and running the daemon under strace -f -e trace=file, or simply reading its documentation, tells you which paths it opens for writing.
+2. Start at ProtectSystem=full unless you know the daemon writes to /etc. It covers /usr, the boot loader directories and /etc, and it is the level most system daemons can take unchanged.
+3. Add it as a drop-in rather than editing the vendor unit, so a package upgrade does not undo it: systemctl edit <unit>, then a [Service] section containing ProtectSystem=full.
+4. Where the daemon does write into a protected directory, do not step back down a level — name the exception instead: ReadWritePaths=/etc/example keeps everything else read-only. That is what lets a daemon run at strict.
+5. Reload and restart: systemctl daemon-reload, then systemctl restart <unit>.
+6. Confirm the assembled unit rather than the file you edited: systemctl show -p ProtectSystem <unit> reports what systemd actually loaded, drop-ins and precedence included.
+7. Exercise the service afterwards, including the paths that are rare — a daemon that writes a state file once a day will not fail during the restart.
+
+```sh
+systemctl show -p ProtectSystem -p ReadWritePaths systemd-journald.service dbus.service
+systemd-analyze security dbus.service
+systemctl cat dbus.service
+```
+
+> **Caution.** ProtectSystem gives the unit a private mount namespace, so anything the service starts inherits the restriction. That is the point for a daemon and the reason cron.service is exempt: its children are jobs somebody else wrote. Restart services one at a time and check that the daemon still writes what it needs to.
+
+**Controls** — `nist-800-53-r5 CM-5`, `nist-800-53-r5 CM-7`, `nist-800-53-r5 SI-7`, `nist-800-53-r5 AC-6`
+
+**References**
+
+- [systemd.exec(5) — ProtectSystem](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
 - [systemd-analyze(1) — security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
 
 ---

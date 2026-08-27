@@ -12,6 +12,47 @@ explanation in this file is a defect.
 ## [Unreleased]
 
 ### Added
+- **`SERVICES-0007` (ProtectSystem on audited system services).** Catalog 23,
+  93 checks. `HIGH` — the highest in the module alongside `SERVICES-0005`, and
+  for the same reason from the other direction: a daemon that can write `/usr`
+  turns a service compromise into a host compromise that survives the service
+  being restarted, with no exploitation step in between.
+
+  Anything from `yes` upward passes. The check does not insist on `strict`,
+  because the right level depends on what the daemon legitimately writes and a
+  host that chose `yes` deliberately is not the problem — the problem is the
+  service that never considered the question.
+
+  **The value is a superset of the booleans**, in systemd's own resolution
+  order: it tries `parse_boolean` first, so `true`, `1` and `on` are all `yes`
+  and `off` is `no`. A build accepting only the four enum names would raise a
+  `HIGH` finding against a service that is in fact protected.
+  `fact.ParseSystemdBool` moved out of the collector into `internal/fact` so
+  both sides can use one grammar — a check may not import a collector package.
+
+  **It is a better check than `SERVICES-0006` and the exemption list is why.**
+  Only `cron.service` is exempt, because it runs arbitrary operator-supplied
+  jobs inside its own mount namespace, so a read-only `/usr` or `/etc` becomes
+  a restriction on code the packager never saw. `dbus.service` is *not* exempt
+  here, unlike from `-0006`: its setuid launch helper is what makes
+  `NoNewPrivileges` unsafe there and has nothing to do with where the daemon
+  may write, and on a systemd host dbus-activated services are started by
+  systemd as their own units rather than as children of dbus, so they do not
+  inherit its namespace.
+
+  That leaves two auditable units where `-0006` has one, and it is the reason
+  exemptions are per-check rather than a shared "awkward services" list. A
+  shared list would have exempted dbus from both and cost this check half of
+  what it can verify. `TestTheTwoSandboxChecksCarryTheirOwnExemptions` asserts
+  the divergence on one fixture.
+
+- **`fact.ParseProtectSystem` and `ServiceSandbox.SystemProtection()`**, which
+  resolve the directive to a level. The collector records the value as written
+  and validates it — an unparseable one is logged and ignored by systemd, so it
+  goes to `Malformed` and the default stays in force — and the reading lives on
+  the fact so a bundle recorded today is re-read by a later build's
+  understanding of the grammar.
+
 - **Exemptions for SERVICES checks.** A check can now declare units it
   deliberately does not hold to its standard, with the reason. `SERVICES-0006`
   exempts `cron.service` and `dbus.service` from `NoNewPrivileges`, because

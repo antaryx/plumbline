@@ -1,0 +1,3 @@
+{
+  "description": "A host on which the only audited unit installed is cron.service, which is exempt from both sandboxing checks. Neither may report PASS: an exemption list that covers every auditable unit turns a check into a green tick that means nothing, and it would get there one reasonable-looking entry at a time. Both must say they had nothing to examine."
+}

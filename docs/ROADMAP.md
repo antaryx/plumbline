@@ -471,7 +471,7 @@ and `docs/PERFORMANCE.md` carries the measured baseline.
 | `USERS` | 10 | **10** | Complete |
 | `SSHD` | 20 | **19** | Resolving `Include`, `Match` blocks and compiled defaults was the real work, and it is done |
 | `NETWORK` | 12 | **3** | Firewall state only so far. Listeners need a `/proc/net/*` collector, not a check |
-| `SERVICES` | 10 | **6** | systemd enablement symlinks read offline. OpenRC and sysvinit degrade gracefully but have no checks. `-0006` (WP-30) is the first to read unit *bodies*, for three sandboxing directives on three named units |
+| `SERVICES` | 10 | **7** | systemd enablement symlinks read offline. OpenRC and sysvinit degrade gracefully but have no checks. `-0006` and `-0007` (WP-30, WP-32) read unit *bodies*, for three sandboxing directives on three named units |
 | `FILESYS` | 14 | **9** | Consumes the shared walk. Unowned files needed walker aggregation and landed after the tag (WP-25) |
 | `LOGGING` | 8 | **5** | |
 | `CRON` | 8 | **5** | |
@@ -757,12 +757,28 @@ exemption list:
     increments, and it is the thing to watch for in every later module that
     wants exemptions.
 
-What the mechanism has *not* solved is that the check is now thin:
-`systemd-journald.service` is the only audited unit that can fail. Widening it
-means finding daemons where the setting is both appropriate and not already
-shipped, which is a research task rather than a coding one — and the answer may
-be that `NoNewPrivileges` is the wrong first directive and `ProtectSystem` or
-`PrivateTmp` is a better one. The fact already records those.
+What the mechanism did not solve is that `-0006` is thin:
+`systemd-journald.service` is the only audited unit that can fail it.
+`SERVICES-0007` is the answer to that, and it arrived at a better place than
+widening the unit list would have.
+
+**`ProtectSystem` is the better first directive, and the exemption lists are
+the evidence.** It carries one exemption where `NoNewPrivileges` carries two,
+because the reason dbus needs `NoNewPrivileges` off — a setuid launch helper —
+says nothing about where the daemon may write, and on a systemd host
+dbus-activated services are started by systemd as their own units rather than
+as children of dbus. So `-0007` has two auditable units where `-0006` has one,
+at `HIGH` rather than `MEDIUM`, and on a stock systemd 259 host it finds
+something: journald ships `NoNewPrivileges=yes` and no `ProtectSystem` at all.
+
+That is also the argument for **exemptions being per-check rather than a shared
+"awkward services" list**, which was the tempting shape. A shared list would
+have exempted dbus from both and cost `-0007` half its subject to a reason that
+did not apply to it. An exemption is a claim about one setting on one unit.
+
+`ProtectHome` is already in the fact and is the obvious next one, with the same
+question to answer first: which units does it break, and is the answer
+different again.
 
 **The corpus does not exercise it.** All six golden bundles predate
 `services.hardening`, so `SERVICES-0006` is `UNKNOWN` on every one. Unlike the
