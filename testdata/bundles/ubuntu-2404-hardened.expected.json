@@ -3,8 +3,8 @@
   "schema": "findings/v1",
   "catalog_version": 25,
   "scan": {
-    "started": "2026-08-25T21:31:55.438565245Z",
-    "finished": "2026-08-25T21:31:55.619481732Z",
+    "started": "2026-08-27T21:29:41.441953502Z",
+    "finished": "2026-08-27T21:29:41.803788605Z",
     "root": "",
     "euid": 0,
     "profile": "default",
@@ -14,19 +14,20 @@
   },
   "summary": {
     "counts": {
-      "pass": 78,
-      "fail": 4,
-      "not_applicable": 5,
+      "pass": 80,
+      "fail": 7,
+      "not_applicable": 8,
       "skipped": 0,
-      "unknown": 8,
+      "unknown": 0,
       "total": 95
     },
     "by_severity": {
+      "HIGH": 3,
       "LOW": 2,
       "MEDIUM": 2
     },
-    "posture": 96.7741935483871,
-    "coverage": 91.11111111111111
+    "posture": 92.46231155778895,
+    "coverage": 100
   },
   "findings": [
     {
@@ -201,32 +202,29 @@
     {
       "check_id": "CONTAINERS-0006",
       "module": "CONTAINERS",
-      "result": "UNKNOWN",
+      "result": "NOT_APPLICABLE",
       "severity": "CRITICAL",
       "base_severity": "CRITICAL",
-      "unknown_reason": "fact_not_collected",
       "fingerprint": "4c92f8bc337c9228ef90b3197522075a",
-      "detail": "required fact containers.docker_service was not collected"
+      "detail": "There is no docker.service unit in any systemd unit directory on this host, so systemd starts no Docker daemon and there is no ExecStart command line to read."
     },
     {
       "check_id": "CONTAINERS-0007",
       "module": "CONTAINERS",
-      "result": "UNKNOWN",
+      "result": "NOT_APPLICABLE",
       "severity": "CRITICAL",
       "base_severity": "CRITICAL",
-      "unknown_reason": "fact_not_collected",
       "fingerprint": "4f4d00718243a3030e9dcdfdae85af5f",
-      "detail": "required fact containers.docker_service was not collected"
+      "detail": "No dockerd binary was found on this host, so there is no Docker daemon configuration to report on."
     },
     {
       "check_id": "CONTAINERS-0008",
       "module": "CONTAINERS",
-      "result": "UNKNOWN",
+      "result": "NOT_APPLICABLE",
       "severity": "LOW",
       "base_severity": "LOW",
-      "unknown_reason": "fact_not_collected",
       "fingerprint": "fe61d551f735a3568b146cc5405c83ef",
-      "detail": "required fact containers.docker_service was not collected"
+      "detail": "No dockerd binary was found on this host, so there is no Docker daemon configuration to report on."
     },
     {
       "check_id": "CRON-0001",
@@ -563,18 +561,11 @@
     {
       "check_id": "KERNEL-0007",
       "module": "KERNEL",
-      "result": "UNKNOWN",
+      "result": "PASS",
       "severity": "MEDIUM",
       "base_severity": "MEDIUM",
-      "unknown_reason": "ambiguous_system_state",
       "fingerprint": "e5a4134804971639d52d79e259e2722d",
-      "detail": "No drift was found among the parameters that could be compared, but 1 sysctl configuration file(s) could not be read (/etc/sysctl.d/99-sysctl.conf), so a parameter set there may disagree with the running kernel without this check seeing it.",
-      "evidence": [
-        {
-          "source": "/etc/sysctl.d/99-sysctl.conf",
-          "excerpt": "not a regular file"
-        }
-      ]
+      "detail": "All 8 configured kernel parameter(s) match the running kernel; the current settings will survive a reboot."
     },
     {
       "check_id": "KERNEL-0008",
@@ -715,17 +706,87 @@
     {
       "check_id": "KERNEL-0017",
       "module": "KERNEL",
-      "result": "UNKNOWN",
+      "result": "FAIL",
       "severity": "HIGH",
       "base_severity": "HIGH",
-      "unknown_reason": "ambiguous_system_state",
       "subject": "sysctl configuration",
       "fingerprint": "f06b835487ba567b7aad0f99677cce01",
-      "detail": "This verdict would rest on not finding the BPF parameters in any configuration file, and /etc/sysctl.d/99-sysctl.conf could not be read — so a setting for them may be in a file this scan never opened. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0006's subject, and a disagreement between the two is KERNEL-0007's.",
+      "detail": "BPF hardening is not written to this host's sysctl configuration: kernel.unprivileged_bpf_disabled is not set in any sysctl configuration file; net.core.bpf_jit_harden is not set in any sysctl configuration file. The running kernel is currently hardened — kernel.unprivileged_bpf_disabled is 2 — so this host is protected now and will not be after the next reboot. That is the case KERNEL-0006 reports as a pass and KERNEL-0007 does not see at all, because a parameter no file mentions has nothing to drift from. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0006's subject, and a disagreement between the two is KERNEL-0007's.",
       "evidence": [
         {
+          "source": "/usr/lib/sysctl.d/50-pid-max.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "a8917a1218bf2809643c2f3931f794ac6d4edfd6da28b250526f9bf11f34f1fd"
+        },
+        {
+          "source": "/usr/lib/sysctl.d/99-protect-links.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        },
+        {
+          "source": "/lib/sysctl.d/50-pid-max.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "a8917a1218bf2809643c2f3931f794ac6d4edfd6da28b250526f9bf11f34f1fd"
+        },
+        {
+          "source": "/lib/sysctl.d/99-protect-links.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        },
+        {
+          "source": "/etc/sysctl.d/10-bufferbloat.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "763c2e237645fb7c3fecf16a54479e49c39aab229c2a646a42f16c83b9dd2974"
+        },
+        {
+          "source": "/etc/sysctl.d/10-console-messages.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "14524a83a266454d517b7cdbfb2141dbc4b884570543da5f65e3f08da0b814c0"
+        },
+        {
+          "source": "/etc/sysctl.d/10-ipv6-privacy.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "e07c86211944a534c6418fe0eb5896926e09a13b56162d8cb642866f37e83b04"
+        },
+        {
+          "source": "/etc/sysctl.d/10-kernel-hardening.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "2bbc2c5684414517eba9da8d2fbff0a678026d944eb8fcfd6287281e11282e2f"
+        },
+        {
+          "source": "/etc/sysctl.d/10-magic-sysrq.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "f9107778c619246fb2a5a7e2a05c9419951752238ede04c771173832dd296128"
+        },
+        {
+          "source": "/etc/sysctl.d/10-map-count.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "867f4371a9cc5a79cab3b350aee03d067857b69e3cbf556a4a19aed057f9e954"
+        },
+        {
+          "source": "/etc/sysctl.d/10-network-security.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "258805ec72eada3c24a923de1c5bd8ed0fd11fe21f3673628ec78f221c31e934"
+        },
+        {
+          "source": "/etc/sysctl.d/10-ptrace.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "4add0d9ecbcc91e4018ed08e8dc66c69d4d9d142f9e31461178dcd7da0fd73c2"
+        },
+        {
+          "source": "/etc/sysctl.d/10-zeropage.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "5c745f62d086d9b9cf2ec23e4164f510cdba206c7aa6f11d2256f3f9be64c950"
+        },
+        {
           "source": "/etc/sysctl.d/99-sysctl.conf",
-          "excerpt": "internal: not a regular file"
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "97c5b93ecd5329df5318b981bbf78117a8bbc1c3644603dc65d0226fc54a340a"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and sets neither BPF parameter",
+          "sha256": "97c5b93ecd5329df5318b981bbf78117a8bbc1c3644603dc65d0226fc54a340a"
         }
       ]
     },
@@ -1150,32 +1211,57 @@
     {
       "check_id": "SERVICES-0006",
       "module": "SERVICES",
-      "result": "UNKNOWN",
+      "result": "PASS",
       "severity": "MEDIUM",
       "base_severity": "MEDIUM",
-      "unknown_reason": "fact_not_collected",
       "fingerprint": "5f1a4e0fc84db17615c979449dd63a9e",
-      "detail": "required fact services.hardening was not collected"
+      "detail": "1 of the 2 audited services installed here sets NoNewPrivileges: systemd-journald.service. A compromise of it cannot gain privileges through a setuid binary or file capabilities. Not held to this standard: cron.service (runs user cron jobs in its own process tree, and no_new_privs is inherited by every child — so a job that calls sudo, su, or any setuid binary stops working, and fails at the job rather than at the restart). An exemption is a documented reason the setting would break the service, not a finding that was suppressed. This examines NoNewPrivileges on a fixed list of units and says nothing about the other services on this host, nor about the other sandboxing directives on these ones.",
+      "evidence": [
+        {
+          "source": "/usr/lib/systemd/system/cron.service",
+          "excerpt": "cron.service: NoNewPrivileges not set; the default is off",
+          "sha256": "bbcd656457d22e12d8983ed0c253b5bd8cc6b12308fd16d9324400040de68e6f"
+        },
+        {
+          "source": "/usr/lib/systemd/system/systemd-journald.service",
+          "excerpt": "systemd-journald.service: NoNewPrivileges=yes",
+          "sha256": "99389b0e3329dad0828df1600cdd31ec271bcc3403bc014018903c5705ec68ef"
+        }
+      ]
     },
     {
       "check_id": "SERVICES-0007",
       "module": "SERVICES",
-      "result": "UNKNOWN",
+      "result": "FAIL",
       "severity": "HIGH",
       "base_severity": "HIGH",
-      "unknown_reason": "fact_not_collected",
-      "fingerprint": "9992a1f0abb7e93301ba8c3067e62270",
-      "detail": "required fact services.hardening was not collected"
+      "subject": "/usr/lib/systemd/system/systemd-journald.service",
+      "fingerprint": "a06fadcdc4bca20843d7ff041c1531d6",
+      "detail": "systemd-journald.service leaves the system directories writable, so a compromise of it can replace a binary under /usr or a boot loader file and survive the service being restarted. Not held to this standard: cron.service (runs arbitrary operator-supplied jobs inside its own mount namespace, so a read-only /usr or /etc becomes a restriction on code the packager never saw — a job that updates a package or rewrites a config file fails, and fails at the job rather than at the restart). An exemption is a documented reason the setting would break the service, not a finding that was suppressed. This examines ProtectSystem on a fixed list of units. It says nothing about the other services on this host, nor about the other sandboxing directives on these ones, nor about what a ReadWritePaths= may have opened up again.",
+      "evidence": [
+        {
+          "source": "/usr/lib/systemd/system/systemd-journald.service",
+          "excerpt": "systemd-journald.service: ProtectSystem not set; the default is no",
+          "sha256": "99389b0e3329dad0828df1600cdd31ec271bcc3403bc014018903c5705ec68ef"
+        }
+      ]
     },
     {
       "check_id": "SERVICES-0008",
       "module": "SERVICES",
-      "result": "UNKNOWN",
+      "result": "FAIL",
       "severity": "HIGH",
       "base_severity": "HIGH",
-      "unknown_reason": "fact_not_collected",
-      "fingerprint": "273b5e16f34647a63ae48dd666569cdd",
-      "detail": "required fact services.hardening was not collected"
+      "subject": "/usr/lib/systemd/system/systemd-journald.service",
+      "fingerprint": "17a4a2b6003812ff28715b2603bde73b",
+      "detail": "systemd-journald.service can reach /home, /root and /run/user, so a compromise of it can read an SSH private key, a cloud credential file or a cached token belonging to any user on this host and reuse it elsewhere. Not held to this standard: cron.service (runs arbitrary operator-supplied jobs inside its own mount namespace, and user cron jobs routinely execute scripts kept in a home directory and read data from one — so the jobs fail, and fail at the job rather than at the restart). An exemption is a documented reason the setting would break the service, not a finding that was suppressed. This examines ProtectHome on a fixed list of units. It says nothing about the other services on this host, nor about the other sandboxing directives on these ones, nor about what a ReadWritePaths= or a BindPaths= may have opened up again.",
+      "evidence": [
+        {
+          "source": "/usr/lib/systemd/system/systemd-journald.service",
+          "excerpt": "systemd-journald.service: ProtectHome not set; the default is no",
+          "sha256": "99389b0e3329dad0828df1600cdd31ec271bcc3403bc014018903c5705ec68ef"
+        }
+      ]
     },
     {
       "check_id": "SSHD-0002",

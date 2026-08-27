@@ -103,6 +103,19 @@ type Sysctl struct {
 	// so a finding can cite evidence an auditor can verify against the
 	// bundle's evidence store (ADR-0009).
 	Digests map[string]string `json:"digests,omitempty"`
+	// Resolved maps a configuration file that is a symbolic link to the path
+	// its contents were actually read from.
+	//
+	// The Debian family ships /etc/sysctl.d/99-sysctl.conf as a link to
+	// /etc/sysctl.conf, which is how the traditional file comes to be applied
+	// last among the drop-ins. Both paths are read and both appear in Files,
+	// because procps `sysctl --system` reads both — the duplicate is harmless,
+	// since two identical values are not a conflict — but a finding citing the
+	// link alone would send an operator to open a symlink.
+	//
+	// Present only for the files that are links, so its absence is the common
+	// case rather than missing information.
+	Resolved map[string]string `json:"resolved,omitempty"`
 	// UnreadableFiles lists configuration files that exist and could not be
 	// read, with why. A check comparing running against configured must not
 	// conclude "not configured" while one of these is outstanding: the setting
@@ -206,6 +219,13 @@ func (s Sysctl) RunningKeys() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ResolvedFrom returns the path a configuration file's contents were read
+// from, and whether the file was a symbolic link at all.
+func (s Sysctl) ResolvedFrom(file string) (string, bool) {
+	target, ok := s.Resolved[file]
+	return target, ok
 }
 
 // UnreadableFileNames returns the unreadable configuration files, sorted.

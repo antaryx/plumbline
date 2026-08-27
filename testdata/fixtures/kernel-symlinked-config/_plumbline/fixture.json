@@ -1,0 +1,6 @@
+{
+  "description": "The Debian and Ubuntu layout: /etc/sysctl.d/99-sysctl.conf is a symbolic link to /etc/sysctl.conf, which is how the traditional file comes to be applied last among the drop-ins. The seam opens with O_NOFOLLOW, so this used to be recorded as an unreadable file and made KERNEL-0007 and KERNEL-0017 decline to answer on the whole distribution family. The placeholder file standing in for the link holds the OPPOSITE values on purpose: if the collector ever reads it instead of the target, both checks flip and the tests say so.",
+  "symlinks": {
+    "/etc/sysctl.d/99-sysctl.conf": "/etc/sysctl.conf"
+  }
+}

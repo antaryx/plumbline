@@ -726,15 +726,33 @@ accident of the kernel package rather than a decision. That is exactly the trap
 the check was written for, found in a recording of a real host rather than in a
 fixture built to demonstrate it.
 
-**The next work package here is a symlink.** `/etc/sysctl.d/99-sysctl.conf` is
-a symlink to `/etc/sysctl.conf` on every Debian-family host; the seam opens with
-`O_NOFOLLOW`, and the sysctl collector does not resolve terminal symlinks by
-hand the way `internal/collect/unit` does. So `KERNEL-0007` and now
-`KERNEL-0017` both decline to answer on that whole distribution family —
-visible in the pins as `ubuntu-2404-hardened`'s `UNKNOWN`. The fix is about
-twenty lines of a pattern already in the tree; it was left out of this work
-package because it changes an existing check's verdict on the corpus and
-deserves its own diff.
+**The symlink is fixed, and the interesting part was what the corpus said
+about it.** `/etc/sysctl.d/99-sysctl.conf` is a link to `/etc/sysctl.conf`; the
+seam opens with `O_NOFOLLOW`, so it was recorded as unreadable and two checks
+declined to answer. Resolving it is twenty lines of the pattern
+`internal/collect/unit` already uses.
+
+Two things are worth carrying forward from it:
+
+- **A code fix cannot move a golden pin.** The bundles are recordings; the
+  `UNKNOWN` lived in the *recorded fact*, not in check logic, so `make
+  golden-update` re-evaluated frozen facts and changed nothing. Clearing it
+  needed `record.sh`. That is the corpus behaving correctly — it is supposed to
+  freeze what a host looked like — and it is a step easy to assume away when
+  planning a collector change.
+- **"Every Debian-family host" was an over-claim, and the corpus caught it.**
+  Only `ubuntu-2404-hardened` carried the link: the stock Ubuntu and Debian
+  images do not ship that file. The mechanism is real and common on configured
+  hosts; the blast radius stated from memory was wider than the evidence. Check
+  the recordings before describing a distribution family.
+
+Re-recording that one bundle also cleared the six `UNKNOWN` the previous four
+work packages had accumulated on it, and dropped its posture from 96.77 to
+92.46 by surfacing three real findings it had been hiding. **A corpus whose
+scores only ever rise is a scoring function rather than a measurement.** The
+remaining five bundles still predate `containers.docker_service` and
+`services.hardening`; re-recording them is the outstanding work package, and it
+is now a smaller and better-understood one.
 
 ---
 

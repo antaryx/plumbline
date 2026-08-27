@@ -1,0 +1,6 @@
+{
+  "description": "A drop-in that is a symbolic link to /etc/shadow, which is what an attacker who can write a sysctl.d directory would plant. The collector follows the link — refusing to would put the Debian layout back where it was — but reads the target through ReadOpaque, so the bytes never reach the bundle's evidence store and the redirected read cannot copy an arbitrary file into an artifact designed to travel. The dangling-link and chain-too-long cases are covered by unit tests rather than fixtures, because neither is representable as a checked-in tree.",
+  "symlinks": {
+    "/etc/sysctl.d/10-evil.conf": "/etc/shadow"
+  }
+}

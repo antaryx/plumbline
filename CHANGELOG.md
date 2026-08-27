@@ -11,6 +11,56 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+### Fixed
+- **The sysctl collector follows a symlinked configuration file.**
+  `/etc/sysctl.d/99-sysctl.conf` is a link to `/etc/sysctl.conf` on Debian-family
+  hosts, which is how the traditional file comes to be applied last among the
+  drop-ins. The seam opens with `O_NOFOLLOW`, so the link was recorded as an
+  unreadable file and `KERNEL-0007` and `KERNEL-0017` both declined to answer.
+
+  The chain is followed one hop at a time and **back through the seam**, which
+  is what keeps `--root` governing where the read lands; resolving with the
+  host's own filesystem calls would dereference against the real machine.
+  Bounded at four hops, a dangling link is skipped rather than recorded as
+  unreadable — `sysctl --system` skips it too, and a link to nothing configures
+  nothing — and a target that is not a regular file is refused.
+
+  **The target is read through `ReadOpaque` where a direct read uses
+  `ReadFile`**, and that asymmetry is the safety property. A configuration file
+  is read for evidence, so its bytes reach the store; a *link* is a path chosen
+  by whoever could write the directory, so following one with `ReadFile` would
+  let a symlink planted in a `sysctl.d` directory copy any file on the host into
+  an artifact designed to travel. Reading opaquely keeps that impossible while
+  still producing the digest and the parsed settings, and the digest is
+  identical either way, so a finding citing the link still resolves against the
+  blob the direct read stored.
+
+  Settings are attributed to the **link**, not the target, because the link's
+  name is what decides where it sorts among the drop-ins. `Sysctl.Resolved`
+  carries the other half so a finding does not send an operator to open a
+  symlink.
+
+### Changed
+- **`ubuntu-2404-hardened` was re-recorded and now carries no `UNKNOWN` at
+  all** — the first bundle in the corpus to reach 100% coverage, and the first
+  time its standing description (the bundle on which every check evaluates) has
+  been literally true. All eight resolved to real verdicts: three CONTAINERS
+  checks to `NOT_APPLICABLE` because the recipe installs no Docker,
+  `KERNEL-0007` and `SERVICES-0006` to `PASS`, and `KERNEL-0017`,
+  `SERVICES-0007` and `SERVICES-0008` to `FAIL`.
+
+  **Its posture fell from 96.77 to 92.46, and that is the corpus working.**
+  Three real findings appeared on a bundle that had been hiding them behind
+  `UNKNOWN`: systemd 259 ships journald with `NoNewPrivileges` and neither
+  `ProtectSystem` nor `ProtectHome`, and Ubuntu's kernel defaults
+  `unprivileged_bpf_disabled` to 2 with no file setting it. All three reproduce
+  on any Ubuntu 24.04 host.
+
+  The other five bundles were deliberately not re-recorded. The symlink was only
+  ever present on this one — the stock Ubuntu and Debian images do not ship
+  `/etc/sysctl.d/99-sysctl.conf` — so re-recording them would sweep whatever
+  moved upstream into a diff about a symlink.
+
 ### Added
 - **`KERNEL-0017` (BPF hardening written to the sysctl configuration).**
   Catalog 25, 95 checks. `HIGH`, above `KERNEL-0006`'s `MEDIUM` on purpose: that

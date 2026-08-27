@@ -2,14 +2,17 @@ package kernel_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/antaryx/plumbline/internal/collect"
 	collector "github.com/antaryx/plumbline/internal/collect/collectors/kernel"
 	"github.com/antaryx/plumbline/internal/fact"
+	"github.com/antaryx/plumbline/internal/system"
 	"github.com/antaryx/plumbline/internal/system/fake"
 )
 
@@ -314,3 +317,241 @@ func writeTree(t *testing.T, root string, files map[string]string) {
 // that needs it, rather than at the top of a file about kernel parameters.
 func mkdirAll(dir string) error   { return os.MkdirAll(dir, 0o755) }
 func writeFile(p, s string) error { return os.WriteFile(p, []byte(s), 0o644) }
+
+// TestASymlinkedDropInIsFollowedToItsTarget is the Debian and Ubuntu layout,
+// and it is the common case rather than an edge one.
+//
+// /etc/sysctl.d/99-sysctl.conf is a symbolic link to /etc/sysctl.conf, which is
+// how the traditional file comes to be applied last among the drop-ins. The
+// seam opens with O_NOFOLLOW, so the collector used to record the link as an
+// unreadable file — and KERNEL-0007 and KERNEL-0017 both declined to answer on
+// every host in that family, which is most of them.
+//
+// The fixture's placeholder file holds the opposite values on purpose. If the
+// collector ever reads the placeholder instead of following the link, the
+// assertions below invert rather than merely weakening.
+func TestASymlinkedDropInIsFollowedToItsTarget(t *testing.T) {
+	sc := collectFixture(t, "kernel-symlinked-config")
+
+	if len(sc.UnreadableFiles) != 0 {
+		t.Fatalf("the link was recorded as unreadable: %+v", sc.UnreadableFiles)
+	}
+
+	const link = "/etc/sysctl.d/99-sysctl.conf"
+	target, ok := sc.ResolvedFrom(link)
+	if !ok {
+		t.Fatalf("no resolution recorded for %s; Resolved = %v", link, sc.Resolved)
+	}
+	if target != "/etc/sysctl.conf" {
+		t.Errorf("resolved to %q, want /etc/sysctl.conf", target)
+	}
+
+	// The values are the target's, not the placeholder's.
+	for _, c := range []struct{ key, want string }{
+		{"kernel.unprivileged_bpf_disabled", "1"},
+		{"net.core.bpf_jit_harden", "2"},
+	} {
+		set, found := sc.EffectiveConfigured(c.key)
+		if !found {
+			t.Errorf("%s is not configured; the link was not followed", c.key)
+			continue
+		}
+		if set.Value != c.want {
+			t.Errorf("%s = %q, want %q — the placeholder was read instead of the target", c.key, set.Value, c.want)
+		}
+	}
+
+	// Both paths are read, because procps `sysctl --system` reads both, and
+	// the duplicate is harmless: two identical values are not a conflict.
+	for _, key := range []string{"kernel.unprivileged_bpf_disabled", "net.core.bpf_jit_harden"} {
+		if sc.ConfiguredConflict(key) {
+			t.Errorf("%s reported as conflicting; the same file read twice is not a disagreement: %+v",
+				key, sc.Configured[key])
+		}
+	}
+
+	// The setting is attributed to the link rather than to the target, because
+	// the link's name is what decides where it sorts among the drop-ins — and
+	// an operator asking "why is this in force" needs that name.
+	set, _ := sc.EffectiveConfigured("kernel.kptr_restrict")
+	if set.File != "/etc/sysctl.conf" {
+		t.Errorf("last writer = %q; /etc/sysctl.conf is applied after the drop-ins", set.File)
+	}
+	var viaLink bool
+	for _, s := range sc.Configured["kernel.kptr_restrict"] {
+		if s.File == link {
+			viaLink = true
+		}
+	}
+	if !viaLink {
+		t.Errorf("the link is not credited with the setting it applies: %+v", sc.Configured["kernel.kptr_restrict"])
+	}
+
+	// The same bytes give the same digest by either path, which is what lets a
+	// finding citing the link resolve against the blob the direct read stored.
+	if sc.Digests[link] == "" || sc.Digests[link] != sc.Digests["/etc/sysctl.conf"] {
+		t.Errorf("digests differ across the link: %q vs %q", sc.Digests[link], sc.Digests["/etc/sysctl.conf"])
+	}
+}
+
+// TestAFollowedLinkDoesNotPutItsTargetInTheBundle is the safety half.
+//
+// Following symlinks in a sysctl.d directory is necessary — refusing would put
+// the Debian family back where it was — and it hands whoever can write that
+// directory a choice of what this collector reads. Configuration files are
+// read with ReadFile, so their bytes reach the evidence store; a *link* is
+// therefore a way to copy an arbitrary file into an artifact designed to
+// travel.
+//
+// The target is read through ReadOpaque instead, which collect.recordingSystem
+// excludes from the evidence store by construction. The parse still happens and
+// the digest is still recorded, so nothing about the Debian case is lost.
+func TestAFollowedLinkDoesNotPutItsTargetInTheBundle(t *testing.T) {
+	base, err := fake.New(filepath.Join(fixtureRoot, "kernel-symlink-escape"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spy := &configReadSpy{System: base}
+
+	facts := fact.NewSet()
+	if err := collector.New().Collect(context.Background(), spy, facts); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, p := range spy.readFile {
+		if p == "/etc/shadow" {
+			t.Errorf("a symlinked drop-in was followed with ReadFile, so /etc/shadow is in the evidence store: %v", spy.readFile)
+		}
+	}
+	var opaque bool
+	for _, p := range spy.readOpaque {
+		if p == "/etc/shadow" {
+			opaque = true
+		}
+	}
+	if !opaque {
+		t.Errorf("the link was not followed at all; that is safe and puts Debian back where it was: opaque=%v", spy.readOpaque)
+	}
+}
+
+// TestADanglingLinkIsNotAnUnreadableFile. `sysctl --system` skips a drop-in
+// pointing at nothing, and so does this: a link to a file that does not exist
+// configures nothing, so there is no gap for a check to be missing. Recording
+// it as unreadable would turn a tidy-up somebody forgot into an UNKNOWN on
+// every check that reads the configuration.
+func TestADanglingLinkIsNotAnUnreadableFile(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		"etc/sysctl.d/50-dangling.conf": "placeholder\n",
+		"etc/sysctl.conf":               "kernel.kptr_restrict = 1\n",
+		"_plumbline/fixture.json": `{"description":"a drop-in pointing at nothing",
+			"symlinks":{"/etc/sysctl.d/50-dangling.conf":"/etc/sysctl.d/gone.conf"}}`,
+	})
+
+	sc := collectRoot(t, root)
+	if len(sc.UnreadableFiles) != 0 {
+		t.Errorf("a dangling link was recorded as unreadable: %+v", sc.UnreadableFiles)
+	}
+	if _, ok := sc.ResolvedFrom("/etc/sysctl.d/50-dangling.conf"); ok {
+		t.Error("a dangling link was recorded as resolved")
+	}
+	// The rest of the configuration is unaffected.
+	if _, found := sc.EffectiveConfigured("kernel.kptr_restrict"); !found {
+		t.Error("a dangling link stopped the other files being read")
+	}
+}
+
+// TestALinkChainIsBounded. A loop, or a chain long enough to look like one, is
+// recorded and abandoned rather than followed — the same cap
+// internal/collect/unit applies, for the same reason.
+func TestALinkChainIsBounded(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		"etc/sysctl.d/50-loop.conf": "placeholder\n",
+		"etc/sysctl.d/51-loop.conf": "placeholder\n",
+		"_plumbline/fixture.json": `{"description":"two links pointing at each other",
+			"symlinks":{
+				"/etc/sysctl.d/50-loop.conf":"/etc/sysctl.d/51-loop.conf",
+				"/etc/sysctl.d/51-loop.conf":"/etc/sysctl.d/50-loop.conf"}}`,
+	})
+
+	sc := collectRoot(t, root)
+	if len(sc.UnreadableFiles) == 0 {
+		t.Fatal("a symlink loop was followed or silently dropped; it must be recorded")
+	}
+	var said bool
+	for _, f := range sc.UnreadableFiles {
+		if strings.Contains(f.Msg, "too long to follow") {
+			said = true
+		}
+	}
+	if !said {
+		t.Errorf("the loop is not described as one: %+v", sc.UnreadableFiles)
+	}
+}
+
+// configReadSpy records which door each read went through.
+type configReadSpy struct {
+	*fake.System
+	readFile   []string
+	readOpaque []string
+}
+
+func (s *configReadSpy) ReadFile(p string, max int64) (system.ReadResult, error) {
+	s.readFile = append(s.readFile, p)
+	return s.System.ReadFile(p, max)
+}
+
+func (s *configReadSpy) ReadOpaque(p string, max int64) (system.ReadResult, error) {
+	s.readOpaque = append(s.readOpaque, p)
+	return s.System.ReadOpaque(p, max)
+}
+
+func collectRoot(t *testing.T, root string) fact.Sysctl {
+	t.Helper()
+	sys, err := fake.New(root)
+	if err != nil {
+		t.Fatalf("load %s: %v", root, err)
+	}
+	facts := fact.NewSet()
+	if err := collector.New().Collect(context.Background(), sys, facts); err != nil {
+		t.Fatal(err)
+	}
+	sc, _, ok := fact.Get[fact.Sysctl](facts, fact.SysctlID)
+	if !ok {
+		t.Fatal("kernel.sysctl missing after collection")
+	}
+	return sc
+}
+
+// TestResolutionSurvivesTheBundle. Sysctl.Resolved is what stops a finding
+// citing a symlink from sending an operator to open one, and it is only useful
+// if it is still there when the bundle is re-evaluated months later.
+func TestResolutionSurvivesTheBundle(t *testing.T) {
+	sc := collectFixture(t, "kernel-symlinked-config")
+
+	blob, err := json.Marshal(sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back fact.Sysctl
+	if err := json.Unmarshal(blob, &back); err != nil {
+		t.Fatal(err)
+	}
+
+	target, ok := back.ResolvedFrom("/etc/sysctl.d/99-sysctl.conf")
+	if !ok || target != "/etc/sysctl.conf" {
+		t.Errorf("resolution lost across the bundle: %q/%v", target, ok)
+	}
+
+	// A fact with no links at all omits the map rather than carrying an empty
+	// one, so absence reads as "nothing was a link" rather than as a field
+	// somebody forgot to populate.
+	plain, err := json.Marshal(collectFixture(t, "kernel-hardened"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(plain), `"resolved"`) {
+		t.Errorf("a fact with no symlinks carries an empty resolved map: %s", plain)
+	}
+}

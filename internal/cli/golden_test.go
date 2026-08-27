@@ -95,6 +95,34 @@ type pin struct {
 // in which either became a PASS would mean the symbol reading had started
 // inventing evidence, which is a worse failure than the false positive.
 //
+// **ubuntu-2404-hardened was re-recorded and now carries no UNKNOWN at all.**
+// It is the first bundle in this corpus to reach 100% coverage, and the title
+// it has always had — the one on which every check in the catalog evaluates —
+// is literally true for the first time rather than aspirational.
+//
+// Two things did that. The sysctl collector now resolves a symlinked
+// configuration file, so /etc/sysctl.d/99-sysctl.conf stops being an
+// unreadable file and KERNEL-0007 can compare running against configured; and
+// the re-recording picked up containers.docker_service and services.hardening,
+// clearing the six UNKNOWN the previous four work packages had accumulated on
+// it. All eight resolved to a real verdict and every one of them is checkable:
+// the three CONTAINERS checks to NOT_APPLICABLE because the recipe installs no
+// Docker, SERVICES-0006 and KERNEL-0007 to PASS, and KERNEL-0017,
+// SERVICES-0007 and SERVICES-0008 to FAIL — the last three matching, exactly,
+// what those checks report on a live systemd 259 host.
+//
+// **Its posture fell from 96.77 to 92.46 and that is the corpus working.**
+// Three real findings appeared on a bundle that had been hiding them behind
+// UNKNOWN, on a host recorded as "hardened". A posture score that only ever
+// rises is a scoring function, not a measurement.
+//
+// The other five bundles were deliberately not re-recorded. The symlink block
+// was only ever present on this one — the stock Ubuntu and Debian images do
+// not ship /etc/sysctl.d/99-sysctl.conf — so re-recording them would sweep in
+// whatever moved in the upstream images since, in a diff about a symlink. They
+// keep their six UNKNOWN and the debt is now visible as a contrast within the
+// corpus rather than as a number in a comment.
+//
 // **KERNEL-0017 is the first check in five work packages to raise coverage
 // rather than lower it**, because it reads kernel.sysctl — a fact these bundles
 // already carry — rather than one recorded after them. It is also the first to
@@ -105,19 +133,8 @@ type pin struct {
 // next kernel's default is. That is precisely the trap the check was written
 // for, found in the corpus rather than in a fixture.
 //
-// ubuntu-2404-hardened is UNKNOWN for a reason worth naming rather than
-// pinning silently: /etc/sysctl.d/99-sysctl.conf is the symlink to
-// /etc/sysctl.conf that the Debian family ships, the seam opens with
-// O_NOFOLLOW, and the sysctl collector does not resolve terminal symlinks by
-// hand the way internal/collect/unit does. So on every Debian-family host both
-// KERNEL-0007 and now KERNEL-0017 decline to answer. It is a pre-existing
-// limitation this check inherits rather than one it introduces, the fix is
-// about twenty lines of a pattern already in the tree, and it changes an
-// existing check's verdict — which is why docs/ROADMAP.md carries it as a work
-// package of its own rather than it being done here.
-//
-// **Every bundle carries six UNKNOWN from two causes, and both are the corpus
-// reporting its own age.** CONTAINERS-0006, -0007 and -0008 require
+// **The five bundles that were not re-recorded carry six UNKNOWN from two
+// causes, and both are those recordings reporting their own age.** CONTAINERS-0006, -0007 and -0008 require
 // containers.docker_service; SERVICES-0006, -0007 and -0008 require
 // services.hardening. All six bundles were recorded before either fact was
 // collected, so neither is in them. The
@@ -209,26 +226,35 @@ var pinned = map[string]pin{
 	// verdict on a host does so here, which no fixture and no stock image
 	// manages on its own.
 	//
-	// The 5 NOT_APPLICABLE are CONTAINERS-0001 to -0005: the recipe
-	// installs no Docker, so there is no daemon to judge. That is the correct
-	// answer and the honest limit of a container-recorded corpus — a bundle
-	// recorded inside a container cannot carry a container runtime's
+	// **Zero UNKNOWN, and it is the only bundle here that can say that.** Every
+	// check in the catalog reaches a real verdict, which is what this bundle
+	// has always claimed and, until it was re-recorded against the current
+	// collectors, was not quite true.
+	//
+	// The 8 NOT_APPLICABLE are the eight CONTAINERS checks: the recipe installs
+	// no Docker, so there is no daemon and no docker.service to judge. That is
+	// the correct answer and the honest limit of a container-recorded corpus —
+	// a bundle recorded inside a container cannot carry a container runtime's
 	// configuration. Covering CONTAINERS against a real daemon needs a recipe
 	// that installs one, which is a work package of its own.
 	//
-	// The 4 FAIL are the four a container cannot fix — /tmp and /home are not
+	// The 7 FAIL are four a container cannot fix — /tmp and /home are not
 	// separate mounts, and /proc/sys is read-only so dmesg_restrict and the
-	// core pattern cannot be set. Of the 8 UNKNOWN, two are KERNEL-0007
-	// and KERNEL-0017 declining to read a configuration that includes a symlink
-	// the seam will not follow — one file, two checks — three are
-	// the checks requiring containers.docker_service, and three are
-	// SERVICES-0006, -0007 and -0008 requiring services.hardening — both facts
-	// this bundle predates. All seventeen are correct, and a run in which any of
-	// them became a PASS would be a serious regression rather than an
-	// improvement.
+	// core pattern cannot be set — and three that are real findings about a
+	// real image, which appeared the moment the UNKNOWNs cleared:
+	// SERVICES-0007 and -0008 because systemd 259 ships journald with
+	// NoNewPrivileges and neither ProtectSystem nor ProtectHome, and
+	// KERNEL-0017 because Ubuntu's kernel defaults unprivileged_bpf_disabled to
+	// 2 and no file on the image sets it. All three are reproducible on any
+	// Ubuntu 24.04 host and none of them is an artifact of the recipe.
+	//
+	// A posture that fell from 96.77 to 92.46 on a bundle named "hardened" is
+	// the corpus doing its job. All fifteen non-passing verdicts are correct,
+	// and a run in which any of them became a PASS would be a serious
+	// regression rather than an improvement.
 	"ubuntu-2404-hardened": {
-		catalog: 25, pass: 78, fail: 4, notApplicable: 5, unknown: 8, skipped: 0,
-		posture: 96.7741935483871, coverage: 91.11111111111111,
+		catalog: 25, pass: 80, fail: 7, notApplicable: 8, unknown: 0, skipped: 0,
+		posture: 92.46231155778895, coverage: 100,
 		why: "the only bundle on which every check in the catalog evaluates",
 	},
 }

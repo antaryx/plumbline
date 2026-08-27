@@ -173,6 +173,7 @@ func (Collector) Collect(ctx context.Context, s system.System, fs *fact.Set) err
 		Running:    map[string]fact.SysctlRunning{},
 		Configured: map[string][]fact.SysctlSetting{},
 		Digests:    map[string]string{},
+		Resolved:   map[string]string{},
 	}
 
 	keys := append([]string(nil), probedKeys...)
@@ -324,9 +325,37 @@ func configFileList(s system.System) []string {
 	return out
 }
 
+// maxConfigLinkHops bounds a symlink chain in the configuration directories.
+// The one that exists in the wild is a single hop; more than a few is a loop
+// or an attempt at one.
+const maxConfigLinkHops = 4
+
 // readConfigFile parses one file into sc, recording it as unreadable if it
 // exists and cannot be read.
 func readConfigFile(s system.System, file string, sc *fact.Sysctl) {
+	// **Stat before reading, because on the Debian family this file is
+	// usually a symlink.** /etc/sysctl.d/99-sysctl.conf points at
+	// /etc/sysctl.conf, which is how the traditional file comes to be applied
+	// last among the drop-ins; the seam opens with O_NOFOLLOW, so reading it
+	// directly returns ErrNotRegular and used to be recorded as an unreadable
+	// file — which made KERNEL-0007 and KERNEL-0017 decline to answer on every
+	// Debian and Ubuntu host.
+	//
+	// The stat is what distinguishes "this is a link, follow it deliberately"
+	// from "this is something else and we should not". Reacting to
+	// ErrNotRegular afterwards would work on a live host and not through the
+	// fixture seam, which lstats a placeholder file; asking first works
+	// through both, and is what internal/collect/unit does for the same
+	// reason.
+	if fi, err := s.Stat(file); err == nil && fi.IsSymlink {
+		if target, ok := resolveConfigLink(s, file, sc); ok {
+			readResolvedConfig(s, file, target, sc)
+		}
+		// resolveConfigLink recorded why, when there was a why worth
+		// recording.
+		return
+	}
+
 	res, err := s.ReadFile(file, maxConfigRead)
 	switch {
 	case errors.Is(err, system.ErrNotExist):
@@ -363,10 +392,21 @@ func readConfigFile(s system.System, file string, sc *fact.Sysctl) {
 		return
 	}
 
-	sc.Files = append(sc.Files, file)
-	sc.Digests[file] = res.SHA256
+	recordConfig(file, res.SHA256, res.Data, sc)
+}
 
-	for n, raw := range strings.Split(string(res.Data), "\n") {
+// recordConfig files one configuration source's contents against the path the
+// tool applying it would name.
+//
+// For a symlink that is the link, not its target: procps and systemd-sysctl
+// both apply /etc/sysctl.d/99-sysctl.conf in the drop-in ordering, and an
+// operator asking "why is this value in force" needs the name that decides
+// where it sorts. Sysctl.Resolved carries the other half.
+func recordConfig(file, digest string, data []byte, sc *fact.Sysctl) {
+	sc.Files = append(sc.Files, file)
+	sc.Digests[file] = digest
+
+	for n, raw := range strings.Split(string(data), "\n") {
 		key, value, ok := parseSysctlLine(raw)
 		if !ok {
 			continue
@@ -378,6 +418,129 @@ func readConfigFile(s system.System, file string, sc *fact.Sysctl) {
 			Line:  n + 1,
 		})
 	}
+}
+
+// resolveConfigLink follows a symlinked configuration file to the regular file
+// it names, one hop at a time and back through the seam.
+//
+// **Every hop goes through the seam**, which is what keeps --root governing
+// where the read lands. Resolving with the host's own filesystem calls would
+// dereference the chain against the real machine, so a rooted scan of a
+// captured filesystem would read the auditor's /etc rather than the subject's
+// — the same reasoning internal/collect/unit gives for doing it this way.
+//
+// The chain is bounded, and a link that does not end at a regular file is
+// recorded as unreadable rather than followed further. A dangling link is not
+// an error: `systemctl --system` skips it and so does this, because a drop-in
+// pointing at nothing configures nothing.
+func resolveConfigLink(s system.System, file string, sc *fact.Sysctl) (string, bool) {
+	target := file
+	for hop := 0; hop < maxConfigLinkHops; hop++ {
+		dest, err := s.Readlink(target)
+		if errors.Is(err, system.ErrNotSymlink) {
+			// Raced, or the seam disagrees with itself. Either way there is
+			// nothing to follow.
+			return "", false
+		}
+		if err != nil {
+			// Not a link after all, or unreadable. Either way this is not a
+			// file whose contents we can attribute.
+			sc.UnreadableFiles = append(sc.UnreadableFiles, fact.SysctlUnreadableFile{
+				File: file, Kind: fact.ErrInternal,
+				Msg: "the path is not a regular file and its link could not be read: " + err.Error(),
+			})
+			return "", false
+		}
+		target = resolveLinkPath(target, dest)
+
+		fi, err := s.Stat(target)
+		switch {
+		case errors.Is(err, system.ErrNotExist):
+			// A dangling drop-in. procps and systemd both skip it, and so does
+			// this: a link to nothing sets nothing. Not recorded as unreadable,
+			// because there is nothing there that a check might be missing.
+			return "", false
+		case err != nil:
+			sc.UnreadableFiles = append(sc.UnreadableFiles, fact.SysctlUnreadableFile{
+				File: file, Kind: fact.ErrInternal,
+				Msg: "the link target could not be examined: " + err.Error(),
+			})
+			return "", false
+		}
+		if fi.IsSymlink {
+			continue
+		}
+		if !fi.IsRegular {
+			sc.UnreadableFiles = append(sc.UnreadableFiles, fact.SysctlUnreadableFile{
+				File: file, Kind: fact.ErrInternal,
+				Msg: "the link target is not a regular file",
+			})
+			return "", false
+		}
+		return target, true
+	}
+
+	sc.UnreadableFiles = append(sc.UnreadableFiles, fact.SysctlUnreadableFile{
+		File: file, Kind: fact.ErrInternal,
+		Msg: "the symlink chain is too long to follow, which is a loop or an attempt at one",
+	})
+	return "", false
+}
+
+// readResolvedConfig reads a link's target and files it against the link.
+//
+// **The target is read through ReadOpaque and the direct reads are not**, which
+// is the one asymmetry here and it is deliberate. A regular configuration file
+// is read with ReadFile so its bytes reach the evidence store and a cited
+// digest can be followed; a *link* is a path chosen by whoever could write the
+// directory, and following one with ReadFile would let a symlink planted in a
+// sysctl.d directory copy any file on the host into an artifact designed to
+// travel. Reading the target opaquely keeps that impossible while still
+// producing the digest and the parsed settings.
+//
+// The digest is the same either way, so on a Debian host — where the link and
+// /etc/sysctl.conf are the same bytes — a finding citing the link resolves
+// against the blob the direct read of /etc/sysctl.conf already stored.
+func readResolvedConfig(s system.System, file, target string, sc *fact.Sysctl) {
+	res, err := s.ReadOpaque(target, maxConfigRead)
+	switch {
+	case errors.Is(err, system.ErrPermission):
+		sc.UnreadableFiles = append(sc.UnreadableFiles, fact.SysctlUnreadableFile{
+			File: file, Kind: fact.ErrPermission,
+			Msg: "permission denied reading the link target " + target,
+		})
+		return
+	case err != nil:
+		sc.UnreadableFiles = append(sc.UnreadableFiles, fact.SysctlUnreadableFile{
+			File: file, Kind: fact.ErrInternal, Msg: err.Error(),
+		})
+		return
+	}
+	if res.Truncated {
+		sc.UnreadableFiles = append(sc.UnreadableFiles, fact.SysctlUnreadableFile{
+			File: file, Kind: fact.ErrTruncated, Msg: "file exceeded the read cap",
+		})
+		return
+	}
+	if why := collect.NotText(res.Data); why != "" {
+		sc.UnreadableFiles = append(sc.UnreadableFiles, fact.SysctlUnreadableFile{
+			File: file, Kind: fact.ErrParse, Msg: why,
+		})
+		return
+	}
+
+	sc.Resolved[file] = target
+	recordConfig(file, res.SHA256, res.Data, sc)
+}
+
+// resolveLinkPath makes a link target absolute against the link's own
+// directory. A relative target read as absolute names a completely different
+// file.
+func resolveLinkPath(link, dest string) string {
+	if path.IsAbs(dest) {
+		return path.Clean(dest)
+	}
+	return path.Clean(path.Join(path.Dir(link), dest))
 }
 
 // parseSysctlLine parses one `key = value` line of sysctl.conf(5).
