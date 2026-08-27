@@ -1,0 +1,1 @@
+{ "description": "Neither parameter written and both at 0 in the running kernel: pointers printed to every local reader and the ring buffer readable by anyone. A sysctl.d file is present and sets something else, so this is not a host without configuration — it is a host whose configuration did not consider these two. Both checks fail at HIGH." }

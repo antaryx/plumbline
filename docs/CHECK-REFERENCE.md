@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 25 · 95 checks · 11 modules**
+**Catalog version 26 · 97 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -2724,6 +2724,141 @@ systemd-analyze cat-config sysctl.d
 
 - [Linux kernel — unprivileged\_bpf\_disabled](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#unprivileged-bpf-disabled)
 - [Linux kernel — bpf\_jit\_harden](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/net.html#bpf-jit-harden)
+- [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
+
+---
+
+### KERNEL-0018 — Kernel pointer restriction is written to the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | HIGH |
+| Since | catalog 26 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `information-disclosure`, `kaslr` |
+
+KASLR moves the kernel's text and data to a different address
+on every boot, so an attacker with a memory-corruption bug does not know where
+to aim. **Every one of those addresses is useless the moment the kernel prints
+a pointer to user space**, because one leaked pointer gives away the offset and
+the whole layout with it.
+
+kptr_restrict decides who gets to see them, and it has three settings:
+
+  - 0 — %pK prints the real address. Anything that reads /proc/kallsyms,
+        /proc/modules, /proc/timer_list or a dozen other files learns the
+        layout.
+  - 1 — the address is printed as zeros unless the reader holds CAP_SYSLOG.
+  - 2 — the address is printed as zeros for everyone, privileged or not.
+
+**1 is the value that looks safe and is not, which is why this check asks for
+2.** CAP_SYSLOG is not a rare thing to hold: a container given it for logging,
+a monitoring agent, anything that reads the kernel ring buffer. Under 1 all of
+those defeat KASLR for the whole host, and the leak is a read of a text file
+rather than an exploit. 2 removes the distinction.
+
+This is a check about files. KERNEL-0002 asks what the running kernel does; this
+asks whether it will still do it after a reboot, which is a different question
+and is not covered by KERNEL-0007 either — that compares running against
+configured and skips a parameter no file mentions, because there is nothing to
+compare it against.
+
+**Expect this to fail on a stock distribution.** Ubuntu ships
+kernel.kptr_restrict = 1 in /usr/lib/sysctl.d and most others ship nothing at
+all. A host at 1 has done something and not enough, and is reported one severity
+band below a host that has done nothing — the finding is the same and the
+conversation is not.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write kernel.kptr\_restrict = 2 to a file in /etc/sysctl.d/ and apply it.
+
+1. Check what already sets it first: grep -rn kptr\_restrict /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. On Ubuntu a vendor file sets 1, and a drop-in in /etc/sysctl.d overrides it only because /etc is walked after /usr/lib — number yours above whatever you find.
+2. Create /etc/sysctl.d/60-kptr.conf containing kernel.kptr\_restrict = 2.
+3. Apply without rebooting: sysctl --system, then confirm with sysctl kernel.kptr\_restrict.
+4. Establish what breaks before rolling it out widely. perf, systemtap, bcc/bpftrace and some crash-dump tooling read kernel symbols, and at 2 they see zeros even as root. Where a profiler is genuinely needed, 1 with a tightly held CAP\_SYSLOG is a defensible position — record it as an exception rather than leaving the file unset.
+5. Verify what actually took effect: systemd-analyze cat-config sysctl.d shows the merged configuration in application order on a systemd host.
+
+```sh
+sysctl kernel.kptr_restrict
+grep -rn kptr_restrict /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+systemd-analyze cat-config sysctl.d
+```
+
+> **Caution.** At 2 kernel addresses read as zeros for root as well, which breaks perf, bpftrace and kernel crash analysis. Test the tooling this host depends on before setting it fleet-wide; the setting is trivial to apply and the breakage appears the next time somebody profiles something.
+
+**Controls** — `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-16`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — kptr\_restrict](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#kptr-restrict)
+- [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
+
+---
+
+### KERNEL-0019 — Kernel ring buffer restriction is written to the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | HIGH |
+| Since | catalog 26 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `information-disclosure` |
+
+dmesg is the other end of the same leak KERNEL-0018 describes.
+kptr_restrict decides whether a pointer is printed as zeros; dmesg_restrict
+decides who may read the buffer those lines are printed into.
+
+At 0 any local user runs dmesg. What they get is not a log so much as a
+narrated tour of the kernel's memory: driver initialisation with device
+addresses, stack traces from anything that has oopsed since boot, module load
+addresses, and — on a host that has not set kptr_restrict — pointers in the
+clear. It is also where a great deal of hardware and topology detail lives,
+which is reconnaissance rather than exploitation but is reconnaissance an
+unprivileged process should not be handed.
+
+At 1 the buffer is readable only with CAP_SYSLOG. There is no third value: this
+is a boolean wearing an integer's clothes, so the check is correspondingly
+simple.
+
+**The two settings are worth doing together and are separate checks on
+purpose.** Restricting dmesg while leaving kptr_restrict at 0 still leaks
+pointers through /proc/kallsyms and friends; hiding pointers while leaving
+dmesg open still hands over stack traces and the hardware inventory. A host
+that has done one and not the other should see one finding, which is what two
+checks give it.
+
+This reads the files. KERNEL-0004 asks what the running kernel does.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write kernel.dmesg\_restrict = 1 to a file in /etc/sysctl.d/ and apply it.
+
+1. Check what already sets it: grep -rn dmesg\_restrict /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d.
+2. Create or extend a drop-in — the same file as kernel.kptr\_restrict is the natural home, since the two settings close the same leak from opposite ends — containing kernel.dmesg\_restrict = 1.
+3. Apply without rebooting: sysctl --system, then confirm with sysctl kernel.dmesg\_restrict.
+4. Check what reads dmesg as a non-root user before rolling it out. Some hardware-monitoring and crash-reporting agents do; the answer for those is usually CAP\_SYSLOG on the unit rather than an open buffer for everyone.
+5. Do KERNEL-0018 at the same time if it is also failing. Restricting dmesg while kernel pointers are still printed in the clear leaves the leak open through /proc/kallsyms, and hiding pointers while dmesg is world-readable leaves the stack traces.
+
+```sh
+sysctl kernel.dmesg_restrict
+grep -rn dmesg_restrict /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+systemd-analyze cat-config sysctl.d
+```
+
+> **Caution.** An unprivileged process that legitimately reads dmesg stops working. That is usually a monitoring agent, and the fix is AmbientCapabilities=CAP\_SYSLOG on its unit rather than reopening the buffer to everyone.
+
+**Controls** — `nist-800-53-r5 SC-4`, `nist-800-53-r5 AU-9`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — dmesg\_restrict](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#dmesg-restrict)
 - [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
 
 ---

@@ -95,6 +95,8 @@ func buildCatalog() *catalog.Catalog {
 		kernelchecks.Check0015,
 		kernelchecks.Check0016,
 		kernelchecks.Check0017,
+		kernelchecks.Check0018,
+		kernelchecks.Check0019,
 		loggingchecks.Check0001,
 		loggingchecks.Check0002,
 		loggingchecks.Check0003,

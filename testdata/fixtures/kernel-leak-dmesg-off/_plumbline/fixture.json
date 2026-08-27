@@ -1,0 +1,1 @@
+{ "description": "dmesg_restrict written down and set to 0, with a comment saying why — a decision somebody made rather than a default nobody changed. kptr_restrict is at 2 beside it, so pointers are hidden and the stack traces and hardware inventory in the ring buffer are not, which is the half-done state the two checks exist to tell apart. Exactly one of them fails." }

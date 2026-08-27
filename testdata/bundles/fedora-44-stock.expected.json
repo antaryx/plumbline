@@ -1,7 +1,7 @@
 {
   "bundle": "fedora-44-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 25,
+  "catalog_version": 26,
   "scan": {
     "started": "2026-08-25T21:31:49.097645827Z",
     "finished": "2026-08-25T21:31:49.817305111Z",
@@ -15,19 +15,19 @@
   "summary": {
     "counts": {
       "pass": 37,
-      "fail": 13,
+      "fail": 15,
       "not_applicable": 38,
       "skipped": 0,
       "unknown": 7,
-      "total": 95
+      "total": 97
     },
     "by_severity": {
-      "HIGH": 4,
+      "HIGH": 6,
       "LOW": 3,
       "MEDIUM": 6
     },
-    "posture": 77.11864406779661,
-    "coverage": 87.71929824561403
+    "posture": 73.38709677419355,
+    "coverage": 88.13559322033898
   },
   "findings": [
     {
@@ -673,12 +673,56 @@
       "evidence": [
         {
           "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
-          "excerpt": "read, and sets neither BPF parameter",
+          "excerpt": "read, and does not set the parameter",
           "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
         },
         {
           "source": "/lib/sysctl.d/10-default-yama-scope.conf",
-          "excerpt": "read, and sets neither BPF parameter",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0018",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "kernel.kptr_restrict",
+      "fingerprint": "6c9194646b22a40b52f14ba568978bad",
+      "detail": "kernel.kptr_restrict is not set in any sysctl configuration file, so the value after the next reboot is whatever the kernel defaults to — which on most builds is 0, printing kernel addresses to every local reader. The running kernel has it at 1, so this host is protected now and will not be after the next reboot unless something sets it again outside these files. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0002's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0019",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "kernel.dmesg_restrict",
+      "fingerprint": "39a60fbad6749e88f527ee8f499c1ad0",
+      "detail": "kernel.dmesg_restrict is not set in any sysctl configuration file, so after the next reboot the ring buffer is readable by whatever the kernel defaults to — 0 on most builds, meaning any local user can run dmesg and read stack traces, module addresses and the hardware inventory. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0004's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
           "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
         }
       ]

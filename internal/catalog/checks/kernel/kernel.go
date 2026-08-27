@@ -238,3 +238,171 @@ func joinKeys(in []string) string {
 	sort.Strings(out)
 	return strings.Join(out, ", ")
 }
+
+// ---------------------------------------------------------------------------
+// persistence: the checks that read the files rather than /proc/sys
+// ---------------------------------------------------------------------------
+
+// persistenceGate answers everything a persistence check has to settle before
+// it may look at a value, and returns nil when there is a value to look at.
+//
+// The four conditions below are the same for every check of this shape and
+// each of them was a decision worth making once. Three checks now share them,
+// which is the point: the ordering is a correctness property — a kernel that
+// does not implement a parameter must be excused *before* an absent
+// configuration is called a failure, and an unreadable file must stop the
+// check *before* an absence is concluded from what was read — and three copies
+// of it would be three chances to get the order wrong.
+//
+// The wording of the verdict is left to the caller. Everything here is about
+// whether a verdict may be reached at all.
+func persistenceGate(sc fact.Sysctl, keys []string, caveat string) *catalog.Outcome {
+	// 1. A kernel that implements none of them has nothing for a file to
+	//    persist, and a file setting them would do nothing. All of them have to
+	//    be absent: a kernel with one and not the other is one this check still
+	//    has something to say about.
+	absent := 0
+	for _, key := range keys {
+		if r, probed := sc.Run(key); probed && r.State == fact.SysctlAbsent {
+			absent++
+		}
+	}
+	if absent == len(keys) {
+		lead := fmt.Sprintf("This kernel implements none of %s", joinKeys(keys))
+		if len(keys) == 1 {
+			lead = fmt.Sprintf("This kernel does not implement %s", keys[0])
+		}
+		return &catalog.Outcome{
+			Result:  finding.NotApplicable,
+			Subject: "sysctl configuration",
+			Detail:  lead + ", so there is nothing for a configuration file to persist." + caveat,
+		}
+	}
+
+	// 2. No configuration at all, and nothing that stopped us reading it.
+	//    There is no file to have an opinion about: an image built without
+	//    them, or a host whose kernel settings arrive some other way.
+	//    Reporting FAIL would be a finding about a file that was never meant
+	//    to exist.
+	if len(sc.Files) == 0 && len(sc.UnreadableFiles) == 0 {
+		return &catalog.Outcome{
+			Result: finding.NotApplicable,
+			Detail: "No sysctl configuration file exists on this host: neither /etc/sysctl.conf nor any .conf file in the sysctl.d directories. There is no persistent kernel configuration to report on, and what the running kernel currently does is the business of the check that reads /proc/sys." + caveat,
+		}
+	}
+
+	// 3. A file we could not read may hold the setting, so an absence cannot
+	//    be concluded. This comes before the value test because every verdict
+	//    below rests on *not* finding something — ADR-0014 in the direction it
+	//    points here.
+	if out, stop := configUnreadable(sc, caveat); stop {
+		return &out
+	}
+
+	// 4. Two files disagreeing has no determinable outcome: procps and
+	//    systemd-sysctl walk the drop-in directories in different orders, so
+	//    which value is in force after a reboot depends on which tool applied
+	//    them. Guessing would be a confident claim about exactly the thing
+	//    these checks report on.
+	for _, key := range keys {
+		if !sc.ConfiguredConflict(key) {
+			continue
+		}
+		var (
+			where []string
+			ev    []finding.Evidence
+		)
+		for _, s := range sc.Configured[key] {
+			where = append(where, fmt.Sprintf("%s:%d sets %s", s.File, s.Line, s.Value))
+			ev = append(ev, evidenceForSetting(sc, s))
+		}
+		return &catalog.Outcome{
+			Result:        finding.Unknown,
+			UnknownReason: finding.ReasonAmbiguousState,
+			Subject:       key,
+			Detail: fmt.Sprintf("%s is set to different values in more than one configuration file (%s). Which one is in force after a reboot depends on whether systemd-sysctl or procps applied them and in what order, so what this host does on its next boot cannot be determined from the files alone.%s",
+				key, strings.Join(where, "; "), caveat),
+			Evidence: ev,
+		}
+	}
+	return nil
+}
+
+// configUnreadable stops the check when a configuration file exists and could
+// not be read.
+//
+// The verdict below rests on *not* finding a setting, and a file nobody opened
+// may contain it. That is ADR-0014 in the direction it points here: an
+// incomplete examination invalidates a negative result.
+func configUnreadable(sc fact.Sysctl, caveat string) (catalog.Outcome, bool) {
+	names := sc.UnreadableFileNames()
+	if len(names) == 0 {
+		return catalog.Outcome{}, false
+	}
+
+	reason := finding.ReasonAmbiguousState
+	if kind, ok := sc.WorstUnreadableKind(); ok {
+		switch kind {
+		case fact.ErrPermission:
+			reason = finding.ReasonPermission
+		case fact.ErrTruncated:
+			reason = finding.ReasonTruncated
+		case fact.ErrParse:
+			reason = finding.ReasonParse
+		}
+	}
+	var ev []finding.Evidence
+	for _, f := range sc.UnreadableFiles {
+		ev = append(ev, finding.NewEvidence(f.File, 0, string(f.Kind)+": "+f.Msg, ""))
+	}
+	return catalog.Outcome{
+		Result:        finding.Unknown,
+		UnknownReason: reason,
+		Subject:       "sysctl configuration",
+		Detail: fmt.Sprintf("This verdict would rest on not finding the BPF parameters in any configuration file, and %s could not be read — so a setting for them may be in a file this scan never opened.%s",
+			joinKeys(names), caveat),
+		Evidence: ev,
+	}, true
+}
+
+// searchedEvidence guarantees a verdict about an absence cites something.
+//
+// When a parameter is set nowhere there is no line to quote, and a finding with
+// no evidence is one an auditor cannot follow up. What they need instead is the
+// list of files that *were* read — "I looked in these and it is in none of
+// them" — which is also the set an operator has to check before adding a new
+// drop-in.
+func searchedEvidence(sc fact.Sysctl, ev []finding.Evidence) []finding.Evidence {
+	if len(ev) > 0 {
+		return ev
+	}
+	for _, f := range sc.Files {
+		note := "read, and does not set the parameter"
+		if target, ok := sc.ResolvedFrom(f); ok {
+			note += "; a symbolic link to " + target
+		}
+		ev = append(ev, finding.NewEvidence(f, 0, note, sc.Digests[f]))
+	}
+	return ev
+}
+
+// configuredEvidence cites one parameter's setting, or the files searched when
+// it has none.
+func configuredEvidence(sc fact.Sysctl, key string) []finding.Evidence {
+	if set, found := sc.EffectiveConfigured(key); found {
+		return []finding.Evidence{evidenceForSetting(sc, set)}
+	}
+	return searchedEvidence(sc, nil)
+}
+
+// persistCaveatFor builds the sentence every persistence verdict ends with,
+// naming the check that reads the running value of the same parameter.
+//
+// It is not decoration. These checks and their /proc/sys counterparts disagree
+// on the same host all the time — that is the whole reason they both exist —
+// and a reader who does not know which one they are holding will act on the
+// wrong finding.
+func persistCaveatFor(runtimeCheck string) string {
+	return fmt.Sprintf(" This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is %s's subject, and a disagreement between the two is KERNEL-0007's.",
+		runtimeCheck)
+}

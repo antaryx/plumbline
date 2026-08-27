@@ -123,6 +123,27 @@ type pin struct {
 // keep their six UNKNOWN and the debt is now visible as a contrast within the
 // corpus rather than as a number in a comment.
 //
+// **KERNEL-0018 and -0019 fail every bundle in the corpus, and that is the
+// finding rather than a calibration problem.** No mainstream distribution
+// persists either parameter. Ubuntu and Rocky ship kernel.kptr_restrict = 1 in
+// a vendor file — the value that hides pointers from ordinary readers and
+// prints them in full to anything holding CAP_SYSLOG — and Alpine and Fedora
+// ship nothing; not one of the six writes kernel.dmesg_restrict anywhere.
+//
+// The severity tier earns itself here rather than in a fixture. -0018 rates
+// the three bundles that set 1 at Medium and the two that set nothing at High,
+// which is the only thing distinguishing "this distribution made a choice and
+// it is not enough" from "this distribution did not consider it". Without it
+// the corpus would show five identical High failures and no way to tell the
+// two situations apart.
+//
+// It is worth being honest that this is a check every user will see fail out
+// of the box, twice, at High and Medium. That is defensible while the finding
+// is true and the remediation is three lines in a drop-in — and it is exactly
+// the shape that becomes noise if the catalog accumulates many of them, which
+// is a judgement to revisit at the next severity review rather than to settle
+// by softening a true finding.
+//
 // **KERNEL-0017 is the first check in five work packages to raise coverage
 // rather than lower it**, because it reads kernel.sysctl — a fact these bundles
 // already carry — rather than one recorded after them. It is also the first to
@@ -177,8 +198,8 @@ var pinned = map[string]pin{
 	// syslog daemon, and a check that declines to judge an absent subject is
 	// the behaviour, not a gap.
 	"ubuntu-2404-stock": {
-		catalog: 25, pass: 39, fail: 13, notApplicable: 37, unknown: 6, skipped: 0,
-		posture: 78.51239669421489, coverage: 89.65517241379311,
+		catalog: 26, pass: 39, fail: 15, notApplicable: 37, unknown: 6, skipped: 0,
+		posture: 75.39682539682539, coverage: 90,
 		why: "the unhardened baseline every other number is measured against",
 	},
 
@@ -186,7 +207,7 @@ var pinned = map[string]pin{
 	// check cares about. One PASS and one NOT_APPLICABLE separate them here,
 	// and which ones is the interesting part of any diff on this pair.
 	"debian-13-stock": {
-		catalog: 25, pass: 37, fail: 13, notApplicable: 39, unknown: 6, skipped: 0,
+		catalog: 26, pass: 37, fail: 13, notApplicable: 41, unknown: 6, skipped: 0,
 		posture: 78.44827586206897, coverage: 89.28571428571429,
 		why: "Debian's defaults, which are not Ubuntu's",
 	},
@@ -195,8 +216,8 @@ var pinned = map[string]pin{
 	// is the bundle that catches a check quietly assuming a Debian-shaped /etc
 	// and reporting a verdict about a file that was never there.
 	"alpine-320-stock": {
-		catalog: 25, pass: 30, fail: 9, notApplicable: 50, unknown: 6, skipped: 0,
-		posture: 81.31868131868131, coverage: 86.66666666666667,
+		catalog: 26, pass: 30, fail: 11, notApplicable: 50, unknown: 6, skipped: 0,
+		posture: 76.28865979381443, coverage: 87.2340425531915,
 		why: "the distribution least like the others, where guessing shows up",
 	},
 
@@ -208,8 +229,8 @@ var pinned = map[string]pin{
 	// binary, not of any file on the host. AUTH-0002 says it does not know.
 	// Every other scanner reports the documented default and calls it a PASS.
 	"fedora-44-stock": {
-		catalog: 25, pass: 37, fail: 13, notApplicable: 38, unknown: 7, skipped: 0,
-		posture: 77.11864406779661, coverage: 87.71929824561403,
+		catalog: 26, pass: 37, fail: 15, notApplicable: 38, unknown: 7, skipped: 0,
+		posture: 73.38709677419355, coverage: 88.13559322033898,
 		why: "the RPM family's leading edge, where authselect owns the PAM stack",
 	},
 
@@ -217,8 +238,8 @@ var pinned = map[string]pin{
 	// point of it. One FAIL and one NOT_APPLICABLE separate the two, and which
 	// ones is the interesting part of any diff on this pair.
 	"rocky-9-stock": {
-		catalog: 25, pass: 37, fail: 12, notApplicable: 39, unknown: 7, skipped: 0,
-		posture: 79.13043478260869, coverage: 87.5,
+		catalog: 26, pass: 37, fail: 14, notApplicable: 39, unknown: 7, skipped: 0,
+		posture: 75.83333333333333, coverage: 87.93103448275862,
 		why: "the enterprise RPM baseline most real audits run against",
 	},
 
@@ -238,23 +259,27 @@ var pinned = map[string]pin{
 	// configuration. Covering CONTAINERS against a real daemon needs a recipe
 	// that installs one, which is a work package of its own.
 	//
-	// The 7 FAIL are four a container cannot fix — /tmp and /home are not
+	// The 9 FAIL are four a container cannot fix — /tmp and /home are not
 	// separate mounts, and /proc/sys is read-only so dmesg_restrict and the
 	// core pattern cannot be set — and three that are real findings about a
 	// real image, which appeared the moment the UNKNOWNs cleared:
 	// SERVICES-0007 and -0008 because systemd 259 ships journald with
 	// NoNewPrivileges and neither ProtectSystem nor ProtectHome, and
 	// KERNEL-0017 because Ubuntu's kernel defaults unprivileged_bpf_disabled to
-	// 2 and no file on the image sets it. All three are reproducible on any
-	// Ubuntu 24.04 host and none of them is an artifact of the recipe.
+	// 2 and no file on the image sets it, and KERNEL-0018 and -0019 because
+	// Ubuntu persists kptr_restrict at 1 and dmesg_restrict not at all. All
+	// five are reproducible on any Ubuntu 24.04 host and none is an artifact
+	// of the recipe.
 	//
-	// A posture that fell from 96.77 to 92.46 on a bundle named "hardened" is
-	// the corpus doing its job. All fifteen non-passing verdicts are correct,
+	// A posture that has fallen from 96.77 to 90.20 across two work packages on
+	// a bundle named "hardened" is the corpus doing its job: every point of it
+	// is a real finding that had been hidden behind an UNKNOWN or had no check
+	// to catch it. All seventeen non-passing verdicts are correct,
 	// and a run in which any of them became a PASS would be a serious
 	// regression rather than an improvement.
 	"ubuntu-2404-hardened": {
-		catalog: 25, pass: 80, fail: 7, notApplicable: 8, unknown: 0, skipped: 0,
-		posture: 92.46231155778895, coverage: 100,
+		catalog: 26, pass: 80, fail: 9, notApplicable: 8, unknown: 0, skipped: 0,
+		posture: 90.19607843137256, coverage: 100,
 		why: "the only bundle on which every check in the catalog evaluates",
 	},
 }

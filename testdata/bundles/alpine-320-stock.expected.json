@@ -1,7 +1,7 @@
 {
   "bundle": "alpine-320-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 25,
+  "catalog_version": 26,
   "scan": {
     "started": "2026-08-25T21:31:44.169375564Z",
     "finished": "2026-08-25T21:31:44.201476282Z",
@@ -15,19 +15,19 @@
   "summary": {
     "counts": {
       "pass": 30,
-      "fail": 9,
+      "fail": 11,
       "not_applicable": 50,
       "skipped": 0,
       "unknown": 6,
-      "total": 95
+      "total": 97
     },
     "by_severity": {
-      "HIGH": 2,
+      "HIGH": 4,
       "LOW": 3,
       "MEDIUM": 4
     },
-    "posture": 81.31868131868131,
-    "coverage": 86.66666666666667
+    "posture": 76.28865979381443,
+    "coverage": 87.2340425531915
   },
   "findings": [
     {
@@ -613,6 +613,50 @@
           "line": 40,
           "excerpt": "kernel.unprivileged_bpf_disabled = 1",
           "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0018",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "kernel.kptr_restrict",
+      "fingerprint": "6c9194646b22a40b52f14ba568978bad",
+      "detail": "kernel.kptr_restrict is not set in any sysctl configuration file, so the value after the next reboot is whatever the kernel defaults to — which on most builds is 0, printing kernel addresses to every local reader. The running kernel has it at 1, so this host is protected now and will not be after the next reboot unless something sets it again outside these files. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0002's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/00-alpine.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "8bba47da45bc8715c69ac904a60410eabffaa7bbbef640f9c1368ab9c48493d0"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0019",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "kernel.dmesg_restrict",
+      "fingerprint": "39a60fbad6749e88f527ee8f499c1ad0",
+      "detail": "kernel.dmesg_restrict is not set in any sysctl configuration file, so after the next reboot the ring buffer is readable by whatever the kernel defaults to — 0 on most builds, meaning any local user can run dmesg and read stack traces, module addresses and the hardware inventory. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0004's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/00-alpine.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "8bba47da45bc8715c69ac904a60410eabffaa7bbbef640f9c1368ab9c48493d0"
         }
       ]
     },

@@ -746,6 +746,30 @@ Two things are worth carrying forward from it:
   hosts; the blast radius stated from memory was wider than the evidence. Check
   the recordings before describing a distribution family.
 
+`KERNEL-0018` and `-0019` are the third and fourth checks of this shape, and at
+three copies the gate came out into `persistenceGate`. The trigger was the same
+one the SERVICES triad produced: the loop encoded *correctness properties* —
+excuse an unsupported kernel before calling an absent file a failure, stop on an
+unreadable file before concluding an absence — and those were being restated per
+check rather than held in one place.
+
+**Neither of them passes anywhere in the corpus**, which is worth recording as a
+fact about distributions rather than about the checks. No mainstream image
+persists `kernel.dmesg_restrict`; Ubuntu and Rocky persist `kptr_restrict` at 1,
+which hands the kernel layout to anything holding `CAP_SYSLOG`, and Alpine and
+Fedora persist nothing. The severity tier — 1 at `MEDIUM`, unset at `HIGH` — is
+the only thing distinguishing those two situations, and it earned itself on the
+corpus rather than in a fixture.
+
+**A check that fails every host is a judgement to revisit, not a bug to fix.**
+It is defensible while the finding is true and the remedy is three lines in a
+drop-in. It stops being defensible if the catalog accumulates several of them,
+because a report where everything is red is a report nobody reads. That is a
+severity-review question for the catalog as a whole rather than something to
+settle by softening one true finding, and `KERNEL-0019` carries a related
+open question in its source: it sits two bands above `KERNEL-0004`, which rates
+the *running* parameter `Low`, and one of the two is miscalibrated.
+
 Re-recording that one bundle also cleared the six `UNKNOWN` the previous four
 work packages had accumulated on it, and dropped its posture from 96.77 to
 92.46 by surfacing three real findings it had been hiding. **A corpus whose

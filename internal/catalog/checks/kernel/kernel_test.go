@@ -36,6 +36,7 @@ var all = []catalog.Check{
 	checks.Check0014,
 	checks.Check0015,
 	checks.Check0016, checks.Check0017,
+	checks.Check0018, checks.Check0019,
 }
 
 // collectFixture runs the real collector against a fixture tree.
@@ -542,9 +543,9 @@ func TestCheckIdentityIsWellFormed(t *testing.T) {
 		// bulk-updated to the current version — which is what this assertion
 		// is guarding, and why it names the versions rather than accepting any.
 		switch check.SinceCatalog {
-		case 2, 3, 25:
+		case 2, 3, 25, 26:
 		default:
-			t.Errorf("%s declares SinceCatalog %d, want 2, 3 or 25", check.ID, check.SinceCatalog)
+			t.Errorf("%s declares SinceCatalog %d, want 2, 3, 25 or 26", check.ID, check.SinceCatalog)
 		}
 		if check.SinceCatalog > catalog.Version {
 			t.Errorf("%s declares SinceCatalog %d, which is ahead of catalog.Version %d",
@@ -635,7 +636,7 @@ func TestKernel0017PersistentBPFHardening(t *testing.T) {
 
 		// A kernel with no BPF at all has nothing to persist.
 		{fixture: "kernel-absent", result: finding.NotApplicable,
-			detailContains: "implements neither"},
+			detailContains: "implements none of"},
 
 		// A file we could not open may hold either setting.
 		{fixture: "kernel-denied", result: finding.Unknown,
@@ -793,5 +794,164 @@ func TestTheConfiguredCheckCitesFilesAndLines(t *testing.T) {
 	}
 	if len(sources) != 2 {
 		t.Errorf("both parameters were read from one file; the fixture splits them: %v", sources)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// KERNEL-0018 and -0019, the information-leak pair
+// ---------------------------------------------------------------------------
+
+func TestKernel0018KptrRestrictPersisted(t *testing.T) {
+	run(t, checks.Check0018, []tc{
+		{fixture: "kernel-leak-restricted", result: finding.Pass,
+			detailContains: "prints zeros for every reader"},
+
+		// Written at 1: a band below the host that wrote nothing.
+		{fixture: "kernel-leak-capsyslog", result: finding.Fail, severity: finding.Medium,
+			detailContains: "CAP_SYSLOG"},
+
+		// Written nowhere.
+		{fixture: "kernel-leak-open", result: finding.Fail, severity: finding.High,
+			detailContains: "not set in any sysctl configuration file"},
+
+		// Two files disagree.
+		{fixture: "kernel-leak-conflict", result: finding.Unknown,
+			reason: finding.ReasonAmbiguousState, detailContains: "different values in more than one"},
+
+		// The gates.
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+func TestKernel0019DmesgRestrictPersisted(t *testing.T) {
+	run(t, checks.Check0019, []tc{
+		{fixture: "kernel-leak-restricted", result: finding.Pass,
+			detailContains: "requires CAP_SYSLOG to read"},
+
+		// Written down and turned off, with a reason in the file.
+		{fixture: "kernel-leak-dmesg-off", result: finding.Fail, severity: finding.High,
+			detailContains: "any local user can run dmesg"},
+
+		// Written nowhere.
+		{fixture: "kernel-leak-open", result: finding.Fail, severity: finding.High,
+			detailContains: "not set in any sysctl configuration file"},
+
+		// A conflict about the *other* parameter must not silence this check.
+		{fixture: "kernel-leak-conflict", result: finding.Pass,
+			detailContains: "requires CAP_SYSLOG"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+// TestOneAtATimeIsHalfDone is why these are two checks rather than one.
+//
+// Restricting dmesg while kernel pointers are printed in the clear leaves the
+// leak open through /proc/kallsyms; hiding pointers while dmesg is
+// world-readable leaves the stack traces and the hardware inventory. A host
+// that has done one and not the other should see exactly one finding, and the
+// two fixtures below are that host in each direction.
+func TestOneAtATimeIsHalfDone(t *testing.T) {
+	// kptr at 1, dmesg at 1: -0018 fails, -0019 passes.
+	if got := evalFixture(t, checks.Check0018, "kernel-leak-capsyslog"); got.Result != finding.Fail {
+		t.Errorf("KERNEL-0018 = %s over kptr_restrict=1: %s", got.Result, got.Detail)
+	}
+	if got := evalFixture(t, checks.Check0019, "kernel-leak-capsyslog"); got.Result != finding.Pass {
+		t.Errorf("KERNEL-0019 responded to kptr_restrict: %s", got.Detail)
+	}
+
+	// kptr at 2, dmesg at 0: the mirror image.
+	if got := evalFixture(t, checks.Check0018, "kernel-leak-dmesg-off"); got.Result != finding.Pass {
+		t.Errorf("KERNEL-0018 responded to dmesg_restrict: %s", got.Detail)
+	}
+	if got := evalFixture(t, checks.Check0019, "kernel-leak-dmesg-off"); got.Result != finding.Fail {
+		t.Errorf("KERNEL-0019 = %s over dmesg_restrict=0: %s", got.Result, got.Detail)
+	}
+}
+
+// TestTheValueThatLooksSafeIsRatedBelowTheOneNobodySet.
+//
+// kptr_restrict = 1 is a failure and is not the same failure as an unset
+// parameter. One operator hid pointers from ordinary readers and left them
+// visible to anything holding CAP_SYSLOG; the other never considered it. Same
+// verdict, one severity band apart, and the finding says which is which — the
+// precedent is CONTAINERS-0006 rating a loopback binding below a routable one.
+func TestTheValueThatLooksSafeIsRatedBelowTheOneNobodySet(t *testing.T) {
+	written := evalFixture(t, checks.Check0018, "kernel-leak-capsyslog")
+	unset := evalFixture(t, checks.Check0018, "kernel-leak-open")
+
+	if written.Result != finding.Fail || unset.Result != finding.Fail {
+		t.Fatalf("expected both to fail: %s / %s", written.Result, unset.Result)
+	}
+	if written.Severity != finding.Medium {
+		t.Errorf("kptr_restrict=1 rated %s, want MEDIUM", written.Severity)
+	}
+	if unset.Severity != finding.High {
+		t.Errorf("an unset kptr_restrict rated %s, want HIGH", unset.Severity)
+	}
+	if !strings.Contains(written.Detail, "Set it to 2") {
+		t.Errorf("the weaker value is not told what to do: %s", written.Detail)
+	}
+	// And the vendor file that set it is cited, because that is the file the
+	// operator has to out-rank.
+	if len(written.Evidence) == 0 || !strings.Contains(written.Evidence[0].Source, "/usr/lib/sysctl.d/") {
+		t.Errorf("the vendor file that set 1 is not cited: %+v", written.Evidence)
+	}
+}
+
+// TestAConflictAboutOneParameterDoesNotSilenceTheOther.
+//
+// persistenceGate is given only the keys its check reads, so a disagreement
+// about kptr_restrict makes KERNEL-0018 UNKNOWN and leaves KERNEL-0019 free to
+// answer. A gate that checked every configured key would have turned one
+// unclear parameter into silence across the whole module.
+func TestAConflictAboutOneParameterDoesNotSilenceTheOther(t *testing.T) {
+	kptr := evalFixture(t, checks.Check0018, "kernel-leak-conflict")
+	if kptr.Result != finding.Unknown {
+		t.Errorf("KERNEL-0018 = %s over a conflicting kptr_restrict: %s", kptr.Result, kptr.Detail)
+	}
+	dmesg := evalFixture(t, checks.Check0019, "kernel-leak-conflict")
+	if dmesg.Result != finding.Pass {
+		t.Errorf("KERNEL-0019 = %s; the conflict is about a parameter it does not read: %s", dmesg.Result, dmesg.Detail)
+	}
+}
+
+// TestThePersistenceChecksShareTheirGate. The ordering in persistenceGate is a
+// correctness property — a kernel that does not implement a parameter is
+// excused before an absent configuration is called a failure, and an unreadable
+// file stops the check before an absence is concluded — and three checks now
+// depend on it. This asserts the consequence rather than the sharing.
+func TestThePersistenceChecksShareTheirGate(t *testing.T) {
+	persistence := []catalog.Check{checks.Check0017, checks.Check0018, checks.Check0019}
+
+	for _, check := range persistence {
+		// No configuration files at all: nothing to have an opinion about.
+		if got := evalFixture(t, check, "kernel-bpf-noconfig"); got.Result != finding.NotApplicable {
+			t.Errorf("%s = %s on a host with no sysctl configuration: %s", check.ID, got.Result, got.Detail)
+		}
+		// A file that exists and could not be read may hold the setting, so no
+		// absence may be concluded.
+		got := evalFixture(t, check, "kernel-denied")
+		if got.Result != finding.Unknown {
+			t.Errorf("%s = %s with an unreadable configuration file: %s", check.ID, got.Result, got.Detail)
+		}
+		if got.UnknownReason == "" {
+			t.Errorf("%s returned UNKNOWN without a reason", check.ID)
+		}
+		// Every verdict names the check that reads the running value, because
+		// the two disagree on the same host all the time and a reader who does
+		// not know which they are holding will act on the wrong one.
+		for _, fixture := range []string{"kernel-leak-restricted", "kernel-leak-open"} {
+			v := evalFixture(t, check, fixture)
+			if !strings.Contains(v.Detail, "after the next reboot") {
+				t.Errorf("%s over %s does not say it read the files: %s", check.ID, fixture, v.Detail)
+			}
+		}
 	}
 }

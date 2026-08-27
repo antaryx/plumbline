@@ -11,6 +11,41 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+### Added
+- **`KERNEL-0018` (kernel pointer restriction persisted) and `KERNEL-0019`
+  (ring buffer restriction persisted).** Catalog 26, 97 checks. Both `HIGH`.
+  They close the same information leak from opposite ends: `kptr_restrict`
+  decides whether a pointer is printed as zeros, `dmesg_restrict` decides who
+  may read the buffer it is printed into. Separate checks so a host that has
+  done one and not the other sees one finding.
+
+  **`kptr_restrict = 1` fails at `MEDIUM` rather than `HIGH`.** It is a
+  failure — 1 hides pointers from ordinary readers and prints them in full to
+  anything holding `CAP_SYSLOG`, which a container granted it for logging has —
+  and it is not the same failure as a host that configured nothing. The
+  precedent is `CONTAINERS-0006` rating a loopback binding below a routable one.
+  On the corpus it is the only thing distinguishing Ubuntu and Rocky, which
+  ship 1 in a vendor file, from Alpine and Fedora, which ship nothing.
+
+- **`persistenceGate`, shared by the three persistence checks.** Kernel support,
+  no configuration, unreadable configuration, conflicting values — in that
+  order, which is a correctness property rather than a tidy-up: a kernel that
+  does not implement a parameter must be excused before an absent configuration
+  is called a failure, and an unreadable file must stop the check before an
+  absence is concluded from what was read. `KERNEL-0017` was rewired onto it
+  with no verdict changing.
+
+  The gate is given only the keys its own check reads, so a disagreement about
+  `kptr_restrict` makes `KERNEL-0018` `UNKNOWN` and leaves `KERNEL-0019` free
+  to answer.
+
+### Changed
+- **Golden posture fell on all six bundles**, by 2 to 5 points. **Not one
+  bundle passes either new check**: no mainstream distribution persists
+  `kernel.dmesg_restrict` at all, and the three that set `kptr_restrict` set it
+  to 1. Every point of the drop is a true finding, and the corpus is where that
+  was established rather than assumed.
+
 ### Fixed
 - **The sysctl collector follows a symlinked configuration file.**
   `/etc/sysctl.d/99-sysctl.conf` is a link to `/etc/sysctl.conf` on Debian-family

@@ -1,7 +1,7 @@
 {
   "bundle": "rocky-9-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 25,
+  "catalog_version": 26,
   "scan": {
     "started": "2026-08-25T21:31:51.893733451Z",
     "finished": "2026-08-25T21:31:52.46518356Z",
@@ -15,19 +15,19 @@
   "summary": {
     "counts": {
       "pass": 37,
-      "fail": 12,
+      "fail": 14,
       "not_applicable": 39,
       "skipped": 0,
       "unknown": 7,
-      "total": 95
+      "total": 97
     },
     "by_severity": {
-      "HIGH": 3,
+      "HIGH": 4,
       "LOW": 3,
-      "MEDIUM": 6
+      "MEDIUM": 7
     },
-    "posture": 79.13043478260869,
-    "coverage": 87.5
+    "posture": 75.83333333333333,
+    "coverage": 87.93103448275862
   },
   "findings": [
     {
@@ -695,22 +695,72 @@
       "evidence": [
         {
           "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
-          "excerpt": "read, and sets neither BPF parameter",
+          "excerpt": "read, and does not set the parameter",
           "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
         },
         {
           "source": "/usr/lib/sysctl.d/50-redhat.conf",
-          "excerpt": "read, and sets neither BPF parameter",
+          "excerpt": "read, and does not set the parameter",
           "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
         },
         {
           "source": "/lib/sysctl.d/10-default-yama-scope.conf",
-          "excerpt": "read, and sets neither BPF parameter",
+          "excerpt": "read, and does not set the parameter",
           "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
         },
         {
           "source": "/lib/sysctl.d/50-redhat.conf",
-          "excerpt": "read, and sets neither BPF parameter",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0018",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "HIGH",
+      "subject": "kernel.kptr_restrict",
+      "fingerprint": "6c9194646b22a40b52f14ba568978bad",
+      "detail": "kernel.kptr_restrict is 1 at /lib/sysctl.d/50-redhat.conf:3, so kernel pointers are hidden from ordinary readers and printed in full to anything holding CAP_SYSLOG — a container granted it for logging, a monitoring agent, anything that reads the ring buffer. One such reader defeats KASLR for the whole host with a read of a text file. Set it to 2, which removes the distinction. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0002's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/50-redhat.conf",
+          "line": 3,
+          "excerpt": "kernel.kptr_restrict = 1",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0019",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "kernel.dmesg_restrict",
+      "fingerprint": "39a60fbad6749e88f527ee8f499c1ad0",
+      "detail": "kernel.dmesg_restrict is not set in any sysctl configuration file, so after the next reboot the ring buffer is readable by whatever the kernel defaults to — 0 on most builds, meaning any local user can run dmesg and read stack traces, module addresses and the hardware inventory. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0004's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/usr/lib/sysctl.d/50-redhat.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/50-redhat.conf",
+          "excerpt": "read, and does not set the parameter",
           "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
         }
       ]

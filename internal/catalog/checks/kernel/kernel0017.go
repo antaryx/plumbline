@@ -66,32 +66,8 @@ after a reboot, which is the one thing this check exists to describe.`,
 	Eval: func(fs *fact.Set) catalog.Outcome {
 		sc := sysctlFact(fs)
 
-		// A kernel that implements neither parameter has nothing to persist,
-		// and a file setting them would do nothing. NOT_APPLICABLE for the
-		// reason the module applies everywhere else: there is nothing to
-		// harden, and reporting ignorance or a failure would bury the real
-		// findings in noise.
-		if out, stop := bpfUnsupported(sc); stop {
-			return out
-		}
-
-		// No configuration at all, and nothing that stopped us reading it.
-		// There is no file to have an opinion about — a host whose sysctl
-		// settings arrive some other way, an image built without them, or a
-		// system that does not use sysctl.d. Reporting FAIL here would be a
-		// finding about a file that was never meant to exist.
-		if len(sc.Files) == 0 && len(sc.UnreadableFiles) == 0 {
-			return catalog.Outcome{
-				Result: finding.NotApplicable,
-				Detail: "No sysctl configuration file exists on this host: neither /etc/sysctl.conf nor any .conf file in the sysctl.d directories. There is no persistent kernel configuration to report on, and what the running kernel currently does is KERNEL-0006's subject.",
-			}
-		}
-
-		// A file we could not read may hold either setting, so an absence
-		// cannot be concluded. This comes before the value tests because the
-		// verdict below rests on *not* finding something.
-		if out, stop := configUnreadable(sc); stop {
-			return out
+		if out := persistenceGate(sc, bpfKeys(), persistBPFCaveat); out != nil {
+			return *out
 		}
 
 		var (
@@ -105,22 +81,6 @@ after a reboot, which is the one thing this check exists to describe.`,
 				failed = append(failed, fmt.Sprintf("%s is not set in any sysctl configuration file", want.key))
 				continue
 			}
-			if sc.ConfiguredConflict(want.key) {
-				var files []string
-				for _, s := range sc.Configured[want.key] {
-					files = append(files, fmt.Sprintf("%s:%d sets %s", s.File, s.Line, s.Value))
-					evidence = append(evidence, evidenceForSetting(sc, s))
-				}
-				return catalog.Outcome{
-					Result:        finding.Unknown,
-					UnknownReason: finding.ReasonAmbiguousState,
-					Subject:       want.key,
-					Detail: fmt.Sprintf("%s is set to different values in more than one configuration file (%s). Which one is in force after a reboot depends on whether systemd-sysctl or procps applied them and in what order, so what this host does on its next boot cannot be determined from the files alone.%s",
-						want.key, strings.Join(files, "; "), persistCaveat),
-					Evidence: evidence,
-				}
-			}
-
 			evidence = append(evidence, evidenceForSetting(sc, set))
 			value := strings.TrimSpace(set.Value)
 			switch {
@@ -137,7 +97,7 @@ after a reboot, which is the one thing this check exists to describe.`,
 			return catalog.Outcome{
 				Result:   finding.Fail,
 				Subject:  "sysctl configuration",
-				Detail:   bpfFailureDetail(sc, failed) + persistCaveat,
+				Detail:   bpfFailureDetail(sc, failed) + persistBPFCaveat,
 				Evidence: searchedEvidence(sc, evidence),
 			}
 		}
@@ -150,7 +110,7 @@ after a reboot, which is the one thing this check exists to describe.`,
 		return catalog.Outcome{
 			Result:   finding.Pass,
 			Subject:  "sysctl configuration",
-			Detail:   detail + runningNote(sc) + persistCaveat,
+			Detail:   detail + runningNote(sc) + persistBPFCaveat,
 			Evidence: evidence,
 		}
 	},
@@ -224,91 +184,19 @@ var bpfPersistent = []struct {
 	},
 }
 
-// persistCaveat is appended to every verdict this check draws.
-//
-// It names the limit that separates this check from KERNEL-0006: a file says
-// what the next boot will do, and nothing about what the kernel is doing now.
-// A host can pass this and be running with BPF wide open, which is drift and is
-// KERNEL-0007's subject.
-const persistCaveat = " This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0006's subject, and a disagreement between the two is KERNEL-0007's."
+// persistBPFCaveat names the limit that separates this check from KERNEL-0006:
+// a file says what the next boot will do and nothing about what the kernel is
+// doing now. A host can pass this and be running with BPF wide open, which is
+// drift and is KERNEL-0007's subject.
+var persistBPFCaveat = persistCaveatFor("KERNEL-0006")
 
-// configUnreadable stops the check when a configuration file exists and could
-// not be read.
-//
-// The verdict below rests on *not* finding a setting, and a file nobody opened
-// may contain it. That is ADR-0014 in the direction it points here: an
-// incomplete examination invalidates a negative result.
-func configUnreadable(sc fact.Sysctl) (catalog.Outcome, bool) {
-	names := sc.UnreadableFileNames()
-	if len(names) == 0 {
-		return catalog.Outcome{}, false
+// bpfKeys are the parameters this check requires, in declaration order.
+func bpfKeys() []string {
+	out := make([]string, 0, len(bpfPersistent))
+	for _, w := range bpfPersistent {
+		out = append(out, w.key)
 	}
-
-	reason := finding.ReasonAmbiguousState
-	if kind, ok := sc.WorstUnreadableKind(); ok {
-		switch kind {
-		case fact.ErrPermission:
-			reason = finding.ReasonPermission
-		case fact.ErrTruncated:
-			reason = finding.ReasonTruncated
-		case fact.ErrParse:
-			reason = finding.ReasonParse
-		}
-	}
-	var ev []finding.Evidence
-	for _, f := range sc.UnreadableFiles {
-		ev = append(ev, finding.NewEvidence(f.File, 0, string(f.Kind)+": "+f.Msg, ""))
-	}
-	return catalog.Outcome{
-		Result:        finding.Unknown,
-		UnknownReason: reason,
-		Subject:       "sysctl configuration",
-		Detail: fmt.Sprintf("This verdict would rest on not finding the BPF parameters in any configuration file, and %s could not be read — so a setting for them may be in a file this scan never opened.%s",
-			joinKeys(names), persistCaveat),
-		Evidence: ev,
-	}, true
-}
-
-// bpfUnsupported reports the NOT_APPLICABLE for a kernel that implements
-// neither parameter.
-//
-// Both have to be absent. A kernel with one and not the other is a kernel this
-// check still has something to say about, and excusing it on the strength of
-// the missing half would hide the half that is there.
-func bpfUnsupported(sc fact.Sysctl) (catalog.Outcome, bool) {
-	var absent []string
-	for _, want := range bpfPersistent {
-		r, probed := sc.Run(want.key)
-		if probed && r.State == fact.SysctlAbsent {
-			absent = append(absent, want.key)
-		}
-	}
-	if len(absent) != len(bpfPersistent) {
-		return catalog.Outcome{}, false
-	}
-	return catalog.Outcome{
-		Result:  finding.NotApplicable,
-		Subject: "sysctl configuration",
-		Detail: fmt.Sprintf("This kernel implements neither %s, so there is nothing for a configuration file to persist. Both are absent from /proc/sys, which on a kernel this old means BPF is not present at all rather than that the parameters are turned off.",
-			joinKeys(absent)),
-	}, true
-}
-
-// searchedEvidence guarantees a failure cites something.
-//
-// When neither parameter is set anywhere there is no line to quote, and a
-// finding with no evidence is one an auditor cannot follow up. What they need
-// instead is the list of files that *were* read — "I looked in these and it is
-// in none of them" — which is also exactly the set an operator has to check
-// before adding a new drop-in.
-func searchedEvidence(sc fact.Sysctl, ev []finding.Evidence) []finding.Evidence {
-	if len(ev) > 0 {
-		return ev
-	}
-	for _, f := range sc.Files {
-		ev = append(ev, finding.NewEvidence(f, 0, "read, and sets neither BPF parameter", sc.Digests[f]))
-	}
-	return ev
+	return out
 }
 
 // bpfFailureDetail renders the failure, leading with what is missing.
