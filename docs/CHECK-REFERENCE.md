@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 23 · 93 checks · 11 modules**
+**Catalog version 24 · 94 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -3905,6 +3905,85 @@ systemctl cat dbus.service
 **References**
 
 - [systemd.exec(5) — ProtectSystem](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
+- [systemd-analyze(1) — security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
+
+---
+
+### SERVICES-0008 — Audited system services cannot reach user home directories
+
+| | |
+|---|---|
+| Module | `SERVICES` |
+| Base severity | HIGH |
+| Since | catalog 24 |
+| Reads | `services.hardening` |
+| Tags | `services`, `systemd`, `sandboxing`, `credential-access`, `lateral-movement` |
+
+ProtectHome takes /home, /root and /run/user away from a
+service, in a mount namespace private to it. It has four levels:
+
+  - no         — the default. The service sees every home directory on the host.
+  - yes        — they are empty and inaccessible.
+  - read-only  — they are mounted read-only. **The contents are still readable.**
+  - tmpfs      — they are replaced with empty tmpfs mounts.
+
+**A root daemon that can read /root and /home is one exploit away from every
+credential on the estate.** The interesting file is not the user's documents; it
+is ~/.ssh/id_ed25519, ~/.aws/credentials, ~/.kube/config, ~/.docker/config.json
+and the token some tool cached in ~/.config. None of those is protected by file
+permissions against a process already running as root, and all of them are
+reusable somewhere else — which turns a single compromised daemon into lateral
+movement across every host and cloud account those keys reach. That is why this
+sits at High rather than beside the other sandboxing directives: it is the one
+whose absence exports the blast radius off the machine.
+
+There is almost never a reason for a system daemon to look. A message bus, a
+log writer, a time synchroniser and a name resolver have no business in a user's
+home directory, and the ones that do — a backup agent, a file server — are
+identifiable and few.
+
+**read-only passes and buys less than the other two.** It stops a daemon
+planting an authorized_keys file or a shell profile, which is a real persistence
+route closed. It does not stop it reading a private key, which is most of what
+the paragraph above is about. The check accepts it, because a host that chose it
+deliberately has done something real, and says so in as many words rather than
+reporting "home directories are protected" about a service that can still read
+every key under /root.
+
+**cron.service is exempt**, for the reason it is exempt from the other two: it
+runs arbitrary operator-supplied jobs inside its own mount namespace, and user
+cron jobs routinely execute scripts kept in a home directory and read data from
+one. dbus.service and systemd-journald.service are audited — neither has any
+business in /home, and unlike NoNewPrivileges there is nothing about dbus's
+setuid launch helper that bears on where the daemon may read.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Set ProtectHome=yes in a drop-in for each service, or tmpfs where the daemon needs the directories to exist.
+
+1. Establish whether the daemon has any business in a home directory before setting it. Most system services do not; the ones that do — backup agents, file servers, anything that serves user content — are identifiable, and for those the answer is an exemption in your own policy rather than a setting.
+2. Prefer ProtectHome=yes, which makes /home, /root and /run/user empty and inaccessible. Use tmpfs where a daemon needs the directories to exist but not to contain anything.
+3. Use read-only only when the daemon genuinely reads user files. It closes the persistence route — no planted authorized\_keys, no altered shell profile — and leaves every private key in those directories readable, which is most of what this check is about.
+4. Add it as a drop-in rather than editing the vendor unit, so a package upgrade does not undo it: systemctl edit <unit>, then a [Service] section containing ProtectHome=yes.
+5. Reload and restart: systemctl daemon-reload, then systemctl restart <unit>.
+6. Confirm the assembled unit rather than the file you edited: systemctl show -p ProtectHome <unit> reports what systemd actually loaded, drop-ins and precedence included.
+7. Treat a daemon that turns out to need /home as the finding rather than the exception: it is the one whose compromise reaches every credential your users keep, and it deserves the attention that discovery just earned it.
+
+```sh
+systemctl show -p ProtectHome -p ProtectSystem systemd-journald.service dbus.service
+systemd-analyze security dbus.service
+systemctl cat systemd-journald.service
+```
+
+> **Caution.** ProtectHome gives the unit a private mount namespace, so anything the service starts inherits it. That is the point for a daemon and the reason cron.service is exempt: its children are jobs somebody else wrote, and they routinely live in a home directory. Restart services one at a time.
+
+**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 CM-7`
+
+**References**
+
+- [systemd.exec(5) — ProtectHome](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
 - [systemd-analyze(1) — security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
 
 ---

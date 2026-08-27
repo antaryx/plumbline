@@ -1,0 +1,3 @@
+{
+  "description": "The two near-misses that leave a host unprotected while its files say otherwise. \"readonly\" is missing the hyphen and \"Read-Only\" has the wrong case — systemd's enum lookup is a string table compared with streq, so it rejects both, logs a warning and ignores the assignment, leaving ProtectHome at its default of no. An operator who typed either believes the home directories are protected. This is the fixture that would silently pass a build which lowercased the enum names."
+}

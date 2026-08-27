@@ -308,3 +308,75 @@ func (e exemptions) sentence(applied []string) string {
 	return fmt.Sprintf(" Not held to this standard: %s. An exemption is a documented reason the setting would break the service, not a finding that was suppressed.",
 		strings.Join(parts, "; "))
 }
+
+// unitPartition is the audited units sorted by what a check can say about
+// each.
+type unitPartition struct {
+	// failed were read, do not satisfy the check, and are not exempt.
+	failed []fact.ServiceSandbox
+	// passed satisfy the check, whether or not they are exempt.
+	passed []fact.ServiceSandbox
+	// masked are installed and will not be started by systemd.
+	masked []string
+	// skipped satisfy an exemption. Named, never silent.
+	skipped []string
+	// unread are installed and could not be read in full.
+	unread []fact.ServiceSandbox
+}
+
+// partitionUnits sorts a host's audited units for one check.
+//
+// The three sandboxing checks differ in the directive they read and the
+// exemptions they carry, and in nothing else. Having the ordering here rather
+// than copied into each of them makes several properties structural that were
+// previously three separate assertions:
+//
+//   - **The pass test runs before the exemption test**, so a unit that
+//     satisfies the check is credited even where an exemption would have
+//     excused it. An exemption is a floor, not a ceiling.
+//   - **An unreadable unit is never exempted**, because it is sorted out
+//     before either test. An exemption is a claim about a configuration that
+//     was seen, and excusing a file nobody opened turns "I could not look"
+//     into "it is fine".
+//   - **A masked unit is neither**, because systemd will not start it and its
+//     file therefore describes no process.
+//
+// A fourth check added later gets all of that by construction rather than by
+// its author remembering, which is the point: each of these was a bug worth
+// having a test for, and three copies of the loop is three places to get one
+// of them wrong.
+func partitionUnits(h fact.ServiceHardening, ex exemptions, satisfied func(fact.ServiceSandbox) bool) unitPartition {
+	var p unitPartition
+	for _, s := range h.Services {
+		switch {
+		case !s.Installed():
+			// Not on this host. Not a finding and not worth a sentence.
+			continue
+		case s.State == fact.UnitMasked:
+			p.masked = append(p.masked, s.Unit)
+			continue
+		case !s.Judgeable():
+			continue
+		}
+		if satisfied(s) {
+			p.passed = append(p.passed, s)
+			continue
+		}
+		if _, ok := ex.reason(s.Unit); ok {
+			p.skipped = append(p.skipped, s.Unit)
+			continue
+		}
+		p.failed = append(p.failed, s)
+	}
+	p.unread = h.Unreadable()
+	return p
+}
+
+// names renders a unit list for a detail string.
+func names(units []fact.ServiceSandbox) []string {
+	out := make([]string, 0, len(units))
+	for _, s := range units {
+		out = append(out, s.Unit)
+	}
+	return out
+}

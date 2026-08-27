@@ -572,9 +572,11 @@ func ParseSystemdBool(v string) (value, ok bool) {
 	return false, false
 }
 
-// asciiLower folds ASCII only. systemd compares with strcaseeq, which is
-// locale-independent ASCII folding; unicode's would differ on a Turkish locale
-// for exactly the letters "t" and "on" contain.
+// asciiLower folds ASCII only, and is used for the boolean words alone.
+// systemd compares those with strcaseeq, which is locale-independent ASCII
+// folding; unicode's would differ on a Turkish locale for exactly the letters
+// "t" and "on" contain. The enum names beside them are *not* folded — see
+// ParseProtectSystem.
 func asciiLower(s string) string {
 	b := []byte(s)
 	for i := range b {
@@ -612,10 +614,26 @@ const (
 // whether it parsed.
 //
 // **The grammar is a superset of the booleans**, and in systemd's own order:
-// it tries parse_boolean first and falls back to the enum, so "true", "1" and
-// "on" are all ProtectYes and "off" is ProtectNo. A build that accepted only
-// yes/no/full/strict would report a host that wrote "ProtectSystem=true" as
-// having set nothing — a failure against a service that is in fact protected.
+// config_parse_protect_system tries parse_boolean first and falls back to the
+// enum, so "true", "1" and "on" are all ProtectYes and "off" is ProtectNo. A
+// build that accepted only yes/no/full/strict would report a host that wrote
+// "ProtectSystem=true" as having set nothing — a failure against a service that
+// is in fact protected.
+//
+// **The two halves do not agree about case, and this follows systemd rather
+// than tidying it.** parse_boolean compares its words case-insensitively, so
+// "True" and "ON" are accepted; the enum names go through
+// protect_system_from_string, which is a string table looked up with streq, so
+// "Full" is *not* accepted — systemd logs it and ignores the assignment,
+// leaving the default in force.
+//
+// Folding the enum half would be the more dangerous of the two mistakes to
+// make. A host that wrote "ProtectSystem=Full" is running with /usr writable,
+// and a build that read it as full would report PASS for a service systemd
+// left unprotected. Reporting it as unparseable instead is both correct and,
+// if this reading of systemd is ever wrong, the safe direction: the operator
+// is told to look at the line rather than being quietly passed or quietly
+// failed.
 func ParseProtectSystem(v string) (ProtectSystemLevel, bool) {
 	if on, ok := ParseSystemdBool(v); ok {
 		if on {
@@ -623,7 +641,7 @@ func ParseProtectSystem(v string) (ProtectSystemLevel, bool) {
 		}
 		return ProtectNo, true
 	}
-	switch asciiLower(v) {
+	switch v {
 	case "full":
 		return ProtectFull, true
 	case "strict":
@@ -631,6 +649,78 @@ func ParseProtectSystem(v string) (ProtectSystemLevel, bool) {
 	}
 	return ProtectNo, false
 }
+
+// ProtectHomeLevel is the effective ProtectHome setting.
+//
+// Three of the four levels stop a daemon *writing* to a home directory and
+// only two of them stop it *reading* one, which is the distinction a finding
+// has to keep: an attacker who can read /root/.ssh/id_ed25519 does not need to
+// write anything.
+type ProtectHomeLevel string
+
+const (
+	// HomeUnprotected is the default: /home, /root and /run/user are visible
+	// and writable to whatever the service's uid allows.
+	HomeUnprotected ProtectHomeLevel = "no"
+	// HomeInaccessible makes them empty and inaccessible.
+	HomeInaccessible ProtectHomeLevel = "yes"
+	// HomeReadOnly mounts them read-only. **The contents are still readable**,
+	// so it stops a daemon planting an authorized_keys file and does not stop
+	// it stealing a private one.
+	HomeReadOnly ProtectHomeLevel = "read-only"
+	// HomeTmpfs replaces them with empty tmpfs mounts, which hides the real
+	// contents as thoroughly as "yes" does.
+	HomeTmpfs ProtectHomeLevel = "tmpfs"
+)
+
+// ParseProtectHome reads a ProtectHome value, returning the level and whether
+// it parsed.
+//
+// Same shape as ParseProtectSystem and the same asymmetry: booleans first and
+// case-insensitively, then a case-sensitive string table. **"read-only" is
+// hyphenated and nothing else is accepted** — "readonly" and "read_only" are
+// values systemd rejects, which is worth catching rather than guessing at,
+// because an operator who typed one believes the home directories are
+// protected and they are not.
+func ParseProtectHome(v string) (ProtectHomeLevel, bool) {
+	if on, ok := ParseSystemdBool(v); ok {
+		if on {
+			return HomeInaccessible, true
+		}
+		return HomeUnprotected, true
+	}
+	switch v {
+	case "read-only":
+		return HomeReadOnly, true
+	case "tmpfs":
+		return HomeTmpfs, true
+	}
+	return HomeUnprotected, false
+}
+
+// HomeProtection returns the effective ProtectHome level for a unit. An unset
+// directive is HomeUnprotected, which is systemd's default.
+func (s ServiceSandbox) HomeProtection() ProtectHomeLevel {
+	if s.ProtectHome == "" {
+		return HomeUnprotected
+	}
+	level, _ := ParseProtectHome(s.ProtectHome)
+	return level
+}
+
+// HomeProtected reports whether the unit's ProtectHome is anything other than
+// the default, which is SERVICES-0008's bar.
+func (s ServiceSandbox) HomeProtected() bool { return s.HomeProtection() != HomeUnprotected }
+
+// HomeReadable reports whether the unit can still *read* home directories
+// despite ProtectHome being set.
+//
+// It is true only for HomeReadOnly, and it exists because that level passes
+// SERVICES-0008 while leaving the finding's own rationale half unaddressed. A
+// verdict that said "home directories are protected" about a service that can
+// still read every private key under /root would be claiming more than the
+// setting delivers.
+func (s ServiceSandbox) HomeReadable() bool { return s.HomeProtection() == HomeReadOnly }
 
 // SystemProtection returns the effective ProtectSystem level for a unit.
 //

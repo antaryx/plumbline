@@ -8,3 +8,4 @@ Description=Journal Service
 ExecStart=/usr/lib/systemd/systemd-journald
 NoNewPrivileges=yes
 ProtectSystem=strict
+ProtectHome=yes

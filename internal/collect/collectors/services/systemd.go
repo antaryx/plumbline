@@ -139,8 +139,10 @@ func readSandbox(s system.System, name string) fact.ServiceSandbox {
 	} else if set {
 		out.ProtectSystem = v
 	}
-	if d, ok := asm.Last("ProtectHome"); ok {
-		out.ProtectHome = d.Value
+	if v, set, bad := lastEnum(asm, "ProtectHome", validProtectHome); bad {
+		out.Malformed = append(out.Malformed, "ProtectHome")
+	} else if set {
+		out.ProtectHome = v
 	}
 	return out
 }
@@ -176,6 +178,11 @@ func lastEnum(asm unit.Unit, name string, valid func(string) bool) (value string
 
 func validProtectSystem(v string) bool {
 	_, ok := fact.ParseProtectSystem(v)
+	return ok
+}
+
+func validProtectHome(v string) bool {
+	_, ok := fact.ParseProtectHome(v)
 	return ok
 }
 

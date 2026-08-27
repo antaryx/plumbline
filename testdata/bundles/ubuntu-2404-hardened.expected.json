@@ -1,7 +1,7 @@
 {
   "bundle": "ubuntu-2404-hardened.plb",
   "schema": "findings/v1",
-  "catalog_version": 23,
+  "catalog_version": 24,
   "scan": {
     "started": "2026-08-25T21:31:55.438565245Z",
     "finished": "2026-08-25T21:31:55.619481732Z",
@@ -18,15 +18,15 @@
       "fail": 4,
       "not_applicable": 5,
       "skipped": 0,
-      "unknown": 6,
-      "total": 93
+      "unknown": 7,
+      "total": 94
     },
     "by_severity": {
       "LOW": 2,
       "MEDIUM": 2
     },
     "posture": 96.7741935483871,
-    "coverage": 93.18181818181817
+    "coverage": 92.13483146067416
   },
   "findings": [
     {
@@ -1148,6 +1148,16 @@
       "base_severity": "HIGH",
       "unknown_reason": "fact_not_collected",
       "fingerprint": "9992a1f0abb7e93301ba8c3067e62270",
+      "detail": "required fact services.hardening was not collected"
+    },
+    {
+      "check_id": "SERVICES-0008",
+      "module": "SERVICES",
+      "result": "UNKNOWN",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "273b5e16f34647a63ae48dd666569cdd",
       "detail": "required fact services.hardening was not collected"
     },
     {

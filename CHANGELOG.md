@@ -11,6 +11,63 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+### Security
+- **`ParseProtectSystem` accepted enum names in the wrong case**, which could
+  report `PASS` for a service systemd left unprotected. `ProtectSystem=Full` is
+  rejected by systemd — `protect_system_from_string` is a string table looked
+  up with `streq` — so it is logged, ignored, and the default `no` stays in
+  force with `/usr` writable. This build lowercased the value and read it as
+  `full`. Enum names are now compared exactly, and a case variant is reported
+  as a value systemd cannot parse, which is both correct and the safe direction
+  if this reading of systemd is ever wrong: the operator is told to look at the
+  line rather than being quietly passed. Introduced in catalog 23; affects
+  `SERVICES-0007` only.
+
+### Added
+- **`SERVICES-0008` (ProtectHome on audited system services).** Catalog 24, 94
+  checks. `HIGH`, the same as `SERVICES-0007` deliberately: that one describes
+  a daemon that can persist on this host, this one a daemon that can walk to
+  the next. Rating them differently would be a claim about which is worse,
+  which depends on the estate.
+
+  A root daemon that can read `/root` and `/home` reaches
+  `~/.ssh/id_ed25519`, `~/.aws/credentials`, `~/.kube/config` and whatever
+  token a tool cached in `~/.config`. None of those is protected by file
+  permissions against a process already running as root, and all are reusable
+  elsewhere — which is what turns one compromised daemon into lateral movement
+  across an estate.
+
+  **`read-only` passes and buys less than the other two, and the verdict says
+  so.** It stops a daemon planting an `authorized_keys` file; it does not stop
+  it reading a private key, which is most of what the check is about. A pass
+  naming a read-only unit says that in as many words rather than reporting
+  "home directories are protected".
+
+  `cron.service` is exempt — user cron jobs routinely execute scripts kept in a
+  home directory. `dbus.service` and `systemd-journald.service` are audited.
+
+- **`fact.ParseProtectHome`, `HomeProtection()`, `HomeProtected()` and
+  `HomeReadable()`.** The grammar is the same shape as `ProtectSystem`'s and
+  has the same asymmetry: `parse_boolean` first and case-insensitively, then a
+  case-sensitive string table. **`read-only` is hyphenated and nothing else is
+  accepted** — `readonly`, `read_only` and `Read-Only` are all values systemd
+  rejects, and all three are the spelling an operator uses while believing the
+  home directories are protected.
+
+### Changed
+- **The three sandboxing checks share `partitionUnits`.** Pass-before-exemption,
+  unreadable-before-either, masked-is-neither: each was a property asserted
+  separately in three copies of the same loop, and each was a bug worth having
+  a test for. A fourth check gets all of them by construction. `SERVICES-0006`
+  and `-0007` were rewired onto it with no verdict changing.
+
+  `TestEachSandboxCheckCarriesItsOwnExemptions` now asserts the full matrix
+  rather than a contrast. `dbus.service` is the unit that proves the lists must
+  be per-check: exempt from `-0006` because its launch helper is setuid,
+  audited by `-0007` and `-0008` because that fact says nothing about where the
+  daemon may write or read. A shared list would have excused it from all three
+  and cost two checks half their subject.
+
 ### Added
 - **`SERVICES-0007` (ProtectSystem on audited system services).** Catalog 23,
   93 checks. `HIGH` — the highest in the module alongside `SERVICES-0005`, and

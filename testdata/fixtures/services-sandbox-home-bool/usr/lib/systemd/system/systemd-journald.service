@@ -1,0 +1,6 @@
+[Unit]
+Description=Journal Service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-journald
+ProtectHome=true

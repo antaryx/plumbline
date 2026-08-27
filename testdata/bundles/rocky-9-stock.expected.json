@@ -1,7 +1,7 @@
 {
   "bundle": "rocky-9-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 23,
+  "catalog_version": 24,
   "scan": {
     "started": "2026-08-25T21:31:51.893733451Z",
     "finished": "2026-08-25T21:31:52.46518356Z",
@@ -18,8 +18,8 @@
       "fail": 11,
       "not_applicable": 39,
       "skipped": 0,
-      "unknown": 6,
-      "total": 93
+      "unknown": 7,
+      "total": 94
     },
     "by_severity": {
       "HIGH": 2,
@@ -27,7 +27,7 @@
       "MEDIUM": 6
     },
     "posture": 81.25,
-    "coverage": 88.88888888888889
+    "coverage": 87.27272727272727
   },
   "findings": [
     {
@@ -1016,6 +1016,16 @@
       "base_severity": "HIGH",
       "unknown_reason": "fact_not_collected",
       "fingerprint": "9992a1f0abb7e93301ba8c3067e62270",
+      "detail": "required fact services.hardening was not collected"
+    },
+    {
+      "check_id": "SERVICES-0008",
+      "module": "SERVICES",
+      "result": "UNKNOWN",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "273b5e16f34647a63ae48dd666569cdd",
       "detail": "required fact services.hardening was not collected"
     },
     {

@@ -95,9 +95,9 @@ type pin struct {
 // in which either became a PASS would mean the symbol reading had started
 // inventing evidence, which is a worse failure than the false positive.
 //
-// **Every bundle carries five UNKNOWN from two causes, and both are the corpus
+// **Every bundle carries six UNKNOWN from two causes, and both are the corpus
 // reporting its own age.** CONTAINERS-0006, -0007 and -0008 require
-// containers.docker_service; SERVICES-0006 and -0007 require
+// containers.docker_service; SERVICES-0006, -0007 and -0008 require
 // services.hardening. All six bundles were recorded before either fact was
 // collected, so neither is in them. The
 // runner resolves a required fact it cannot find to UNKNOWN(fact_not_collected),
@@ -117,13 +117,18 @@ type pin struct {
 // number; a finding against a host that did the work is what stops an operator
 // reading the report.
 //
-// The SERVICES pair is the cheaper of the two to clear and is not the same
+// The SERVICES triad is the cheaper of the two to clear and is not the same
 // problem. It needs no Docker: every one of these hosts has a
 // systemd-journald.service, so a re-recording with the sandboxing collector in
-// it produces a real verdict on every bundle — and SERVICES-0007 is the one
-// most worth having back, because it is the only High-severity check in the
-// catalog currently unable to evaluate. The Docker three need a recipe that
-// installs a daemon.
+// it produces a real verdict on every bundle — and it is now the more urgent of
+// the two, because SERVICES-0007 and -0008 are the only High-severity checks in
+// the catalog unable to evaluate, and both of them find something on a stock
+// systemd host. The Docker three need a recipe that installs a daemon.
+//
+// Six UNKNOWN out of ninety-four is the highest this corpus has carried, and it
+// is worth saying plainly that the number is a debt rather than a property: it
+// grew by one per work package for four packages running, each time for a good
+// reason, and the fix has been a re-recording the whole time.
 //
 // It costs coverage on every bundle and moves no verdict: pass, fail and
 // not-applicable are unchanged on all six, and so is every posture score.
@@ -134,8 +139,8 @@ var pinned = map[string]pin{
 	// syslog daemon, and a check that declines to judge an absent subject is
 	// the behaviour, not a gap.
 	"ubuntu-2404-stock": {
-		catalog: 23, pass: 39, fail: 12, notApplicable: 37, unknown: 5, skipped: 0,
-		posture: 80.50847457627118, coverage: 91.07142857142857,
+		catalog: 24, pass: 39, fail: 12, notApplicable: 37, unknown: 6, skipped: 0,
+		posture: 80.50847457627118, coverage: 89.47368421052632,
 		why: "the unhardened baseline every other number is measured against",
 	},
 
@@ -143,8 +148,8 @@ var pinned = map[string]pin{
 	// check cares about. One PASS and one NOT_APPLICABLE separate them here,
 	// and which ones is the interesting part of any diff on this pair.
 	"debian-13-stock": {
-		catalog: 23, pass: 37, fail: 13, notApplicable: 38, unknown: 5, skipped: 0,
-		posture: 78.44827586206897, coverage: 90.9090909090909,
+		catalog: 24, pass: 37, fail: 13, notApplicable: 38, unknown: 6, skipped: 0,
+		posture: 78.44827586206897, coverage: 89.28571428571429,
 		why: "Debian's defaults, which are not Ubuntu's",
 	},
 
@@ -152,8 +157,8 @@ var pinned = map[string]pin{
 	// is the bundle that catches a check quietly assuming a Debian-shaped /etc
 	// and reporting a verdict about a file that was never there.
 	"alpine-320-stock": {
-		catalog: 23, pass: 30, fail: 8, notApplicable: 50, unknown: 5, skipped: 0,
-		posture: 84.0909090909091, coverage: 88.37209302325581,
+		catalog: 24, pass: 30, fail: 8, notApplicable: 50, unknown: 6, skipped: 0,
+		posture: 84.0909090909091, coverage: 86.36363636363636,
 		why: "the distribution least like the others, where guessing shows up",
 	},
 
@@ -165,8 +170,8 @@ var pinned = map[string]pin{
 	// binary, not of any file on the host. AUTH-0002 says it does not know.
 	// Every other scanner reports the documented default and calls it a PASS.
 	"fedora-44-stock": {
-		catalog: 23, pass: 37, fail: 12, notApplicable: 38, unknown: 6, skipped: 0,
-		posture: 79.13043478260869, coverage: 89.0909090909091,
+		catalog: 24, pass: 37, fail: 12, notApplicable: 38, unknown: 7, skipped: 0,
+		posture: 79.13043478260869, coverage: 87.5,
 		why: "the RPM family's leading edge, where authselect owns the PAM stack",
 	},
 
@@ -174,8 +179,8 @@ var pinned = map[string]pin{
 	// point of it. One FAIL and one NOT_APPLICABLE separate the two, and which
 	// ones is the interesting part of any diff on this pair.
 	"rocky-9-stock": {
-		catalog: 23, pass: 37, fail: 11, notApplicable: 39, unknown: 6, skipped: 0,
-		posture: 81.25, coverage: 88.88888888888889,
+		catalog: 24, pass: 37, fail: 11, notApplicable: 39, unknown: 7, skipped: 0,
+		posture: 81.25, coverage: 87.27272727272727,
 		why: "the enterprise RPM baseline most real audits run against",
 	},
 
@@ -192,16 +197,17 @@ var pinned = map[string]pin{
 	//
 	// The 4 FAIL are the four a container cannot fix — /tmp and /home are not
 	// separate mounts, and /proc/sys is read-only so dmesg_restrict and the
-	// core pattern cannot be set. Of the 6 UNKNOWN, one is KERNEL-0007
+	// core pattern cannot be set. Of the 7 UNKNOWN, one is KERNEL-0007
 	// declining to claim the running kernel matches its configuration when one
 	// of the configuration files was a symlink it would not follow, three are
-	// the checks requiring containers.docker_service, and two are SERVICES-0006
-	// and -0007 requiring services.hardening — both facts this bundle predates.
-	// All fifteen are correct, and a run in which any of them became a PASS
-	// would be a serious regression rather than an improvement.
+	// the checks requiring containers.docker_service, and three are
+	// SERVICES-0006, -0007 and -0008 requiring services.hardening — both facts
+	// this bundle predates. All sixteen are correct, and a run in which any of
+	// them became a PASS would be a serious regression rather than an
+	// improvement.
 	"ubuntu-2404-hardened": {
-		catalog: 23, pass: 78, fail: 4, notApplicable: 5, unknown: 6, skipped: 0,
-		posture: 96.7741935483871, coverage: 93.18181818181817,
+		catalog: 24, pass: 78, fail: 4, notApplicable: 5, unknown: 7, skipped: 0,
+		posture: 96.7741935483871, coverage: 92.13483146067416,
 		why: "the only bundle on which every check in the catalog evaluates",
 	},
 }

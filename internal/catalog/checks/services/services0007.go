@@ -74,39 +74,15 @@ daemon may write.`,
 			return *out
 		}
 
-		var (
-			failed  []fact.ServiceSandbox
-			passed  []string
-			masked  []string
-			skipped []string
-		)
-		for _, s := range h.Services {
-			switch {
-			case !s.Installed():
-				continue
-			case s.State == fact.UnitMasked:
-				masked = append(masked, s.Unit)
-				continue
-			case !s.Judgeable():
-				// Unreadable, and therefore neither a pass nor a failure nor
-				// a candidate for exemption: an exemption is a claim about a
-				// configuration that was seen.
-				continue
-			}
-			// The pass test runs first, so a unit that protects itself is
-			// credited even where the exemption would have excused it.
-			if s.Protected() {
-				passed = append(passed, fmt.Sprintf("%s (%s)", s.Unit, s.SystemProtection()))
-				continue
-			}
-			if _, ok := protectSystemExemptions.reason(s.Unit); ok {
-				skipped = append(skipped, s.Unit)
-				continue
-			}
-			failed = append(failed, s)
-		}
+		p := partitionUnits(h, protectSystemExemptions, fact.ServiceSandbox.Protected)
+		failed, masked, skipped, unread := p.failed, p.masked, p.skipped, p.unread
 
-		unread := h.Unreadable()
+		// The level is carried in the name, so a reader can see at a glance that
+		// one host is at strict and another merely at yes.
+		var passed []string
+		for _, s := range p.passed {
+			passed = append(passed, fmt.Sprintf("%s (%s)", s.Unit, s.SystemProtection()))
+		}
 
 		// ADR-0014: a unit that was read and writes to /usr is a finding
 		// whatever else went unread.

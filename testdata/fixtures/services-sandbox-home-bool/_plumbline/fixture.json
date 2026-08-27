@@ -1,0 +1,3 @@
+{
+  "description": "ProtectHome written as booleans, one of them in a case parse_boolean folds. systemd tries parse_boolean before the enum, so \"true\" and \"ON\" both resolve to yes. The case-insensitivity here is real and is exactly what does NOT apply to the enum names beside them: \"Read-Only\" would be rejected, which services-sandbox-home-malformed covers."
+}

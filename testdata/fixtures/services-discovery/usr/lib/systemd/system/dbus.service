@@ -7,3 +7,4 @@ Description=D-Bus System Message Bus
 ExecStart=/usr/bin/dbus-daemon --system --address=systemd: --nofork
 NoNewPrivileges=yes
 ProtectSystem=full
+ProtectHome=yes

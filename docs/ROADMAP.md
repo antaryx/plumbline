@@ -471,7 +471,7 @@ and `docs/PERFORMANCE.md` carries the measured baseline.
 | `USERS` | 10 | **10** | Complete |
 | `SSHD` | 20 | **19** | Resolving `Include`, `Match` blocks and compiled defaults was the real work, and it is done |
 | `NETWORK` | 12 | **3** | Firewall state only so far. Listeners need a `/proc/net/*` collector, not a check |
-| `SERVICES` | 10 | **7** | systemd enablement symlinks read offline. OpenRC and sysvinit degrade gracefully but have no checks. `-0006` and `-0007` (WP-30, WP-32) read unit *bodies*, for three sandboxing directives on three named units |
+| `SERVICES` | 10 | **8** | systemd enablement symlinks read offline. OpenRC and sysvinit degrade gracefully but have no checks. `-0006`, `-0007` and `-0008` (WP-30, WP-32, WP-33) read unit *bodies*: the sandboxing triad, on three named units |
 | `FILESYS` | 14 | **9** | Consumes the shared walk. Unowned files needed walker aggregation and landed after the tag (WP-25) |
 | `LOGGING` | 8 | **5** | |
 | `CRON` | 8 | **5** | |
@@ -776,9 +776,39 @@ That is also the argument for **exemptions being per-check rather than a shared
 have exempted dbus from both and cost `-0007` half its subject to a reason that
 did not apply to it. An exemption is a claim about one setting on one unit.
 
-`ProtectHome` is already in the fact and is the obvious next one, with the same
-question to answer first: which units does it break, and is the answer
-different again.
+`SERVICES-0008` finished the triad and the answer was: the same unit again, for
+a third distinct reason. cron is exempt from all three — jobs that escalate,
+jobs that write, jobs that live in a home directory — and dbus from exactly
+one. That one unit on one of three lists is the clearest evidence the lists had
+to be per-check.
+
+**Three copies of the same loop was one copy too many.** `partitionUnits` now
+owns the ordering all three depend on — pass before exemption, unreadable
+before either, masked neither — and each of those was a property previously
+asserted three times and implementable wrongly three times. A fourth check gets
+them by construction. The rule of thumb it produced: when a mechanism's
+*correctness properties* are being restated per caller, the mechanism is in the
+wrong place, and that is a stronger signal than the amount of duplicated code.
+
+**A grammar's case rules are worth reading rather than assuming**, and this cost
+a shipped bug. `ProtectSystem` and `ProtectHome` both take a value that is a
+superset of the booleans, and the two halves disagree: `parse_boolean` compares
+its words with `strcaseeq`, while the enum names go through a string table
+looked up with `streq`. `ProtectSystem=Full` is therefore *rejected* by systemd
+— logged, ignored, default left in force — and catalog 23 read it as `full` and
+passed a host with `/usr` writable. Folding the enum half is the dangerous
+direction of the two, because it converts an unprotected service into a green
+tick. Any later check reading a systemd enum should assume case matters until
+it has read the table.
+
+The remaining sandboxing directives — `PrivateTmp`, `PrivateDevices`,
+`RestrictAddressFamilies`, `SystemCallFilter` — are a different shape of
+question. They are cheap to collect and hard to judge: the right value depends
+on what the daemon does, far more than `ProtectHome` does, and a check that
+demanded `SystemCallFilter=@system-service` of every unit would be exemptions
+all the way down. `systemd-analyze security` exists and scores rather than
+judges, which is probably the right instinct; whether this tool should
+reproduce it is a design question and not a coding one.
 
 **The corpus does not exercise it.** All six golden bundles predate
 `services.hardening`, so `SERVICES-0006` is `UNKNOWN` on every one. Unlike the

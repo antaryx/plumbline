@@ -1,0 +1,3 @@
+{
+  "description": "The two ways of leaving /root readable, on units that are not exempt: journald writes ProtectHome=no and dbus never mentions it. Both fail. cron is unset too and is exempt, so it is named with its reason rather than counted as a third failure — the same shape as the ProtectSystem fixture beside it, on the directive where the consequence is a stolen key rather than a rewritten binary."
+}

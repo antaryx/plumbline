@@ -99,43 +99,12 @@ and that reason is the first thing to establish before changing it.`,
 			return *out
 		}
 
-		var (
-			failed  []fact.ServiceSandbox
-			passed  []string
-			masked  []string
-			skipped []string
-		)
-		for _, s := range h.Services {
-			switch {
-			case !s.Installed():
-				// Not on this host. Not a finding: see the description.
-				continue
-			case s.State == fact.UnitMasked:
-				masked = append(masked, s.Unit)
-				continue
-			case !s.Judgeable():
-				// Unreadable. Counted by Unreadable() below rather than here,
-				// because it is neither a pass nor a failure — and note the
-				// exemption test has not been reached yet, which is
-				// deliberate: an exemption is a claim about a configuration
-				// that was seen, so it must not excuse a file nobody opened.
-				continue
-			}
-			// The pass test runs before the exemption test, so a host whose
-			// dbus.service does set the bit is credited with it rather than
-			// reported as skipped. An exemption is a floor, not a ceiling.
-			if on, set := fact.OptBool(s.NoNewPrivileges); set && on {
-				passed = append(passed, s.Unit)
-				continue
-			}
-			if _, ok := nnpExemptions.reason(s.Unit); ok {
-				skipped = append(skipped, s.Unit)
-				continue
-			}
-			failed = append(failed, s)
-		}
-
-		unread := h.Unreadable()
+		p := partitionUnits(h, nnpExemptions, func(s fact.ServiceSandbox) bool {
+			on, set := fact.OptBool(s.NoNewPrivileges)
+			return set && on
+		})
+		failed, masked, skipped, unread := p.failed, p.masked, p.skipped, p.unread
+		passed := names(p.passed)
 
 		// A unit that was read and does not set the bit is a finding whatever
 		// else went unread — ADR-0014, and the reason this comes first. An
