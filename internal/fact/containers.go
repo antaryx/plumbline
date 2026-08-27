@@ -354,6 +354,15 @@ type UnitFragment struct {
 // expanded: a $VARIABLE stays a $VARIABLE, because what it expands to lives in
 // an Environment= assignment or an EnvironmentFile that this collector
 // deliberately does not read. See DockerService.Ambiguities.
+//
+// **One kind of value is removed rather than recorded.** The value of a
+// --log-opt is replaced with [REDACTED], keeping the option's key: log options
+// are where a logging driver's credentials are configured, and this is the one
+// command line a bundle carries. The same options written in daemon.json have
+// only ever had their key names recorded, and a bundle must not disclose more
+// because of which file an operator chose. Nothing else is altered, so every
+// other argument is the argument systemd passed. See the collector's
+// scrubArgs.
 type DockerExec struct {
 	// Origin is the fragment this directive survived from.
 	Origin string `json:"origin"`
@@ -398,6 +407,11 @@ type DockerHostBinding struct {
 // whole fragment as an evidence blob would put those in an artifact designed
 // to travel, which is the concern ADR-0015 exists for. Only ExecStart is kept,
 // because only ExecStart is read.
+//
+// ExecStart itself is then scrubbed of the one class of value that can be a
+// credential — see DockerExec — so the exception the unit gets is narrower
+// than "one whole line": it is the flags, and the values of the flags whose
+// values a check needs.
 //
 // **What is not modelled**, and would change the answer if it were set:
 //

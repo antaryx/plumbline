@@ -91,6 +91,20 @@ the day rather than continuously.`,
 
 		name, source, line, set := effectiveLogDriver(d, u)
 
+		// Whether anything the unit might still say can change the driver.
+		//
+		// It cannot when daemon.json named it: dockerd refuses to start when
+		// an option is given as a flag and in the configuration file at once,
+		// so on a host whose daemon is running, a unit this scan only partly
+		// read is not also naming a driver. In every other case it can —
+		// nothing named one, or the unit named it and pflag takes the last
+		// occurrence, so a --log-driver in a fragment nobody opened wins.
+		if set && source != d.Path {
+			lead := fmt.Sprintf("%s names the %q logging driver on dockerd's command line", source, name)
+			if out := unitMayHide(u, d, lead, "a later --log-driver flag", "which driver is in force"); out != nil {
+				return *out
+			}
+		}
 		if !set {
 			// Nothing names a driver, so the daemon's compiled-in default is
 			// in force and the default is the finding. Before that can be
@@ -115,7 +129,26 @@ the day rather than continuously.`,
 			}
 
 		case name == defaultDriver:
-			if by := sizeBounded(d, u); by != "" {
+			by := sizeBounded(d, u)
+
+			// The bound gets the same test the driver got, and it needs it in
+			// one more case. log-driver and log-opt are *different* options,
+			// so dockerd's refusal to take one option from two places does not
+			// apply between them: a driver named in daemon.json can be bounded
+			// by a --log-opt in the unit, and a fragment nobody opened is
+			// exactly where such a line lives. So the answer is settled only
+			// when daemon.json itself carries the bound.
+			if by != d.Path {
+				lead := daemonSilence(d, "sets no max-size log option")
+				if by != "" {
+					lead = fmt.Sprintf("the max-size log option comes from %s", by)
+				}
+				if out := unitMayHide(u, d, lead, "a --log-opt max-size", "whether the log rotates"); out != nil {
+					return *out
+				}
+			}
+
+			if by != "" {
 				return catalog.Outcome{
 					Result:  finding.Pass,
 					Subject: d.Path,
@@ -123,14 +156,6 @@ the day rather than continuously.`,
 						by, configuredIn(d, source, line), loggingCaveat),
 					Evidence: logEvidence(d, u, source, line),
 				}
-			}
-
-			// No bound found. A --log-opt max-size in a fragment this scan
-			// could not read would change that, so the same test the driver
-			// itself got applies to the bound.
-			if out := unitMayHide(u, d, daemonSilence(d, "sets no max-size log option"),
-				"a --log-opt max-size", "whether the log rotates"); out != nil {
-				return *out
 			}
 
 			detail := "The default logging driver is json-file with no max-size log option, so every container's output is appended to a file in /var/lib/docker that nothing rotates and nothing trims until the container is removed."
@@ -323,11 +348,22 @@ func flagOrigin(u fact.DockerService, name string) (origin string, line int) {
 // unitMayHide returns the UNKNOWN for a command line that was only partly
 // read, or nil when there was nothing unread to worry about.
 //
-// It is called only where the verdict would rest on something *not* being
-// there — no driver named, no size bound set — which is the one kind of
-// conclusion an incomplete reading can overturn (ADR-0014). A driver that was
-// found is found whatever else went unread, and none of the branches that have
-// one call this.
+// It is called wherever what went unread could still overturn the verdict, and
+// working out where that is takes one fact about dockerd. **An option given as
+// a flag and in the configuration file at once stops the daemon starting**, so
+// anything daemon.json settles, the unit cannot contradict on a running host —
+// and a verdict drawn from daemon.json alone stands however little of the unit
+// was read. Everything else is exposed: nothing named a driver, or the unit
+// named it and pflag takes the last occurrence, or the size bound came from
+// the unit — and log-driver and log-opt are different options, so dockerd
+// permits *that* split and a drop-in can bound a driver the file named.
+//
+// The direction is ADR-0014's. An incomplete examination invalidates a
+// negative result and never a positive one, and in this check the negative
+// result is usually wearing a FAIL's clothes: "no driver is configured" and
+// "no bound is set" are both absences, and neither may be asserted out of a
+// file nobody opened. What stands regardless is a verdict resting on something
+// actually found in daemon.json.
 //
 // An absent unit reaches here with nothing to report, which is correct: a
 // docker.service that does not exist has no flags to hide, so the daemon's
@@ -357,8 +393,8 @@ func unitMayHide(u fact.DockerService, d fact.DockerDaemon, lead, what, question
 		Result:        finding.Unknown,
 		UnknownReason: reason,
 		Subject:       d.Path,
-		Detail: fmt.Sprintf("%s, and %s could be carrying %s that this scan did not see, so %s cannot be determined: %s.%s",
-			lead, unitSubject(u), what, question, strings.Join(reasons, "; "), loggingCaveat),
+		Detail: fmt.Sprintf("%s, and the command line was not read in full, so %s cannot be determined — %s in the part that went unread would change the answer: %s.%s",
+			lead, question, what, strings.Join(reasons, "; "), loggingCaveat),
 		Evidence: []finding.Evidence{evidence(d, logDriverExcerpt(d))},
 	}
 }
@@ -372,13 +408,6 @@ func daemonSilence(d fact.DockerDaemon, what string) string {
 		return fmt.Sprintf("There is no %s on this host", d.Path)
 	}
 	return d.Path + " " + what
-}
-
-func unitSubject(u fact.DockerService) string {
-	if u.Path == "" {
-		return "the systemd unit"
-	}
-	return u.Path
 }
 
 // configuredIn names the file the driver was read from, for the verdicts where

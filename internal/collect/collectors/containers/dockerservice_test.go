@@ -2,6 +2,8 @@ package containers_test
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -536,4 +538,241 @@ func TestARepeatedFlagKeepsEveryOccurrence(t *testing.T) {
 	if got := split.StringFlags("log-opt"); !reflect.DeepEqual(got, []string{"max-file=3", "max-size=50m"}) {
 		t.Errorf("StringFlags across fragments = %v", got)
 	}
+}
+
+// TestLogOptionValuesAreScrubbedFromTheCommandLine is the collector's one
+// deliberate departure from recording what the file says, and the test that
+// has to hold for it to be worth making.
+//
+// ExecStart is the only command line a bundle carries, and dockerd takes
+// --log-opt on it: splunk-token is an authentication token, and it would
+// otherwise travel in an artifact designed to be attached to bug reports. The
+// same options written in /etc/docker/daemon.json have only ever had their key
+// names recorded, so a bundle disclosing more because of which file an
+// operator happened to use was an inconsistency rather than a policy.
+//
+// The rule is "the key is policy, the value is not", so max-size goes with
+// splunk-token even though nothing about "10m" is sensitive. A scrubber that
+// kept a list of bad words would be a scrubber that misses the next driver's
+// credential option, and the keys are all any check needs.
+func TestLogOptionValuesAreScrubbedFromTheCommandLine(t *testing.T) {
+	u := collectService(t, "containers-docker-log-secret")
+
+	if u.State != fact.DockerUnitPresent {
+		t.Fatalf("state = %s, want present: %s", u.State, u.Msg)
+	}
+
+	// The whole fact, marshalled the way a bundle would write it. Asserting on
+	// Argv alone would miss a value that had reached Msg, a fragment path or a
+	// digest field, and the bundle carries all of them.
+	blob, err := json.Marshal(u)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, secret := range []string{
+		"secret123",               // the credential
+		"splunk.example.internal", // an internal hostname in the --flag= form
+		"10m",                     // not sensitive, and still not kept
+		"host logs",               // a quoted value with a space in it
+	} {
+		if strings.Contains(string(blob), secret) {
+			t.Errorf("a log-opt value survived into the fact: %q\n%s", secret, blob)
+		}
+	}
+
+	// What must survive: every key, so a check can still read the options, and
+	// an operator can still see that they configured them.
+	//
+	// The single-dash -log-opt is absent from this list on purpose, and the
+	// gap is the design rather than an oversight. **The scrubber is permissive
+	// and the reader is exact.** StringFlags models pflag, which does not
+	// accept a single-dash long flag, so a check must not read a value from
+	// one — but the scrubber redacts it anyway, because being wrong in the
+	// permissive direction costs a token nobody reads and being wrong in the
+	// other direction costs a secret. The whole-fact sweep above is what
+	// proves that half; the assertion below names the token.
+	opts := u.StringFlags("log-opt")
+	want := []string{
+		"splunk-token=[REDACTED]",
+		"splunk-url=[REDACTED]",
+		"splunk-index=[REDACTED]",
+		"$EXTRA_LOG_OPTS",
+	}
+	if !reflect.DeepEqual(opts, want) {
+		t.Errorf("StringFlags(log-opt) = %#v,\n                      want %#v", opts, want)
+	}
+
+	var argv []string
+	for _, e := range u.ExecStart {
+		argv = append(argv, e.Argv...)
+	}
+	if !contains(argv, "max-size=[REDACTED]") {
+		t.Errorf("the single-dash spelling was not scrubbed: %v", argv)
+	}
+
+	// The flag whose value a check actually reads is untouched. Scrubbing
+	// --log-driver as well would have made CONTAINERS-0008 unable to answer
+	// its own question, which is the line between an opaque flag and a
+	// modelled one.
+	if v, set := u.StringFlag("log-driver"); !set || v != "splunk" {
+		t.Errorf("StringFlag(log-driver) = %q/%v, want splunk/true", v, set)
+	}
+
+	// And so is everything else on the line.
+	if got := specs(u); !reflect.DeepEqual(got, []string{"fd://"}) {
+		t.Errorf("the socket bindings were disturbed: %v", got)
+	}
+}
+
+// TestAnUnexpandedVariableIsNotAValueToScrub.
+//
+// systemd expands $EXTRA_LOG_OPTS into however many words it holds, so an
+// unexpanded one is a reason the command line cannot be claimed to have been
+// read in full — which is what Ambiguities reports and what CONTAINERS-0006
+// turns into UNKNOWN rather than a pass. Redacting the token would have
+// removed the "$" that signals it, quietly converting "I could not read this"
+// into "there was nothing here".
+//
+// It costs no disclosure to keep: a variable reference is a name, and the
+// value it refers to lives in the EnvironmentFile this collector does not read.
+func TestAnUnexpandedVariableIsNotAValueToScrub(t *testing.T) {
+	u := collectService(t, "containers-docker-log-secret")
+
+	found := false
+	for _, a := range u.Ambiguities() {
+		if strings.Contains(a, "$EXTRA_LOG_OPTS") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the scrubber swallowed the ambiguity: %v", u.Ambiguities())
+	}
+}
+
+// TestEverySpellingOfAnOpaqueFlagIsScrubbed.
+//
+// pflag takes a long flag's value in two forms and dockerd's own documentation
+// uses both. The single-dash long form is not one pflag accepts, and it is
+// handled anyway: being wrong in the permissive direction costs a redacted
+// token that was never a flag, and being wrong in the other direction costs a
+// secret.
+//
+// The negative cases are the other half. A flag that merely starts with the
+// same letters is a different flag, and the token after an opaque flag is its
+// value rather than a general licence to redact the next thing on the line.
+func TestEverySpellingOfAnOpaqueFlagIsScrubbed(t *testing.T) {
+	cases := []struct {
+		argv []string
+		want []string
+	}{
+		{
+			[]string{"dockerd", "--log-opt", "splunk-token=abc"},
+			[]string{"dockerd", "--log-opt", "splunk-token=[REDACTED]"},
+		},
+		{
+			[]string{"dockerd", "--log-opt=splunk-token=abc"},
+			[]string{"dockerd", "--log-opt=splunk-token=[REDACTED]"},
+		},
+		{
+			[]string{"dockerd", "-log-opt", "splunk-token=abc"},
+			[]string{"dockerd", "-log-opt", "splunk-token=[REDACTED]"},
+		},
+		{
+			[]string{"dockerd", "-log-opt=splunk-token=abc"},
+			[]string{"dockerd", "-log-opt=splunk-token=[REDACTED]"},
+		},
+		// A value containing an "=" of its own: the split is on the first one,
+		// so the key survives and everything after it does not.
+		{
+			[]string{"dockerd", "--log-opt", "tag=a=b=c"},
+			[]string{"dockerd", "--log-opt", "tag=[REDACTED]"},
+		},
+		// A "$" inside a value is still a value. Only a token that is nothing
+		// but a variable reference is kept.
+		{
+			[]string{"dockerd", "--log-opt", "splunk-token=a$b"},
+			[]string{"dockerd", "--log-opt", "splunk-token=[REDACTED]"},
+		},
+		// No "=" and no "$": there is no key to keep, so all of it goes.
+		{
+			[]string{"dockerd", "--log-opt", "nonsense"},
+			[]string{"dockerd", "--log-opt", "[REDACTED]"},
+		},
+		// A trailing flag has no value to scrub, and inventing one would be
+		// worse than reporting none.
+		{
+			[]string{"dockerd", "--log-opt"},
+			[]string{"dockerd", "--log-opt"},
+		},
+		// Not this flag. --log-driver's value is read by CONTAINERS-0008 and
+		// --log-opts is not a dockerd flag at all.
+		{
+			[]string{"dockerd", "--log-driver", "journald"},
+			[]string{"dockerd", "--log-driver", "journald"},
+		},
+		{
+			[]string{"dockerd", "--log-opt-extra", "keep=me"},
+			[]string{"dockerd", "--log-opt-extra", "keep=me"},
+		},
+		// The token after a scrubbed pair is an ordinary argument again.
+		{
+			[]string{"dockerd", "--log-opt", "max-size=10m", "-H", "tcp://0.0.0.0:2375"},
+			[]string{"dockerd", "--log-opt", "max-size=[REDACTED]", "-H", "tcp://0.0.0.0:2375"},
+		},
+	}
+
+	for _, c := range cases {
+		got := scrubThroughCollector(t, c.argv)
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("scrub(%v)\n = %v\nwant %v", c.argv, got, c.want)
+		}
+	}
+}
+
+// scrubThroughCollector runs one command line through the real collector by
+// writing it into a unit file, because the scrubber is unexported and the
+// thing worth testing is that it is wired into the path a fact takes rather
+// than that a function works.
+func scrubThroughCollector(t *testing.T, argv []string) []string {
+	t.Helper()
+
+	root := t.TempDir()
+	dir := filepath.Join(root, "lib", "systemd", "system")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	unit := "[Service]\nExecStart=" + strings.Join(argv, " ") + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "docker.service"), []byte(unit), 0o644); err != nil {
+		t.Fatalf("write unit: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "_plumbline"), 0o755); err != nil {
+		t.Fatalf("mkdir manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "_plumbline", "fixture.json"),
+		[]byte(`{"description":"one hand-built command line"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	sys, err := fake.New(root)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	facts := fact.NewSet()
+	if err := collector.NewService().Collect(context.Background(), sys, facts); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	u, _, ok := fact.Get[fact.DockerService](facts, fact.DockerServiceID)
+	if !ok || len(u.ExecStart) != 1 {
+		t.Fatalf("expected one ExecStart, got %+v", u)
+	}
+	return u.ExecStart[0].Argv
+}
+
+func contains(haystack []string, needle string) bool {
+	for _, s := range haystack {
+		if s == needle {
+			return true
+		}
+	}
+	return false
 }

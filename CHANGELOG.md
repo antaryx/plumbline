@@ -11,6 +11,51 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+### Security
+- **`--log-opt` values are scrubbed out of the recorded `ExecStart`.**
+  `dockerd` takes log options on its command line as well as in
+  `daemon.json`, and `ExecStart` is the one command line a bundle keeps — so
+  `--log-opt splunk-token=…` in a drop-in travelled, where the `daemon.json`
+  spelling of the same option had its value dropped. A bundle now discloses the
+  same amount whichever file an operator used.
+
+  The key survives and the value never does, `max-size` included. A scrubber
+  holding a list of sensitive names is a scrubber that misses the next logging
+  driver's credential option, so the rule is structural: a log option's key is
+  policy and its value is not. `[REDACTED]` is a visible marker rather than an
+  omission, because "set, and not carried" and "not set" are different facts
+  about the host.
+
+  All four spellings are handled — `--log-opt v`, `--log-opt=v`, and the
+  single-dash forms `pflag` does not actually accept, because being wrong in
+  the permissive direction costs a redacted token nobody reads and being wrong
+  in the other direction costs a secret. An unexpanded `$VARIABLE` is left
+  alone: it is a name rather than a value, and `CONTAINERS-0006` needs to still
+  see it to report that the command line was not read in full.
+
+  Asserted end to end. `TestABundleFromASecretBearingHostCarriesNoSecret`
+  collects a bundle from a fixture whose drop-in configures the splunk driver
+  with its token and searches every member of the compressed archive as bytes.
+
+  This is the first place in the tree that deliberately records something other
+  than what the file says. Fragment digests are unaffected — they are computed
+  over the real bytes at the seam — so verifying a finding against the live
+  host still works.
+
+### Fixed
+- **`CONTAINERS-0008` no longer reports a `PASS` from a command line it could
+  not read in full.** A driver named in a drop-in is not the last word: `pflag`
+  takes the last `--log-driver`, and systemd expands a `$VARIABLE` into however
+  many words it holds, so an unread fragment or an unexpanded variable can
+  carry a `--log-driver=none` after it. The verdict is now `UNKNOWN` there.
+
+  A driver named in `daemon.json` is not exposed to this and still passes:
+  `dockerd` refuses to start when an option is given as a flag and in the
+  configuration file at once, so a unit nobody read cannot be contradicting it.
+  The size bound gets the same treatment with one extra case — `log-driver` and
+  `log-opt` are *different* options, so `dockerd` permits that split and a
+  drop-in can bound a driver the file named.
+
 ### Added
 - **`CONTAINERS-0008` (logging driver bounded and retrievable).** Catalog 21,
   91 checks. `LOW`: nothing here is a privilege boundary, and both failure

@@ -433,6 +433,9 @@ func foldExecStart(execs []fact.DockerExec, origin string, data []byte) []fact.D
 		if len(argv) == 0 {
 			continue
 		}
+		// The single point at which a command line becomes fact data, and so
+		// the single place the scrubber has to run. See scrubArgs.
+		argv = scrubArgs(argv)
 		execs = append(execs, fact.DockerExec{
 			Origin:   origin,
 			Line:     d.line,
@@ -510,6 +513,128 @@ func continues(s string) bool {
 		n++
 	}
 	return n%2 == 1
+}
+
+// opaqueFlags names the dockerd flags whose *values* must never reach a
+// bundle, by their long name without dashes.
+//
+// It is a table rather than a special case for one flag because the question
+// recurs: any flag whose value is an arbitrary key/value pair set by an
+// operator is a place a credential can end up, and adding one here is the
+// whole of the change. What qualifies is a flag whose value this build does
+// not need in order to reach a verdict — if a check has to read the value, the
+// answer is to model it as a typed field and decide there, not to record the
+// raw text and hope.
+//
+// --log-opt is the one that matters today and it is not hypothetical.
+// "splunk-token" is an authentication token, "awslogs-credentials-endpoint" is
+// the path to one, and both are documented ways to configure a logging driver.
+// The same options written in /etc/docker/daemon.json have had their values
+// dropped since the log-opts key names were modelled; a bundle must not depend
+// on which of the two files an operator happened to use.
+var opaqueFlags = map[string]bool{
+	"log-opt": true,
+}
+
+// redactedValue is what stands in for a value that was read and not kept.
+//
+// It is a visible marker rather than an omission on purpose. A reader has to
+// be able to tell "this option was set and its value is not in this artifact"
+// from "this option was not set", because those are different facts about the
+// host and only one of them is a finding.
+const redactedValue = "[REDACTED]"
+
+// scrubArgs removes the values of opaque flags from a command line, keeping
+// everything else exactly as systemd would have passed it.
+//
+// **This is the one place in the tree that deliberately records something
+// other than what the file says**, and the trade is worth stating. An evidence
+// excerpt drawn from a scrubbed ExecStart no longer matches `systemctl show -p
+// ExecStart docker.service` byte for byte, which costs an auditor a moment of
+// confusion. A credential in an artifact designed to travel costs rather more,
+// and cannot be taken back once the bundle is shared. The fragment digest is
+// unaffected — it is the sha256 of the file's bytes, computed at the seam —
+// so verifying a finding against the live host still works.
+//
+// Both of pflag's spellings are handled, plus the single-dash long form that
+// pflag does not actually accept. Being wrong in the permissive direction here
+// costs a redacted token that was never a flag; being wrong in the other
+// direction costs a secret.
+func scrubArgs(argv []string) []string {
+	out := make([]string, 0, len(argv))
+	for i := 0; i < len(argv); i++ {
+		tok := argv[i]
+
+		dashes, name, value, inline := splitFlag(tok)
+		if !opaqueFlags[name] {
+			out = append(out, tok)
+			continue
+		}
+
+		if inline {
+			// --log-opt=key=value, all in one token.
+			out = append(out, dashes+name+"="+scrubValue(value))
+			continue
+		}
+
+		// --log-opt key=value, where the value is the next token. A trailing
+		// flag with nothing after it has no value to scrub; dockerd would
+		// refuse to start on it.
+		out = append(out, tok)
+		if i+1 < len(argv) {
+			i++
+			out = append(out, scrubValue(argv[i]))
+		}
+	}
+	return out
+}
+
+// splitFlag takes a token apart into its leading dashes, its flag name, and an
+// inline value if it carries one.
+//
+// The dashes are counted rather than assumed so the token can be rebuilt as it
+// was written: an operator who typed -log-opt gets -log-opt back, not
+// --log-opt, because a fact that silently corrected the command line would be
+// a fact that disagreed with the host for a second reason.
+func splitFlag(tok string) (dashes, name, value string, inline bool) {
+	rest := strings.TrimLeft(tok, "-")
+	if rest == "" || len(rest) == len(tok) {
+		// Not a flag at all, or nothing but dashes.
+		return "", "", "", false
+	}
+	dashes = tok[:len(tok)-len(rest)]
+	if i := strings.IndexByte(rest, '='); i >= 0 {
+		return dashes, rest[:i], rest[i+1:], true
+	}
+	return dashes, rest, "", false
+}
+
+// scrubValue keeps a log option's key and discards what it was set to.
+//
+// The key is policy and worth having: "max-size" being present is the whole of
+// what CONTAINERS-0008 needs, and an operator reading "log-opt
+// splunk-token=[REDACTED]" can see both that they configured it and that this
+// tool did not carry it. The value is the part that is sometimes a credential
+// and is never needed.
+//
+// A token with no "=" has no key to keep, so all of it goes — unless it is an
+// unexpanded variable, which is a *name* rather than a value. The secret a
+// $SPLUNK_TOKEN refers to lives in the EnvironmentFile this collector
+// deliberately does not read, so the token itself discloses nothing, and
+// DockerService.Ambiguities has to still be able to see it: systemd expands a
+// variable into however many words it holds, so an unexpanded one is a reason
+// the command line cannot be claimed to have been read in full.
+func scrubValue(v string) string {
+	if v == "" {
+		return v
+	}
+	if i := strings.IndexByte(v, '='); i >= 0 {
+		return v[:i+1] + redactedValue
+	}
+	if strings.Contains(v, "$") {
+		return v
+	}
+	return redactedValue
 }
 
 // splitExec separates systemd's modifier prefixes from the command line and

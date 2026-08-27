@@ -633,19 +633,30 @@ Six things it produced that outlive the checks:
   must not do is disagree about what a socket specification *means*, which is
   why the reading of `dockerd`'s grammar is one file both import rather than
   two implementations that match today.
-- **Names travel, values do not — one level below the top-level keys.** `Keys`
-  established that a fact can record which options a document set without
-  carrying what they were set to. `log-opts` is where that stops being a
-  precaution: `splunk-token` is an authentication token and
+- **Names travel, values do not — one level below the top-level keys, and in
+  both files.** `Keys` established that a fact can record which options a
+  document set without carrying what they were set to. `log-opts` is where that
+  stops being a precaution: `splunk-token` is an authentication token and
   `awslogs-credentials-endpoint` is the path to one, so the values are never
   decoded at all. The test of whether the trade is affordable is whether the
   names still answer the question, and here they do — `json-file` is unbounded
   unless `max-size` is set. Where they would not, the answer is to record less
-  and say `UNKNOWN`, not to record the value. Every nested-object option a
-  later module models should be read this way first and widened only with a
-  reason.
+  and say `UNKNOWN`, not to record the value.
 
-The module's honest limits are four, and all of them are worth stating plainly.
+  The half that took a second pass is that **a privacy posture has to hold
+  across every spelling of the same option, not just the one it was written
+  for.** `dockerd` takes log options on its command line too, and `ExecStart`
+  is the one command line a bundle keeps — so for one work package a bundle
+  disclosed more or less depending on which file an operator happened to use.
+  The collector now scrubs those values out of the recorded argv, which is the
+  first place in the tree that deliberately records something other than what
+  the file says. The rule that makes it safe to extend is structural rather
+  than a word list: a flag whose value no check needs is opaque, and a flag
+  whose value a check *does* need gets modelled as a typed field instead.
+  `--registry-mirror` is the next candidate and has not been done, because a
+  mirror URL is a hostname far more often than it is a credential.
+
+The module's honest limits are three, and all of them are worth stating plainly.
 
 **The corpus.** All six golden bundles were recorded inside containers, so none
 carries a Docker daemon: `CONTAINERS-0001` to `-0005` are `NOT_APPLICABLE` on
@@ -672,18 +683,6 @@ stock installation is the well-known way to make Docker stop starting. Neither
 check reports that conflict — each reads its own file and neither compares them
 — so a host in that state is one whose daemon is not running and which both
 checks describe as though it were. Detecting it is a check of its own.
-
-**A credential can still reach a bundle through the one command line.**
-`ExecStart=` is stored argument by argument because the flags on it decide the
-API's exposure, and `dockerd` accepts `--log-opt` there as well as in
-`daemon.json`. So `--log-opt splunk-token=…` in a drop-in travels, where the
-`daemon.json` spelling of the same option has its value dropped. Nothing
-redacts it today. The fix is narrow — replace the value of a log option this
-build does not read with a visible marker in the recorded argv — and it is a
-work package rather than a footnote, because it is the first place the tree
-would deliberately record something other than what the file says, and the cost
-lands on `CONTAINERS-0006`'s evidence excerpt. `docs/PRIVACY.md` states the
-limit meanwhile.
 
 **What the logging check cannot see.** `CONTAINERS-0008` reads the daemon's
 *default* driver. A container started with its own `--log-driver`, or with a

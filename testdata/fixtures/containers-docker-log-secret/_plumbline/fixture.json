@@ -1,0 +1,3 @@
+{
+  "description": "A drop-in that configures the splunk logging driver on dockerd's command line, credentials and all. It is the fixture the argument scrubber exists for: splunk-token is an authentication token, and ExecStart is the one command line a bundle carries. Every spelling is present — space-separated, --flag=, the single-dash long form pflag does not actually accept, and a quoted value with a space in it — plus an unexpanded $EXTRA_LOG_OPTS, which is a variable name rather than a value and must survive so Ambiguities can still report it."
+}

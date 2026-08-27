@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"archive/tar"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -1913,5 +1914,76 @@ func TestProfileAppliesToEvalToo(t *testing.T) {
 
 	if !bytes.Equal(parse(t, scanOut).Findings, parse(t, evalOut).Findings) {
 		t.Error("scan and eval disagree once a profile is applied")
+	}
+}
+
+// TestABundleFromASecretBearingHostCarriesNoSecret is the end-to-end form of
+// the argument scrubber's promise, asserted where it actually matters.
+//
+// Every other test of that scrubber looks at a fact. This one runs the whole
+// pipeline — collect, serialise, compress — over a fixture whose docker.service
+// drop-in configures the splunk logging driver with its authentication token,
+// and then searches every member of the resulting archive as bytes. A fact
+// that was clean and a bundle that was not would be the only failure mode that
+// matters, because the bundle is the thing that travels.
+//
+// The token is checked alongside a value that is not a secret at all. The
+// scrubber does not keep a list of sensitive words: a log option's key is
+// policy and its value is not, so max-size goes with splunk-token, and a
+// future driver's credential option is covered before anybody has heard of it.
+func TestABundleFromASecretBearingHostCarriesNoSecret(t *testing.T) {
+	fixture := filepath.Join("..", "..", "testdata", "fixtures", "containers-docker-log-secret")
+	path := filepath.Join(t.TempDir(), "secret.plb")
+
+	// ExitDegraded is the expected code and not a problem here: a fixture root
+	// holding a Docker host and nothing else has no /etc/passwd for the USERS
+	// collector to read. The bundle is written either way, and the bundle is
+	// what this test is about.
+	if code, _, stderr := run(t, "collect", "--root", fixture, "-o", path); code != cli.ExitOK && code != cli.ExitDegraded {
+		t.Fatalf("collect exit = %d: %s", code, stderr)
+	}
+
+	f, err := os.Open(path) //nolint:gosec // a path this test builds
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	zr, err := zstd.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer zr.Close()
+
+	tr := tar.NewReader(zr)
+	var found []string
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("reading archive: %v", err)
+		}
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			t.Fatalf("reading %s: %v", hdr.Name, err)
+		}
+		for _, secret := range []string{"secret123", "splunk.example.internal", "10m"} {
+			if bytes.Contains(data, []byte(secret)) {
+				found = append(found, hdr.Name+": "+secret)
+			}
+		}
+		// The keys are meant to be there, and the marker with them: a reader
+		// has to be able to tell "set, and not carried" from "not set".
+		if hdr.Name == "facts/containers.docker_service.json" {
+			if !bytes.Contains(data, []byte("splunk-token=[REDACTED]")) {
+				t.Errorf("the fact does not show the option was set and withheld:\n%s", data)
+			}
+		}
+	}
+	if len(found) > 0 {
+		t.Errorf("a bundle carries values from dockerd's command line: %v\n"+
+			"    ExecStart is the one command line a bundle keeps, and --log-opt is\n"+
+			"    where a logging driver's credentials are configured.", found)
 	}
 }

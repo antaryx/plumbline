@@ -23,8 +23,8 @@ A `.plb` is host inventory. Treat it as sensitive.
 | PAM stack structure and module arguments | Policy, not credentials |
 | Kernel parameters | Running values and the configured files |
 | Mount table, firewall configuration, cron and logging configuration | |
-| The Docker daemon's `ExecStart` | From `docker.service` and its drop-ins — **that one line, and no other part of the unit**. See the caveat below |
-| Docker `log-opts` **key names** | From `daemon.json` — names only; the values are never decoded |
+| The Docker daemon's `ExecStart` | From `docker.service` and its drop-ins — **that one line, and no other part of the unit**, with log-option values scrubbed |
+| Docker log-option **key names** | From `daemon.json` *and* from `--log-opt` on the command line — names only, values never |
 | Filesystem **aggregates** | Counts of setuid, world-writable, unowned inodes, with a small number of example paths |
 | Hostname and OS release | Unless `--redact` |
 | Evidence blobs | The raw bytes of the configuration files a finding cites |
@@ -59,36 +59,58 @@ A `.plb` is host inventory. Treat it as sensitive.
 - **No network addresses.** Firewall *configuration* is read; interfaces are
   named, addresses are not.
 
-### The one command line, and its known edge
+### The one command line, and what is taken out of it
 
-The `ExecStart=` of `docker.service` is stored in full, argument by argument,
-because the flags on it decide whether the Docker API is exposed to the network
-and whether it requires a client certificate. That is a deliberate exception and
-the paragraph above explains it.
+The `ExecStart=` of `docker.service` is stored argument by argument, because the
+flags on it decide whether the Docker API is exposed to the network and whether
+it requires a client certificate. That is a deliberate exception and the
+paragraph above explains why it earns its place.
 
-It has an edge worth stating rather than leaving to be discovered. `dockerd`
-accepts `--log-opt` on that command line as well as in `daemon.json`, so an
-operator who wrote `--log-opt splunk-token=…` in a drop-in has put a credential
-on the one line this tool keeps — where the `daemon.json` spelling of the same
-option would have had its value dropped. Nothing in the tree redacts it today.
+**The values of `--log-opt` are scrubbed out of it before it is recorded.**
+`dockerd` accepts log options on its command line as well as in `daemon.json`,
+and that is where a logging driver's credentials are configured —
+`splunk-token` is an authentication token and `awslogs-credentials-endpoint` is
+the path to one. A drop-in reading
 
-If your fleet configures a logging driver's credentials on `dockerd`'s command
-line rather than in `daemon.json`, check the drop-in before sharing a bundle:
-
-```bash
-systemctl show -p ExecStart docker.service | grep -o -- '--log-opt [^ ]*'
+```ini
+ExecStart=/usr/bin/dockerd -H fd:// --log-driver=splunk --log-opt splunk-token=abc123
 ```
 
-Redacting the values of log options in the recorded `ExecStart` is a named work
-package in `docs/ROADMAP.md`. Until it lands, this is a limit rather than a
-protection.
+reaches a bundle as
 
-### Filesystem aggregates, specifically
+```
+/usr/bin/dockerd -H fd:// --log-driver=splunk --log-opt splunk-token=[REDACTED]
+```
 
-The walk visits every inode but stores counts and a handful of examples, not a
-listing. A bundle from a host with two million files does not contain two
-million paths — it contains "uid 4242 owns 3 inodes, for example
-`/var/lib/oldapp`". That is a deliberate bound on both size and disclosure.
+Three things about how that is done are worth stating, because each of them is
+a decision that could reasonably have gone the other way:
+
+- **The key survives and the value never does — including values that are not
+  secrets.** `max-size=10m` is scrubbed exactly as `splunk-token` is. A
+  scrubber holding a list of sensitive names is a scrubber that misses the next
+  logging driver's credential option, so the rule is structural: a log option's
+  key is policy and its value is not. Nothing in the tool needs the values —
+  `CONTAINERS-0008` asks only whether `max-size` is *present* — and if a later
+  check ever does, the answer is to model it as a typed field rather than to
+  widen what the raw command line keeps.
+- **It is a visible marker, not an omission.** `[REDACTED]` lets a reader tell
+  "this option was set and its value is not in this artifact" from "this option
+  was not set". Those are different facts about the host and only one of them
+  is a finding.
+- **Everything else is exactly what `systemd` would have passed.** Only the
+  flags in the table above are treated this way, and the fragment digests are
+  unaffected — they are computed over the file's real bytes at the seam, so
+  verifying a finding against the live host still works.
+
+An unexpanded `$VARIABLE` is left alone. It is a *name*, not a value: what it
+expands to lives in an `EnvironmentFile` this tool deliberately does not read,
+so the token discloses nothing, and `CONTAINERS-0006` needs to still see it in
+order to say it could not read the whole command line.
+
+This is asserted end to end rather than promised. A test collects a bundle from
+a fixture whose drop-in configures the splunk driver with its token, then
+searches every member of the compressed archive as bytes
+(`TestABundleFromASecretBearingHostCarriesNoSecret`).
 
 ## Redaction
 

@@ -818,9 +818,26 @@ socket list a pass. `masked` is a state with no analogue in a configuration
 file: a unit linked to `/dev/null` is one systemd refuses to start, so the
 vendor unit underneath is not in force and no verdict may be drawn from it.
 
-**Nothing is expanded.** `Environment=`, `EnvironmentFile=` and systemd's `%`
-specifiers are not read, so a `$DOCKER_OPTS` survives as a token and
-`Ambiguities()` reports it. That is deliberate in both directions: dropping it
+**One class of value is scrubbed.** The value of a `--log-opt` is replaced with
+`[REDACTED]`, keeping the option's key, in all four spellings a command line
+can carry it. `ExecStart` is the one command line a bundle keeps and `dockerd`
+takes log options on it, which is where `splunk-token` and
+`awslogs-credentials-endpoint` are configured — the same options written in
+`daemon.json` have only ever had their key names recorded, and a bundle must
+not disclose more because of which file an operator chose. Keys survive because
+keys are all a check needs; values go whether or not they look sensitive,
+because a scrubber holding a list of bad words misses the next driver's
+credential option. It is the one place in the tree that deliberately records
+something other than what the file says, and the fragment digests are computed
+over the real bytes at the seam, so verifying against the live host is
+unaffected. `PRIVACY.md` states the whole of it.
+
+**Nothing else is expanded or altered.** `Environment=`, `EnvironmentFile=` and
+systemd's `%` specifiers are not read, so a `$DOCKER_OPTS` survives as a token
+and `Ambiguities()` reports it. An unexpanded variable is left out of the
+scrubbing for that reason: it is a name rather than a value, what it refers to
+lives in a file this collector does not read, and removing it would convert "I
+could not read this" into "there was nothing here". That is deliberate in both directions: dropping it
 would render `dockerd -H fd:// $DOCKER_OPTS` as a command line with no options
 — an unread line silently rendered as a safe-looking one — and reading the
 environment file to resolve it would mean parsing the file where a Docker

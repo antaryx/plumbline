@@ -1182,7 +1182,7 @@ func TestCheck0008LoggingDriver(t *testing.T) {
 
 		// A drop-in that could not be read could be carrying the flag.
 		{fixture: "containers-docker-service-denied", result: finding.Unknown,
-			reason: finding.ReasonPermission, detailContains: "could be carrying a --log-driver flag"},
+			reason: finding.ReasonPermission, detailContains: "a --log-driver flag in the part that went unread"},
 
 		// So could a $DOCKER_OPTS this scan does not expand.
 		{fixture: "containers-docker-service-envvar", result: finding.Unknown,
@@ -1423,5 +1423,81 @@ func TestTheLoggingCheckIsIndependentOfTheSocketChecks(t *testing.T) {
 	}
 	if strings.Contains(sock.Detail, "tcp://") {
 		t.Errorf("the logging verdict repeats the socket finding: %s", sock.Detail)
+	}
+}
+
+// TestARedactedValueStillAnswersTheQuestion.
+//
+// The collector replaces every --log-opt value with a marker, max-size
+// included, because the rule is "the key is policy, the value is not" rather
+// than a list of sensitive words. That only works if the keys are genuinely
+// all this check needs — so the fixture whose bound lives on the command line
+// has to keep passing with `max-size=[REDACTED]` in place of `max-size=50m`.
+//
+// If a later check needs a log option's value, the answer is to model it as a
+// typed field in the fact and decide there, not to widen what the argv keeps.
+func TestARedactedValueStillAnswersTheQuestion(t *testing.T) {
+	got := evalCheck(t, checks.Check0008, "containers-docker-log-in-unit")
+
+	if got.Result != finding.Pass {
+		t.Fatalf("a redacted max-size = %s, want PASS: %s", got.Result, got.Detail)
+	}
+	if len(got.Evidence) != 2 {
+		t.Fatalf("evidence = %d entries, want 2", len(got.Evidence))
+	}
+
+	// The excerpt shows the operator what they set and this tool what it kept.
+	excerpt := got.Evidence[1].Excerpt
+	if !strings.Contains(excerpt, "--log-opt max-size=[REDACTED]") {
+		t.Errorf("the excerpt does not show the redacted option: %q", excerpt)
+	}
+	if strings.Contains(excerpt, "50m") {
+		t.Errorf("a log-opt value reached a finding: %q", excerpt)
+	}
+	// And the flag whose value the check does read is untouched.
+	if !strings.Contains(excerpt, "--log-driver=json-file") {
+		t.Errorf("the excerpt lost the driver: %q", excerpt)
+	}
+}
+
+// TestAnIncompleteCommandLineCannotProduceAPass is ADR-0014 in the direction
+// it actually points, and the ordering bug it exists to prevent is a subtle
+// one.
+//
+// containers-docker-log-secret names the splunk driver in a drop-in — a
+// shipping driver, and on its face a pass — and the same command line carries
+// an unexpanded $EXTRA_LOG_OPTS. systemd expands that into however many words
+// it holds and pflag takes the *last* --log-driver, so the variable can
+// perfectly well be carrying `--log-driver=none`. A check that read the
+// splunk and stopped would be asserting a pass out of a command line it had
+// already admitted it could not read.
+//
+// The daemon.json half is the inverse and is not exposed to this at all:
+// dockerd refuses to start when an option is given as a flag and in the
+// configuration file at once, so a driver named in the file cannot be
+// contradicted by a unit nobody read.
+func TestAnIncompleteCommandLineCannotProduceAPass(t *testing.T) {
+	got := evalCheck(t, checks.Check0008, "containers-docker-log-secret")
+
+	if got.Result != finding.Unknown {
+		t.Fatalf("a driver from a partly-read command line = %s, want UNKNOWN: %s", got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "splunk") {
+		t.Errorf("the verdict hides the driver it did find: %s", got.Detail)
+	}
+	if !strings.Contains(got.Detail, "EXTRA_LOG_OPTS") {
+		t.Errorf("the verdict does not say what it could not read: %s", got.Detail)
+	}
+
+	// The credential is not in the finding either, which is the whole point of
+	// the scrubber: a detail string reaches a terminal, --json output and
+	// whatever an operator pastes into a ticket.
+	if strings.Contains(got.Detail, "secret123") {
+		t.Errorf("a credential reached the detail: %s", got.Detail)
+	}
+	for _, e := range got.Evidence {
+		if strings.Contains(e.Excerpt, "secret123") {
+			t.Errorf("a credential reached an evidence excerpt: %q", e.Excerpt)
+		}
 	}
 }
