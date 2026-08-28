@@ -776,6 +776,15 @@ turns on which bits are set rather than on how large the number is. Ubuntu ships
 exactly that value, so the tier separates a deliberate narrow choice from a
 default on real data rather than in a fixture.
 
+**A conservative default is still a wrong answer, and the corpus will not tell
+you.** `ConfiguredConflict` treated every repeated key with differing values as
+undeterminable, which is safe in the sense that `UNKNOWN` never lies — and it
+declined to answer on a shape that has one right answer, on the most common
+distribution family. The refinement is small: the two tools disagree only about
+how they order *directories*, so a disagreement within one directory is
+resolvable and only a cross-directory one is not. It moved no golden verdict,
+because the corpus does not contain the shape; the live workstation did.
+
 **Run the finished check against a live host before calling it done.**
 `KERNEL-0021` parsed the mask with base 10, and systemd ships
 `kernel.sysrq = 0x01b6`. Every fixture passed; the live scan reported UNKNOWN

@@ -123,6 +123,15 @@ type pin struct {
 // keep their six UNKNOWN and the debt is now visible as a contrast within the
 // corpus rather than as a number in a comment.
 //
+// **The lexical conflict resolution moved nothing here, and that is worth
+// recording.** Reducing each directory to the value it ends on, and reporting a
+// conflict only across directories, changed no verdict on any of the six — the
+// corpus does not happen to contain a same-directory disagreement. A live
+// Ubuntu 24.04 workstation does: /usr/lib/sysctl.d/50-default.conf sets
+// kernel.sysrq = 0x01b6 and 55-magic-sysrq.conf sets 176, which used to produce
+// UNKNOWN and now resolves to 176 — the value the running kernel reports. A
+// corpus of six images is not a substitute for running the thing on a host.
+//
 // **KERNEL-0020 passes on both Ubuntu bundles and nowhere else**, which is the
 // first time a check in this persistence group has passed anything. Ubuntu
 // ships kernel.yama.ptrace_scope = 1 in a vendor file; Alpine, Fedora and Rocky
@@ -221,8 +230,8 @@ var pinned = map[string]pin{
 	// syslog daemon, and a check that declines to judge an absent subject is
 	// the behaviour, not a gap.
 	"ubuntu-2404-stock": {
-		catalog: 27, pass: 40, fail: 16, notApplicable: 37, unknown: 6, skipped: 0,
-		posture: 74.24242424242425, coverage: 90.32258064516128,
+		catalog: 28, pass: 40, fail: 17, notApplicable: 37, unknown: 6, skipped: 0,
+		posture: 73.13432835820896, coverage: 90.47619047619048,
 		why: "the unhardened baseline every other number is measured against",
 	},
 
@@ -230,7 +239,7 @@ var pinned = map[string]pin{
 	// check cares about. One PASS and one NOT_APPLICABLE separate them here,
 	// and which ones is the interesting part of any diff on this pair.
 	"debian-13-stock": {
-		catalog: 27, pass: 37, fail: 13, notApplicable: 43, unknown: 6, skipped: 0,
+		catalog: 28, pass: 37, fail: 13, notApplicable: 44, unknown: 6, skipped: 0,
 		posture: 77.11864406779661, coverage: 89.28571428571429,
 		why: "Debian's defaults, which are not Ubuntu's",
 	},
@@ -239,8 +248,8 @@ var pinned = map[string]pin{
 	// is the bundle that catches a check quietly assuming a Debian-shaped /etc
 	// and reporting a verdict about a file that was never there.
 	"alpine-320-stock": {
-		catalog: 27, pass: 30, fail: 13, notApplicable: 50, unknown: 6, skipped: 0,
-		posture: 71.15384615384616, coverage: 87.75510204081633,
+		catalog: 28, pass: 30, fail: 14, notApplicable: 50, unknown: 6, skipped: 0,
+		posture: 69.81132075471697, coverage: 88,
 		why: "the distribution least like the others, where guessing shows up",
 	},
 
@@ -252,8 +261,8 @@ var pinned = map[string]pin{
 	// binary, not of any file on the host. AUTH-0002 says it does not know.
 	// Every other scanner reports the documented default and calls it a PASS.
 	"fedora-44-stock": {
-		catalog: 27, pass: 37, fail: 17, notApplicable: 38, unknown: 7, skipped: 0,
-		posture: 69.46564885496184, coverage: 88.52459016393442,
+		catalog: 28, pass: 37, fail: 18, notApplicable: 38, unknown: 7, skipped: 0,
+		posture: 68.42105263157895, coverage: 88.70967741935483,
 		why: "the RPM family's leading edge, where authselect owns the PAM stack",
 	},
 
@@ -261,8 +270,8 @@ var pinned = map[string]pin{
 	// point of it. One FAIL and one NOT_APPLICABLE separate the two, and which
 	// ones is the interesting part of any diff on this pair.
 	"rocky-9-stock": {
-		catalog: 27, pass: 37, fail: 16, notApplicable: 39, unknown: 7, skipped: 0,
-		posture: 71.65354330708661, coverage: 88.33333333333333,
+		catalog: 28, pass: 37, fail: 17, notApplicable: 39, unknown: 7, skipped: 0,
+		posture: 70.54263565891473, coverage: 88.52459016393442,
 		why: "the enterprise RPM baseline most real audits run against",
 	},
 
@@ -282,7 +291,7 @@ var pinned = map[string]pin{
 	// configuration. Covering CONTAINERS against a real daemon needs a recipe
 	// that installs one, which is a work package of its own.
 	//
-	// The 10 FAIL are four a container cannot fix — /tmp and /home are not
+	// The 11 FAIL are four a container cannot fix — /tmp and /home are not
 	// separate mounts, and /proc/sys is read-only so dmesg_restrict and the
 	// core pattern cannot be set — and three that are real findings about a
 	// real image, which appeared the moment the UNKNOWNs cleared:
@@ -298,12 +307,12 @@ var pinned = map[string]pin{
 	// A posture that has fallen from 96.77 to 90.20 across two work packages on
 	// a bundle named "hardened" is the corpus doing its job: every point of it
 	// is a real finding that had been hidden behind an UNKNOWN or had no check
-	// to catch it. All eighteen non-passing verdicts are correct,
+	// to catch it. All nineteen non-passing verdicts are correct,
 	// and a run in which any of them became a PASS would be a serious
 	// regression rather than an improvement.
 	"ubuntu-2404-hardened": {
-		catalog: 27, pass: 81, fail: 10, notApplicable: 8, unknown: 0, skipped: 0,
-		posture: 89.04761904761904, coverage: 100,
+		catalog: 28, pass: 81, fail: 11, notApplicable: 8, unknown: 0, skipped: 0,
+		posture: 88.20754716981132, coverage: 100,
 		why: "the only bundle on which every check in the catalog evaluates",
 	},
 }

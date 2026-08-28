@@ -174,30 +174,95 @@ func (s Sysctl) EffectiveConfigured(key string) (SysctlSetting, bool) {
 	return all[len(all)-1], true
 }
 
-// ConfiguredConflict reports whether more than one configuration file sets this
-// parameter to different values.
+// ConfiguredConflict reports whether this parameter's value after the next
+// reboot depends on which tool applied the configuration.
 //
-// It matters because the order in which drop-in files are applied is not the
-// same on every host: systemd-sysctl merges the sysctl.d directories by
-// filename and applies /etc/sysctl.conf last, while procps `sysctl --system`
-// walks the directories in its own documented order. They agree in the common
-// case and can disagree when one parameter is set twice with different values.
+// **Not every repeat is a conflict, and treating them alike produced UNKNOWN on
+// hosts whose answer is perfectly determinable.** The two tools that apply
+// these files disagree about one thing only:
 //
-// A check that meets a conflict must return UNKNOWN rather than pick a winner.
-// Guessing produces a confident claim about what this host will do after a
-// reboot, which is exactly the kind of statement an operator acts on.
+//   - systemd-sysctl merges every drop-in directory and sorts by *filename
+//     across all of them*, with a higher-precedence directory shadowing a
+//     same-named file in a lower one.
+//   - procps `sysctl --system` walks the directories in its own order and
+//     sorts filenames *within* each one, applying /etc/sysctl.conf last.
+//
+// Both therefore agree completely about two settings in the same directory:
+// later filename wins, and within one file the later line wins. They can only
+// disagree when the settings are in *different* directories, where one tool
+// orders by directory and the other by filename.
+//
+// So the reading is: reduce each directory to the value it ends on — which is
+// the last entry for that directory in application order, and which both tools
+// compute the same way — and report a conflict only when two directories end
+// on different values.
+//
+// This also disposes of the usr-merge duplicate without a special case. On a
+// host where /lib is a symlink to /usr/lib the same files are reached by two
+// paths, each directory ends on the same value, and the two agree.
+//
+// A check that meets a real conflict must return UNKNOWN rather than pick a
+// winner. Guessing produces a confident claim about what this host will do
+// after a reboot, which is exactly the kind of statement an operator acts on.
 func (s Sysctl) ConfiguredConflict(key string) bool {
-	all := s.Configured[key]
-	if len(all) < 2 {
+	winners := s.directoryWinners(key)
+	if len(winners) < 2 {
 		return false
 	}
-	first := strings.TrimSpace(all[0].Value)
-	for _, set := range all[1:] {
-		if strings.TrimSpace(set.Value) != first {
+	first := winners[0].Value
+	for _, w := range winners[1:] {
+		if strings.TrimSpace(w.Value) != strings.TrimSpace(first) {
 			return true
 		}
 	}
 	return false
+}
+
+// directoryWinners returns the setting each directory ends on, in the order the
+// directories were first applied.
+//
+// "Ends on" is the last entry for that directory in Configured[key], which is
+// application order: the collector emits directories in search order, files
+// sorted within a directory, and lines in file order. Both tools compute that
+// same value for a single directory, which is what makes it safe to reduce.
+func (s Sysctl) directoryWinners(key string) []SysctlSetting {
+	all := s.Configured[key]
+	if len(all) == 0 {
+		return nil
+	}
+
+	order := make([]string, 0, len(all))
+	last := make(map[string]SysctlSetting, len(all))
+	for _, set := range all {
+		dir := configDir(set.File)
+		if _, seen := last[dir]; !seen {
+			order = append(order, dir)
+		}
+		last[dir] = set
+	}
+
+	out := make([]SysctlSetting, 0, len(order))
+	for _, dir := range order {
+		out = append(out, last[dir])
+	}
+	return out
+}
+
+// configDir is the directory a setting was read from.
+//
+// /etc/sysctl.conf is its own directory for this purpose rather than being
+// lumped in with /etc/sysctl.d. It is not a drop-in: procps applies it last,
+// after every directory, and systemd treats it as one more file to merge — so
+// a value there and a value in /etc/sysctl.d are exactly the cross-directory
+// case this distinction exists to catch.
+func configDir(file string) string {
+	if i := strings.LastIndexByte(file, '/'); i > 0 {
+		if file[:i] == "/etc" {
+			return file
+		}
+		return file[:i]
+	}
+	return file
 }
 
 // ConfiguredKeys returns every parameter any configuration file sets, sorted.

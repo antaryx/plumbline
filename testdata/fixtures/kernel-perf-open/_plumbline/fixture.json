@@ -1,0 +1,1 @@
+{ "description": "perf_event_paranoid written down at 1, below upstream's own default — the shape a host takes when somebody lowered it to make a profiler work and never restored it. Unprivileged processes may measure the kernel's own execution, which is a direct read of the layout KASLR randomises. The finding has to say that rather than that the number is too low." }

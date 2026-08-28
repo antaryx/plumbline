@@ -1,0 +1,1 @@
+{ "description": "perf_event_paranoid at 3, the Debian and Ubuntu patch that refuses unprivileged perf_event_open entirely. It passes and the verdict says it is stricter than upstream and available only on that kernel family — a deliberate choice rather than an inherited default, which is worth telling an operator apart from a 2." }

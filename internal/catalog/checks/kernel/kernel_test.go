@@ -36,7 +36,7 @@ var all = []catalog.Check{
 	checks.Check0014,
 	checks.Check0015,
 	checks.Check0016, checks.Check0017,
-	checks.Check0018, checks.Check0019, checks.Check0020, checks.Check0021,
+	checks.Check0018, checks.Check0019, checks.Check0020, checks.Check0021, checks.Check0022,
 }
 
 // collectFixture runs the real collector against a fixture tree.
@@ -543,9 +543,9 @@ func TestCheckIdentityIsWellFormed(t *testing.T) {
 		// bulk-updated to the current version — which is what this assertion
 		// is guarding, and why it names the versions rather than accepting any.
 		switch check.SinceCatalog {
-		case 2, 3, 25, 26, 27:
+		case 2, 3, 25, 26, 27, 28:
 		default:
-			t.Errorf("%s declares SinceCatalog %d, want 2, 3, 25, 26 or 27", check.ID, check.SinceCatalog)
+			t.Errorf("%s declares SinceCatalog %d, want 2, 3, 25, 26, 27 or 28", check.ID, check.SinceCatalog)
 		}
 		if check.SinceCatalog > catalog.Version {
 			t.Errorf("%s declares SinceCatalog %d, which is ahead of catalog.Version %d",
@@ -1155,4 +1155,165 @@ func TestTheSysrqMaskIsParsedTheWayTheKernelParsesIt(t *testing.T) {
 	if strings.Contains(out[0].Detail, "not a number") {
 		t.Errorf("a hex value was reported as unparseable: %s", out[0].Detail)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// deterministic conflict resolution, and KERNEL-0022
+// ---------------------------------------------------------------------------
+
+// TestSameDirectoryDisagreementIsResolvedNotReported.
+//
+// The two tools that apply these files disagree about one thing only: how to
+// order *directories* against each other. Within a directory both sort by
+// filename, so two files there that disagree have a determinable answer — the
+// later filename — and reporting UNKNOWN was over-caution that cost a real
+// verdict on a real host.
+//
+// The fixture is the shape found on a live Ubuntu 24.04 workstation, where
+// /usr/lib/sysctl.d/50-default.conf sets kernel.sysrq = 0x01b6 and
+// 55-magic-sysrq.conf sets 176. The running kernel on that host reports 176.
+func TestSameDirectoryDisagreementIsResolvedNotReported(t *testing.T) {
+	sc := sysctlFromFixture(t, "kernel-samedir-order")
+
+	if sc.ConfiguredConflict("kernel.sysrq") {
+		t.Errorf("two files in one directory reported as conflicting: %+v", sc.Configured["kernel.sysrq"])
+	}
+	set, found := sc.EffectiveConfigured("kernel.sysrq")
+	if !found || set.Value != "176" {
+		t.Errorf("effective value = %q, want 176 — the later filename wins", set.Value)
+	}
+
+	// And the verdict that follows from it, which is the point of the change.
+	got := evalFixture(t, checks.Check0021, "kernel-samedir-order")
+	if got.Result != finding.Fail {
+		t.Fatalf("= %s, want FAIL: the answer is determinable\n  %s", got.Result, got.Detail)
+	}
+	if got.Severity != finding.Low {
+		t.Errorf("severity = %s, want LOW: 176 is sync, remount-read-only and reboot", got.Severity)
+	}
+	if !strings.Contains(got.Detail, "55-magic-sysrq.conf") {
+		t.Errorf("the verdict does not cite the file that wins: %s", got.Detail)
+	}
+}
+
+// TestCrossDirectoryDisagreementIsStillUnknown is the other half, and the pair
+// is the whole distinction: the same disagreement, the same two values, and
+// only the directory differs.
+//
+// procps walks the directories in its own documented order; systemd-sysctl
+// merges them and sorts by filename across all of them. Here those give
+// different answers, so what the host does after a reboot depends on which tool
+// applied the files, and guessing would be a confident claim about exactly that.
+func TestCrossDirectoryDisagreementIsStillUnknown(t *testing.T) {
+	sc := sysctlFromFixture(t, "kernel-crossdir-conflict")
+
+	if !sc.ConfiguredConflict("kernel.sysrq") {
+		t.Errorf("a cross-directory disagreement was resolved: %+v", sc.Configured["kernel.sysrq"])
+	}
+
+	got := evalFixture(t, checks.Check0021, "kernel-crossdir-conflict")
+	if got.Result != finding.Unknown {
+		t.Fatalf("= %s, want UNKNOWN: %s", got.Result, got.Detail)
+	}
+	for _, file := range []string{"/usr/lib/sysctl.d/50-default.conf", "/run/sysctl.d/50-cloud.conf"} {
+		if !strings.Contains(got.Detail, file) {
+			t.Errorf("%s is not named: %s", file, got.Detail)
+		}
+	}
+}
+
+// TestOneDirectoryReachedByTwoPathsIsNotAConflict.
+//
+// On a usr-merged host /lib is a symlink to /usr/lib, so the same files are
+// reached by two paths. The collector now dedupes the search directories by
+// inode, and the per-directory reading disposes of any that a recorded bundle
+// still carries — each path ends on the same value, so the two agree. Both
+// halves matter: the first keeps the fact honest about what was read, the
+// second keeps old bundles re-evaluable.
+func TestOneDirectoryReachedByTwoPathsIsNotAConflict(t *testing.T) {
+	sc := fact.Sysctl{Configured: map[string][]fact.SysctlSetting{}}
+	sc.Configured["kernel.sysrq"] = []fact.SysctlSetting{
+		{Key: "kernel.sysrq", Value: "0x01b6", File: "/usr/lib/sysctl.d/50-default.conf", Line: 19},
+		{Key: "kernel.sysrq", Value: "176", File: "/usr/lib/sysctl.d/55-magic-sysrq.conf", Line: 26},
+		{Key: "kernel.sysrq", Value: "0x01b6", File: "/lib/sysctl.d/50-default.conf", Line: 19},
+		{Key: "kernel.sysrq", Value: "176", File: "/lib/sysctl.d/55-magic-sysrq.conf", Line: 26},
+	}
+	if sc.ConfiguredConflict("kernel.sysrq") {
+		t.Error("a usr-merge duplicate was reported as a conflict")
+	}
+	if set, _ := sc.EffectiveConfigured("kernel.sysrq"); set.Value != "176" {
+		t.Errorf("effective value = %q, want 176", set.Value)
+	}
+}
+
+// TestEtcSysctlConfIsItsOwnDirectory.
+//
+// /etc/sysctl.conf is not a drop-in. procps applies it after every directory
+// and systemd treats it as one more file to merge, so a value there and a value
+// in /etc/sysctl.d are exactly the cross-directory case — and lumping them
+// together by their shared /etc prefix would resolve a disagreement that is not
+// determinable.
+func TestEtcSysctlConfIsItsOwnDirectory(t *testing.T) {
+	sc := fact.Sysctl{Configured: map[string][]fact.SysctlSetting{}}
+	sc.Configured["kernel.sysrq"] = []fact.SysctlSetting{
+		{Key: "kernel.sysrq", Value: "1", File: "/etc/sysctl.d/60-local.conf", Line: 1},
+		{Key: "kernel.sysrq", Value: "0", File: "/etc/sysctl.conf", Line: 3},
+	}
+	if !sc.ConfiguredConflict("kernel.sysrq") {
+		t.Error("/etc/sysctl.conf was treated as a drop-in in /etc/sysctl.d")
+	}
+}
+
+func TestKernel0022PerfEventParanoid(t *testing.T) {
+	run(t, checks.Check0022, []tc{
+		{fixture: "kernel-perf-restricted", result: finding.Pass,
+			detailContains: "may not profile the kernel"},
+
+		// 3 passes and is told apart from 2.
+		{fixture: "kernel-perf-strict", result: finding.Pass,
+			detailContains: "stricter than upstream"},
+
+		// Written below the bar.
+		{fixture: "kernel-perf-open", result: finding.Fail, severity: finding.Medium,
+			detailContains: "KASLR oracle"},
+
+		// Written nowhere. A default is not a decision.
+		{fixture: "kernel-trace-unset", result: finding.Fail, severity: finding.Medium,
+			detailContains: "a default is not a decision"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+// TestTheTwoAcceptedPerfLevelsAreToldApart. 2 is upstream's default and 3 is a
+// Debian-family patch that does not exist elsewhere — which is why the bar is 2
+// rather than 3, and why a host running 3 is told it chose something rather
+// than inherited it.
+func TestTheTwoAcceptedPerfLevelsAreToldApart(t *testing.T) {
+	two := evalFixture(t, checks.Check0022, "kernel-perf-restricted")
+	three := evalFixture(t, checks.Check0022, "kernel-perf-strict")
+
+	if two.Result != finding.Pass || three.Result != finding.Pass {
+		t.Fatalf("expected both to pass: %s / %s", two.Result, three.Result)
+	}
+	if !strings.Contains(two.Detail, "3 is stricter") {
+		t.Errorf("a host at 2 is not told a stricter value exists: %s", two.Detail)
+	}
+	if !strings.Contains(three.Detail, "deliberate choice rather than an inherited one") {
+		t.Errorf("a host at 3 is not credited: %s", three.Detail)
+	}
+}
+
+// sysctlFromFixture collects the fact itself, for the assertions that are about
+// the reading rather than about a verdict.
+func sysctlFromFixture(t *testing.T, name string) fact.Sysctl {
+	t.Helper()
+	sc, _, ok := fact.Get[fact.Sysctl](collectFixture(t, name), fact.SysctlID)
+	if !ok {
+		t.Fatalf("kernel.sysctl missing from %s", name)
+	}
+	return sc
 }

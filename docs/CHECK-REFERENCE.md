@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 27 · 99 checks · 11 modules**
+**Catalog version 28 · 100 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -3004,6 +3004,77 @@ systemd-analyze cat-config sysctl.d
 
 - [Linux kernel — Magic SysRq key](https://www.kernel.org/doc/html/latest/admin-guide/sysrq.html)
 - [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
+
+---
+
+### KERNEL-0022 — Perf event restriction is written to the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | MEDIUM |
+| Since | catalog 28 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `side-channel` |
+
+perf_event_open is a system call that asks the kernel to
+instrument the hardware: cycle counters, cache misses, branch mispredictions,
+and the addresses being executed while it counts. It exists for profiling and it
+is very good at it, which is the problem — the same measurements that show a
+developer where their program spends its time show an attacker what another
+process is doing, at instruction granularity.
+
+kernel.perf_event_paranoid decides how much of that an unprivileged process may
+ask for:
+
+  - -1 — everything, including raw tracepoints and kernel measurements.
+  -  0 — no raw tracepoint access; CPU events still allowed.
+  -  1 — no CPU event access for unprivileged users.
+  -  2 — no kernel profiling. The upstream default since Linux 4.6.
+  -  3 — no unprivileged perf at all. A Debian and Ubuntu patch, not upstream.
+
+**Below 2 the call is a side-channel primitive and a KASLR oracle.** Kernel
+measurements return addresses from the kernel's own execution, which is a direct
+read of the layout randomisation is meant to hide; and the counter resolution is
+fine enough to have carried practical cache-timing attacks against
+cryptographic code in another process. Neither needs a bug — this is the
+interface working as documented.
+
+2 is the bar because it is upstream's own default and because 3 does not exist
+on a kernel without the Debian patch, so requiring it would fail every RPM-family
+host for shipping a kernel that cannot have it. Where 3 is available it is
+better, and a host running it is told so rather than merely passed.
+
+This is a check about files. KERNEL-0013 asks what the running kernel does; a
+host set with sysctl -w and nothing on disk passes that and reverts at the next
+boot.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write kernel.perf\_event\_paranoid = 2 to a file in /etc/sysctl.d/, or 3 on a Debian-family kernel.
+
+1. Check what already sets it: grep -rn perf\_event\_paranoid /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d.
+2. Create or extend a drop-in containing kernel.perf\_event\_paranoid = 2. Write it down even if the running kernel already reports 2: upstream's default is not a decision, and a kernel rebuild or a boot parameter can lower it without anything on this host changing.
+3. Use 3 on Debian and Ubuntu, where the patch exists, unless something on the host profiles as a non-root user. On an RPM-family kernel 3 is not available and setting it does nothing useful.
+4. Apply without rebooting: sysctl --system, then confirm with sysctl kernel.perf\_event\_paranoid.
+5. Find out what profiles before restricting it. perf, bpftrace, some APM agents and Java Flight Recorder all use perf\_event\_open; at 2 a non-root user can still profile their own userspace processes, and at 3 they cannot profile at all. The usual answer for a legitimate profiler is CAP\_PERFMON on the unit rather than lowering the value host-wide.
+
+```sh
+sysctl kernel.perf_event_paranoid
+grep -rn perf_event_paranoid /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+systemd-analyze cat-config sysctl.d
+```
+
+> **Caution.** Unprivileged profiling stops working. perf top, bpftrace and Java Flight Recorder are the usual casualties, and at 3 they stop for everyone without CAP\_PERFMON. Grant the capability to the units that need it rather than lowering the value for the whole host.
+
+**Controls** — `nist-800-53-r5 SC-4`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — perf\_event\_paranoid](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#perf-event-paranoid)
+- [perf\_event\_open(2)](https://man7.org/linux/man-pages/man2/perf_event_open.2.html)
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "bundle": "ubuntu-2404-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 27,
+  "catalog_version": 28,
   "scan": {
     "started": "2026-08-25T21:31:57.77690799Z",
     "finished": "2026-08-25T21:31:57.807262853Z",
@@ -15,19 +15,19 @@
   "summary": {
     "counts": {
       "pass": 40,
-      "fail": 16,
+      "fail": 17,
       "not_applicable": 37,
       "skipped": 0,
       "unknown": 6,
-      "total": 99
+      "total": 100
     },
     "by_severity": {
       "HIGH": 6,
       "LOW": 4,
-      "MEDIUM": 6
+      "MEDIUM": 7
     },
-    "posture": 74.24242424242425,
-    "coverage": 90.32258064516128
+    "posture": 73.13432835820896,
+    "coverage": 90.47619047619048
   },
   "findings": [
     {
@@ -848,6 +848,78 @@
           "line": 26,
           "excerpt": "kernel.sysrq = 176",
           "sha256": "f9107778c619246fb2a5a7e2a05c9419951752238ede04c771173832dd296128"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0022",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "kernel.perf_event_paranoid",
+      "fingerprint": "934fdbecba0f171c09532067bfc95978",
+      "detail": "kernel.perf_event_paranoid is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream has defaulted to 2 since Linux 4.6, which is adequate — but a default is not a decision, and a kernel built with a lower value, or a boot parameter that lowers it, leaves unprivileged processes able to measure the kernel's own execution. The running kernel has it at 2, so this host is adequate now on its default and has not written that down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0013's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/99-protect-links.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        },
+        {
+          "source": "/lib/sysctl.d/99-protect-links.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        },
+        {
+          "source": "/etc/sysctl.d/10-bufferbloat.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "763c2e237645fb7c3fecf16a54479e49c39aab229c2a646a42f16c83b9dd2974"
+        },
+        {
+          "source": "/etc/sysctl.d/10-console-messages.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "14524a83a266454d517b7cdbfb2141dbc4b884570543da5f65e3f08da0b814c0"
+        },
+        {
+          "source": "/etc/sysctl.d/10-ipv6-privacy.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "e07c86211944a534c6418fe0eb5896926e09a13b56162d8cb642866f37e83b04"
+        },
+        {
+          "source": "/etc/sysctl.d/10-kernel-hardening.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2bbc2c5684414517eba9da8d2fbff0a678026d944eb8fcfd6287281e11282e2f"
+        },
+        {
+          "source": "/etc/sysctl.d/10-magic-sysrq.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "f9107778c619246fb2a5a7e2a05c9419951752238ede04c771173832dd296128"
+        },
+        {
+          "source": "/etc/sysctl.d/10-map-count.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "867f4371a9cc5a79cab3b350aee03d067857b69e3cbf556a4a19aed057f9e954"
+        },
+        {
+          "source": "/etc/sysctl.d/10-network-security.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "258805ec72eada3c24a923de1c5bd8ed0fd11fe21f3673628ec78f221c31e934"
+        },
+        {
+          "source": "/etc/sysctl.d/10-ptrace.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "4add0d9ecbcc91e4018ed08e8dc66c69d4d9d142f9e31461178dcd7da0fd73c2"
+        },
+        {
+          "source": "/etc/sysctl.d/10-zeropage.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "5c745f62d086d9b9cf2ec23e4164f510cdba206c7aa6f11d2256f3f9be64c950"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "97c5b93ecd5329df5318b981bbf78117a8bbc1c3644603dc65d0226fc54a340a"
         }
       ]
     },

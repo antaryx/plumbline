@@ -1,0 +1,1 @@
+{ "description": "perf_event_paranoid written down at 2, which is upstream's own default since Linux 4.6 and the bar this check sets. Writing it down is the point: a default is not a decision, and a kernel rebuild or a boot parameter can lower it without anything on the host changing." }

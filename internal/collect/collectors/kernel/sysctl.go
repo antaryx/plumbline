@@ -312,7 +312,22 @@ func readConfiguration(ctx context.Context, s system.System, sc *fact.Sysctl) {
 // distribution's drop-ins are numbered.
 func configFileList(s system.System) []string {
 	var out []string
+	// /lib/sysctl.d and /usr/lib/sysctl.d are one directory on a usr-merged
+	// host, which is every current distribution. Listing it twice made the
+	// fact claim to have read each vendor file twice — visible on a live scan
+	// as four settings for kernel.sysrq where the host has two — and made
+	// every repeated key look like a candidate for a conflict. The duplicate is
+	// detected by inode rather than by guessing which layout this host uses,
+	// the way the unit collector does for drop-in directories.
+	seenDir := make(map[[2]uint64]bool, len(configDirs))
 	for _, dir := range configDirs {
+		if fi, err := s.Stat(dir); err == nil && fi.Ino != 0 {
+			key := [2]uint64{fi.Dev, fi.Ino}
+			if seenDir[key] {
+				continue
+			}
+			seenDir[key] = true
+		}
 		listing, err := s.ReadDir(dir, 0)
 		if err != nil {
 			continue

@@ -1,7 +1,7 @@
 {
   "bundle": "fedora-44-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 27,
+  "catalog_version": 28,
   "scan": {
     "started": "2026-08-25T21:31:49.097645827Z",
     "finished": "2026-08-25T21:31:49.817305111Z",
@@ -15,19 +15,19 @@
   "summary": {
     "counts": {
       "pass": 37,
-      "fail": 17,
+      "fail": 18,
       "not_applicable": 38,
       "skipped": 0,
       "unknown": 7,
-      "total": 99
+      "total": 100
     },
     "by_severity": {
       "HIGH": 8,
       "LOW": 2,
-      "MEDIUM": 7
+      "MEDIUM": 8
     },
-    "posture": 69.46564885496184,
-    "coverage": 88.52459016393442
+    "posture": 68.42105263157895,
+    "coverage": 88.70967741935483
   },
   "findings": [
     {
@@ -754,6 +754,28 @@
       "subject": "kernel.sysrq",
       "fingerprint": "7abbed450d12b6b32402a496c848344e",
       "detail": "kernel.sysrq is not set in any sysctl configuration file, so after the next reboot the magic SysRq key is whatever the kernel was built with — commonly 1, every function enabled, or a distribution's own default. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. No check in this catalog reads the running value, and the kernel command line can enable SysRq in a way no sysctl file records — sysrq_always_enabled in the bootloader configuration is not visible here.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0022",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "kernel.perf_event_paranoid",
+      "fingerprint": "934fdbecba0f171c09532067bfc95978",
+      "detail": "kernel.perf_event_paranoid is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream has defaulted to 2 since Linux 4.6, which is adequate — but a default is not a decision, and a kernel built with a lower value, or a boot parameter that lowers it, leaves unprivileged processes able to measure the kernel's own execution. The running kernel has it at 2, so this host is adequate now on its default and has not written that down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0013's subject, and a disagreement between the two is KERNEL-0007's.",
       "evidence": [
         {
           "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",

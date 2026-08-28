@@ -11,6 +11,55 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+### Fixed
+- **A parameter set twice in the same directory is resolved, not reported as a
+  conflict.** `ConfiguredConflict` flagged any repeat with differing values,
+  which produced `UNKNOWN` on hosts whose answer is perfectly determinable.
+
+  The two tools that apply these files disagree about one thing only: how they
+  order *directories*. Within a directory both sort by filename, and within a
+  file both take the later line — so two settings in one directory have an
+  answer both agree on. The reading is now: reduce each directory to the value
+  it ends on, and report a conflict only when two directories end on different
+  values.
+
+  This also disposes of the usr-merge duplicate without a special case. Where
+  `/lib` is a symlink to `/usr/lib` the same files are reached by two paths,
+  each path ends on the same value, and the two agree — so an old bundle
+  carrying the duplicate re-evaluates correctly too.
+
+  `/etc/sysctl.conf` counts as its own directory rather than as part of
+  `/etc/sysctl.d`. It is not a drop-in: procps applies it after every directory
+  and systemd merges it by filename, which is exactly the cross-directory case.
+
+  Found on a live Ubuntu 24.04 workstation, where
+  `/usr/lib/sysctl.d/50-default.conf` sets `kernel.sysrq = 0x01b6` and
+  `55-magic-sysrq.conf` sets `176`. `KERNEL-0021` reported `UNKNOWN`; it now
+  reports `176`, which is what the running kernel has. **It moved no verdict on
+  any golden bundle** — the corpus does not contain this shape and a live host
+  does.
+
+- **The sysctl collector no longer lists the same directory twice.**
+  `/lib/sysctl.d` and `/usr/lib/sysctl.d` are one directory on a usr-merged
+  host, and every vendor file was being read and recorded twice. Deduped by
+  inode, the way the unit collector already does for drop-in directories.
+
+### Added
+- **`KERNEL-0022` (perf event restriction persisted).** Catalog 28, 100 checks.
+  `MEDIUM`. Below `perf_event_paranoid = 2` an unprivileged process can measure
+  the kernel's own execution, which is a direct read of the layout KASLR
+  randomises, and the counter resolution has carried practical cache-timing
+  attacks against another process's cryptographic code. Neither needs a bug.
+
+  **2 is the bar, not 3.** 2 is upstream's own default since Linux 4.6; 3 is a
+  Debian and Ubuntu patch that does not exist elsewhere, so requiring it would
+  fail every RPM-family host for shipping a kernel that cannot have it. A host
+  running 3 is told it chose something rather than inherited it.
+
+  An unset parameter fails even where the running kernel reports 2, because a
+  default is not a decision: a kernel rebuild or a boot parameter can lower it
+  without anything on the host changing.
+
 ### Check corrections
 - **`KERNEL-0004` (running `kernel.dmesg_restrict`) re-rated from `LOW` to
   `HIGH`.** Catalog 27.
