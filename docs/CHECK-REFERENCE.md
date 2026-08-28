@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 26 · 97 checks · 11 modules**
+**Catalog version 27 · 99 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -2015,7 +2015,7 @@ sysctl kernel.yama.ptrace_scope
 | | |
 |---|---|
 | Module | `KERNEL` |
-| Base severity | LOW |
+| Base severity | HIGH |
 | Since | catalog 2 |
 | Reads | `kernel.sysctl` |
 | Tags | `kernel`, `information-disclosure` |
@@ -2859,6 +2859,150 @@ systemd-analyze cat-config sysctl.d
 **References**
 
 - [Linux kernel — dmesg\_restrict](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#dmesg-restrict)
+- [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
+
+---
+
+### KERNEL-0020 — Yama ptrace restriction is written to the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | HIGH |
+| Since | catalog 27 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `credential-access` |
+
+ptrace lets one process read and write another's memory. That
+is what a debugger is, and it is also what credential theft is: an attacker who
+lands as an ordinary user and finds a browser, an ssh-agent, a password manager
+or a running deployment script belonging to the same uid can read the secrets
+out of it without any privilege escalation at all, and can write instructions
+into it without dropping a file on disk.
+
+The Yama LSM gates that, and kernel.yama.ptrace_scope chooses how far:
+
+  - 0 — classic behaviour. Any process may trace any other with the same uid.
+  - 1 — a process may trace only its own descendants, unless the target has
+        opted in with PR_SET_PTRACER.
+  - 2 — only a process with CAP_SYS_PTRACE may trace anything.
+  - 3 — no process may trace another, ever, and the value cannot be lowered
+        without a reboot.
+
+**Anything above 0 passes**, because the right level depends on what the host
+runs and a system that chose 1 deliberately is not the problem this exists to
+find. 1 is enough to stop the sideways read that matters: a compromised
+process cannot reach into an unrelated one belonging to the same user, which
+is the whole of the credential-theft path above.
+
+This is a check about files. KERNEL-0003 asks what the running kernel does; a
+host hardened with sysctl -w and nothing on disk passes that and reverts at the
+next boot, and KERNEL-0007 does not see it because a parameter no file mentions
+has nothing to drift from.
+
+**A kernel without Yama is not a failure.** The parameter does not exist unless
+the LSM is built in and enabled, and asking a file to set a parameter the
+kernel does not implement would be asking for a line that does nothing.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write kernel.yama.ptrace\_scope = 1 to a file in /etc/sysctl.d/ and apply it.
+
+1. Check what already sets it: grep -rn ptrace\_scope /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Ubuntu ships 1 in a vendor file; most others ship nothing.
+2. Create or extend a drop-in containing kernel.yama.ptrace\_scope = 1. That is the level to start at: it stops a process reading an unrelated one owned by the same user, and leaves an ordinary debugger able to trace the children it started.
+3. Go to 2 only where no unprivileged debugging happens at all, and to 3 only where nothing debugs anything — 3 cannot be lowered again without a reboot, which is the point of it and also the reason to be sure.
+4. Apply without rebooting: sysctl --system, then confirm with sysctl kernel.yama.ptrace\_scope.
+5. Check what debugs what before rolling it out. gdb attaching to a running process, strace on something already started, and some crash reporters and profilers all use ptrace across the process tree. Under 1 the answer for a legitimate debugger is usually to start the target from it rather than attach, or PR\_SET\_PTRACER on the target.
+
+```sh
+sysctl kernel.yama.ptrace_scope
+grep -rn ptrace_scope /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+systemd-analyze cat-config sysctl.d
+```
+
+> **Caution.** Attaching a debugger or strace to an already-running process stops working for unprivileged users at 1 and for everyone without CAP\_SYS\_PTRACE at 2. Crash reporters and APM agents are the usual casualties. Level 3 cannot be undone without rebooting.
+
+**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-16`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — Yama ptrace\_scope](https://www.kernel.org/doc/html/latest/admin-guide/LSM/Yama.html)
+- [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
+
+---
+
+### KERNEL-0021 — The magic SysRq key is disabled in the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | MEDIUM |
+| Since | catalog 27 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `physical-access` |
+
+Magic SysRq is a direct line into the kernel from the console.
+It bypasses everything above it: no login, no permission check, no audit record,
+no userspace at all. That is what makes it valuable when a machine is wedged and
+what makes it a liability the rest of the time.
+
+kernel.sysrq is a bitmask, and the functions it can enable are not equivalent:
+
+  - 2   — change the console log level, which can silence kernel logging
+  - 4   — keyboard control, including turning off raw mode
+  - 8   — debugging dumps: registers, memory, every task's stack
+  - 16  — sync all filesystems
+  - 32  — remount everything read-only
+  - 64  — signal processes, including SIGKILL to every task
+  - 128 — reboot or power off immediately
+  - 256 — renice all real-time tasks
+
+0 disables the lot; 1 enables the lot. **The dangerous half is not the reboot.**
+It is 8, which dumps kernel memory and task state to the console and defeats
+address-space randomisation in one keystroke, and 2, which turns the logging
+level down far enough that what happens next is not recorded. 64 lets an
+attacker at the console kill the audit daemon before doing anything else.
+
+**This needs console access, which is why it is rated below the leak checks
+beside it.** But "console" includes a serial console on a management network, a
+hypervisor's virtual console, an IPMI or iDRAC session and a cloud provider's
+web terminal — none of which is the locked room the phrase suggests, and
+several of which are reachable by anyone who has the management credentials
+rather than the host's.
+
+A value that enables only harmless functions is a smaller finding than one that
+enables everything, and the verdict says which by decoding the mask rather than
+printing the number. A host with kernel.sysrq = 16 has thought about this and
+chosen to keep the emergency sync; a host with 1 has not.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write kernel.sysrq = 0 to a file in /etc/sysctl.d/ and apply it.
+
+1. Check what already sets it: grep -rn 'kernel.sysrq' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. systemd ships a default in /usr/lib/sysctl.d/50-default.conf, so a drop-in in /etc/sysctl.d is what overrides it.
+2. Create or extend a drop-in containing kernel.sysrq = 0.
+3. Decide first whether anyone actually uses it. On a physical machine with an operations team that recovers wedged hosts from a console, the sync and remount-read-only functions are genuinely valuable and the honest answer may be 16 or 48 rather than 0 — a narrow mask, chosen and written down, which this check reports at Low rather than as a plain failure.
+4. Never leave the debugging dumps enabled. Bit 8 prints registers, memory and every task's stack to the console, which defeats address-space randomisation for anyone who can read it.
+5. Apply without rebooting: sysctl --system, then confirm with sysctl kernel.sysrq.
+6. Remember the kernel command line can set it too: sysrq\_always\_enabled in the bootloader configuration overrides this and is not visible to a check that reads sysctl files.
+
+```sh
+sysctl kernel.sysrq
+grep -rn 'kernel.sysrq' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+systemd-analyze cat-config sysctl.d
+```
+
+> **Caution.** Disabling SysRq removes the last resort for recovering a machine whose userspace is gone. Where that matters — physical hosts with console access and an operations team who use it — a narrow mask is a better answer than 0, and better than leaving the default in place.
+
+**Controls** — `nist-800-53-r5 PE-3`, `nist-800-53-r5 AC-3`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — Magic SysRq key](https://www.kernel.org/doc/html/latest/admin-guide/sysrq.html)
 - [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
 
 ---

@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 26 · 97 checks · 11 modules**
+**Catalog version 27 · 99 checks · 11 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 
@@ -17,14 +17,14 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | `CONTAINERS` | 8 | 2 | 0 | 3 | 3 | 0 |
 | `CRON` | 5 | 0 | 2 | 2 | 1 | 0 |
 | `FILESYS` | 10 | 2 | 3 | 4 | 1 | 0 |
-| `KERNEL` | 19 | 0 | 4 | 13 | 2 | 0 |
+| `KERNEL` | 21 | 0 | 6 | 14 | 1 | 0 |
 | `LOGGING` | 5 | 0 | 0 | 4 | 1 | 0 |
 | `MEMORY` | 4 | 0 | 0 | 3 | 1 | 0 |
 | `NETWORK` | 3 | 0 | 2 | 1 | 0 | 0 |
 | `SERVICES` | 8 | 0 | 4 | 4 | 0 | 0 |
 | `SSHD` | 19 | 1 | 7 | 8 | 3 | 0 |
 | `USERS` | 10 | 2 | 4 | 2 | 2 | 0 |
-| **total** | **97** | 7 | 29 | 46 | 15 | 0 |
+| **total** | **99** | 7 | 31 | 47 | 14 | 0 |
 
 Severity is the check's **base** severity, before any context adjustment a finding may carry.
 
@@ -86,7 +86,7 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`KERNEL-0001`](CHECK-REFERENCE.md#kernel-0001--address-space-layout-randomisation-is-fully-enabled) Address-space layout randomisation is fully enabled | HIGH | `kernel.sysctl` |
 | [`KERNEL-0002`](CHECK-REFERENCE.md#kernel-0002--kernel-pointers-are-not-exposed-to-unprivileged-users) Kernel pointers are not exposed to unprivileged users | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0003`](CHECK-REFERENCE.md#kernel-0003--debugging-other-processes-with-ptrace-is-restricted) Debugging other processes with ptrace is restricted | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0004`](CHECK-REFERENCE.md#kernel-0004--the-kernel-ring-buffer-is-not-readable-by-unprivileged-users) The kernel ring buffer is not readable by unprivileged users | LOW | `kernel.sysctl` |
+| [`KERNEL-0004`](CHECK-REFERENCE.md#kernel-0004--the-kernel-ring-buffer-is-not-readable-by-unprivileged-users) The kernel ring buffer is not readable by unprivileged users | HIGH | `kernel.sysctl` |
 | [`KERNEL-0005`](CHECK-REFERENCE.md#kernel-0005--setuid-programs-do-not-write-core-dumps) Setuid programs do not write core dumps | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0006`](CHECK-REFERENCE.md#kernel-0006--unprivileged-users-cannot-load-bpf-programs) Unprivileged users cannot load BPF programs | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0007`](CHECK-REFERENCE.md#kernel-0007--the-running-kernel-parameters-match-the-configured-ones) The running kernel parameters match the configured ones | MEDIUM | `kernel.sysctl` |
@@ -102,6 +102,8 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`KERNEL-0017`](CHECK-REFERENCE.md#kernel-0017--bpf-hardening-is-written-to-the-sysctl-configuration) BPF hardening is written to the sysctl configuration | HIGH | `kernel.sysctl` |
 | [`KERNEL-0018`](CHECK-REFERENCE.md#kernel-0018--kernel-pointer-restriction-is-written-to-the-sysctl-configuration) Kernel pointer restriction is written to the sysctl configuration | HIGH | `kernel.sysctl` |
 | [`KERNEL-0019`](CHECK-REFERENCE.md#kernel-0019--kernel-ring-buffer-restriction-is-written-to-the-sysctl-configuration) Kernel ring buffer restriction is written to the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0020`](CHECK-REFERENCE.md#kernel-0020--yama-ptrace-restriction-is-written-to-the-sysctl-configuration) Yama ptrace restriction is written to the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0021`](CHECK-REFERENCE.md#kernel-0021--the-magic-sysrq-key-is-disabled-in-the-sysctl-configuration) The magic SysRq key is disabled in the sysctl configuration | MEDIUM | `kernel.sysctl` |
 
 ## LOGGING
 

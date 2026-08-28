@@ -1,5 +1,5 @@
 {
-  "description": "An unprivileged scan: the parameters exist and cannot be read, and one configuration file is unreadable too",
+  "description": "An unprivileged scan: the parameters exist and cannot be read, and one configuration file is unreadable too. Every parameter the module probes has an entry here, which is what makes the fixture assert what it claims \u2014 a parameter missing from the tree reads as a kernel that does not implement it, and a check would be excused as NOT_APPLICABLE rather than reporting that it was refused.",
   "euid": 1000,
   "unreadable": [
     "/etc/sysctl.d/60-hardening.conf",
@@ -13,6 +13,7 @@
     "/proc/sys/kernel/kptr_restrict",
     "/proc/sys/kernel/perf_event_paranoid",
     "/proc/sys/kernel/randomize_va_space",
+    "/proc/sys/kernel/sysrq",
     "/proc/sys/kernel/unprivileged_bpf_disabled",
     "/proc/sys/kernel/yama/ptrace_scope",
     "/proc/sys/net/ipv4/conf/all/accept_source_route",

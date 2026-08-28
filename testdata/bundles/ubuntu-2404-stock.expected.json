@@ -1,7 +1,7 @@
 {
   "bundle": "ubuntu-2404-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 26,
+  "catalog_version": 27,
   "scan": {
     "started": "2026-08-25T21:31:57.77690799Z",
     "finished": "2026-08-25T21:31:57.807262853Z",
@@ -14,20 +14,20 @@
   },
   "summary": {
     "counts": {
-      "pass": 39,
-      "fail": 15,
+      "pass": 40,
+      "fail": 16,
       "not_applicable": 37,
       "skipped": 0,
       "unknown": 6,
-      "total": 97
+      "total": 99
     },
     "by_severity": {
-      "HIGH": 5,
+      "HIGH": 6,
       "LOW": 4,
       "MEDIUM": 6
     },
-    "posture": 75.39682539682539,
-    "coverage": 90
+    "posture": 74.24242424242425,
+    "coverage": 90.32258064516128
   },
   "findings": [
     {
@@ -464,8 +464,8 @@
       "check_id": "KERNEL-0004",
       "module": "KERNEL",
       "result": "FAIL",
-      "severity": "LOW",
-      "base_severity": "LOW",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
       "subject": "kernel.dmesg_restrict",
       "fingerprint": "7b91daf5d698ef6802c1d7ca526b75f9",
       "detail": "kernel.dmesg_restrict is 0; any user may read the kernel ring buffer, which exposes kernel addresses and hardware detail useful for building an exploit.",
@@ -812,6 +812,42 @@
           "source": "/etc/sysctl.conf",
           "excerpt": "read, and does not set the parameter",
           "sha256": "97c5b93ecd5329df5318b981bbf78117a8bbc1c3644603dc65d0226fc54a340a"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0020",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "kernel.yama.ptrace_scope",
+      "fingerprint": "6ebd9339297294d9152bae0288b113d7",
+      "detail": "kernel.yama.ptrace_scope is 1 at /etc/sysctl.d/10-ptrace.conf:22, so a process may trace only its own descendants and one that opted in with PR_SET_PTRACER, and it stays that way across a reboot. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0003's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/etc/sysctl.d/10-ptrace.conf",
+          "line": 22,
+          "excerpt": "kernel.yama.ptrace_scope = 1",
+          "sha256": "4add0d9ecbcc91e4018ed08e8dc66c69d4d9d142f9e31461178dcd7da0fd73c2"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0021",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "LOW",
+      "base_severity": "MEDIUM",
+      "subject": "kernel.sysrq",
+      "fingerprint": "7abbed450d12b6b32402a496c848344e",
+      "detail": "kernel.sysrq is 176 at /etc/sysctl.d/10-magic-sysrq.conf:26, which enables syncing all filesystems, remounting all filesystems read-only, immediate reboot or power off. None of those hands an attacker at the console anything beyond the disruption itself, so this is a deliberate and narrow choice rather than the default — and 0 is still the value to reach for unless the emergency use is real. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. No check in this catalog reads the running value, and the kernel command line can enable SysRq in a way no sysctl file records — sysrq_always_enabled in the bootloader configuration is not visible here.",
+      "evidence": [
+        {
+          "source": "/etc/sysctl.d/10-magic-sysrq.conf",
+          "line": 26,
+          "excerpt": "kernel.sysrq = 176",
+          "sha256": "f9107778c619246fb2a5a7e2a05c9419951752238ede04c771173832dd296128"
         }
       ]
     },

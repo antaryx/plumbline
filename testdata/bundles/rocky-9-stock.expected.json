@@ -1,7 +1,7 @@
 {
   "bundle": "rocky-9-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 26,
+  "catalog_version": 27,
   "scan": {
     "started": "2026-08-25T21:31:51.893733451Z",
     "finished": "2026-08-25T21:31:52.46518356Z",
@@ -15,19 +15,19 @@
   "summary": {
     "counts": {
       "pass": 37,
-      "fail": 14,
+      "fail": 16,
       "not_applicable": 39,
       "skipped": 0,
       "unknown": 7,
-      "total": 97
+      "total": 99
     },
     "by_severity": {
-      "HIGH": 4,
-      "LOW": 3,
-      "MEDIUM": 7
+      "HIGH": 6,
+      "LOW": 2,
+      "MEDIUM": 8
     },
-    "posture": 75.83333333333333,
-    "coverage": 87.93103448275862
+    "posture": 71.65354330708661,
+    "coverage": 88.33333333333333
   },
   "findings": [
     {
@@ -472,8 +472,8 @@
       "check_id": "KERNEL-0004",
       "module": "KERNEL",
       "result": "FAIL",
-      "severity": "LOW",
-      "base_severity": "LOW",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
       "subject": "kernel.dmesg_restrict",
       "fingerprint": "7b91daf5d698ef6802c1d7ca526b75f9",
       "detail": "kernel.dmesg_restrict is 0; any user may read the kernel ring buffer, which exposes kernel addresses and hardware detail useful for building an exploit.",
@@ -742,6 +742,56 @@
       "subject": "kernel.dmesg_restrict",
       "fingerprint": "39a60fbad6749e88f527ee8f499c1ad0",
       "detail": "kernel.dmesg_restrict is not set in any sysctl configuration file, so after the next reboot the ring buffer is readable by whatever the kernel defaults to — 0 on most builds, meaning any local user can run dmesg and read stack traces, module addresses and the hardware inventory. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0004's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/usr/lib/sysctl.d/50-redhat.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/50-redhat.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0020",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "kernel.yama.ptrace_scope",
+      "fingerprint": "6ebd9339297294d9152bae0288b113d7",
+      "detail": "kernel.yama.ptrace_scope is 0 at /lib/sysctl.d/10-default-yama-scope.conf:34, which is the classic behaviour: any process may attach to any other owned by the same user and read or write its memory. An attacker who lands as an ordinary user reads the secrets out of a browser, an ssh-agent or a running deployment script without escalating at all, and writes into one without dropping a file on disk. Setting it to 1 stops that and still allows a debugger to trace its own children. The running kernel has it at 1, which does not match the file; see KERNEL-0007. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0003's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "line": 34,
+          "excerpt": "kernel.yama.ptrace_scope = 0",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0021",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "kernel.sysrq",
+      "fingerprint": "7abbed450d12b6b32402a496c848344e",
+      "detail": "kernel.sysrq is not set in any sysctl configuration file, so after the next reboot the magic SysRq key is whatever the kernel was built with — commonly 1, every function enabled, or a distribution's own default. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. No check in this catalog reads the running value, and the kernel command line can enable SysRq in a way no sysctl file records — sysrq_always_enabled in the bootloader configuration is not visible here.",
       "evidence": [
         {
           "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",

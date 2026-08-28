@@ -1,7 +1,7 @@
 {
   "bundle": "debian-13-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 26,
+  "catalog_version": 27,
   "scan": {
     "started": "2026-08-25T21:31:46.550601813Z",
     "finished": "2026-08-25T21:31:46.799731954Z",
@@ -16,17 +16,17 @@
     "counts": {
       "pass": 37,
       "fail": 13,
-      "not_applicable": 41,
+      "not_applicable": 43,
       "skipped": 0,
       "unknown": 6,
-      "total": 97
+      "total": 99
     },
     "by_severity": {
-      "HIGH": 3,
-      "LOW": 4,
+      "HIGH": 4,
+      "LOW": 3,
       "MEDIUM": 6
     },
-    "posture": 78.44827586206897,
+    "posture": 77.11864406779661,
     "coverage": 89.28571428571429
   },
   "findings": [
@@ -456,8 +456,8 @@
       "check_id": "KERNEL-0004",
       "module": "KERNEL",
       "result": "FAIL",
-      "severity": "LOW",
-      "base_severity": "LOW",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
       "subject": "kernel.dmesg_restrict",
       "fingerprint": "7b91daf5d698ef6802c1d7ca526b75f9",
       "detail": "kernel.dmesg_restrict is 0; any user may read the kernel ring buffer, which exposes kernel addresses and hardware detail useful for building an exploit.",
@@ -671,6 +671,24 @@
       "base_severity": "HIGH",
       "fingerprint": "92d5778ef124bf54675de95435387169",
       "detail": "No sysctl configuration file exists on this host: neither /etc/sysctl.conf nor any .conf file in the sysctl.d directories. There is no persistent kernel configuration to report on, and what the running kernel currently does is the business of the check that reads /proc/sys. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0004's subject, and a disagreement between the two is KERNEL-0007's."
+    },
+    {
+      "check_id": "KERNEL-0020",
+      "module": "KERNEL",
+      "result": "NOT_APPLICABLE",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "fingerprint": "1af332e087f33b9f110ea49b894c8dac",
+      "detail": "No sysctl configuration file exists on this host: neither /etc/sysctl.conf nor any .conf file in the sysctl.d directories. There is no persistent kernel configuration to report on, and what the running kernel currently does is the business of the check that reads /proc/sys. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0003's subject, and a disagreement between the two is KERNEL-0007's."
+    },
+    {
+      "check_id": "KERNEL-0021",
+      "module": "KERNEL",
+      "result": "NOT_APPLICABLE",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "8034a567348947d1e8640bdb7fe98f9e",
+      "detail": "No sysctl configuration file exists on this host: neither /etc/sysctl.conf nor any .conf file in the sysctl.d directories. There is no persistent kernel configuration to report on, and what the running kernel currently does is the business of the check that reads /proc/sys. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. No check in this catalog reads the running value, and the kernel command line can enable SysRq in a way no sysctl file records — sysrq_always_enabled in the bootloader configuration is not visible here."
     },
     {
       "check_id": "LOGGING-0001",

@@ -64,6 +64,11 @@ var probedKeys = []string{
 	"kernel.kptr_restrict",
 	"kernel.perf_event_paranoid",
 	"kernel.randomize_va_space",
+	// kernel.sysrq is a bitmask rather than a boolean, and the mask is the
+	// point: 0 disables the magic key entirely, 1 enables every function, and
+	// anything between enables a named subset. KERNEL-0021 decodes it, which
+	// is why the value is recorded as written rather than normalised.
+	"kernel.sysrq",
 	"kernel.unprivileged_bpf_disabled",
 	"kernel.yama.ptrace_scope",
 	// net.core.bpf_jit_harden is the other half of the BPF story. It is not

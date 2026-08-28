@@ -11,6 +11,67 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+### Check corrections
+- **`KERNEL-0004` (running `kernel.dmesg_restrict`) re-rated from `LOW` to
+  `HIGH`.** Catalog 27.
+
+  *Old behaviour:* an unrestricted kernel ring buffer was reported at `LOW`.
+  *New behaviour:* the same finding, at `HIGH`. The verdict logic is unchanged —
+  no host passes or fails that did not before.
+
+  *Who is affected:* every user whose hosts fail it, which on this corpus is all
+  six golden bundles. Posture scores fall by roughly one to three points where
+  the check fails. A suppression written against `KERNEL-0004` still matches;
+  a `--fail-on` threshold between `LOW` and `HIGH` will now trip on it.
+
+  *Why:* the old rating read the ring buffer as verbose logging that happens to
+  be untidy. What it holds is kernel and module load addresses, and on a host
+  where `kptr_restrict` is 0 — which is most of them — an unprivileged `dmesg`
+  defeats KASLR outright, with no privilege and no trace. The mismatch surfaced
+  when `KERNEL-0019` was written to check the same parameter's *persistence* and
+  rated `HIGH`: a configuration check outranking the runtime check it persists
+  by two bands says a file matters more than the kernel, which is backwards. One
+  of the two had to move and this was the miscalibrated one.
+
+### Added
+- **`KERNEL-0020` (Yama ptrace scope persisted).** Catalog 27, 99 checks.
+  `HIGH`. ptrace is how a process reads another's memory, and an attacker who
+  lands as an ordinary user reads the secrets out of a browser, an ssh-agent or
+  a running deployment script belonging to the same uid without escalating at
+  all. **Anything above 0 passes**: the right level depends on what the host
+  runs, and 1 already stops the sideways read that matters. A kernel without
+  Yama is `NOT_APPLICABLE`, not a failure.
+
+- **`KERNEL-0021` (magic SysRq disabled in configuration).** `MEDIUM`. It needs
+  console access — which includes a serial line on a management network, a
+  hypervisor console and a cloud provider's web terminal, none of them the
+  locked room the phrase suggests.
+
+  **The mask is decoded rather than printed, and the severity follows the bits
+  rather than the number.** A value enabling only sync, remount-read-only and
+  reboot is reported at `LOW` as a deliberate narrow choice; one that adds the
+  debugging dumps (which print kernel memory to the console), the log-level
+  control (which can silence logging) or process signalling (which can kill
+  auditd) stays at `MEDIUM`. On the corpus this is the only thing separating
+  Ubuntu, which ships `kernel.sysrq = 176`, from Alpine and Fedora, which ship
+  nothing.
+
+### Fixed
+- **`kernel.sysrq` is parsed the way the kernel parses it — base 0, not base
+  10.** systemd ships `kernel.sysrq = 0x01b6` in
+  `/usr/lib/sysctl.d/50-default.conf`, and a decimal-only parse reported that
+  real and common value as "not a number". Found by running the finished check
+  against a live host rather than against the fixture corpus.
+
+### Changed
+- **`kernel.sysrq` is now probed** by the kernel collector; it had no coverage
+  at all.
+- **Golden posture fell on all six bundles**, by 1 to 4 points, from the two new
+  checks and the `KERNEL-0004` re-rating together. **`KERNEL-0020` passes on
+  both Ubuntu bundles** — the first check in this persistence group to pass
+  anywhere — which is what establishes that the group's uniform failures
+  elsewhere are a fact about distributions rather than a bar set too high.
+
 ### Added
 - **`KERNEL-0018` (kernel pointer restriction persisted) and `KERNEL-0019`
   (ring buffer restriction persisted).** Catalog 26, 97 checks. Both `HIGH`.

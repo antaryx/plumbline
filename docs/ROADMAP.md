@@ -761,14 +761,39 @@ Fedora persist nothing. The severity tier — 1 at `MEDIUM`, unset at `HIGH` —
 the only thing distinguishing those two situations, and it earned itself on the
 corpus rather than in a fixture.
 
+`KERNEL-0020` and `-0021` finished the group and answered the question the two
+before them raised. **-0020 passes on both Ubuntu bundles and nowhere else**,
+which is what establishes that the group's uniform failures are a fact about
+distributions rather than a bar set too high — a check that can pass, and does,
+on a real recorded host is a different object from one that has never passed
+anything.
+
+**Decoding beats printing, and the corpus proved it.** `kernel.sysrq = 176` is a
+number an operator has to look up; "syncing all filesystems, remounting all
+filesystems read-only, immediate reboot or power off" is a finding they can act
+on — and the decode is what makes the severity tier possible at all, since it
+turns on which bits are set rather than on how large the number is. Ubuntu ships
+exactly that value, so the tier separates a deliberate narrow choice from a
+default on real data rather than in a fixture.
+
+**Run the finished check against a live host before calling it done.**
+`KERNEL-0021` parsed the mask with base 10, and systemd ships
+`kernel.sysrq = 0x01b6`. Every fixture passed; the live scan reported UNKNOWN
+"not a number" on a real and common value. The kernel parses with base 0 and now
+so does this. Nothing in the fixture corpus would have caught it, because the
+fixtures were written by the same person who wrote the parser.
+
 **A check that fails every host is a judgement to revisit, not a bug to fix.**
 It is defensible while the finding is true and the remedy is three lines in a
 drop-in. It stops being defensible if the catalog accumulates several of them,
 because a report where everything is red is a report nobody reads. That is a
 severity-review question for the catalog as a whole rather than something to
-settle by softening one true finding, and `KERNEL-0019` carries a related
-open question in its source: it sits two bands above `KERNEL-0004`, which rates
-the *running* parameter `Low`, and one of the two is miscalibrated.
+settle by softening one true finding, and That question about `KERNEL-0019` and
+`KERNEL-0004` is closed: the older check was the miscalibrated one and was
+re-rated from `Low` to `High` at catalog 27, with a `### Check corrections`
+entry. **A severity mismatch between a runtime check and the persistence check
+beside it is a useful smell**, and it only became visible because the two were
+written a work package apart by someone looking at both.
 
 Re-recording that one bundle also cleared the six `UNKNOWN` the previous four
 work packages had accumulated on it, and dropped its posture from 96.77 to

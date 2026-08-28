@@ -123,6 +123,29 @@ type pin struct {
 // keep their six UNKNOWN and the debt is now visible as a contrast within the
 // corpus rather than as a number in a comment.
 //
+// **KERNEL-0020 passes on both Ubuntu bundles and nowhere else**, which is the
+// first time a check in this persistence group has passed anything. Ubuntu
+// ships kernel.yama.ptrace_scope = 1 in a vendor file; Alpine, Fedora and Rocky
+// ship nothing. That contrast is worth more than either verdict on its own: it
+// establishes that the group's uniform failures elsewhere are a fact about
+// distributions rather than a bar set too high.
+//
+// **KERNEL-0021's bitmask tier validated itself on real data.** Ubuntu ships
+// kernel.sysrq = 176 in /etc/sysctl.d/10-magic-sysrq.conf, which decodes to
+// sync, remount read-only and reboot — disruptive, disclosing nothing — so it
+// is reported at Low. Alpine, Fedora and Rocky have no value and sit at Medium.
+// A check that printed "kernel.sysrq is 176" and failed all four the same way
+// would have lost the only distinction an operator can act on.
+//
+// **KERNEL-0004 was re-rated from Low to High at catalog 27** and now fails all
+// six bundles at High where it failed them at Low. The old rating read the ring
+// buffer as untidy logging; what it holds is kernel and module load addresses,
+// and on a host with kptr_restrict at 0 an unprivileged dmesg defeats KASLR
+// outright. The mismatch surfaced because KERNEL-0019 checks the same
+// parameter's persistence at High, and a configuration check outranking the
+// runtime check it persists by two bands says a file matters more than the
+// kernel.
+//
 // **KERNEL-0018 and -0019 fail every bundle in the corpus, and that is the
 // finding rather than a calibration problem.** No mainstream distribution
 // persists either parameter. Ubuntu and Rocky ship kernel.kptr_restrict = 1 in
@@ -198,8 +221,8 @@ var pinned = map[string]pin{
 	// syslog daemon, and a check that declines to judge an absent subject is
 	// the behaviour, not a gap.
 	"ubuntu-2404-stock": {
-		catalog: 26, pass: 39, fail: 15, notApplicable: 37, unknown: 6, skipped: 0,
-		posture: 75.39682539682539, coverage: 90,
+		catalog: 27, pass: 40, fail: 16, notApplicable: 37, unknown: 6, skipped: 0,
+		posture: 74.24242424242425, coverage: 90.32258064516128,
 		why: "the unhardened baseline every other number is measured against",
 	},
 
@@ -207,8 +230,8 @@ var pinned = map[string]pin{
 	// check cares about. One PASS and one NOT_APPLICABLE separate them here,
 	// and which ones is the interesting part of any diff on this pair.
 	"debian-13-stock": {
-		catalog: 26, pass: 37, fail: 13, notApplicable: 41, unknown: 6, skipped: 0,
-		posture: 78.44827586206897, coverage: 89.28571428571429,
+		catalog: 27, pass: 37, fail: 13, notApplicable: 43, unknown: 6, skipped: 0,
+		posture: 77.11864406779661, coverage: 89.28571428571429,
 		why: "Debian's defaults, which are not Ubuntu's",
 	},
 
@@ -216,8 +239,8 @@ var pinned = map[string]pin{
 	// is the bundle that catches a check quietly assuming a Debian-shaped /etc
 	// and reporting a verdict about a file that was never there.
 	"alpine-320-stock": {
-		catalog: 26, pass: 30, fail: 11, notApplicable: 50, unknown: 6, skipped: 0,
-		posture: 76.28865979381443, coverage: 87.2340425531915,
+		catalog: 27, pass: 30, fail: 13, notApplicable: 50, unknown: 6, skipped: 0,
+		posture: 71.15384615384616, coverage: 87.75510204081633,
 		why: "the distribution least like the others, where guessing shows up",
 	},
 
@@ -229,8 +252,8 @@ var pinned = map[string]pin{
 	// binary, not of any file on the host. AUTH-0002 says it does not know.
 	// Every other scanner reports the documented default and calls it a PASS.
 	"fedora-44-stock": {
-		catalog: 26, pass: 37, fail: 15, notApplicable: 38, unknown: 7, skipped: 0,
-		posture: 73.38709677419355, coverage: 88.13559322033898,
+		catalog: 27, pass: 37, fail: 17, notApplicable: 38, unknown: 7, skipped: 0,
+		posture: 69.46564885496184, coverage: 88.52459016393442,
 		why: "the RPM family's leading edge, where authselect owns the PAM stack",
 	},
 
@@ -238,8 +261,8 @@ var pinned = map[string]pin{
 	// point of it. One FAIL and one NOT_APPLICABLE separate the two, and which
 	// ones is the interesting part of any diff on this pair.
 	"rocky-9-stock": {
-		catalog: 26, pass: 37, fail: 14, notApplicable: 39, unknown: 7, skipped: 0,
-		posture: 75.83333333333333, coverage: 87.93103448275862,
+		catalog: 27, pass: 37, fail: 16, notApplicable: 39, unknown: 7, skipped: 0,
+		posture: 71.65354330708661, coverage: 88.33333333333333,
 		why: "the enterprise RPM baseline most real audits run against",
 	},
 
@@ -259,7 +282,7 @@ var pinned = map[string]pin{
 	// configuration. Covering CONTAINERS against a real daemon needs a recipe
 	// that installs one, which is a work package of its own.
 	//
-	// The 9 FAIL are four a container cannot fix — /tmp and /home are not
+	// The 10 FAIL are four a container cannot fix — /tmp and /home are not
 	// separate mounts, and /proc/sys is read-only so dmesg_restrict and the
 	// core pattern cannot be set — and three that are real findings about a
 	// real image, which appeared the moment the UNKNOWNs cleared:
@@ -269,17 +292,18 @@ var pinned = map[string]pin{
 	// 2 and no file on the image sets it, and KERNEL-0018 and -0019 because
 	// Ubuntu persists kptr_restrict at 1 and dmesg_restrict not at all. All
 	// five are reproducible on any Ubuntu 24.04 host and none is an artifact
-	// of the recipe.
+	// of the recipe. KERNEL-0004 joins them at catalog 27, failing at High
+	// where it used to fail at Low.
 	//
 	// A posture that has fallen from 96.77 to 90.20 across two work packages on
 	// a bundle named "hardened" is the corpus doing its job: every point of it
 	// is a real finding that had been hidden behind an UNKNOWN or had no check
-	// to catch it. All seventeen non-passing verdicts are correct,
+	// to catch it. All eighteen non-passing verdicts are correct,
 	// and a run in which any of them became a PASS would be a serious
 	// regression rather than an improvement.
 	"ubuntu-2404-hardened": {
-		catalog: 26, pass: 80, fail: 9, notApplicable: 8, unknown: 0, skipped: 0,
-		posture: 90.19607843137256, coverage: 100,
+		catalog: 27, pass: 81, fail: 10, notApplicable: 8, unknown: 0, skipped: 0,
+		posture: 89.04761904761904, coverage: 100,
 		why: "the only bundle on which every check in the catalog evaluates",
 	},
 }

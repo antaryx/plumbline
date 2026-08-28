@@ -26,7 +26,7 @@ import (
 // (WP-21); 10 adds NETWORK and AUTH, completing the v0.2 catalog (WP-22,
 // WP-23); 11 adds FILESYS and wires the shared walker into the scan (WP-24),
 // completing the v0.2.0 catalog.
-const Version = 26
+const Version = 27
 
 // Outcome is what a check's Eval returns. The runner converts it into a
 // finding, filling in identity and fingerprint so a check cannot get those

@@ -1,0 +1,1 @@
+{ "description": "Both persisted at the values the remediations recommend: ptrace_scope at 1, which stops a process reading an unrelated one owned by the same user while still letting a debugger trace its own children, and sysrq at 0. The running kernel agrees with the file, so KERNEL-0007 is quiet." }

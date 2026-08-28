@@ -1,0 +1,1 @@
+{ "description": "A SysRq mask written in hexadecimal, which is how systemd ships it: /usr/lib/sysctl.d/50-default.conf contains kernel.sysrq = 0x01b6. The kernel parses these with base 0, so hex and octal are both accepted, and a check that read only decimal would report a real and common value as \"not a number\". Found on a live Ubuntu host rather than reasoned about." }

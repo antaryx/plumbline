@@ -1,7 +1,7 @@
 {
   "bundle": "alpine-320-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 26,
+  "catalog_version": 27,
   "scan": {
     "started": "2026-08-25T21:31:44.169375564Z",
     "finished": "2026-08-25T21:31:44.201476282Z",
@@ -15,19 +15,19 @@
   "summary": {
     "counts": {
       "pass": 30,
-      "fail": 11,
+      "fail": 13,
       "not_applicable": 50,
       "skipped": 0,
       "unknown": 6,
-      "total": 97
+      "total": 99
     },
     "by_severity": {
-      "HIGH": 4,
-      "LOW": 3,
-      "MEDIUM": 4
+      "HIGH": 6,
+      "LOW": 2,
+      "MEDIUM": 5
     },
-    "posture": 76.28865979381443,
-    "coverage": 87.2340425531915
+    "posture": 71.15384615384616,
+    "coverage": 87.75510204081633
   },
   "findings": [
     {
@@ -377,8 +377,8 @@
       "check_id": "KERNEL-0004",
       "module": "KERNEL",
       "result": "FAIL",
-      "severity": "LOW",
-      "base_severity": "LOW",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
       "subject": "kernel.dmesg_restrict",
       "fingerprint": "7b91daf5d698ef6802c1d7ca526b75f9",
       "detail": "kernel.dmesg_restrict is 0; any user may read the kernel ring buffer, which exposes kernel addresses and hardware detail useful for building an exploit.",
@@ -647,6 +647,50 @@
       "subject": "kernel.dmesg_restrict",
       "fingerprint": "39a60fbad6749e88f527ee8f499c1ad0",
       "detail": "kernel.dmesg_restrict is not set in any sysctl configuration file, so after the next reboot the ring buffer is readable by whatever the kernel defaults to — 0 on most builds, meaning any local user can run dmesg and read stack traces, module addresses and the hardware inventory. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0004's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/00-alpine.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "8bba47da45bc8715c69ac904a60410eabffaa7bbbef640f9c1368ab9c48493d0"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0020",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "kernel.yama.ptrace_scope",
+      "fingerprint": "6ebd9339297294d9152bae0288b113d7",
+      "detail": "kernel.yama.ptrace_scope is not set in any sysctl configuration file, so after the next reboot ptrace scope is whatever the kernel defaults to — 0 on most builds, meaning any process may read and write the memory of any other process owned by the same user. The running kernel has it at 1, so this host is protected now and will not be after the next reboot unless something sets it again outside these files. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0003's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/00-alpine.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "8bba47da45bc8715c69ac904a60410eabffaa7bbbef640f9c1368ab9c48493d0"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0021",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "kernel.sysrq",
+      "fingerprint": "7abbed450d12b6b32402a496c848344e",
+      "detail": "kernel.sysrq is not set in any sysctl configuration file, so after the next reboot the magic SysRq key is whatever the kernel was built with — commonly 1, every function enabled, or a distribution's own default. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. No check in this catalog reads the running value, and the kernel command line can enable SysRq in a way no sysctl file records — sysrq_always_enabled in the bootloader configuration is not visible here.",
       "evidence": [
         {
           "source": "/lib/sysctl.d/00-alpine.conf",

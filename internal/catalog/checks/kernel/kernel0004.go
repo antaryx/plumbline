@@ -21,7 +21,21 @@ defeating address-space randomisation.
 
 kernel.dmesg_restrict set to 1 requires CAP_SYSLOG to read the ring buffer.`,
 
-	BaseSeverity: finding.Low,
+	// **Re-rated from Low to High at catalog 27**, and the old rating was the
+	// mistake rather than this one being an inflation. The reasoning that
+	// produced Low read the ring buffer as verbose logging that happens to be
+	// untidy; what it actually holds is kernel and module load addresses, and
+	// on a host where kptr_restrict is 0 — which is most of them, see
+	// KERNEL-0018 — an unprivileged `dmesg` defeats KASLR outright. That is
+	// not a step towards an attack, it is the step, and it needs no privilege
+	// and leaves no trace.
+	//
+	// The mismatch surfaced when KERNEL-0019 was written to check the same
+	// parameter's *persistence* and rated High: a configuration check
+	// outranking the runtime check it persists by two bands says a file
+	// matters more than the kernel, which is backwards. One of the two had to
+	// move and it was this one.
+	BaseSeverity: finding.High,
 	Tags:         []string{"kernel", "information-disclosure"},
 	Requires:     []fact.ID{fact.SysctlID},
 	SinceCatalog: 2,

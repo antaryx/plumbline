@@ -36,7 +36,7 @@ var all = []catalog.Check{
 	checks.Check0014,
 	checks.Check0015,
 	checks.Check0016, checks.Check0017,
-	checks.Check0018, checks.Check0019,
+	checks.Check0018, checks.Check0019, checks.Check0020, checks.Check0021,
 }
 
 // collectFixture runs the real collector against a fixture tree.
@@ -543,9 +543,9 @@ func TestCheckIdentityIsWellFormed(t *testing.T) {
 		// bulk-updated to the current version — which is what this assertion
 		// is guarding, and why it names the versions rather than accepting any.
 		switch check.SinceCatalog {
-		case 2, 3, 25, 26:
+		case 2, 3, 25, 26, 27:
 		default:
-			t.Errorf("%s declares SinceCatalog %d, want 2, 3, 25 or 26", check.ID, check.SinceCatalog)
+			t.Errorf("%s declares SinceCatalog %d, want 2, 3, 25, 26 or 27", check.ID, check.SinceCatalog)
 		}
 		if check.SinceCatalog > catalog.Version {
 			t.Errorf("%s declares SinceCatalog %d, which is ahead of catalog.Version %d",
@@ -953,5 +953,206 @@ func TestThePersistenceChecksShareTheirGate(t *testing.T) {
 				t.Errorf("%s over %s does not say it read the files: %s", check.ID, fixture, v.Detail)
 			}
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// KERNEL-0020 and -0021
+// ---------------------------------------------------------------------------
+
+func TestKernel0020PtraceScopePersisted(t *testing.T) {
+	run(t, checks.Check0020, []tc{
+		{fixture: "kernel-trace-restricted", result: finding.Pass,
+			detailContains: "only its own descendants"},
+
+		// Anything above 0 passes, and the verdict says what that level
+		// restricts rather than repeating the number.
+		{fixture: "kernel-trace-adminonly", result: finding.Pass,
+			detailContains: "CAP_SYS_PTRACE"},
+
+		// Written down and wide open.
+		{fixture: "kernel-trace-open", result: finding.Fail, severity: finding.High,
+			detailContains: "classic behaviour"},
+
+		// Written nowhere, and hardened at runtime — the trap.
+		{fixture: "kernel-trace-unset", result: finding.Fail, severity: finding.High,
+			detailContains: "will not be after the next reboot"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+func TestKernel0021SysrqPersisted(t *testing.T) {
+	run(t, checks.Check0021, []tc{
+		{fixture: "kernel-trace-restricted", result: finding.Pass,
+			detailContains: "SysRq key is disabled"},
+
+		// 1 is every function, and the verdict says so rather than printing 1.
+		{fixture: "kernel-trace-open", result: finding.Fail, severity: finding.Medium,
+			detailContains: "every SysRq function"},
+
+		// A narrow, deliberate mask: still a failure, one band down.
+		{fixture: "kernel-sysrq-narrow", result: finding.Fail, severity: finding.Low,
+			detailContains: "syncing all filesystems"},
+
+		// The same shape of mask with the dumps added stays at Medium.
+		{fixture: "kernel-sysrq-dumps", result: finding.Fail, severity: finding.Medium,
+			detailContains: "debugging dumps"},
+
+		{fixture: "kernel-trace-unset", result: finding.Fail, severity: finding.Medium,
+			detailContains: "not set in any sysctl configuration file"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+// TestTheSysrqMaskIsDecodedRatherThanPrinted.
+//
+// "kernel.sysrq is 176" is a number an operator has to go and look up.
+// "176 enables syncing all filesystems, remounting all filesystems read-only,
+// immediate reboot or power off" is a finding they can act on — and the
+// decoding is what makes the severity tier possible at all, since it turns on
+// which bits are set rather than on how large the number is.
+func TestTheSysrqMaskIsDecodedRatherThanPrinted(t *testing.T) {
+	narrow := evalFixture(t, checks.Check0021, "kernel-sysrq-narrow")
+	dumps := evalFixture(t, checks.Check0021, "kernel-sysrq-dumps")
+
+	for _, want := range []string{"syncing all filesystems", "remounting all filesystems read-only"} {
+		if !strings.Contains(narrow.Detail, want) {
+			t.Errorf("48 is not decoded: %s", narrow.Detail)
+		}
+		if !strings.Contains(dumps.Detail, want) {
+			t.Errorf("184 is not decoded: %s", dumps.Detail)
+		}
+	}
+	// The bit that separates them.
+	if strings.Contains(narrow.Detail, "debugging dumps") {
+		t.Errorf("48 was described as enabling the dumps: %s", narrow.Detail)
+	}
+	if !strings.Contains(dumps.Detail, "debugging dumps") {
+		t.Errorf("184 does not mention the dumps: %s", dumps.Detail)
+	}
+	// And the consequence, which is the whole reason for decoding.
+	if narrow.Severity != finding.Low || dumps.Severity != finding.Medium {
+		t.Errorf("the tier does not follow the bits: 48=%s 184=%s", narrow.Severity, dumps.Severity)
+	}
+	if !strings.Contains(dumps.Detail, "defeat address-space randomisation") {
+		t.Errorf("the dangerous bit is not explained: %s", dumps.Detail)
+	}
+}
+
+// TestANarrowMaskIsNotTheSameFindingAsTheDefault. 48 is a host that considered
+// SysRq and kept the two functions its operations team uses; 1 is a host that
+// did not consider it. Both fail, one band apart, and the finding says which.
+func TestANarrowMaskIsNotTheSameFindingAsTheDefault(t *testing.T) {
+	narrow := evalFixture(t, checks.Check0021, "kernel-sysrq-narrow")
+	everything := evalFixture(t, checks.Check0021, "kernel-trace-open")
+
+	if narrow.Result != finding.Fail || everything.Result != finding.Fail {
+		t.Fatalf("expected both to fail: %s / %s", narrow.Result, everything.Result)
+	}
+	if narrow.Severity != finding.Low {
+		t.Errorf("a narrow mask rated %s, want LOW", narrow.Severity)
+	}
+	if everything.Severity != finding.Medium {
+		t.Errorf("every function enabled rated %s, want MEDIUM", everything.Severity)
+	}
+	if !strings.Contains(narrow.Detail, "deliberate and narrow choice") {
+		t.Errorf("the narrow mask is not credited: %s", narrow.Detail)
+	}
+}
+
+// TestTheSysrqCheckNamesItsBlindSpot. Nothing in this catalog reads the running
+// kernel.sysrq, and the kernel command line can enable SysRq in a way no sysctl
+// file records. A caveat pointing at a runtime check that does not exist would
+// be worse than no caveat.
+func TestTheSysrqCheckNamesItsBlindSpot(t *testing.T) {
+	got := evalFixture(t, checks.Check0021, "kernel-trace-restricted")
+
+	if !strings.Contains(got.Detail, "sysrq_always_enabled") {
+		t.Errorf("the bootloader override is not named: %s", got.Detail)
+	}
+	if !strings.Contains(got.Detail, "No check in this catalog reads the running value") {
+		t.Errorf("the verdict implies a runtime counterpart that does not exist: %s", got.Detail)
+	}
+}
+
+// TestKernel0004IsRatedWithTheLeakItEnables is the re-rating, asserted rather
+// than left to a changelog entry.
+//
+// An open ring buffer on a host with kptr_restrict at 0 is a KASLR defeat that
+// needs no privilege and leaves no trace. Rating that Low while KERNEL-0019
+// rates the same parameter's *persistence* High said a file matters more than
+// the kernel, which is backwards.
+func TestKernel0004IsRatedWithTheLeakItEnables(t *testing.T) {
+	if checks.Check0004.BaseSeverity != finding.High {
+		t.Errorf("KERNEL-0004 is %s, want HIGH", checks.Check0004.BaseSeverity)
+	}
+	// A persistence check may outrank the runtime check it persists by at most
+	// one band — the "scheduled to fall down" argument — and these two now read
+	// the same parameter at the same severity.
+	if checks.Check0019.BaseSeverity != checks.Check0004.BaseSeverity {
+		t.Errorf("KERNEL-0004 (%s) and KERNEL-0019 (%s) rate the same parameter differently",
+			checks.Check0004.BaseSeverity, checks.Check0019.BaseSeverity)
+	}
+}
+
+// TestTheSysrqMaskIsParsedTheWayTheKernelParsesIt.
+//
+// The kernel's proc_get_long uses simple_strtoul with base 0, and systemd ships
+// `kernel.sysrq = 0x01b6` in /usr/lib/sysctl.d/50-default.conf. A decimal-only
+// parse reports that real and common value as "not a number" and resolves the
+// check to UNKNOWN on a host that has, in fact, configured it.
+//
+// This was found by running the finished check against a live host rather than
+// by reading the fixture corpus, which is the argument for doing that on every
+// work package.
+func TestTheSysrqMaskIsParsedTheWayTheKernelParsesIt(t *testing.T) {
+	got := evalFixture(t, checks.Check0021, "kernel-sysrq-hex")
+	if got.Result != finding.Pass {
+		t.Fatalf("0x0 = %s, want PASS: the kernel reads it as zero\n  %s", got.Result, got.Detail)
+	}
+
+	// And the decoding of a non-zero hex mask, through a hand-built fact so the
+	// assertion names the value rather than depending on a fixture's contents.
+	sc := fact.Sysctl{
+		Running:    map[string]fact.SysctlRunning{},
+		Configured: map[string][]fact.SysctlSetting{},
+		Digests:    map[string]string{},
+		Files:      []string{"/usr/lib/sysctl.d/50-default.conf"},
+	}
+	sc.Running["kernel.sysrq"] = fact.SysctlRunning{
+		Key: "kernel.sysrq", State: fact.SysctlObserved, Value: "438",
+	}
+	sc.Configured["kernel.sysrq"] = []fact.SysctlSetting{{
+		Key: "kernel.sysrq", Value: "0x01b6",
+		File: "/usr/lib/sysctl.d/50-default.conf", Line: 19,
+	}}
+	fs := fact.NewSet()
+	fs.Put(sc)
+
+	out := catalog.MustNew(checks.Check0021).Evaluate(fs)
+	if len(out) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(out))
+	}
+	if out[0].Result != finding.Fail {
+		t.Fatalf("0x01b6 = %s, want FAIL: %s", out[0].Result, out[0].Detail)
+	}
+	// 0x1b6 is 438 = 2+4+16+32+128+256, which includes the log-level control
+	// and the keyboard control — so Medium, not the Low a benign mask gets.
+	if out[0].Severity != finding.Medium {
+		t.Errorf("0x01b6 rated %s, want MEDIUM: it enables log-level and keyboard control", out[0].Severity)
+	}
+	if !strings.Contains(out[0].Detail, "changing the console log level") {
+		t.Errorf("the hex mask was not decoded: %s", out[0].Detail)
+	}
+	if strings.Contains(out[0].Detail, "not a number") {
+		t.Errorf("a hex value was reported as unparseable: %s", out[0].Detail)
 	}
 }

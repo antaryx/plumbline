@@ -1,0 +1,1 @@
+{ "description": "Both parameters written down at their most permissive values: any process may read another's memory, and every SysRq function is reachable from the console. Written rather than absent, so this is a decision somebody made — and the sysrq verdict must decode 1 as every function rather than printing the number." }
