@@ -19,15 +19,23 @@
     "/proc/sys/net/ipv4/conf/all/accept_redirects",
     "/proc/sys/net/ipv4/conf/all/accept_source_route",
     "/proc/sys/net/ipv4/conf/all/rp_filter",
+    "/proc/sys/net/ipv4/conf/all/send_redirects",
     "/proc/sys/net/ipv4/conf/default/accept_redirects",
     "/proc/sys/net/ipv4/conf/default/accept_source_route",
     "/proc/sys/net/ipv4/conf/default/rp_filter",
+    "/proc/sys/net/ipv4/conf/default/send_redirects",
     "/proc/sys/net/ipv4/conf/eth0/accept_redirects",
     "/proc/sys/net/ipv4/conf/eth0/accept_source_route",
     "/proc/sys/net/ipv4/conf/eth0/rp_filter",
+    "/proc/sys/net/ipv4/conf/eth0/send_redirects",
     "/proc/sys/net/ipv4/conf/lo/accept_redirects",
     "/proc/sys/net/ipv4/conf/lo/accept_source_route",
     "/proc/sys/net/ipv4/conf/lo/rp_filter",
-    "/proc/sys/net/ipv4/tcp_syncookies"
+    "/proc/sys/net/ipv4/conf/lo/send_redirects",
+    "/proc/sys/net/ipv4/ip_forward",
+    "/proc/sys/net/ipv4/tcp_rfc1337",
+    "/proc/sys/net/ipv4/tcp_syncookies",
+    "/proc/sys/net/ipv6/conf/all/accept_ra",
+    "/proc/sys/net/ipv6/conf/default/accept_ra"
   ]
 }

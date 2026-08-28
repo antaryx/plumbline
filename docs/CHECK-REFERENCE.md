@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 29 · 103 checks · 11 modules**
+**Catalog version 30 · 106 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -3299,6 +3299,210 @@ systemd-analyze cat-config sysctl.d
 - [Linux kernel — ip-sysctl accept\_source\_route and accept\_redirects](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
 - [RFC 7126 — Filtering of IP-Optioned Packets](https://www.rfc-editor.org/rfc/rfc7126)
 - [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
+
+---
+
+### KERNEL-0026 — IPv6 router advertisements are refused in the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | HIGH |
+| Since | catalog 30 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `ipv6` |
+
+A router advertisement is an unauthenticated multicast packet
+that tells every listening host on the segment what the prefix is and who the
+default gateway is. It is how IPv6 stateless autoconfiguration is designed to
+work, and it is the whole attack.
+
+Anyone who can put a frame on the segment can send one. There is no race to win
+and no cache to poison — a host that accepts RAs installs the attacker as its
+default gateway because that is what the protocol says to do. Two things make
+it worse than the IPv4 equivalent:
+
+  - **It works on a network that is not using IPv6.** The stack is enabled by
+    default on every modern distribution, so an attacker can introduce IPv6 to
+    a v4-only segment and be the only router on it.
+  - **The host will prefer the new route.** RFC 6724 puts IPv6 above IPv4 in
+    destination address selection, so traffic that was working over IPv4 moves
+    to the attacker's path without anything appearing to change.
+
+net.ipv6.conf.*.accept_ra takes three values: 0 refuses, 1 accepts unless this
+host forwards, and 2 accepts even when it does. **1 is the default**, so a host
+that has never been configured accepts them.
+
+Both keys are checked. conf.default is the template every interface created
+after boot inherits — a container veth, a VPN tunnel, a hot-plugged NIC — and
+nothing else reaches them.
+
+This check is for a host that gets its addresses statically or by DHCPv6. On a
+host that uses SLAAC, refusing RAs removes its IPv6 address, its default route
+and its DNS servers, which is the deliberate trade rather than a side effect.
+See the remediation.
+
+This is a check about files. Nothing reads the running value yet.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort MEDIUM
+
+Write net.ipv6.conf.all.accept\_ra = 0 and net.ipv6.conf.default.accept\_ra = 0 to a file in /etc/sysctl.d/ — but confirm this host does not use SLAAC first.
+
+1. Find out how this host gets its IPv6 address before changing anything. `ip -6 addr show` marking an address `dynamic mngtmpaddr` means it came from a router advertisement, and refusing RAs will remove it along with the default route. An address from DHCPv6 or from a static configuration is unaffected.
+2. Check what already sets it, patterns included: grep -rn accept\_ra /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d.
+3. Create or extend a drop-in containing net.ipv6.conf.all.accept\_ra = 0 and net.ipv6.conf.default.accept\_ra = 0. Set both: default is the template for interfaces that do not exist yet, and nothing else reaches them.
+4. Apply without rebooting: sysctl --system, then confirm with sysctl -a \| grep accept\_ra, and confirm the host still has the route it needs with ip -6 route.
+5. Where the host genuinely needs SLAAC, this is a network control rather than a host one: RA Guard on the access switch drops advertisements from ports that are not the router, which is the only thing that stops the attack while leaving autoconfiguration working.
+6. Disabling IPv6 outright is a different and usually worse answer. A stack that is down cannot be attacked, but applications fall back in ways that are hard to predict, and a kernel parameter is easier to reverse than an addressing decision.
+
+```sh
+ip -6 addr show
+ip -6 route show
+sysctl -a 2>/dev/null | grep accept_ra
+grep -rn accept_ra /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+```
+
+> **Caution.** On a host that autoconfigures over IPv6 this removes its address, its default route and any DNS server learned from the advertisement — IPv6 connectivity stops. That is the trade, not a mistake. Verify the addressing method before applying it, and be aware that a cloud provider's network may hand out IPv6 by RA even where IPv4 comes from DHCP.
+
+**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — ip-sysctl accept\_ra](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [RFC 6104 — Rogue IPv6 Router Advertisement Problem Statement](https://www.rfc-editor.org/rfc/rfc6104)
+- [RFC 6105 — IPv6 Router Advertisement Guard](https://www.rfc-editor.org/rfc/rfc6105)
+
+---
+
+### KERNEL-0027 — Sending ICMP redirects is refused in the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | MEDIUM |
+| Since | catalog 30 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `routing` |
+
+An ICMP redirect is a router telling a host on its own segment
+that there is a better first hop for some destination. Only a router has any
+business sending one, and a host that is not routing has nothing to say.
+
+KERNEL-0025 asks whether this host *accepts* redirects, which is the
+man-in-the-middle exposure. This asks whether it *sends* them, which is a
+smaller and different problem:
+
+  - **It describes the network to anyone who can reach this host.** A redirect
+    names a gateway and a destination, so an attacker who can elicit one learns
+    a route they were not told about — internal topology, from the outside of
+    it.
+  - **It is a statement that this host is forwarding at all.** On a machine
+    that is not meant to be a router, a redirect leaving it is evidence that
+    something turned forwarding on.
+
+**The parameter only has effect while forwarding is enabled, which is exactly
+why it is worth writing down.** A host that is not forwarding sends no
+redirects whatever this says, so setting it costs nothing today — and container
+runtimes, VPN daemons and virtualisation hosts all enable
+net.ipv4.ip_forward as a side effect of being installed. Docker turns it on at
+start-up. The value of writing 0 down is that the day something enables
+forwarding, this host still does not start advertising routes.
+
+Both keys are checked. conf.default is the template every interface created
+after boot inherits, which on a host running containers is a new interface
+every few seconds.
+
+This is a check about files. Nothing reads the running value yet.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write net.ipv4.conf.all.send\_redirects = 0 and net.ipv4.conf.default.send\_redirects = 0 to a file in /etc/sysctl.d/.
+
+1. Check whether this host is meant to route: sysctl net.ipv4.ip\_forward. If it is a router, a NAT gateway or a firewall with more than one leg, leave this alone — sending redirects is part of the job and suppressing them makes traffic take a longer path rather than no path.
+2. Check what already sets it, patterns included: grep -rn send\_redirects /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d.
+3. Create or extend a drop-in containing net.ipv4.conf.all.send\_redirects = 0 and net.ipv4.conf.default.send\_redirects = 0.
+4. Apply without rebooting: sysctl --system, then confirm with sysctl -a \| grep send\_redirects.
+5. Expect the running value to be 1 on a host with Docker or libvirt installed even though nothing configured it. Those enable net.ipv4.ip\_forward, which is what makes send\_redirects reachable at all; this setting is what stops that side effect from turning into route advertisements.
+
+```sh
+sysctl net.ipv4.ip_forward
+sysctl -a 2>/dev/null | grep send_redirects
+grep -rn send_redirects /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+```
+
+> **Caution.** On a genuine router this suppresses a legitimate optimisation: hosts on the segment keep sending through this machine instead of learning the better first hop, so traffic takes an extra hop rather than failing. Do not set it on a device whose purpose is to route.
+
+**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — ip-sysctl send\_redirects](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [RFC 1122 — Requirements for Internet Hosts](https://www.rfc-editor.org/rfc/rfc1122)
+
+---
+
+### KERNEL-0028 — RFC 1337 TIME-WAIT protection is written to the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | LOW |
+| Since | catalog 30 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `tcp` |
+
+When a TCP connection closes, the side that closed first holds
+the socket in TIME-WAIT for twice the maximum segment lifetime. The socket is
+doing something during that time: it holds the four-tuple so that a segment
+from the old connection, delayed somewhere in the network, cannot arrive after
+a new connection has taken the same tuple and be accepted as part of it.
+
+**A reset ends TIME-WAIT early, and that is the hazard RFC 1337 describes.** An
+RST for a socket in TIME-WAIT tears it down immediately and frees the tuple for
+reuse. A delayed segment from the old connection can then land inside the new
+one — the sequence numbers may fall in the new window by chance, or be chosen —
+and the receiver accepts data that belongs to a connection that ended.
+
+net.ipv4.tcp_rfc1337 = 1 makes the kernel drop RSTs aimed at TIME-WAIT sockets
+instead of acting on them, which is the mitigation the RFC recommends. **The
+kernel defaults to 0**, so no host has this unless someone set it.
+
+The realistic reach of this is narrow, and the severity says so. An attacker
+needs to be on the path or able to guess a four-tuple and a sequence number,
+and what they get is a corrupted or reset connection rather than access to
+anything. It belongs in a hardening baseline because it costs nothing, not
+because it closes a common door.
+
+This is a check about files. Nothing reads the running value yet.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write net.ipv4.tcp\_rfc1337 = 1 to a file in /etc/sysctl.d/.
+
+1. Check what already sets it: grep -rn tcp\_rfc1337 /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Expect nothing — the kernel defaults to 0 and no distribution in this project's corpus ships it.
+2. Create or extend a drop-in containing net.ipv4.tcp\_rfc1337 = 1.
+3. Apply without rebooting: sysctl --system, then confirm with sysctl net.ipv4.tcp\_rfc1337.
+4. Do not pair this with net.ipv4.tcp\_tw\_reuse or the long-removed tcp\_tw\_recycle as a set of 'TIME-WAIT tuning'. They pull in opposite directions: this one makes TIME-WAIT more durable on purpose, and those exist to get out of it sooner.
+
+```sh
+sysctl net.ipv4.tcp_rfc1337
+grep -rn tcp_rfc1337 /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+```
+
+> **Caution.** Effectively none. Sockets already in TIME-WAIT stay there for their full wait instead of being cut short by a reset, which is what the state is for. A host exhausting its ephemeral ports under very high connection churn is the only place the extra durability is felt, and the answer there is the port range and keep-alive behaviour rather than accepting resets from anyone.
+
+**Controls** — `nist-800-53-r5 SC-5`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [RFC 1337 — TIME-WAIT Assassination Hazards in TCP](https://www.rfc-editor.org/rfc/rfc1337)
+- [Linux kernel — ip-sysctl tcp\_rfc1337](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
 
 ---
 

@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 29 · 103 checks · 11 modules**
+**Catalog version 30 · 106 checks · 11 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 
@@ -17,14 +17,14 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | `CONTAINERS` | 8 | 2 | 0 | 3 | 3 | 0 |
 | `CRON` | 5 | 0 | 2 | 2 | 1 | 0 |
 | `FILESYS` | 10 | 2 | 3 | 4 | 1 | 0 |
-| `KERNEL` | 25 | 0 | 6 | 17 | 2 | 0 |
+| `KERNEL` | 28 | 0 | 7 | 18 | 3 | 0 |
 | `LOGGING` | 5 | 0 | 0 | 4 | 1 | 0 |
 | `MEMORY` | 4 | 0 | 0 | 3 | 1 | 0 |
 | `NETWORK` | 3 | 0 | 2 | 1 | 0 | 0 |
 | `SERVICES` | 8 | 0 | 4 | 4 | 0 | 0 |
 | `SSHD` | 19 | 1 | 7 | 8 | 3 | 0 |
 | `USERS` | 10 | 2 | 4 | 2 | 2 | 0 |
-| **total** | **103** | 7 | 31 | 50 | 15 | 0 |
+| **total** | **106** | 7 | 32 | 51 | 16 | 0 |
 
 Severity is the check's **base** severity, before any context adjustment a finding may carry.
 
@@ -108,6 +108,9 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`KERNEL-0023`](CHECK-REFERENCE.md#kernel-0023--tcp-syn-cookies-are-written-to-the-sysctl-configuration) TCP SYN cookies are written to the sysctl configuration | LOW | `kernel.sysctl` |
 | [`KERNEL-0024`](CHECK-REFERENCE.md#kernel-0024--reverse-path-filtering-is-written-to-the-sysctl-configuration) Reverse-path filtering is written to the sysctl configuration | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0025`](CHECK-REFERENCE.md#kernel-0025--source-routing-and-icmp-redirects-are-refused-in-the-sysctl-configuration) Source routing and ICMP redirects are refused in the sysctl configuration | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0026`](CHECK-REFERENCE.md#kernel-0026--ipv6-router-advertisements-are-refused-in-the-sysctl-configuration) IPv6 router advertisements are refused in the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0027`](CHECK-REFERENCE.md#kernel-0027--sending-icmp-redirects-is-refused-in-the-sysctl-configuration) Sending ICMP redirects is refused in the sysctl configuration | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0028`](CHECK-REFERENCE.md#kernel-0028--rfc-1337-time-wait-protection-is-written-to-the-sysctl-configuration) RFC 1337 TIME-WAIT protection is written to the sysctl configuration | LOW | `kernel.sysctl` |
 
 ## LOGGING
 

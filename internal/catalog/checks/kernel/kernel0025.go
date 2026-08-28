@@ -1,8 +1,6 @@
 package kernel
 
 import (
-	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/antaryx/plumbline/internal/catalog"
@@ -67,33 +65,11 @@ runtime counterpart yet.`,
 	Eval: func(fs *fact.Set) catalog.Outcome {
 		sc := sysctlFact(fs)
 
-		if out := persistenceGate(sc, routingPersistKeys(), persistRoutingCaveat); out != nil {
+		if out := persistenceGate(sc, requirementKeys(routingPersistent), persistRoutingCaveat); out != nil {
 			return *out
 		}
 
-		var (
-			failed   []string
-			evidence []finding.Evidence
-		)
-		for _, want := range routingPersistent {
-			set, found := sc.EffectiveConfigured(want.key)
-			if !found {
-				failed = append(failed, fmt.Sprintf("%s, so %s", notConfigured(sc, want.key), want.absence))
-				continue
-			}
-			evidence = append(evidence, evidenceForSetting(sc, set))
-
-			n, err := strconv.Atoi(strings.TrimSpace(set.Value))
-			switch {
-			case err != nil:
-				failed = append(failed, fmt.Sprintf("%s is %q %s, which is not a number", want.key, set.Value, configuredAt(sc, want.key, set)))
-			case n == 0:
-				// Refused, which is the whole requirement.
-			default:
-				failed = append(failed, fmt.Sprintf("%s is %d %s, so %s", want.key, n, configuredAt(sc, want.key, set), want.enabled))
-			}
-		}
-
+		failed, evidence := checkRequirements(sc, routingPersistent)
 		if len(failed) > 0 {
 			return catalog.Outcome{
 				Result:   finding.Fail,
@@ -107,7 +83,7 @@ runtime counterpart yet.`,
 			Result:  finding.Pass,
 			Subject: "sysctl configuration",
 			Detail: "Source routing and ICMP redirect acceptance are both refused in the sysctl configuration, for the host-wide keys and for the template every interface created later inherits. A packet carrying its own return path is dropped and an unauthenticated redirect will not rewrite this host's routing table, after the next reboot and on interfaces that do not exist yet." +
-				routingRunningNote(sc) + persistRoutingCaveat,
+				runningContradiction(sc, routingPersistent) + persistRoutingCaveat,
 			Evidence: searchedEvidence(sc, evidence),
 		}
 	},
@@ -152,40 +128,31 @@ runtime counterpart yet.`,
 // to 1, so an unset key is a host that will accept them. A shared sentence
 // would have to be vague enough to be true of both, which would make it useless
 // for the one that matters more.
-var routingPersistent = []struct {
-	key     string
-	absence string
-	enabled string
-}{
+var routingPersistent = []requirement{
 	{
+		accept:  refused,
 		key:     "net.ipv4.conf.all.accept_source_route",
 		absence: "nothing on this host records that source-routed packets should be dropped; the kernel's own default is 0, which is correct and is not a decision anybody made",
-		enabled: "a packet may carry its own return path and this host will honour it",
+		wrong:   "a packet may carry its own return path and this host will honour it",
 	},
 	{
+		accept:  refused,
 		key:     "net.ipv4.conf.default.accept_source_route",
 		absence: "an interface created after boot — a container veth, a VPN tunnel, a hot-plugged NIC — inherits whatever the kernel defaults to rather than a value this host chose",
-		enabled: "every interface created after boot will accept source-routed packets",
+		wrong:   "every interface created after boot will accept source-routed packets",
 	},
 	{
+		accept:  refused,
 		key:     "net.ipv4.conf.all.accept_redirects",
 		absence: "this host will accept ICMP redirects, because unlike source routing the kernel defaults this one to 1: any party on the segment can rewrite its routing table with an unauthenticated packet",
-		enabled: "any party on the segment can rewrite this host's routing table with an unauthenticated packet",
+		wrong:   "any party on the segment can rewrite this host's routing table with an unauthenticated packet",
 	},
 	{
+		accept:  refused,
 		key:     "net.ipv4.conf.default.accept_redirects",
 		absence: "every interface created after boot will accept ICMP redirects, since the kernel defaults this one to 1 and nothing here overrides it",
-		enabled: "every interface created after boot will accept ICMP redirects",
+		wrong:   "every interface created after boot will accept ICMP redirects",
 	},
-}
-
-// routingPersistKeys is the key list in the order routingPersistent declares.
-func routingPersistKeys() []string {
-	out := make([]string, 0, len(routingPersistent))
-	for _, w := range routingPersistent {
-		out = append(out, w.key)
-	}
-	return out
 }
 
 // persistRoutingCaveat names the check that reads the running values.
@@ -195,22 +162,3 @@ func routingPersistKeys() []string {
 // the redirect equivalent should find out it does not exist rather than
 // conclude they misread the report.
 var persistRoutingCaveat = " This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. What it is doing now is KERNEL-0015's subject for source routing and nothing's yet for redirect acceptance, and a disagreement between file and kernel is KERNEL-0007's."
-
-// routingRunningNote reports a running kernel that contradicts a passing
-// configuration, which is the one thing a green verdict here could be hiding.
-func routingRunningNote(sc fact.Sysctl) string {
-	var live []string
-	for _, w := range routingPersistent {
-		r, ok := sc.Run(w.key)
-		if !ok || r.State != fact.SysctlObserved {
-			continue
-		}
-		if n, err := strconv.Atoi(strings.TrimSpace(r.Value)); err == nil && n != 0 {
-			live = append(live, fmt.Sprintf("%s is %d", w.key, n))
-		}
-	}
-	if len(live) == 0 {
-		return ""
-	}
-	return fmt.Sprintf(" The running kernel disagrees — %s — so the files are right and have not taken effect; see KERNEL-0007.", strings.Join(live, ", "))
-}

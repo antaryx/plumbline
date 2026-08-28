@@ -38,6 +38,7 @@ var all = []catalog.Check{
 	checks.Check0016, checks.Check0017,
 	checks.Check0018, checks.Check0019, checks.Check0020, checks.Check0021, checks.Check0022,
 	checks.Check0023, checks.Check0024, checks.Check0025,
+	checks.Check0026, checks.Check0027, checks.Check0028,
 }
 
 // collectFixture runs the real collector against a fixture tree.
@@ -544,9 +545,9 @@ func TestCheckIdentityIsWellFormed(t *testing.T) {
 		// bulk-updated to the current version — which is what this assertion
 		// is guarding, and why it names the versions rather than accepting any.
 		switch check.SinceCatalog {
-		case 2, 3, 25, 26, 27, 28, 29:
+		case 2, 3, 25, 26, 27, 28, 29, 30:
 		default:
-			t.Errorf("%s declares SinceCatalog %d, want 2, 3, 25, 26, 27, 28 or 29", check.ID, check.SinceCatalog)
+			t.Errorf("%s declares SinceCatalog %d, want 2, 3, 25, 26, 27, 28, 29 or 30", check.ID, check.SinceCatalog)
 		}
 		if check.SinceCatalog > catalog.Version {
 			t.Errorf("%s declares SinceCatalog %d, which is ahead of catalog.Version %d",
@@ -1602,5 +1603,178 @@ func TestAPersistenceCheckNamesItsOwnParametersWhenTheConfigIsUnreadable(t *test
 		if strings.Contains(got.Detail, "BPF") && c.check.ID != "KERNEL-0017" {
 			t.Errorf("%s reports an unreadable file as being about BPF: %s", c.check.ID, got.Detail)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// KERNEL-0026, -0027 and -0028: the rest of the network surface
+// ---------------------------------------------------------------------------
+
+func TestKernel0026RouterAdvertisementsAreRefused(t *testing.T) {
+	run(t, checks.Check0026, []tc{
+		{fixture: "kernel-net-persisted", result: finding.Pass,
+			detailContains: "will not install a default route"},
+
+		// The kernel default is 1, so an unset key is an open door rather than
+		// an undocumented default. The wording has to say so.
+		{fixture: "kernel-net-unset", result: finding.Fail, severity: finding.High,
+			detailContains: "the kernel defaults this to 1"},
+
+		// 2 accepts advertisements even while forwarding, so a check testing
+		// "not 1" would pass the worse of the two enabled values.
+		{fixture: "kernel-net-disabled", result: finding.Fail, severity: finding.High,
+			detailContains: "default gateway"},
+
+		// A kernel with no IPv6 stack has nothing for a file to persist.
+		{fixture: "kernel-net-no-ipv6", result: finding.NotApplicable,
+			detailContains: "implements none of"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+// TestAcceptRAIsNotTreatedAsABoolean. accept_ra takes 0, 1 and 2, and 2 is the
+// value that accepts advertisements *even while forwarding* — strictly worse
+// than 1. A check written against a boolean would pass it.
+func TestAcceptRAIsNotTreatedAsABoolean(t *testing.T) {
+	got := evalFixture(t, checks.Check0026, "kernel-net-disabled")
+	if got.Result != finding.Fail {
+		t.Fatalf("accept_ra = 2 was not failed: %s / %s", got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "is 2 ") {
+		t.Errorf("the finding does not quote the value it read: %s", got.Detail)
+	}
+}
+
+// TestAKernelWithoutIPv6IsExcusedNotFailed. The two accept_ra keys are named in
+// probedKeys rather than enumerated precisely so this state is observable: an
+// enumeration that finds nothing produces keys that were never probed, which
+// means "the collector did not ask" and not "this kernel has no such
+// parameter". Only the second may be excused.
+func TestAKernelWithoutIPv6IsExcusedNotFailed(t *testing.T) {
+	sc := sysctlFromFixture(t, "kernel-net-no-ipv6")
+	for _, key := range []string{"net.ipv6.conf.all.accept_ra", "net.ipv6.conf.default.accept_ra"} {
+		r, probed := sc.Run(key)
+		if !probed {
+			t.Fatalf("%s was never probed, so its absence cannot be told from a wiring bug", key)
+		}
+		if r.State != fact.SysctlAbsent {
+			t.Errorf("%s state = %s, want absent", key, r.State)
+		}
+	}
+
+	// And the IPv4 half of the same fixture still reaches a real verdict,
+	// which is what proves the excuse is scoped to the missing stack.
+	if got := evalFixture(t, checks.Check0027, "kernel-net-no-ipv6"); got.Result != finding.Pass {
+		t.Errorf("KERNEL-0027 = %s on a host with no IPv6; the excuse leaked: %s", got.Result, got.Detail)
+	}
+}
+
+func TestKernel0027SendRedirectsAreRefused(t *testing.T) {
+	run(t, checks.Check0027, []tc{
+		{fixture: "kernel-net-persisted", result: finding.Pass,
+			detailContains: "will not start advertising routes"},
+
+		{fixture: "kernel-net-unset", result: finding.Fail, severity: finding.Medium,
+			detailContains: "the kernel defaults this to 1"},
+
+		{fixture: "kernel-net-disabled", result: finding.Fail, severity: finding.Medium,
+			detailContains: "send ICMP redirects"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+// TestSendRedirectsSaysWhetherForwardingIsOn. The parameter only has effect
+// while the host forwards, which is a fair objection to the finding — so the
+// finding answers it. On a host that is forwarding the exposure is present
+// today; on one that is not, this is defence in depth against the day a
+// container runtime turns it on, and the two should not read alike.
+func TestSendRedirectsSaysWhetherForwardingIsOn(t *testing.T) {
+	forwarding := evalFixture(t, checks.Check0027, "kernel-net-unset")
+	if !strings.Contains(forwarding.Detail, "IP forwarding is on right now") {
+		t.Errorf("a forwarding host is not told the exposure is live: %s", forwarding.Detail)
+	}
+
+	quiet := evalFixture(t, checks.Check0027, "kernel-net-globbed")
+	if strings.Contains(quiet.Detail, "IP forwarding is on right now") {
+		t.Errorf("a non-forwarding host was told forwarding is on: %s", quiet.Detail)
+	}
+}
+
+func TestKernel0028RFC1337IsPersisted(t *testing.T) {
+	run(t, checks.Check0028, []tc{
+		{fixture: "kernel-net-persisted", result: finding.Pass,
+			detailContains: "dropped rather than acted on"},
+
+		{fixture: "kernel-net-unset", result: finding.Fail, severity: finding.Low,
+			detailContains: "kernel's default of 0"},
+
+		// Written down as 0 is a decision, not an inherited default, and the
+		// two failures say different things.
+		{fixture: "kernel-net-disabled", result: finding.Fail, severity: finding.Low,
+			detailContains: "written down rather than inherited"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+// TestTheUnpairedChecksSayTheyAreUnpaired. KERNEL-0026, -0027 and -0028 have no
+// counterpart reading /proc/sys. Every other persistence check names one, so
+// silence would leave a reader assuming the pairing exists and going to look
+// for a finding that is not there.
+func TestTheUnpairedChecksSayTheyAreUnpaired(t *testing.T) {
+	for _, c := range []catalog.Check{checks.Check0026, checks.Check0027, checks.Check0028} {
+		got := evalFixture(t, c, "kernel-net-persisted")
+		if !strings.Contains(got.Detail, "No check reads this parameter's running value yet") {
+			t.Errorf("%s does not admit it has no runtime counterpart: %s", c.ID, got.Detail)
+		}
+	}
+}
+
+// TestARequirementTableTellsItsThreeFailuresApart is about the shared helper
+// rather than one check. A key nobody sets, a key set to something unparseable
+// and a key set to a wrong value have three different remedies, and the loop
+// that collapses any pair of them is the bug this guards.
+func TestARequirementTableTellsItsThreeFailuresApart(t *testing.T) {
+	base := func(configured map[string][]fact.SysctlSetting) fact.Sysctl {
+		return fact.Sysctl{
+			Running: map[string]fact.SysctlRunning{
+				"net.ipv4.conf.all.send_redirects":     {Key: "net.ipv4.conf.all.send_redirects", State: fact.SysctlObserved, Value: "1"},
+				"net.ipv4.conf.default.send_redirects": {Key: "net.ipv4.conf.default.send_redirects", State: fact.SysctlObserved, Value: "1"},
+			},
+			Configured: configured,
+			Files:      []string{"/etc/sysctl.d/60-net.conf"},
+		}
+	}
+	set := func(key, value string) map[string][]fact.SysctlSetting {
+		return map[string][]fact.SysctlSetting{
+			key: {{Key: key, Value: value, File: "/etc/sysctl.d/60-net.conf", Line: 1}},
+			"net.ipv4.conf.default.send_redirects": {{
+				Key: "net.ipv4.conf.default.send_redirects", Value: "0",
+				File: "/etc/sysctl.d/60-net.conf", Line: 2,
+			}},
+		}
+	}
+
+	unparseable := evalSysctl(t, checks.Check0027, base(set("net.ipv4.conf.all.send_redirects", "banana")))
+	if !strings.Contains(unparseable.Detail, "which is not a number") {
+		t.Errorf("an unparseable value is not told apart: %s", unparseable.Detail)
+	}
+	wrong := evalSysctl(t, checks.Check0027, base(set("net.ipv4.conf.all.send_redirects", "1")))
+	if !strings.Contains(wrong.Detail, "will send ICMP redirects") {
+		t.Errorf("a wrong value is not told apart: %s", wrong.Detail)
+	}
+	if strings.Contains(wrong.Detail, "not a number") {
+		t.Errorf("a wrong value was reported as unparseable: %s", wrong.Detail)
 	}
 }

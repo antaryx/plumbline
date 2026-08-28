@@ -79,6 +79,34 @@ var probedKeys = []string{
 	// it. The two are set independently and a host commonly has one without
 	// the other.
 	"net.core.bpf_jit_harden",
+	// net.ipv6.conf.{all,default}.accept_ra are named here rather than
+	// enumerated from /proc/sys/net/ipv6/conf, which is where every other
+	// conf/ parameter in this file comes from.
+	//
+	// The reason is that IPv6 can be absent. A kernel booted with
+	// ipv6.disable=1, or built without the stack, has no /proc/sys/net/ipv6
+	// at all — and an enumeration that finds nothing produces keys that were
+	// never probed, which reads as "the collector did not ask" rather than as
+	// "this kernel has no such parameter". KERNEL-0026 has to tell those apart:
+	// the first is a wiring bug and the second is NOT_APPLICABLE. Naming the
+	// keys makes the absence observable, because readRunning maps ENOENT to
+	// SysctlAbsent.
+	//
+	// It is safe to name these two specifically where it would not be safe to
+	// name an interface: "all" and "default" are pseudo-interfaces that exist
+	// whenever the stack does, and neither contains a dot, so the dotted-to-
+	// path derivation is exact for them.
+	"net.ipv6.conf.all.accept_ra",
+	"net.ipv6.conf.default.accept_ra",
+	// net.ipv4.ip_forward is not the subject of any check. It is read because
+	// it is the condition send_redirects depends on: a host that does not
+	// forward sends no redirects whatever conf/*/send_redirects says, so
+	// KERNEL-0027 is defence in depth on most hosts and an immediate finding
+	// on the ones where something — a container runtime, a VPN daemon, a
+	// virtualisation stack — has already turned forwarding on. The finding
+	// needs to be able to say which of those it is.
+	"net.ipv4.ip_forward",
+	"net.ipv4.tcp_rfc1337",
 	"net.ipv4.tcp_syncookies",
 }
 
@@ -107,6 +135,13 @@ var perInterfaceLeaves = []string{
 	"accept_redirects",
 	"accept_source_route",
 	"rp_filter",
+	// send_redirects is the only one of these that is about what this host
+	// emits rather than what it accepts, and it is not combined with conf/all
+	// by any rule — each interface's own value decides for that interface,
+	// with conf/all acting as a plain default for interfaces that have none.
+	// It is collected the same way regardless, because it lives in the same
+	// directory and the enumeration already walks it.
+	"send_redirects",
 }
 
 // configFiles are the sysctl configuration sources, in application order:

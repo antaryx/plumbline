@@ -852,18 +852,49 @@ That gap between "running" and "written down" is the entire subject of this
 group of checks, and the network keys show it more starkly than the kernel ones
 did.
 
-Two gaps this left, neither started:
+`KERNEL-0026`, `-0027` and `-0028` closed the surface: router advertisements,
+redirect *sending*, and the RFC 1337 TIME-WAIT protection.
 
-- **Redirect acceptance has no runtime check.** `KERNEL-0025` reads the files;
-  nothing reads `/proc/sys` for `accept_redirects`, so its caveat names
-  `KERNEL-0015` for the source-routing half and admits the other has no
-  counterpart. The collector now reads the values, so the check is the only
-  missing piece.
-- **IPv6 is absent from the module.** `net.ipv6.conf.*.accept_redirects` and
-  `accept_ra` are the larger exposure on a dual-stacked host — there is no
-  source-routing key to set, the header having been removed, but router
-  advertisements do more than a redirect does. `alpine-320-stock` already
-  configures the IPv6 keys and no check reads them.
+**An absence has to be observable before a check can be excused for it.** The
+two `accept_ra` keys are named in `probedKeys` rather than enumerated from
+`/proc/sys/net/ipv6/conf`, which is how every other `conf/` parameter here is
+read. A kernel booted with `ipv6.disable=1` has no such directory, and an
+enumeration that finds nothing yields keys that were *never probed* — which
+means "the collector did not ask" and is a wiring bug, not an observation. Only
+`absent` may become `NOT_APPLICABLE`. Naming the two pseudo-interfaces is what
+turns a disabled stack from a false `FAIL` into an honest excuse, and it is safe
+for exactly these two because neither name contains a dot.
+
+**A finding about a setting that does nothing invites the objection it
+deserves.** `send_redirects` has no effect unless the host forwards, so
+`KERNEL-0027` reads `net.ipv4.ip_forward` — a parameter no check judges — purely
+so the verdict can say which situation the reader is in. On this workstation it
+says forwarding is on, because Docker turned it on, so the finding is live
+rather than theoretical. A supporting fact of that kind is still "what the
+checks need"; the rule against collecting what nothing reads is about
+parameters no finding ever mentions.
+
+**The catalog now has a check that a defensible host will fail.** `KERNEL-0026`
+requires `accept_ra = 0`, and a host that legitimately autoconfigures over IPv6
+cannot comply without losing its address, its route and its DNS. `alpine-320-stock`
+is the case in point: it is the only bundle that configures IPv6 at all, and it
+sets `use_tempaddr = 2` — privacy addressing *for* SLAAC, the opposite posture,
+and a considered one. The check documents the trade in its caution rather than
+pretending there is not one, and the network-side answer (RA Guard on the access
+switch) is named because it is the only control that stops the attack while
+leaving autoconfiguration working. **This is the strongest argument yet for the
+catalog-wide severity review**: `KERNEL-0025`, `-0026` and `-0027` each fail
+every bundle that has any sysctl configuration, and a report where the network
+section is uniformly red is one an operator learns to page past.
+
+One gap remains, unchanged and not started: **redirect acceptance has no runtime
+check.** `KERNEL-0025` reads the files; nothing reads `/proc/sys` for
+`accept_redirects`, and the same is now true of `accept_ra`, `send_redirects`
+and `tcp_rfc1337`. The collector reads all four, so in each case the check is
+the only missing piece. Whether the module wants a runtime counterpart for every
+persistence check, or whether the persistence half is the one that matters and
+the pairing should stop being the expectation, is a question worth answering
+once rather than four more times.
 
 ---
 

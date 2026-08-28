@@ -1,7 +1,7 @@
 {
   "bundle": "alpine-320-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 29,
+  "catalog_version": 30,
   "scan": {
     "started": "2026-08-25T21:31:44.169375564Z",
     "finished": "2026-08-25T21:31:44.201476282Z",
@@ -14,20 +14,20 @@
   },
   "summary": {
     "counts": {
-      "pass": 32,
-      "fail": 15,
+      "pass": 33,
+      "fail": 17,
       "not_applicable": 50,
       "skipped": 0,
       "unknown": 6,
-      "total": 103
+      "total": 106
     },
     "by_severity": {
-      "HIGH": 6,
+      "HIGH": 7,
       "LOW": 2,
-      "MEDIUM": 7
+      "MEDIUM": 8
     },
-    "posture": 69.36936936936937,
-    "coverage": 88.67924528301887
+    "posture": 66.66666666666666,
+    "coverage": 89.28571428571429
   },
   "findings": [
     {
@@ -788,6 +788,68 @@
           "source": "/lib/sysctl.d/00-alpine.conf",
           "line": 13,
           "excerpt": "net.ipv4.conf.all.accept_redirects = 0",
+          "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0026",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "sysctl configuration",
+      "fingerprint": "8606906230a3644ba88eeb56e013d287",
+      "detail": "net.ipv6.conf.all.accept_ra is not set in any sysctl configuration file, so this host accepts IPv6 router advertisements, because the kernel defaults this to 1: anyone on the segment can become its default gateway by announcing that they are; net.ipv6.conf.default.accept_ra is not set in any sysctl configuration file, so every interface created after boot accepts IPv6 router advertisements, since the kernel defaults this to 1 and nothing here overrides it. Anyone able to put a frame on this segment can advertise themselves as the default gateway and read and rewrite every IPv6 flow leaving this host, without exploiting anything — router advertisements are unauthenticated by design. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. No check reads this parameter's running value yet, so this finding is the only place it appears; a disagreement between the file and the running kernel is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/00-alpine.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "8bba47da45bc8715c69ac904a60410eabffaa7bbbef640f9c1368ab9c48493d0"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0027",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "sysctl configuration",
+      "fingerprint": "4ca32d32d9b65ab55eea9a557ddf7653",
+      "detail": "net.ipv4.conf.all.send_redirects is not set in any sysctl configuration file, so nothing stops this host advertising routes to its neighbours if anything enables IP forwarding on it, and the kernel defaults this to 1; net.ipv4.conf.default.send_redirects is not set in any sysctl configuration file, so every interface created after boot inherits the kernel's default of 1, which on a host running containers is a new interface every few seconds. Only a router has any business sending a redirect, and a host that emits one describes a route it was not asked about to whoever elicited it. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. No check reads this parameter's running value yet, so this finding is the only place it appears; a disagreement between the file and the running kernel is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/00-alpine.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "8bba47da45bc8715c69ac904a60410eabffaa7bbbef640f9c1368ab9c48493d0"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0028",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "subject": "net.ipv4.tcp_rfc1337",
+      "fingerprint": "d29102de5d1bc95c93c8abed88bce2d5",
+      "detail": "net.ipv4.tcp_rfc1337 is 1 at /lib/sysctl.d/00-alpine.conf:22, so a reset aimed at a socket in TIME-WAIT is dropped rather than acted on, and the socket serves out its wait absorbing anything still in flight from the connection that ended. It stays that way across a reboot. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. No check reads this parameter's running value yet, so this finding is the only place it appears; a disagreement between the file and the running kernel is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/00-alpine.conf",
+          "line": 22,
+          "excerpt": "net.ipv4.tcp_rfc1337 = 1",
           "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
         }
       ]

@@ -16,6 +16,7 @@ package kernel
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/antaryx/plumbline/internal/catalog"
@@ -449,6 +450,112 @@ func notConfigured(sc fact.Sysctl, key string) string {
 // on the same host all the time — that is the whole reason they both exist —
 // and a reader who does not know which one they are holding will act on the
 // wrong finding.
+// requirement is one parameter a persistence check needs the configuration to
+// carry, with the wording for each way it can fail to.
+type requirement struct {
+	key    string
+	accept func(n int) bool
+	// absence is what it means that no file sets the key. It differs per
+	// parameter because the kernel's own default does: an unset key whose
+	// default is safe is an undocumented default, and an unset key whose
+	// default is unsafe is an open door. A sentence vague enough to cover both
+	// is useless for the one that matters.
+	absence string
+	// wrong is what it means that a file sets the key to a value the check
+	// does not accept.
+	wrong string
+}
+
+// checkRequirements resolves every requirement against the configuration,
+// returning the failures in declaration order and evidence for the keys that
+// were set.
+//
+// The order inside the loop is a correctness property rather than a style. A
+// key nobody sets, a key set to something unparseable and a key set to a value
+// that is simply wrong are three different findings with three different
+// remedies, and collapsing any pair of them loses the sentence the operator
+// acts on. Three checks share it, which is the point of it being here.
+func checkRequirements(sc fact.Sysctl, reqs []requirement) ([]string, []finding.Evidence) {
+	var (
+		failed   []string
+		evidence []finding.Evidence
+	)
+	for _, r := range reqs {
+		set, found := sc.EffectiveConfigured(r.key)
+		if !found {
+			failed = append(failed, fmt.Sprintf("%s, so %s", notConfigured(sc, r.key), r.absence))
+			continue
+		}
+		evidence = append(evidence, evidenceForSetting(sc, set))
+
+		n, err := strconv.Atoi(strings.TrimSpace(set.Value))
+		switch {
+		case err != nil:
+			failed = append(failed, fmt.Sprintf("%s is %q %s, which is not a number",
+				r.key, set.Value, configuredAt(sc, r.key, set)))
+		case r.accept(n):
+		default:
+			failed = append(failed, fmt.Sprintf("%s is %d %s, so %s",
+				r.key, n, configuredAt(sc, r.key, set), r.wrong))
+		}
+	}
+	return failed, evidence
+}
+
+// refused is the accept predicate for a parameter whose only safe value is 0.
+//
+// It is a named function rather than a closure per table so that the tables
+// read as declarations of intent. Several of these parameters are documented
+// as booleans and are not: accept_ra takes 2, and a check that tested "!= 1"
+// would pass the value that accepts router advertisements even while
+// forwarding.
+func refused(n int) bool { return n == 0 }
+
+// requirementKeys is the key list a requirement table declares, for the gate.
+func requirementKeys(reqs []requirement) []string {
+	out := make([]string, 0, len(reqs))
+	for _, r := range reqs {
+		out = append(out, r.key)
+	}
+	return out
+}
+
+// runningContradiction reports a running kernel that disagrees with a
+// configuration this check has just passed, which is the one thing a green
+// verdict of this shape could be hiding.
+func runningContradiction(sc fact.Sysctl, reqs []requirement) string {
+	var live []string
+	for _, r := range reqs {
+		got, ok := sc.Run(r.key)
+		if !ok || got.State != fact.SysctlObserved {
+			continue
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(got.Value))
+		if err != nil || r.accept(n) {
+			continue
+		}
+		live = append(live, fmt.Sprintf("%s is %d", r.key, n))
+	}
+	if len(live) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" The running kernel disagrees — %s — so the files are right and have not taken effect; see KERNEL-0007.", strings.Join(live, ", "))
+}
+
+// persistCaveatUnpaired is the caveat for a persistence check whose parameter
+// no check reads the running value of.
+//
+// Most of this group has a counterpart in /proc/sys and says so, because a
+// reader holding one of the two needs to know which. Three of them do not have
+// one, and saying nothing would leave a reader to assume the pairing exists and
+// go looking for a finding that is not there. An absent counterpart is also the
+// more useful half of the warning: it means a host that set the parameter with
+// sysctl -w and never wrote it down is reported here as a failure and nowhere
+// else as a pass, so this finding is the only place the subject appears.
+func persistCaveatUnpaired() string {
+	return " This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. No check reads this parameter's running value yet, so this finding is the only place it appears; a disagreement between the file and the running kernel is KERNEL-0007's."
+}
+
 func persistCaveatFor(runtimeCheck string) string {
 	return fmt.Sprintf(" This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is %s's subject, and a disagreement between the two is KERNEL-0007's.",
 		runtimeCheck)

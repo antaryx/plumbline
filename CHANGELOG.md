@@ -12,6 +12,14 @@ explanation in this file is a defect.
 ## [Unreleased]
 
 ### Fixed
+- **The three ways a required parameter can fail are resolved in one place.**
+  `KERNEL-0025`, `-0026` and `-0027` each need a table of keys checked against
+  a predicate, and the order inside that loop is a correctness property: a key
+  nobody sets, a key set to something unparseable and a key set to a wrong
+  value are three findings with three different remedies. Extracted to
+  `checkRequirements` at the third copy, with `KERNEL-0025` refactored onto it
+  and its wording unchanged.
+
 - **A sysctl key set by a glob pattern is now read as set.** `sysctl.d(5)` lets
   a file write `net.ipv4.conf.*.rp_filter = 2` instead of naming every
   interface, and the distributions use it: Red Hat's `50-redhat.conf` and
@@ -89,6 +97,60 @@ explanation in this file is a defect.
   inode, the way the unit collector already does for drop-in directories.
 
 ### Added
+- **`KERNEL-0026`, `-0027` and `-0028`: the rest of the network sysctl
+  surface.** Catalog 30, 106 checks. All three route through `persistenceGate`,
+  and **none of the three has a runtime counterpart** — the caveat says so,
+  because every other check in this group names one and silence would leave a
+  reader hunting for a finding that does not exist.
+
+  - **`KERNEL-0026` (IPv6 router advertisements refused).** `HIGH`. A rogue RA
+    is a complete man-in-the-middle position over every IPv6 flow on the
+    segment, obtained with no privilege on the host and no exploit — the
+    protocol is working as designed. It is worse than the IPv4 equivalents on
+    two counts: the stack is on by default, so an attacker can introduce IPv6 to
+    a v4-only segment and be the only router on it; and RFC 6724 makes the host
+    prefer the new path, so traffic moves without anything appearing to change.
+    `accept_ra` is **not a boolean** — `2` accepts advertisements even while
+    forwarding, so a check testing `!= 1` would pass the worse value.
+  - **`KERNEL-0027` (sending ICMP redirects refused).** `MEDIUM`. The parameter
+    only has effect while forwarding is enabled, which is exactly why it is
+    worth writing down: Docker, libvirt and most VPN daemons turn
+    `net.ipv4.ip_forward` on as a side effect of being installed. The finding
+    reads `ip_forward` and says whether the exposure is live today or is
+    defence in depth against the day something enables it.
+  - **`KERNEL-0028` (RFC 1337 TIME-WAIT protection).** `LOW`. An RST aimed at a
+    socket in TIME-WAIT ends it early and frees the four-tuple while a delayed
+    segment from the finished connection may still arrive and be accepted into
+    whatever takes it next. The severity is low deliberately: the attacker needs
+    to be on-path or to guess a tuple and a sequence number, and what they get
+    is a corrupted connection rather than access.
+
+  **What the corpus persists:**
+
+  | | 0026 accept_ra | 0027 send_redirects | 0028 rfc1337 |
+  |---|---|---|---|
+  | alpine-320-stock | FAIL | FAIL | **PASS** |
+  | ubuntu-2404-stock | FAIL | FAIL | FAIL |
+  | ubuntu-2404-hardened | FAIL | FAIL | FAIL |
+  | fedora-44-stock | FAIL | FAIL | FAIL |
+  | rocky-9-stock | FAIL | FAIL | FAIL |
+  | debian-13-stock | N/A | N/A | N/A |
+
+  Alpine's `/lib/sysctl.d/00-alpine.conf` is the only file in the corpus that
+  sets `tcp_rfc1337`. **No bundle refuses router advertisements**, and Alpine —
+  the one distribution that configures IPv6 at all — takes the opposite and
+  coherent position: it sets `net.ipv6.conf.*.use_tempaddr = 2`, which is
+  privacy addressing *for* SLAAC. That is a considered posture rather than an
+  oversight, and it is the tension `KERNEL-0026` documents rather than resolves.
+
+- **`net.ipv4.conf.*.send_redirects`, `net.ipv6.conf.{all,default}.accept_ra`,
+  `net.ipv4.tcp_rfc1337` and `net.ipv4.ip_forward` are collected.** The two
+  IPv6 keys are named rather than enumerated so that a kernel with IPv6
+  compiled out reports `absent` — the state a check may excuse — rather than
+  producing keys that were never probed, which means "the collector did not
+  ask" and may not be read as an observation. `ip_forward` is judged by nothing
+  and read only so `KERNEL-0027` can say whether its finding is live.
+
 - **`KERNEL-0023`, `-0024` and `-0025`: the network stack, in the files rather
   than in `/proc`.** Catalog 29, 103 checks. Each is the persistence counterpart
   to a runtime check that already existed, and each routes through the same
