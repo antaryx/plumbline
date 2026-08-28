@@ -84,11 +84,19 @@ type Stream struct {
 	// system.TerminalWidth for why this is not a SIGWINCH handler.
 	width func() (int, bool)
 
-	// quiet suppresses the per-row narration and keeps the closing tally. It
-	// is --quiet, and it is a property of the stream rather than a branch at
-	// each call site because the counters have to keep counting either way:
-	// the tally is of what was evaluated, not of what was printed.
+	// quiet suppresses the per-row narration; tally adds the list of failures
+	// by severity. They are independent, and between them they are the three
+	// output modes (CLI-SPEC.md §7):
+	//
+	//	standard   quiet=false tally=false   the stream, then two lines
+	//	--verbose  quiet=false tally=true    the stream, then the failures
+	//	--quiet    quiet=true  tally=false   two lines
+	//
+	// Both are properties of the stream rather than branches at each call site,
+	// because the counters have to keep counting either way: the closing block
+	// is a tally of what was evaluated, not of what was printed.
 	quiet bool
+	tally bool
 
 	// Tallies, for the closing line. Kept here rather than recomputed from the
 	// findings because the stream is a view of what it actually showed: if a
@@ -111,13 +119,29 @@ func NewStream(w io.Writer, colour bool, width func() (int, bool)) *Stream {
 	return &Stream{w: w, colour: colour, width: width, counts: map[finding.Result]int{}}
 }
 
-// Quiet suppresses the per-row narration, leaving the closing tally. It returns
+// Quiet suppresses the per-row narration, leaving the closing block. It returns
 // the stream so a caller can write NewStream(...).Quiet(flag).
 func (s *Stream) Quiet(quiet bool) *Stream {
 	if s == nil {
 		return nil
 	}
 	s.quiet = quiet
+	return s
+}
+
+// Tally adds the list of failures by severity to the closing block.
+//
+// **It is off by default and that is the whole point of this file.** The list
+// is one line per failing check — eleven on a fixture, forty on a real host —
+// and it lands after the stream, so on any ordinary terminal it is the only
+// thing still on screen when the scan ends. The stream an operator asked to
+// watch scrolls away above it. The count in the Result block already says how
+// many failed; which ones is a question --verbose answers.
+func (s *Stream) Tally(tally bool) *Stream {
+	if s == nil {
+		return nil
+	}
+	s.tally = tally
 	return s
 }
 
@@ -218,7 +242,7 @@ func (s *Stream) Close(sc score.Score) {
 		s.counts[finding.Pass], s.counts[finding.Fail],
 		s.counts[finding.Unknown], s.counts[finding.NotApplicable])
 
-	if len(s.failed) > 0 {
+	if s.tally && len(s.failed) > 0 {
 		// Most severe first, then by ID, so the order is stable for a person
 		// reading two runs side by side even though nothing diffs this.
 		failed := make([]finding.Finding, len(s.failed))

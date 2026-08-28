@@ -297,7 +297,8 @@ func TestTheClosingTallyNamesTheFailures(t *testing.T) {
 	for _, f := range sampleFindings() {
 		s.CheckDone(f)
 	}
-	s.Hint("run again with --verbose for evidence, remediation and cautions")
+	s.Tally(true)
+	s.Hint("Run again with --verbose for detailed evidence and remediation.")
 	s.Close(score.Compute(sampleFindings(), 33))
 
 	out := visible(buf.String())
@@ -340,4 +341,83 @@ func TestANilStreamIsSilent(t *testing.T) {
 	s.CheckDone(finding.Finding{CheckID: "T-0001"})
 	s.CollectorDone("c", "ok", 0)
 	s.Close(score.Compute(nil, 33))
+}
+
+// TestTheThreeOutputModes.
+//
+// The modes are two independent switches and this is the table that says what
+// each produces. It exists because the standard mode was wrong twice: first it
+// carried the whole detailed report, then it carried the severity tally, and
+// both times the effect was the same — the stream the operator asked to watch
+// scrolled off the top before the run finished.
+//
+// What standard mode may contain is therefore stated as a closed list, and the
+// tally's absence is asserted rather than assumed.
+func TestTheThreeOutputModes(t *testing.T) {
+	cases := []struct {
+		name              string
+		quiet, tally      bool
+		wantRows, wantSum bool
+		wantTally         bool
+	}{
+		{"standard", false, false, true, true, false},
+		{"--verbose", false, true, true, true, true},
+		{"--quiet", true, false, false, true, false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			s := text.NewStream(&buf, false, fixedWidth(90)).Quiet(c.quiet).Tally(c.tally)
+			s.Phase("Collecting host evidence")
+			s.CollectorDone("kernel", "ok", 0)
+			s.Phase("Evaluating the catalog")
+			for _, f := range sampleFindings() {
+				s.CheckDone(f)
+			}
+			s.Close(score.Compute(sampleFindings(), 33))
+			out := visible(buf.String())
+
+			if got := strings.Contains(out, "[+] Checking "); got != c.wantRows {
+				t.Errorf("evaluation rows present = %v, want %v:\n%s", got, c.wantRows, out)
+			}
+			if got := strings.Contains(out, "[+] Collecting "); got != c.wantRows {
+				t.Errorf("collection rows present = %v, want %v:\n%s", got, c.wantRows, out)
+			}
+			if got := strings.Contains(out, "[*] Collecting host evidence"); got != c.wantRows {
+				t.Errorf("phase headers present = %v, want %v:\n%s", got, c.wantRows, out)
+			}
+			if got := strings.Contains(out, "[*] Result"); got != c.wantSum {
+				t.Errorf("result block present = %v, want %v:\n%s", got, c.wantSum, out)
+			}
+			// The tally is the line that pushed the stream off the screen.
+			if got := strings.Contains(out, "!  HIGH"); got != c.wantTally {
+				t.Errorf("severity tally present = %v, want %v:\n%s", got, c.wantTally, out)
+			}
+		})
+	}
+}
+
+// TestStandardModeEndsWithinAScreenOfTheStream.
+//
+// The regression this whole change exists for. Whatever follows the last
+// streamed row has to be short enough that the row is still on an ordinary
+// terminal when the scan ends — otherwise the live output is theatre for
+// something nobody sees. Four lines: blank, result, counts, blank, hint.
+func TestStandardModeEndsWithinAScreenOfTheStream(t *testing.T) {
+	var buf bytes.Buffer
+	s := text.NewStream(&buf, false, fixedWidth(90))
+	for _, f := range sampleFindings() {
+		s.CheckDone(f)
+	}
+	s.Hint("Run again with --verbose for detailed evidence and remediation.")
+
+	before := len(strings.Split(buf.String(), "\n"))
+	s.Close(score.Compute(sampleFindings(), 33))
+	after := len(strings.Split(buf.String(), "\n"))
+
+	if tail := after - before; tail > 6 {
+		t.Errorf("the closing block is %d lines; it pushes the stream off a small terminal:\n%s",
+			tail, visible(buf.String()))
+	}
 }

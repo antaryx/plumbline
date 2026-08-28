@@ -14,6 +14,7 @@ import (
 	rendertext "github.com/antaryx/plumbline/internal/render/text"
 	"github.com/antaryx/plumbline/internal/score"
 	"github.com/antaryx/plumbline/internal/suppress"
+	"github.com/antaryx/plumbline/internal/system"
 	"github.com/antaryx/plumbline/internal/version"
 )
 
@@ -164,8 +165,12 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 		case FormatSARIF:
 			renderErr = renderSARIF(w, b, sc, findings, len(factErrors) > 0, prof.Name())
 		default:
+			// The scan phase is dropped only when the stream drew it on the
+			// same terminal this report is going to. A redirect or --output
+			// gets the whole document even though a stream also ran.
+			narrated := live != nil && out.output == "" && system.IsTerminal(w)
 			renderErr = renderTerminal(w, b, sc, findings, factErrors,
-				useColor(w, out.noColor, out.output != ""), prof.Name())
+				useColor(w, out.noColor, out.output != ""), prof.Name(), narrated)
 		}
 
 		if cerr := closeOut(); renderErr == nil {
@@ -218,7 +223,7 @@ func renderSARIF(w io.Writer, b bundle.Bundle, sc score.Score, findings []findin
 	})
 }
 
-func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, factErrors []fact.Error, color bool, activeProfile string) error {
+func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, factErrors []fact.Error, color bool, activeProfile string, narrated bool) error {
 	return rendertext.Render(w, rendertext.Input{
 		Tool: rendertext.Tool{Name: "plumbline", Version: version.Version, Commit: version.Commit},
 		Scan: rendertext.Scan{
@@ -229,11 +234,12 @@ func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []fin
 			Profile:  activeProfile,
 			Host:     textHostFor(b),
 		},
-		Score:      sc,
-		Findings:   findings,
-		FactErrors: factErrors,
-		Degraded:   len(factErrors) > 0,
-		Color:      color,
+		Score:        sc,
+		Findings:     findings,
+		FactErrors:   factErrors,
+		Degraded:     len(factErrors) > 0,
+		Color:        color,
+		ScanNarrated: narrated,
 	})
 }
 

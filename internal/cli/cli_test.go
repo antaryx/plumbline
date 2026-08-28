@@ -2146,3 +2146,24 @@ func TestARedirectedRunStillCarriesTheWholeReport(t *testing.T) {
 		})
 	}
 }
+
+// TestVerboseDoesNotRepeatTheScanPhase.
+//
+// A terminal --verbose run has already seen every check stream past, so the
+// report's own grouped scan phase would be the same hundred rows a second time.
+// It is dropped there and nowhere else: a pipe, a redirect and --output all
+// still carry the complete document, which is what this asserts by the same
+// token being present in the piped run below.
+func TestVerboseDoesNotRepeatTheScanPhase(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	// A test buffer is not a terminal, so this exercises the path every
+	// scripted use takes: the whole report, scan phase included.
+	_, stdout, _ := run(t, "scan", "--root", hostFixture, "--verbose")
+	if !strings.Contains(stdout, "[+] AUTH") {
+		t.Error("a redirected --verbose run lost the scan phase")
+	}
+	if !strings.Contains(stdout, "Warnings and suggestions") {
+		t.Error("--verbose lost the detail it exists for")
+	}
+}

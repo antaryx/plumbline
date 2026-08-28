@@ -131,6 +131,17 @@ type Input struct {
 	Degraded bool
 	// Color enables ANSI escape sequences. See the package comment.
 	Color bool
+
+	// ScanNarrated says that a live stream has already put every check on the
+	// operator's screen, so the report's own scan phase would be the same
+	// hundred rows a second time, regrouped. It is set only for a terminal
+	// `scan --verbose`; `eval`, a pipe, a redirect and --output all render the
+	// complete report, because on those nothing else has said anything.
+	//
+	// It suppresses the scan phase and nothing else. The dashboard stays,
+	// because a gauge and four module cards are not a repetition of a scrolling
+	// list, and the suggestion phase is the reason --verbose was typed.
+	ScanNarrated bool
 }
 
 // Render writes a human-readable report to w.
@@ -142,7 +153,9 @@ func Render(w io.Writer, in Input) error {
 	p := &printer{w: w, color: in.Color}
 
 	p.header(in)
-	p.scanPhase(in.Findings)
+	if !in.ScanNarrated {
+		p.scanPhase(in.Findings)
+	}
 	p.factErrors(in.FactErrors)
 	p.warningsAndSuggestions(in.Findings)
 	p.accepted(in.Findings)

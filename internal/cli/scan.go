@@ -91,7 +91,13 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			// terminal that will not identify itself — and the spinner takes
 			// over on precisely those runs, which is the behaviour that was
 			// there before and is still right for them.
-			stream := streamPresenter(format, stderr, out.noColor).Quiet(quiet)
+			// The three output modes are two independent switches on the
+			// stream plus one on the report (CLI-SPEC.md §7). --quiet silences
+			// the rows; --verbose adds the failure tally here and the detailed
+			// report on stdout.
+			stream := streamPresenter(format, stderr, out.noColor).
+				Quiet(quiet).
+				Tally(verbose)
 			opts := collectOptions{
 				redact: redact, profile: pf.name, perCollector: perCollector,
 			}
@@ -144,7 +150,7 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			// as before: to a pipe, to a file, to --output, and to anyone who
 			// asked for it with --verbose.
 			detail := reportDestination(verbose, stream, out, stdout)
-			stream.Hint(reportHint(detail, out.output))
+			stream.Hint(reportHint(detail, out.output, quiet))
 
 			return renderAndGate(got.bundle, failOn, gt, format, out, sup, prof, stream, detail, stdout, stderr)
 		},
@@ -154,8 +160,8 @@ re-evaluated or diffed; the two are not interchangeable.`,
 	f.StringVar(&root, "root", "", "scan root; paths are interpreted beneath it")
 	f.StringVar(&saveBundle, "save-bundle", "", "write the evidence bundle this scan used to PATH (e.g. host.plb); required for later eval/diff")
 	f.BoolVar(&redact, "redact", false, "omit hostname and non-loopback addresses at collection time")
-	f.BoolVarP(&verbose, "verbose", "v", false, "write the detailed report — evidence, remediation, cautions — to stdout as well as streaming the scan")
-	f.BoolVarP(&quiet, "quiet", "q", false, "stream no per-check rows; print only the closing tally")
+	f.BoolVarP(&verbose, "verbose", "v", false, "add the failure tally and the detailed report — evidence, remediation, cautions")
+	f.BoolVarP(&quiet, "quiet", "q", false, "stream no rows; print only the closing result block")
 	f.DurationVar(&timeout, "timeout", 30*time.Minute, "whole-scan budget")
 	f.DurationVar(&perCollector, "collector-timeout", 2*time.Minute, "budget for one collector that declares none")
 	out.register(cmd)
@@ -244,16 +250,20 @@ func reportDestination(verbose bool, live *rendertext.Stream, out outputFlags, s
 // reportHint is the stream's closing line: where the detail went.
 //
 // A clean terminal is the point of this and it is also its one hazard — a
-// screen with no detail on it reads as a tool that had nothing to say. Every
-// path therefore ends with a sentence naming where the rest is, and the
-// withheld case names the flag that brings it back.
-func reportHint(wrote bool, output string) string {
+// screen with no detail on it reads as a tool that had nothing to say. Standard
+// mode therefore ends with the flag that produces the rest.
+//
+// --quiet gets no hint. It is the mode that asked for less, and one dim line of
+// advice is exactly the kind of thing it asked to be rid of.
+func reportHint(wrote bool, output string, quiet bool) string {
 	switch {
+	case quiet:
+		return ""
 	case wrote && output != "":
-		return "the full report, with evidence and remediation, was written to " + output
+		return "The full report, with evidence and remediation, was written to " + output
 	case wrote:
-		return "the full report, with evidence and remediation, was written to stdout"
+		return "The full report, with evidence and remediation, was written to stdout."
 	default:
-		return "run again with --verbose for evidence, remediation and cautions"
+		return "Run again with --verbose for detailed evidence and remediation."
 	}
 }

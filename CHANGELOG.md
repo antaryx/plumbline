@@ -214,6 +214,35 @@ because of this release (VERSIONING §2.4).
   inode, the way the unit collector already does for drop-in directories.
 
 ### Changed
+- **Standard mode is now strictly the stream plus four lines.** The severity
+  tally — one `! HIGH` line per failing check — moved behind `--verbose`. It was
+  eleven lines on a fixture and forty on a real host, it landed after the last
+  streamed row, and on an 80×24 terminal it was therefore the only thing left on
+  screen when a scan finished: the live output the mode exists for had scrolled
+  away above it. The `[*] Result` block already reports how many failed; which
+  ones is what `--verbose` is for.
+
+  The three modes are now a closed table (CLI-SPEC.md §7), asserted as one:
+
+  | | standard | `--verbose` | `--quiet` |
+  |---|---|---|---|
+  | Scoring notice | yes | yes | yes |
+  | Collection and evaluation rows | yes | yes | — |
+  | `[*] Result` block | yes | yes | yes |
+  | Severity tally | — | yes | — |
+  | Detailed report | — | yes | — |
+
+  `--quiet` gets no closing hint: it is the mode that asked for less. Standard
+  mode's hint is now one sentence — *Run again with --verbose for detailed
+  evidence and remediation.*
+
+- **`--verbose` on a terminal drops the report's scan phase.** The stream has
+  just drawn the same hundred rows; the grouped per-module listing was them a
+  second time. The header, fact errors, warnings and suggestions and the
+  dashboard all stay — a gauge and four module cards are not a repetition of a
+  scrolling list. Every non-terminal destination is unchanged and still carries
+  the complete document, scan phase included.
+
 - **A terminal scan no longer prints the detailed report by default.** The live
   stream puts every check on the screen as it happens; following it with the
   same checks again, regrouped and trailed by every remediation the catalog

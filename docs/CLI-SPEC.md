@@ -63,8 +63,8 @@ the same.
 | `--json` | false | Shorthand for `--format json` | **yes** (v0.3) |
 | `--output PATH` | — | Output file; only valid with a single format | **yes** |
 | `--no-color` | false | Also honours `NO_COLOR` and non-TTY stdout | **yes** (v0.3) |
-| `--verbose`, `-v` | false | Write the detailed report to stdout as well as streaming the scan (§7) | no |
-| `--quiet`, `-q` | false | Stream no per-check rows; print only the closing tally (§7) | no |
+| `--verbose`, `-v` | false | Add the severity tally and the detailed report (§7) | no |
+| `--quiet`, `-q` | false | Stream nothing; print only the closing result block (§7) | no |
 | `--output-dir DIR` | — | Directory; required when multiple formats | no |
 | `--quiet` | false | Findings only, no progress | no |
 | `--verbose` | false | Per-check execution detail | no |
@@ -693,9 +693,7 @@ edge of the terminal.
 [*] Result  posture 88.3   coverage 100%
     82 passed, 11 failed, 0 unknown, 16 not applicable
 
-    !  HIGH    CRON-0001  The system crontab is owned by root and writable only by root
-
-    run again with --verbose for evidence, remediation and cautions
+    Run again with --verbose for detailed evidence and remediation.
 ```
 
 **On a terminal, this is the whole of the output.** The detailed report — every
@@ -720,35 +718,58 @@ was there before and is still right for a log.
 
 #### What the terminal shows
 
-Three levels, and the default is the quiet one.
+**Three modes, and the standard one exists to leave the stream on the screen.**
+Everything after the last streamed row competes with it for the last page of an
+80×24 terminal, so standard mode allows itself four lines and a hint.
 
-| Invocation | stdout | stderr |
-|---|---|---|
-| `plumbline scan` on a terminal | *nothing* | notice, stream, tally |
-| `plumbline scan --verbose` | the full report | notice, stream, tally |
-| `plumbline scan --quiet` | *nothing* | notice, tally |
-| `plumbline scan > report.txt` | the full report | notice, stream, tally |
-| `plumbline scan -o report.txt` | *nothing* (the file gets it) | notice, stream, tally |
-| `plumbline scan --json` | the document | notice only |
-| Piped, in CI, or `PLUMBLINE_NO_PROGRESS` | the full report | notice only |
+| | standard | `--verbose` | `--quiet` |
+|---|---|---|---|
+| Scoring notice | yes | yes | yes |
+| Collection rows `[ DONE ]` | yes | yes | — |
+| Evaluation rows `[ OK ]` / `[ WARNING ]` | yes | yes | — |
+| `[*] Result` block — posture, coverage, counts | yes | yes | yes |
+| Severity tally — the `! HIGH` list | — | yes | — |
+| Detailed report — evidence, remediation, cautions | — | yes | — |
+| Closing hint | `--verbose` | where the report went | — |
+
+The **severity tally is one line per failing check** — eleven on a fixture,
+forty on a real host — and it lands after the stream, so in standard mode it
+would be the only thing left on screen when the scan ends. The `[*] Result`
+block already says how many failed; *which* ones is a question `--verbose`
+answers.
+
+`--quiet` gets no hint: it is the mode that asked for less, and a line of advice
+is what it asked to be rid of. It does not silence the scoring notice, which is
+a correctness warning rather than progress chatter and has
+`PLUMBLINE_NO_NOTICES` of its own. `--verbose` and `--quiet` contradict each
+other and passing both is a usage error.
+
+#### Where the detailed report goes
+
+| Invocation | stdout |
+|---|---|
+| `plumbline scan` on a terminal | *nothing* |
+| `plumbline scan --verbose` | the report, without its scan phase |
+| `plumbline scan --quiet` | *nothing* |
+| `plumbline scan > report.txt` | the whole report |
+| `plumbline scan -o report.txt` | *nothing* (the file gets the whole report) |
+| `plumbline scan --json` | the document |
+| Piped, in CI, or `PLUMBLINE_NO_PROGRESS` | the whole report |
 
 The report is withheld **only** when a live stream has already put the whole
 scan on the same terminal and the operator did not ask for it — one condition,
 four exceptions, all of them cases where nothing else has said anything.
 
+Under `--verbose` on a terminal the report drops its own **scan phase**, the
+grouped per-module listing, because the stream just drew the same hundred rows.
+It keeps the header, the fact errors, the warnings and suggestions, and the
+dashboard: a gauge and four module cards are not a repetition of a scrolling
+list. Every non-terminal destination gets the scan phase as before.
+
 This is the only place where stdout's content depends on what stdout is, and it
 is a deliberate exception. Everything scripted keeps the document it always had:
 a pipe, a redirect, `--output`, `--format json`, a CI run. What changes is the
 one case where the tool was talking to a person who had just watched it work.
-
-`--quiet` drops the per-check rows and keeps the closing tally. It does not
-silence the scoring notice, which is a correctness warning rather than progress
-chatter and has `PLUMBLINE_NO_NOTICES` of its own. `--verbose` and `--quiet`
-contradict each other and passing both is a usage error.
-
-The stream's last line always names where the detail went — `--verbose`, stdout,
-or the file — because a screen with no detail on it otherwise reads as a tool
-that found nothing to say.
 
 #### Why this one measures the terminal and the report does not
 

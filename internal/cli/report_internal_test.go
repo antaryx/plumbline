@@ -65,19 +65,26 @@ func TestTheClosingHintAlwaysSaysWhereTheDetailWent(t *testing.T) {
 	cases := []struct {
 		wrote  bool
 		output string
+		quiet  bool
 		want   string
 	}{
-		{false, "", "--verbose"},
-		{true, "", "stdout"},
-		{true, "report.txt", "report.txt"},
+		{false, "", false, "Run again with --verbose for detailed evidence and remediation."},
+		{true, "", false, "stdout"},
+		{true, "report.txt", false, "report.txt"},
 	}
 	for _, c := range cases {
-		got := reportHint(c.wrote, c.output)
+		got := reportHint(c.wrote, c.output, c.quiet)
 		if got == "" {
 			t.Errorf("wrote=%v output=%q produced no hint", c.wrote, c.output)
 		}
 		if !strings.Contains(got, c.want) {
 			t.Errorf("wrote=%v output=%q: hint %q does not mention %q", c.wrote, c.output, got, c.want)
 		}
+	}
+
+	// --quiet asked for less, and one dim line of advice is the kind of thing
+	// it asked to be rid of.
+	if got := reportHint(false, "", true); got != "" {
+		t.Errorf("--quiet still printed a hint: %q", got)
 	}
 }

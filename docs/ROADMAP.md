@@ -1134,8 +1134,22 @@ destroying the column far more thoroughly than a short row would; the floor is
 now a guard against absurd arithmetic and the row drops to its compact form
 instead.
 
-**Both open questions about the display were settled immediately, by watching
-it.** A screen recording made the answer obvious in a way the reasoning had not:
+**Every open question about the display was settled by watching it, and two of
+them the other way from the reasoning.** Screen recordings made in a day what
+the design notes had not managed: the arithmetic of a terminal is that whatever
+comes *after* the stream is what an operator is left looking at, and no amount
+of correct content survives being on the wrong side of the last page.
+
+The standard mode was wrong twice for the same reason. First it carried the
+whole detailed report, then — after that was withheld — it carried the severity
+tally, one line per failing check, forty of them on a real host. Both times the
+live output scrolled off the top before the run finished. The rule that came out
+of it is worth stating as a rule: **standard mode allows itself four lines and a
+hint after the last streamed row**, and anything that grows with the number of
+findings belongs behind `--verbose`.
+`TestStandardModeEndsWithinAScreenOfTheStream` is that rule as a test.
+
+The rest of the settlement:
 
 - **The report is withheld from a terminal that watched the scan.** The stream
   and the report were both on screen for a bare `plumbline scan` — the same
