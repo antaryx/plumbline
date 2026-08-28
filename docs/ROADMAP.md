@@ -1088,6 +1088,77 @@ What this leaves:
 
 ---
 
+## The live scan stream
+
+`lynis` narrates. Plumbline printed a spinner for the collection phase and then
+a finished report, which meant the operator's whole view of a forty-second scan
+was one line of braille. This is the narration.
+
+**The event architecture is two interfaces, deliberately not one.**
+`catalog.Observer` is called once per check, synchronously, in deterministic
+order, from the goroutine that called `EvaluateWith`. `collect.Runner.Observer`
+is called once per collector from the collector goroutines, which run at once,
+in completion order, which is not stable between runs. A single shared interface
+would have had to document the weaker of the two contracts everywhere, and a
+caller reading it would not be able to tell which half it was in. `rendertext.Stream`
+implements both and takes its mutex on every method, which is what makes the
+concurrent half safe; the joint between `collect.CollectorStatus` and the
+renderer's plain string is an adapter in `internal/cli`, because the render tree
+may not import the collection tree.
+
+**Evaluation was not made concurrent and should not be.** 109 checks over a
+collected fact set take 1.3 ms. The slow half of a scan is collection, which
+already is concurrent, and the ordering of `Evaluate` is what makes two runs
+over one bundle byte-identical. Streaming a millisecond of work is why the
+collector events exist: without them, replacing the spinner would have made the
+*slow* phase silent again, which is the exact failure `progress.go` was written
+to fix.
+
+**Two width policies, and the split is the point.** The report is an artifact
+somebody diffs, so its grid is fixed at 78 columns and does not read the
+terminal — that decision predates this work and is unchanged. The stream is
+ephemeral stderr output that nobody redirects into a file they compare, so it
+measures the terminal for every row. A resize mid-scan therefore reflows from
+the next row; already-printed rows are somebody's scrollback and cannot be
+reflowed by anyone, which is the strongest guarantee available and the reason
+there is no `SIGWINCH` handler. `system.TerminalWidth` is one `TIOCGWINSZ`
+ioctl inside the seam, asked freshly each time, costing about a microsecond
+against a filesystem walk.
+
+Within a row, only the middle segment gives. The check ID is in the fixed tail,
+because it is what a suppression file matches on and what `plumbline explain`
+takes — a row that has lost its ID has lost the only part of itself anybody can
+act on. An early version clamped the layout to a 40-column floor and produced
+40-column rows on a 30-column terminal, which the terminal then wrapped,
+destroying the column far more thoroughly than a short row would; the floor is
+now a guard against absurd arithmetic and the row drops to its compact form
+instead.
+
+What this leaves:
+
+- **The stream and the report are both on screen for a bare `plumbline scan`.**
+  stderr and stdout are usually the same terminal, so the operator sees the
+  live rows and then the report's own scan phase — the same checks, in a
+  different vocabulary, twice. It is defensible (one is progress, one is the
+  record, and lynis has the same shape) and it is not obviously right.
+  Suppressing the report's scan phase when a stream ran would fix it, at the
+  cost of making stdout depend on whether anybody was watching. Worth deciding
+  deliberately rather than leaving to whoever notices it next.
+- **The stream shows raw evaluation.** Profile scoping and suppression are
+  applied to the slice afterwards, so a check the operator has formally accepted
+  streams past as `FAIL` and then appears in the report as `SUPPRESSED`. The
+  suppression set is already loaded by the time the stream is built, so labelling
+  them live is cheap; it was left out because the stream is a view of evaluation
+  and this would make it a view of the pipeline.
+- **The slowest collector is silent while it runs.** Rows are written on
+  completion, which is what keeps them whole under concurrency. A forty-second
+  filesystem walk therefore prints nothing until it finishes, while its
+  neighbours' rows appear around it. A heartbeat line under the stream would
+  cover it and needs the stream and the spinner to share stderr, which is the
+  interleaving both currently avoid by never running together.
+
+---
+
 ## SERVICES, sandboxing
 
 `SERVICES-0006` audits `NoNewPrivileges` on `cron.service`,

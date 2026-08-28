@@ -16,6 +16,7 @@ import (
 	"github.com/antaryx/plumbline/internal/collect"
 	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/finding"
+	rendertext "github.com/antaryx/plumbline/internal/render/text"
 	"github.com/antaryx/plumbline/internal/sanitize"
 	"github.com/antaryx/plumbline/internal/system"
 	"github.com/antaryx/plumbline/internal/version"
@@ -52,7 +53,9 @@ func collectFacts(ctx context.Context, s system.System, opts collectOptions) (co
 	// collector cannot leave a half-drawn line on the operator's terminal.
 	// What follows Run is assembling a struct, which costs nothing worth
 	// stopping the indicator early for.
-	defer startProgress(opts.progress, "Collecting host evidence").Stop()
+	if opts.progress != nil {
+		defer startProgress(opts.progress, "Collecting host evidence").Stop()
+	}
 
 	facts := fact.NewSet()
 	evidence := bundle.NewEvidenceStore()
@@ -62,6 +65,7 @@ func collectFacts(ctx context.Context, s system.System, opts collectOptions) (co
 		Registry: collect.Default(),
 		Timeout:  opts.perCollector,
 		Evidence: evidence,
+		Observer: opts.observer,
 	}
 	if err := runner.Run(ctx, s, facts); err != nil {
 		return collected{}, err
@@ -111,7 +115,16 @@ type collectOptions struct {
 	// collectors run, or nil for no indicator. It is always stderr in
 	// practice; whether anything is actually drawn on it is progress.go's
 	// decision, not the caller's.
+	//
+	// It is mutually exclusive with observer: a spinner redrawing its line
+	// underneath a stream that is printing rows would interleave a carriage
+	// return into the middle of somebody's output. scan picks one.
 	progress io.Writer
+
+	// observer, when set, is told as each collector finishes, which is what
+	// turns the slow half of a scan from a spinner into a running account of
+	// what is being read. Called concurrently; see collect.Runner.Observer.
+	observer collect.Observer
 }
 
 // hostMeta describes the host being scanned, read through the seam so that
@@ -299,7 +312,21 @@ func rejectFindingsDocument(f *os.File, path string) error {
 
 // evaluate runs the catalog over collected facts.
 func evaluate(facts *fact.Set) []finding.Finding {
-	return buildCatalog().Evaluate(facts)
+	return evaluateWith(facts, nil)
+}
+
+// evaluateWith is evaluate with a live presenter watching each check finish.
+//
+// The nil check is here rather than left to the catalog because a
+// (*rendertext.Stream)(nil) stored in a catalog.Observer interface is not a nil
+// interface, and the catalog's nil test would miss it. Every method on Stream
+// tolerates a nil receiver anyway, so this is belt and braces — but the belt is
+// the one that would fail silently.
+func evaluateWith(facts *fact.Set, live *rendertext.Stream) []finding.Finding {
+	if live == nil {
+		return buildCatalog().Evaluate(facts)
+	}
+	return buildCatalog().EvaluateWith(facts, live)
 }
 
 // severityRank orders severities for --fail-on. rank 0 is "none", which never

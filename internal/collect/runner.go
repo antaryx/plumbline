@@ -44,6 +44,57 @@ type Runner struct {
 	// reads, so that findings can cite content-addressed sources. Nil means
 	// evidence is not being kept for this run.
 	Evidence EvidenceRecorder
+
+	// Observer, when set, is told as each collector finishes, so that a caller
+	// can show progress during the slow half of a scan.
+	//
+	// **It is called from the collector goroutines and they run concurrently**,
+	// so an implementation must be safe for concurrent use. This is the only
+	// place in the project where that is true of an observer — catalog.Observer
+	// is called from one goroutine — and the two are deliberately separate
+	// interfaces so that neither package has to know about the other's
+	// concurrency.
+	//
+	// Order is completion order, which is not registration order and is not
+	// stable between runs: collectors finish when they finish. Nothing that
+	// needs determinism may be built on these events. The findings are
+	// deterministic; this is a progress display.
+	Observer Observer
+}
+
+// Observer is notified as each collector finishes, however it finished.
+// Exactly one call is made per collector in the run.
+type Observer interface {
+	CollectorDone(id string, status CollectorStatus, took time.Duration)
+}
+
+// CollectorStatus is how one collector's run ended.
+//
+// It is coarser than the fact.Error it produces, and deliberately: this is
+// what a person watching a scan needs to know, and the error is what the
+// report carries. A collector that could not run for want of privilege and one
+// whose dependency was never registered are both Skipped here and are two very
+// different entries in errors.json.
+type CollectorStatus string
+
+const (
+	// CollectorOK: it ran and reported no error. Its facts are in the set.
+	CollectorOK CollectorStatus = "ok"
+	// CollectorFailed: it ran and something went wrong — an error it returned,
+	// or a panic. A panic discards its output; an error does not.
+	CollectorFailed CollectorStatus = "failed"
+	// CollectorSkipped: it never ran. Insufficient privilege, or a dependency
+	// that is not registered.
+	CollectorSkipped CollectorStatus = "skipped"
+	// CollectorTimedOut: it ran out of time, or the scan ended underneath it.
+	CollectorTimedOut CollectorStatus = "timeout"
+)
+
+// observe reports one collector's outcome, if anyone is listening.
+func (r Runner) observe(id string, status CollectorStatus, took time.Duration) {
+	if r.Observer != nil {
+		r.Observer.CollectorDone(id, status, took)
+	}
 }
 
 // Run executes every registered collector and records the result in fs.
@@ -116,6 +167,13 @@ func (r Runner) Run(ctx context.Context, s system.System, fs *fact.Set) error {
 			defer wg.Done()
 			defer close(done[c.ID()])
 
+			// One event per collector, on every path out of this function,
+			// including the ones that never reach runOne. A progress display
+			// that silently drops the collectors which could not run is one
+			// that looks tidiest on the hosts it understands least.
+			status, took := CollectorSkipped, time.Duration(0)
+			defer func() { r.observe(c.ID(), status, took) }()
+
 			if deps := missing[c.ID()]; len(deps) > 0 {
 				record(c, fact.ErrInternal,
 					fmt.Sprintf("collector %s depends on unregistered collector(s) %v; it was not run",
@@ -140,6 +198,7 @@ func (r Runner) Run(ctx context.Context, s system.System, fs *fact.Set) error {
 				select {
 				case <-ch:
 				case <-ctx.Done():
+					status = CollectorTimedOut
 					record(c, fact.ErrTimeout, cancelledMsg(c, ctx.Err(), "waiting for dependency "+d))
 					return
 				}
@@ -150,12 +209,13 @@ func (r Runner) Run(ctx context.Context, s system.System, fs *fact.Set) error {
 				case expensive <- struct{}{}:
 					defer func() { <-expensive }()
 				case <-ctx.Done():
+					status = CollectorTimedOut
 					record(c, fact.ErrTimeout, cancelledMsg(c, ctx.Err(), "waiting for the expensive-collector slot"))
 					return
 				}
 			}
 
-			r.runOne(ctx, c, s, fs, &mu, record)
+			status, took = r.runOne(ctx, c, s, fs, &mu, record)
 		}(c)
 	}
 
@@ -174,15 +234,22 @@ type result struct {
 
 // runOne executes a single collector under its budget, isolating a panic and
 // abandoning a collector that outruns the clock.
-func (r Runner) runOne(ctx context.Context, c Collector, s system.System, fs *fact.Set, mu *sync.Mutex, record func(Collector, fact.ErrorKind, string)) {
+// The returned status and duration are for Observer. The duration is the time
+// the collector actually spent working, measured from here rather than from
+// the goroutine's start: a collector queued behind the Expensive slot did not
+// spend that time doing anything, and charging it to the collector would tell
+// an operator that a cheap read took thirty seconds.
+func (r Runner) runOne(ctx context.Context, c Collector, s system.System, fs *fact.Set, mu *sync.Mutex, record func(Collector, fact.ErrorKind, string)) (CollectorStatus, time.Duration) {
 	// Once the scan is over, no new collector starts. Waiting for a
 	// dependency and waiting for the Expensive slot both race the scan
 	// deadline, and without this a collector could win that race and go on
 	// working a host whose scan has already ended.
 	if err := ctx.Err(); err != nil {
 		record(c, fact.ErrTimeout, cancelledMsg(c, err, "the scan ended before it could start"))
-		return
+		return CollectorTimedOut, 0
 	}
+
+	started := time.Now()
 
 	// The collector's own budget wins; the runner's is the fallback for one
 	// that does not declare a preference.
@@ -220,6 +287,7 @@ func (r Runner) runOne(ctx context.Context, c Collector, s system.System, fs *fa
 			// than merged into an audit.
 			record(c, fact.ErrInternal,
 				fmt.Sprintf("collector %s panicked: %v", c.ID(), got.panicVal))
+			return CollectorFailed, time.Since(started)
 
 		case cctx.Err() != nil && got.err != nil:
 			// It noticed the deadline and returned rather than being
@@ -227,6 +295,7 @@ func (r Runner) runOne(ctx context.Context, c Collector, s system.System, fs *fa
 			// outcome, so this is a timeout and not whatever error it chose to
 			// return on the way out.
 			record(c, fact.ErrTimeout, timedOutMsg(c, cctx, ctx))
+			return CollectorTimedOut, time.Since(started)
 
 		default:
 			mu.Lock()
@@ -234,7 +303,9 @@ func (r Runner) runOne(ctx context.Context, c Collector, s system.System, fs *fa
 			mu.Unlock()
 			if got.err != nil {
 				recordCollectorError(fs, mu, c, got.err)
+				return CollectorFailed, time.Since(started)
 			}
+			return CollectorOK, time.Since(started)
 		}
 
 	case <-cctx.Done():
@@ -244,6 +315,7 @@ func (r Runner) runOne(ctx context.Context, c Collector, s system.System, fs *fa
 		// time are exactly the kind of half-truth this project refuses to
 		// report as an observation.
 		record(c, fact.ErrTimeout, timedOutMsg(c, cctx, ctx))
+		return CollectorTimedOut, time.Since(started)
 	}
 }
 

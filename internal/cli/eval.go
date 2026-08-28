@@ -85,7 +85,11 @@ collected on a production host be analysed somewhere safer.`,
 				return exitError{code: ExitInternal, message: err.Error()}
 			}
 
-			return renderAndGate(b, failOn, gt, format, out, sup, prof, stdout, stderr)
+			// nil presenter: eval has no collection phase to narrate and is
+			// the offline, re-evaluate-an-archive path. Streaming it would put
+			// a hundred lines of progress in front of a report that was
+			// already instant.
+			return renderAndGate(b, failOn, gt, format, out, sup, prof, nil, stdout, stderr)
 		},
 	}
 
@@ -102,8 +106,12 @@ collected on a production host be analysed somewhere safer.`,
 // Rendering is chosen here rather than inside each command for the same
 // reason: a report and its exit code are one answer, and a second call site
 // would be a second place for the two to disagree.
-func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, prof *profile.Profile, stdout, stderr io.Writer) error {
-	findings := evaluate(b.Facts)
+func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, prof *profile.Profile, live *rendertext.Stream, stdout, stderr io.Writer) error {
+	// The presenter is handed to the catalog rather than to the renderer,
+	// because what it shows is evaluation happening — one line as each check
+	// reaches a verdict — and by the time there is a slice to render, there is
+	// nothing left to watch. A nil presenter is the plain evaluation.
+	findings := evaluateWith(b.Facts, live)
 
 	// The profile scopes before suppression does. Both sit between evaluation
 	// and scoring, and the order matters: a check outside the baseline was
@@ -128,6 +136,12 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 
 	sc := score.Compute(findings, version.Catalog())
 	factErrors := b.Facts.Errors()
+
+	// The stream closes before the report opens. Both may be pointed at the
+	// same terminal — stderr and stdout usually are — and a tally that landed
+	// in the middle of the report's header would be the one thing this layout
+	// cannot survive.
+	live.Close(sc)
 
 	w, closeOut, err := writeTo(out.output, stdout)
 	if err != nil {

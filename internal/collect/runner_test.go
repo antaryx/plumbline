@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -663,5 +664,95 @@ func TestOpaqueReadsAreNotRecordedAsEvidence(t *testing.T) {
 	}
 	if !bytes.Equal(viaReadOpaque.Data, viaReadFile.Data) {
 		t.Error("ReadOpaque returned different bytes from ReadFile; the two reads must differ only in disposition")
+	}
+}
+
+// recorder is a collect.Observer that keeps what it was told. It is called
+// from the collector goroutines, which run at once, so it locks — a test
+// observer that raced would report a bug in the runner that was its own.
+type recorder struct {
+	mu   sync.Mutex
+	seen map[string]collect.CollectorStatus
+	n    int
+}
+
+func newRecorder() *recorder {
+	return &recorder{seen: map[string]collect.CollectorStatus{}}
+}
+
+func (r *recorder) CollectorDone(id string, status collect.CollectorStatus, _ time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.seen[id] = status
+	r.n++
+}
+
+// TestEveryCollectorReportsExactlyOnce.
+//
+// The observer drives a progress display, and a display that silently omits the
+// collectors which could not run is one that looks tidiest on the hosts it
+// understands least. Every path out of the collector goroutine has to produce
+// exactly one event: the ones that ran, the one refused for privilege, the one
+// whose dependency was never registered, and the one that returned an error.
+func TestEveryCollectorReportsExactlyOnce(t *testing.T) {
+	r := collect.NewRegistry()
+	r.Register(stub{id: "fine"})
+	r.Register(stub{id: "broken", run: func(context.Context, system.System, *fact.Set) error {
+		return errors.New("no")
+	}})
+	r.Register(stub{id: "privileged", requires: collect.CapRoot})
+	r.Register(stub{id: "orphan", deps: []string{"never-registered"}})
+
+	rec := newRecorder()
+	// sshd-unreadable runs as euid 1000, so "privileged" cannot run.
+	run(t, collect.Runner{Registry: r, Observer: rec}, sys(t, "sshd-unreadable"))
+
+	want := map[string]collect.CollectorStatus{
+		"fine":       collect.CollectorOK,
+		"broken":     collect.CollectorFailed,
+		"privileged": collect.CollectorSkipped,
+		"orphan":     collect.CollectorSkipped,
+	}
+	if rec.n != len(want) {
+		t.Errorf("%d events for %d collectors; exactly one each is the contract", rec.n, len(want))
+	}
+	for id, status := range want {
+		if got := rec.seen[id]; got != status {
+			t.Errorf("%s reported %q, want %q", id, got, status)
+		}
+	}
+}
+
+// A collector that runs out of time is reported as a timeout rather than as a
+// failure, because the two send an operator to different places: one raises a
+// budget and the other reads a stack trace.
+func TestATimedOutCollectorIsReportedAsOne(t *testing.T) {
+	r := collect.NewRegistry()
+	r.Register(stub{id: "slow", run: func(ctx context.Context, _ system.System, _ *fact.Set) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}})
+
+	rec := newRecorder()
+	run(t, collect.Runner{Registry: r, Timeout: 30 * time.Millisecond, Observer: rec}, sys(t, "sshd-hardened"))
+
+	if got := rec.seen["slow"]; got != collect.CollectorTimedOut {
+		t.Errorf("a collector that overran reported %q, want %q", got, collect.CollectorTimedOut)
+	}
+}
+
+// A nil observer is the ordinary run, and nothing about the runner may depend
+// on one being present.
+func TestARunWithNoObserverIsUnchanged(t *testing.T) {
+	r := collect.NewRegistry()
+	r.Register(stub{id: "fine", produces: []fact.ID{fact.SSHDConfigID},
+		run: func(_ context.Context, _ system.System, fs *fact.Set) error {
+			fs.Put(fact.SSHDConfig{Installed: true})
+			return nil
+		}})
+
+	fs := run(t, collect.Runner{Registry: r}, sys(t, "sshd-hardened"))
+	if _, _, ok := fact.Get[fact.SSHDConfig](fs, fact.SSHDConfigID); !ok {
+		t.Error("the run did not happen without an observer")
 	}
 }

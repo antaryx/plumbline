@@ -156,12 +156,49 @@ func (c *Catalog) IDs() []string {
 // Len reports the number of checks.
 func (c *Catalog) Len() int { return len(c.order) }
 
+// Observer is notified as each check reaches a verdict, so that a caller can
+// show progress instead of waiting for the slice.
+//
+// **The contract is narrow on purpose.** CheckDone is called once per check,
+// synchronously, on the goroutine that called EvaluateWith, in the same
+// deterministic order the returned slice carries. An implementation must not
+// block for long — it is on the evaluation path — and must not retain the
+// finding beyond the call unless it copies it.
+//
+// It is also called before anything the *pipeline* does to a finding: profile
+// scoping and suppression both happen after evaluation, so an observer sees a
+// suppressed finding as the FAIL it is rather than as SUPPRESSED. That is the
+// honest thing for a live view of evaluation to show and the wrong thing for a
+// report to show, which is why the report is rendered from the slice and not
+// from these events.
+type Observer interface {
+	CheckDone(finding.Finding)
+}
+
 // Evaluate runs the whole catalog against a fact set and returns findings in
 // deterministic order.
 func (c *Catalog) Evaluate(facts *fact.Set) []finding.Finding {
+	return c.EvaluateWith(facts, nil)
+}
+
+// EvaluateWith is Evaluate with an observer notified as each check finishes.
+// A nil observer is the plain evaluation, which is why Evaluate is one line.
+//
+// Evaluation is sequential, and that is a correctness property rather than an
+// unfinished optimisation: IDs returns sorted order, two runs over one bundle
+// must be byte-identical, and 109 checks over a collected fact set take about
+// a millisecond. Nothing here would be faster in parallel and the determinism
+// would have to be rebuilt afterwards. An observer is therefore called from
+// one goroutine — but an implementation shared with the collector runner, which
+// genuinely is concurrent, still has to be safe for concurrent use.
+func (c *Catalog) EvaluateWith(facts *fact.Set, obs Observer) []finding.Finding {
 	out := make([]finding.Finding, 0, len(c.order))
 	for _, id := range c.order {
-		out = append(out, c.EvaluateOne(c.checks[id], facts))
+		f := c.EvaluateOne(c.checks[id], facts)
+		out = append(out, f)
+		if obs != nil {
+			obs.CheckDone(f)
+		}
 	}
 	return out
 }

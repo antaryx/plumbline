@@ -673,6 +673,57 @@ them worth an afternoon.
 
 `eval` does not write it. VERSIONING §2.4 names `scan`.
 
+### The live scan stream
+
+`scan --format terminal` narrates the scan on **stderr** as it happens: one row
+per collector, then one per check, each with its verdict flush against the right
+edge of the terminal.
+
+```
+[*] Collecting host evidence
+[+] Collecting users...                                          [ DONE ]
+[+] Collecting fswalk... (41s)                                   [ DONE ]
+
+[*] Evaluating the catalog
+[+] Checking A password quality module is enforced (AUTH-0001)... [ PASS ]
+[+] Checking Root login is disabled over SSH (SSHD-0009)...       [ FAIL ]
+
+[*] Result  posture 88.3   coverage 100%
+    82 passed, 11 failed, 0 unknown, 16 not applicable
+```
+
+**It replaces the progress indicator; the two never both run.** They are the
+same job — telling a person that something is happening — and they obey the same
+four conditions (below). Where those conditions say nobody is watching, the
+stream is not built and the indicator takes over, which is the behaviour that
+was there before and is still right for a log.
+
+| Property | Detail |
+|---|---|
+| stderr only | The report is the contract and this is a view of it being made. `plumbline scan --json > out.json` shows the scan happening and writes a clean document. |
+| `--format terminal` only | Not a stdout concern — the stream never touches stdout — but an intent one. Somebody asking for machine-readable output is scripting, and narrating a hundred checks at them is noise on the stream they left open for errors. |
+| Same four conditions as the indicator | `PLUMBLINE_NO_PROGRESS` unset, stderr a character device, `TERM` set and not `dumb`, no CI marker. One list, consulted twice. |
+| Width follows the terminal | Unlike the report's fixed grid. See below. |
+| Tokens are `PASS` / `FAIL` / `UNKNOWN` / `N/A` | Not the report's `OK` / `WARNING` / `SKIPPED`. The stream is a commentary on evaluation, where the useful word is the verdict; the report sits above a remediation, where the useful word is what to do. |
+
+#### Why this one measures the terminal and the report does not
+
+The report is an artifact somebody diffs, so its grid is fixed at 78 columns and
+two runs of an unchanged host are byte-identical. The stream is gone as soon as
+the terminal scrolls, is never redirected into a file anybody compares, and is
+laid out against `TIOCGWINSZ` at the moment each row is written — so a window
+resized mid-scan reflows from the next row on. Nothing already printed moves,
+because nothing can move somebody's scrollback.
+
+Each row is `[+] ` + a fixed head + an elastic middle + a fixed tail + `...`,
+padded so that head through token is exactly the terminal width. **Only the
+middle gives.** The check ID is in the tail, so a narrow window shortens the
+human sentence and never the identifier — the ID is what a suppression file
+matches on. Below the width where a truncated title is two letters and an
+ellipsis, the row drops to `[+] AUTH-0001... [ PASS ]`. Widths are clamped to
+[20, 120]: past 120, flush-right puts the verdict too far from the title for the
+eye to associate them.
+
 ### The progress indicator
 
 `scan` and `collect` draw a transient one-line indicator on **stderr** while
@@ -692,6 +743,10 @@ stdout, which is the wrong descriptor for something stderr draws:
 `plumbline scan > report.txt` leaves stderr on the terminal, and that is
 precisely the run where an operator most wants to see that something is
 happening. The file stays clean either way.
+
+It is the fallback for the runs the live stream does not cover: `collect`,
+which has no evaluation phase to narrate, and any `scan` asking for a format
+other than `terminal`.
 
 It is drawn only when all four of these hold, and the default is off:
 

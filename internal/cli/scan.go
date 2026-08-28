@@ -9,6 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/antaryx/plumbline/internal/collect"
+	rendertext "github.com/antaryx/plumbline/internal/render/text"
+	"github.com/antaryx/plumbline/internal/system"
 	"github.com/antaryx/plumbline/internal/system/live"
 )
 
@@ -77,11 +80,25 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 			defer cancel()
 
-			sys := live.New(root)
-			got, err := collectFacts(ctx, sys, collectOptions{
+			// The live stream and the spinner are the same job done two ways
+			// and exactly one of them runs. streamPresenter returns nil when
+			// this is not a run a person is watching — a pipe, a CI log, a
+			// terminal that will not identify itself — and the spinner takes
+			// over on precisely those runs, which is the behaviour that was
+			// there before and is still right for them.
+			stream := streamPresenter(format, stderr, out.noColor)
+			opts := collectOptions{
 				redact: redact, profile: pf.name, perCollector: perCollector,
-				progress: stderr,
-			})
+			}
+			if stream != nil {
+				stream.Phase("Collecting host evidence")
+				opts.observer = collectorEvents{stream}
+			} else {
+				opts.progress = stderr
+			}
+
+			sys := live.New(root)
+			got, err := collectFacts(ctx, sys, opts)
 			if err != nil {
 				return exitError{code: ExitInternal, message: err.Error()}
 			}
@@ -113,7 +130,10 @@ re-evaluated or diffed; the two are not interchangeable.`,
 				return exitError{code: ExitTimeout, message: "scan exceeded --timeout"}
 			}
 
-			return renderAndGate(got.bundle, failOn, gt, format, out, sup, prof, stdout, stderr)
+			if stream != nil {
+				stream.Phase("Evaluating the catalog")
+			}
+			return renderAndGate(got.bundle, failOn, gt, format, out, sup, prof, stream, stdout, stderr)
 		},
 	}
 
@@ -128,4 +148,48 @@ re-evaluated or diffed; the two are not interchangeable.`,
 	sf.register(cmd)
 	pf.register(cmd)
 	return cmd
+}
+
+// streamPresenter builds the live scan display, or returns nil when this run
+// should not have one.
+//
+// **The policy is the progress indicator's, deliberately reused rather than
+// restated.** Both are ephemeral stderr output for a person watching a scan
+// happen, and the four conditions that decide whether anybody is watching —
+// PLUMBLINE_NO_PROGRESS, stderr being a character device, a TERM that
+// identifies itself, and no CI marker — are the same four for both. Two copies
+// of that list would drift, and the run where they disagreed would be one that
+// draws a hundred lines of progress into a build log.
+//
+// It is also restricted to `--format terminal`. That is not about stdout —
+// the stream never touches stdout, so a json run is safe either way — but about
+// intent: somebody asking for machine-readable output is scripting, and
+// narrating a hundred checks at them is noise on the stream they left open to
+// see errors on. The scoring notice is different and does print on every
+// format, because a scoring change is something they need whether or not they
+// wanted company.
+func streamPresenter(format string, stderr io.Writer, noColor bool) *rendertext.Stream {
+	if format != FormatTerminal || !progressAllowed(stderr) {
+		return nil
+	}
+	return rendertext.NewStream(stderr, useColor(stderr, noColor, false), func() (int, bool) {
+		return system.TerminalWidth(stderr)
+	})
+}
+
+// collectorEvents adapts the renderer to the collector runner's observer.
+//
+// The two packages are deliberately kept apart: internal/render may not import
+// internal/collect, because a renderer that knows how facts are gathered is a
+// renderer that will eventually gather some. So collect.Observer speaks its own
+// CollectorStatus and rendertext.Stream takes a plain string, and the joint
+// between them is here — in the composition root, which is the one place
+// already allowed to know about both.
+//
+// It carries no state, so it is safe to hand to the concurrent collector
+// goroutines; the locking that makes that true is the Stream's.
+type collectorEvents struct{ s *rendertext.Stream }
+
+func (c collectorEvents) CollectorDone(id string, status collect.CollectorStatus, took time.Duration) {
+	c.s.CollectorDone(id, string(status), took)
 }

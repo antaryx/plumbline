@@ -2039,3 +2039,69 @@ func TestTheScoringNoticeIsDrawnWhereNoHumanIsWatching(t *testing.T) {
 		t.Errorf("PLUMBLINE_NO_NOTICES did not silence it:\n%s", quiet)
 	}
 }
+
+// TestTheLiveStreamNeverReachesStdout.
+//
+// The stream is the second thing this CLI writes to stderr and it is by far the
+// noisiest — one row per collector and one per check, over a hundred lines. It
+// is also constructed only for `--format terminal`, so the json and sarif runs
+// below are asserting that no stream exists rather than that it went somewhere
+// safe; the terminal run asserts the rows are not on stdout even when they are
+// the same format as the report.
+//
+// A test buffer is never a terminal, so no stream is drawn here at all — which
+// is precisely the property being pinned. A run whose stderr is a pipe, a file
+// or a CI log gets the spinner's policy, which is nothing.
+func TestTheLiveStreamNeverReachesStdout(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	for _, format := range []string{"terminal", "json", "sarif"} {
+		t.Run(format, func(t *testing.T) {
+			code, stdout, stderr := run(t, "scan", "--root", hostFixture, "--format", format)
+			if code != 0 {
+				t.Fatalf("exit %d\n%s", code, stderr)
+			}
+			for _, marker := range []string{"[+] Checking ", "[+] Collecting ", "[*] Result"} {
+				if strings.Contains(stdout, marker) {
+					t.Errorf("stream marker %q is on stdout in %s output", marker, format)
+				}
+			}
+			if strings.Contains(stderr, "[+] Checking ") {
+				t.Error("a stream was drawn on a stderr that is not a terminal")
+			}
+		})
+	}
+}
+
+// TestScanIsUnchangedOnStdoutWhetherOrNotAnythingIsWatching.
+//
+// The stream changes what a person sees and must change nothing a machine
+// reads. Two runs of the same fixture, one with the stream suppressed the way a
+// pipe suppresses it and one with PLUMBLINE_NO_PROGRESS set explicitly, have to
+// produce the same document — because the alternative is a report whose content
+// depends on whether somebody was looking at it.
+func TestScanIsUnchangedOnStdoutWhetherOrNotAnythingIsWatching(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	_, watched, _ := run(t, "scan", "--root", hostFixture)
+
+	t.Setenv("PLUMBLINE_NO_PROGRESS", "1")
+	_, quiet, _ := run(t, "scan", "--root", hostFixture)
+
+	if normaliseReport(watched) != normaliseReport(quiet) {
+		t.Error("the report differs depending on whether progress output was drawn")
+	}
+}
+
+// normaliseReport removes the two fields that legitimately differ between two
+// runs of one fixture: the wall-clock start and the elapsed time.
+func normaliseReport(s string) string {
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		if strings.Contains(line, "started") && strings.Contains(line, "elapsed") {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}

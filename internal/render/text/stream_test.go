@@ -1,0 +1,285 @@
+package text_test
+
+import (
+	"bytes"
+	"fmt"
+	"regexp"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/antaryx/plumbline/internal/finding"
+	"github.com/antaryx/plumbline/internal/render/text"
+	"github.com/antaryx/plumbline/internal/score"
+)
+
+var ansi = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// visible is what the terminal actually draws: escape sequences removed and
+// the result measured in runes, not bytes. Every assertion about alignment in
+// this file goes through it, because measuring the bytes is exactly the mistake
+// the layout exists to avoid — `…` is three bytes and one column, and a green
+// token is eleven bytes of nothing.
+func visible(line string) string { return ansi.ReplaceAllString(line, "") }
+
+func width(line string) int { return len([]rune(visible(line))) }
+
+// fixedWidth is a width function for a terminal that never changes size.
+func fixedWidth(n int) func() (int, bool) {
+	return func() (int, bool) { return n, true }
+}
+
+func streamRows(t *testing.T, buf *bytes.Buffer) []string {
+	t.Helper()
+	var out []string
+	for _, l := range strings.Split(buf.String(), "\n") {
+		if strings.HasPrefix(visible(l), "[+] ") {
+			out = append(out, l)
+		}
+	}
+	if len(out) == 0 {
+		t.Fatalf("no rows in:\n%s", buf.String())
+	}
+	return out
+}
+
+func sampleFindings() []finding.Finding {
+	return []finding.Finding{
+		{CheckID: "AUTH-0001", Title: "A password quality module is enforced",
+			Result: finding.Pass, Severity: finding.Medium},
+		{CheckID: "CONTAINERS-0001", Title: "The Docker daemon remaps container users to unprivileged host ranges",
+			Result: finding.NotApplicable, Severity: finding.High},
+		{CheckID: "KERNEL-0004", Title: "The kernel ring buffer is not readable by unprivileged users",
+			Result: finding.Fail, Severity: finding.High},
+		{CheckID: "SSHD-0009", Title: "Root login is disabled over SSH",
+			Result: finding.Unknown, Severity: finding.Low},
+	}
+}
+
+// TestEveryRowIsExactlyTheTerminalWidth.
+//
+// This is the whole claim of the layout and it is asserted at several widths,
+// with colour both on and off. Colour is the interesting half: a token carries
+// eleven bytes of escape sequence that draw nothing, so a gap computed with len
+// rather than visibleWidth would put the coloured rows several columns short
+// and the plain ones exactly right — a misalignment that only appears on a real
+// terminal, which is the one place no test looks.
+func TestEveryRowIsExactlyTheTerminalWidth(t *testing.T) {
+	for _, columns := range []int{45, 60, 80, 100, 120} {
+		for _, colour := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%d/colour=%v", columns, colour), func(t *testing.T) {
+				var buf bytes.Buffer
+				s := text.NewStream(&buf, colour, fixedWidth(columns))
+				for _, f := range sampleFindings() {
+					s.CheckDone(f)
+				}
+				s.CollectorDone("containers-service", "ok", 0)
+
+				for _, row := range streamRows(t, &buf) {
+					if got := width(row); got != columns {
+						t.Errorf("row is %d columns, want %d:\n  %q", got, columns, visible(row))
+					}
+				}
+			})
+		}
+	}
+}
+
+// TestTheTerminalWidthIsReadPerRow.
+//
+// Resizing mid-scan must reflow from the next row, which is only true if the
+// width is asked for every line rather than cached at construction. The width
+// function here changes its answer on each call, and the rows have to follow
+// it.
+func TestTheTerminalWidthIsReadPerRow(t *testing.T) {
+	widths := []int{100, 80, 60}
+	i := 0
+	var buf bytes.Buffer
+	s := text.NewStream(&buf, false, func() (int, bool) {
+		w := widths[i]
+		i++
+		return w, true
+	})
+
+	for _, f := range sampleFindings()[:3] {
+		s.CheckDone(f)
+	}
+
+	rows := streamRows(t, &buf)
+	for n, row := range rows {
+		if got := width(row); got != widths[n] {
+			t.Errorf("row %d is %d columns, want %d (the terminal was resized)", n, got, widths[n])
+		}
+	}
+}
+
+// TestTheCheckIDSurvivesEveryWidth.
+//
+// The ID is what a suppression file matches on and what `plumbline explain`
+// takes. A layout that truncates the assembled line eats it first, because it
+// is at the end — so a narrow terminal would silently produce rows nobody can
+// act on. The title gives way instead, and below the width where even that is
+// pointless the row drops to the ID alone.
+func TestTheCheckIDSurvivesEveryWidth(t *testing.T) {
+	for _, columns := range []int{20, 24, 30, 40, 45, 60, 80, 120} {
+		var buf bytes.Buffer
+		s := text.NewStream(&buf, false, fixedWidth(columns))
+		for _, f := range sampleFindings() {
+			s.CheckDone(f)
+		}
+
+		text := buf.String()
+		for _, f := range sampleFindings() {
+			if !strings.Contains(text, f.CheckID) {
+				t.Errorf("at %d columns, %s is not in its own row:\n%s", columns, f.CheckID, visible(text))
+			}
+		}
+	}
+}
+
+// TestANarrowTerminalIsNotWidenedToFitTheLayout.
+//
+// An earlier version clamped the layout to a 40-column floor, which on a
+// 30-column terminal produced 40-column rows that the terminal then wrapped —
+// destroying the column far more thoroughly than a short row would. The rule
+// is that a row may exceed the terminal only when even the compact form does
+// not fit, and never by much.
+func TestANarrowTerminalIsNotWidenedToFitTheLayout(t *testing.T) {
+	const columns = 30
+	var buf bytes.Buffer
+	s := text.NewStream(&buf, false, fixedWidth(columns))
+	for _, f := range sampleFindings() {
+		s.CheckDone(f)
+	}
+
+	for _, row := range streamRows(t, &buf) {
+		// The overflow that remains is the compact row itself: a long ID plus
+		// a long token cannot be made shorter without losing one of them.
+		if got := width(row); got > columns+8 {
+			t.Errorf("row is %d columns on a %d-column terminal:\n  %q", got, columns, visible(row))
+		}
+	}
+}
+
+func TestTheTokensSayWhatHappened(t *testing.T) {
+	cases := []struct {
+		result finding.Result
+		want   string
+	}{
+		{finding.Pass, "[ PASS ]"},
+		{finding.Fail, "[ FAIL ]"},
+		{finding.Unknown, "[ UNKNOWN ]"},
+		{finding.NotApplicable, "[ N/A ]"},
+	}
+	for _, c := range cases {
+		var buf bytes.Buffer
+		s := text.NewStream(&buf, false, fixedWidth(80))
+		s.CheckDone(finding.Finding{CheckID: "T-0001", Title: "t", Result: c.result})
+		if !strings.Contains(visible(buf.String()), c.want) {
+			t.Errorf("%s rendered as %q, want %s", c.result, visible(buf.String()), c.want)
+		}
+	}
+}
+
+// Colour off means no escape sequences at all, which is what makes the stream
+// safe on a pipe and readable in a captured log.
+func TestColourOffEmitsNoEscapes(t *testing.T) {
+	var buf bytes.Buffer
+	s := text.NewStream(&buf, false, fixedWidth(80))
+	s.Phase("Evaluating")
+	for _, f := range sampleFindings() {
+		s.CheckDone(f)
+	}
+	s.CollectorDone("kernel", "failed", 2*time.Second)
+	s.Close(score.Compute(sampleFindings(), 33))
+
+	if strings.Contains(buf.String(), "\x1b[") {
+		t.Errorf("escape sequences with colour off:\n%q", buf.String())
+	}
+}
+
+// TestConcurrentCollectorEventsProduceWholeLines.
+//
+// collect.Runner calls CollectorDone from the collector goroutines and they run
+// at once. Without the mutex two of them interleave inside one Fprintf and the
+// operator gets a row with another row's token in the middle of it — which the
+// race detector would catch on the counters but not on the writer, because a
+// bytes.Buffer racing is a corrupted line rather than a panic.
+func TestConcurrentCollectorEventsProduceWholeLines(t *testing.T) {
+	var buf bytes.Buffer
+	s := text.NewStream(&buf, true, fixedWidth(80))
+
+	var wg sync.WaitGroup
+	for i := range 64 {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			s.CollectorDone(fmt.Sprintf("collector-%02d", n), "ok", 0)
+		}(i)
+	}
+	wg.Wait()
+
+	rows := streamRows(t, &buf)
+	if len(rows) != 64 {
+		t.Fatalf("got %d rows, want 64", len(rows))
+	}
+	for _, row := range rows {
+		if got := width(row); got != 80 {
+			t.Errorf("interleaved row (%d columns): %q", got, visible(row))
+		}
+		if strings.Count(visible(row), "[ DONE ]") != 1 {
+			t.Errorf("row carries more than one verdict: %q", visible(row))
+		}
+	}
+}
+
+// TestTheClosingTallyNamesTheFailures.
+func TestTheClosingTallyNamesTheFailures(t *testing.T) {
+	var buf bytes.Buffer
+	s := text.NewStream(&buf, false, fixedWidth(80))
+	for _, f := range sampleFindings() {
+		s.CheckDone(f)
+	}
+	s.Close(score.Compute(sampleFindings(), 33))
+
+	out := visible(buf.String())
+	for _, want := range []string{
+		"posture", "coverage",
+		"1 passed, 1 failed, 1 unknown, 1 not applicable",
+		"KERNEL-0004",
+		// The stream is not the report and must not be mistaken for one.
+		"follows on stdout",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the tally does not mention %q:\n%s", want, out)
+		}
+	}
+}
+
+// A posture that is undefined must not be printed as zero. score.Score returns
+// (value, ok) precisely so that "nothing was evaluated" cannot be rendered as
+// "posture 0", and the last line of the stream must not undo that.
+func TestAnUndefinedPostureIsNotPrintedAsZero(t *testing.T) {
+	var buf bytes.Buffer
+	s := text.NewStream(&buf, false, fixedWidth(80))
+	s.Close(score.Compute(nil, 33))
+
+	out := visible(buf.String())
+	if strings.Contains(out, "posture 0") {
+		t.Errorf("an unevaluated host was scored:\n%s", out)
+	}
+	if !strings.Contains(out, "no posture") {
+		t.Errorf("the tally does not say why there is no score:\n%s", out)
+	}
+}
+
+// A nil stream is the disabled one, and every method has to tolerate it so
+// that the CLI can hold one variable instead of a branch at each call site.
+func TestANilStreamIsSilent(t *testing.T) {
+	var s *text.Stream
+	s.Phase("x")
+	s.CheckDone(finding.Finding{CheckID: "T-0001"})
+	s.CollectorDone("c", "ok", 0)
+	s.Close(score.Compute(nil, 33))
+}

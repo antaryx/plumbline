@@ -214,6 +214,46 @@ because of this release (VERSIONING §2.4).
   inode, the way the unit collector already does for drop-in directories.
 
 ### Added
+- **A live scan stream (`internal/render/text/stream.go`).** `scan --format
+  terminal` now narrates the scan on **stderr** as it happens — one row per
+  collector, then one per check, each with its verdict flush against the right
+  edge of the terminal — instead of a spinner that says only that something is
+  going on.
+
+  Three pieces:
+
+  - **`catalog.Observer` and `Catalog.EvaluateWith`.** One call per check as it
+    reaches a verdict, synchronous, in the same deterministic order the returned
+    slice carries. `Evaluate` is now one line over it. Evaluation stays
+    sequential: 109 checks take about a millisecond over collected facts, and
+    the byte-identical ordering is a correctness property rather than an
+    unfinished optimisation.
+  - **`collect.Runner.Observer` and `collect.CollectorStatus`.** One call per
+    collector, however it ended — including the ones refused for privilege and
+    the ones whose dependency was never registered, because a progress display
+    that omits the collectors which could not run looks tidiest on the hosts it
+    understands least. **These are called from the collector goroutines, which
+    run concurrently**, so an implementation must be safe for concurrent use;
+    `Stream` locks on every method.
+  - **`rendertext.Stream`**, which satisfies both. It lives in the render tree
+    beside the report so the two share one palette, one `visibleWidth` and one
+    posture-colour rule (`postureBandFor`, extracted from the dashboard's
+    `gaugeTone` for the purpose). A second package with its own idea of how wide
+    green is would be two answers about one screen.
+
+  **It replaces the progress indicator rather than joining it**, on the same four
+  conditions the indicator already used — so a pipe, a CI log or a `TERM` that
+  will not identify itself gets exactly what it got before. `--format json` and
+  `--format sarif` do not stream at all.
+
+  **Terminal width is measured per row** (`system.TerminalWidth`, `TIOCGWINSZ`
+  through the seam), so a window resized mid-scan reflows from the next row.
+  The report's grid stays fixed at 78 columns, because that is an artifact
+  somebody diffs and this is not. Only the title gives way when a row does not
+  fit: the check ID is what a suppression file matches on, so it is never
+  truncated, and below the width where a shortened title conveys nothing the row
+  drops to `[+] AUTH-0001... [ PASS ]`.
+
 - **A startup notice for scoring changes (`internal/cli/notice.go`).**
   VERSIONING §2.4 has required a `plumbline scan` startup warning for a
   high-impact correction since v1.0.0 and nothing implemented one. This does.

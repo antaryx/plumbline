@@ -165,3 +165,89 @@ type opaqueFact struct {
 func (o opaqueFact) FactID() fact.ID  { return o.id }
 func (o opaqueFact) FactVersion() int { return o.version }
 func (o opaqueFact) OpaqueFact() int  { return o.version }
+
+// tape records what an Observer was told, in the order it was told.
+type tape struct{ ids []string }
+
+func (t *tape) CheckDone(f finding.Finding) { t.ids = append(t.ids, f.CheckID) }
+
+// TestTheObserverSeesEveryCheckInTheOrderTheSliceCarries.
+//
+// The live display and the report have to agree about what ran, and the only
+// way they can disagree is if the events and the slice are built by two
+// different walks. They are built by one, and this is what says so.
+func TestTheObserverSeesEveryCheckInTheOrderTheSliceCarries(t *testing.T) {
+	c := catalog.MustNew(
+		passing("BBB-0001"),
+		passing("AAA-0002"),
+		passing("AAA-0001"),
+	)
+
+	var seen tape
+	out := c.EvaluateWith(fact.NewSet(), &seen)
+
+	if len(out) != len(seen.ids) {
+		t.Fatalf("%d findings but %d events", len(out), len(seen.ids))
+	}
+	for i := range out {
+		if out[i].CheckID != seen.ids[i] {
+			t.Errorf("event %d was %s, slice has %s", i, seen.ids[i], out[i].CheckID)
+		}
+	}
+	// And that order is the catalog's sorted order, which is what makes two
+	// runs over one bundle byte-identical.
+	if got := strings.Join(seen.ids, ","); got != "AAA-0001,AAA-0002,BBB-0001" {
+		t.Errorf("events came in %s", got)
+	}
+}
+
+// A check that panics still reaches the observer, as the UNKNOWN the runner
+// turned it into. A display that skipped the row would leave a gap exactly
+// where the operator most needs to see something happened.
+func TestAPanickingCheckStillReachesTheObserver(t *testing.T) {
+	c := catalog.MustNew(catalog.Check{
+		ID: "BOOM-0001", Module: "BOOM", Title: "t",
+		BaseSeverity: finding.Low, Requires: []fact.ID{fact.SSHDConfigID},
+		Eval: func(*fact.Set) catalog.Outcome { panic("no") },
+	})
+
+	fs := fact.NewSet()
+	fs.Put(fact.SSHDConfig{Installed: true})
+
+	var seen tape
+	c.EvaluateWith(fs, &seen)
+	if len(seen.ids) != 1 || seen.ids[0] != "BOOM-0001" {
+		t.Errorf("the panicking check produced events %v", seen.ids)
+	}
+}
+
+// Evaluate is EvaluateWith with no observer, and must stay exactly that.
+func TestEvaluateAndEvaluateWithAgree(t *testing.T) {
+	c := catalog.MustNew(passing("AAA-0001"), passing("BBB-0001"))
+	fs := fact.NewSet()
+
+	plain := c.Evaluate(fs)
+	watched := c.EvaluateWith(fs, &tape{})
+	if len(plain) != len(watched) {
+		t.Fatalf("%d findings without an observer, %d with", len(plain), len(watched))
+	}
+	for i := range plain {
+		if plain[i].CheckID != watched[i].CheckID || plain[i].Result != watched[i].Result {
+			t.Errorf("%s: %s without an observer, %s with",
+				plain[i].CheckID, plain[i].Result, watched[i].Result)
+		}
+	}
+}
+
+// passing is a check that needs a fact nothing supplies, so it resolves to
+// UNKNOWN without any fixture. What these tests assert is the walk, not the
+// verdict.
+func passing(id string) catalog.Check {
+	return catalog.Check{
+		ID: id, Module: strings.SplitN(id, "-", 2)[0], Title: "t",
+		BaseSeverity: finding.Low, Requires: []fact.ID{fact.SSHDConfigID},
+		Eval: func(*fact.Set) catalog.Outcome {
+			return catalog.Outcome{Result: finding.Pass, Detail: "d"}
+		},
+	}
+}

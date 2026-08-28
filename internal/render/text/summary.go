@@ -322,23 +322,48 @@ func (p *printer) gauge(s *styles, sc score.Score) string {
 // It is a separate function from the box it is drawn in so the rule can be
 // tested as a rule, rather than by reading colours back out of rendered bytes.
 func gaugeTone(s *styles, posture, coverage float64) style {
-	tone := s.pass
+	switch postureBandFor(posture, coverage) {
+	case bandFail:
+		return s.fail
+	case bandWarn:
+		return s.unknown
+	default:
+		return s.pass
+	}
+}
+
+// postureBand is which of the three the gauge colour rule lands on.
+type postureBand int
+
+const (
+	bandPass postureBand = iota
+	bandWarn
+	bandFail
+)
+
+// postureBandFor is the rule itself, separated from the styles it is drawn
+// with so that the live stream and the dashboard cannot disagree about what
+// green means on one screen. Two implementations of a colour band would be two
+// answers about the same number, which is the mistake this package spends its
+// palette comment arguing against.
+func postureBandFor(posture, coverage float64) postureBand {
+	band := bandPass
 	switch {
 	case posture < postureAmber:
-		tone = s.fail
+		band = bandFail
 	case posture < postureGreen:
-		tone = s.unknown
+		band = bandWarn
 	}
 
 	switch {
 	case coverage < coverageRed:
-		return s.fail
+		return bandFail
 	case coverage < coverageAmber:
-		if tone == s.pass {
-			return s.unknown
+		if band == bandPass {
+			return bandWarn
 		}
 	}
-	return tone
+	return band
 }
 
 // bar draws the filled proportion. The two block characters are full and light
