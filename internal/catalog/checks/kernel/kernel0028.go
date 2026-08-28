@@ -65,12 +65,12 @@ This is a check about files. Nothing reads the running value yet.`,
 					detail += " The running kernel has it at 1, so this host is protected now and will not be after the next reboot unless something sets it again outside these files."
 				}
 			}
-			return catalog.Outcome{
+			return tierAbsence(catalog.Outcome{
 				Result:   finding.Fail,
 				Subject:  rfc1337Key,
-				Detail:   detail + persistRFC1337Caveat,
+				Detail:   detail,
 				Evidence: searchedEvidence(sc, nil),
-			}
+			}, sc, rfc1337Tiering, persistRFC1337Caveat)
 		}
 
 		n, err := strconv.Atoi(set.Value)
@@ -130,3 +130,6 @@ const rfc1337Key = "net.ipv4.tcp_rfc1337"
 
 // persistRFC1337Caveat names the absent runtime counterpart.
 var persistRFC1337Caveat = persistCaveatUnpaired()
+
+// rfc1337Tiering is the runtime cross-reference for the absence case.
+var rfc1337Tiering = []requirement{{key: rfc1337Key, accept: func(n int) bool { return n == 1 }}}

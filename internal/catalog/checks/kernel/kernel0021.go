@@ -74,12 +74,12 @@ chosen to keep the emergency sync; a host with 1 has not.`,
 			if r, ok := sc.Run(sysrqKey); ok && r.State == fact.SysctlObserved {
 				detail += fmt.Sprintf(" The running kernel has it at %s (%s).", r.Value, describeSysrq(r.Value))
 			}
-			return catalog.Outcome{
+			return tierAbsence(catalog.Outcome{
 				Result:   finding.Fail,
 				Subject:  sysrqKey,
-				Detail:   detail + persistSysrqCaveat,
+				Detail:   detail,
 				Evidence: searchedEvidence(sc, nil),
-			}
+			}, sc, sysrqTiering, persistSysrqCaveat)
 		}
 
 		value := strings.TrimSpace(set.Value)
@@ -249,3 +249,6 @@ func dangerousSysrq(mask int) []string {
 	}
 	return why
 }
+
+// sysrqTiering is the runtime cross-reference for the absence case.
+var sysrqTiering = []requirement{{key: sysrqKey, accept: func(n int) bool { return n == 0 }}}

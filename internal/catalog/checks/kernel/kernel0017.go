@@ -53,11 +53,23 @@ applied them, and this check will not guess — it reports UNKNOWN and names bot
 files. Getting that wrong would be a confident claim about what the host does
 after a reboot, which is the one thing this check exists to describe.`,
 
-	// High. KERNEL-0006 is Medium because it describes a boundary that is up
-	// right now; this describes one that is scheduled to fall down, on a host
-	// whose operator believes it is hardened and whose other checks agree. A
-	// finding nobody will see again until an incident is worth more than one
-	// they can see today.
+	// High is the base, which is what a host with nothing hardening BPF gets.
+	//
+	// This comment used to end there, and the reasoning was that KERNEL-0006 is
+	// Medium because it describes a boundary that is up right now, while this
+	// describes one scheduled to fall down on a host whose operator believes it
+	// is hardened. **That reasoning is now in tension with runtimeTier**, which
+	// drops this to LOW precisely when the running kernel is hardened and no
+	// file says so — the case the paragraph above called the worst one.
+	//
+	// The tension was settled deliberately at catalog 32 and in favour of
+	// tiering, because a severity field that cannot sort a triage queue is
+	// worth less than the emphasis it was carrying: this group failed almost
+	// every host at HIGH, and a report where everything is red is one nobody
+	// reads. What was lost is emphasis, not information — the detail still says
+	// the setting came from outside these files and will not survive a reboot,
+	// and an operator filtering on LOW is filtering on "not exposed today"
+	// rather than on "unimportant".
 	BaseSeverity: finding.High,
 	Tags:         []string{"kernel", "bpf", "sysctl", "persistence", "privilege-escalation"},
 	Requires:     []fact.ID{fact.SysctlID},
@@ -75,6 +87,7 @@ after a reboot, which is the one thing this check exists to describe.`,
 			weak     []string
 			evidence []finding.Evidence
 		)
+		written := 0
 		for _, want := range bpfPersistent {
 			set, found := sc.EffectiveConfigured(want.key)
 			if !found {
@@ -90,16 +103,25 @@ after a reboot, which is the one thing this check exists to describe.`,
 				}
 			default:
 				failed = append(failed, fmt.Sprintf("%s is %s at %s:%d, and %s", want.key, value, set.File, set.Line, want.wantNote))
+				written++
 			}
 		}
 
 		if len(failed) > 0 {
-			return catalog.Outcome{
+			out := catalog.Outcome{
 				Result:   finding.Fail,
 				Subject:  "sysctl configuration",
-				Detail:   bpfFailureDetail(sc, failed) + persistBPFCaveat,
+				Detail:   bpfFailureDetail(sc, failed),
 				Evidence: searchedEvidence(sc, evidence),
 			}
+			if written > 0 {
+				// A file sets one of them to the wrong value. That is a
+				// decision somebody made and the running kernel disagreeing
+				// with it does not make it less serious.
+				out.Detail += persistBPFCaveat
+				return out
+			}
+			return tierAbsence(out, sc, bpfTiering, persistBPFCaveat)
 		}
 
 		detail := "Both BPF hardening parameters are written to the sysctl configuration, so unprivileged bpf() stays refused and the JIT keeps blinding constants across a reboot."
@@ -283,4 +305,15 @@ func startsWithSysctlKey(s string) bool {
 		}
 	}
 	return true
+}
+
+// bpfTiering is the runtime cross-reference for the absence case, mirroring
+// what bpfPersistent accepts in a file.
+//
+// Both parameters default to 0 on every kernel, so this downgrade fires only
+// on a host where something set them at runtime — which is the case the note
+// is careful not to call safe.
+var bpfTiering = []requirement{
+	{key: "kernel.unprivileged_bpf_disabled", accept: func(n int) bool { return n == 1 || n == 2 }},
+	{key: "net.core.bpf_jit_harden", accept: func(n int) bool { return n >= 2 }},
 }

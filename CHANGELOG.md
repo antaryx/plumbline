@@ -11,6 +11,52 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+### Check corrections
+
+Catalog 32. Two corrections, both of which **lower** severities or widen what a
+check accepts. Neither makes any check stricter — nobody's pipeline goes red
+because of this release (VERSIONING §2.4).
+
+- **A persistence check no longer reports a safe running kernel at full
+  severity.** *Old behaviour:* every check routed through `persistenceGate`
+  failed at its base severity when no file set the parameter, whether or not
+  the host was actually exposed. *New behaviour:* when the failure rests
+  **entirely** on absences and every required parameter is running at a value
+  the check accepts, the finding drops to `LOW` and says why. *Affected:*
+  KERNEL-0017 through -0031 on hosts whose running kernel is already correct —
+  which is most hosts, for most of these parameters. **No verdict changes**:
+  a FAIL stays a FAIL and the detail still says the setting is unrecorded and
+  may not survive a reboot. Only the ranking moves.
+
+  Three cases deliberately do **not** downgrade, and they are the point of the
+  design: a parameter running at a value the check rejects (the host is exposed
+  now); a parameter whose running value could not be read (a downgrade has to
+  be earned by evidence — ADR-0014); and a failure where any file sets a wrong
+  value, because that is a decision somebody made and the running kernel
+  disagreeing with it does not soften it.
+
+- **`KERNEL-0005` accepts `fs.suid_dumpable = 2`.** *Old behaviour:* only `0`
+  passed; `2` was a `LOW` failure. *New behaviour:* `0` and `2` both pass, and
+  the verdict still says `2` is not equivalent to `0` — the privileged memory
+  reaches the disk. *Affected:* hosts using `systemd-coredump` to capture setuid
+  crashes, which is the only reason to run `2`. This closes a contradiction:
+  `KERNEL-0029` accepted `2` on the same host where `KERNEL-0005` failed it, so
+  one report carried a PASS and a FAIL about one value. The cross-reference in
+  `KERNEL-0029` and the test pinning the disagreement are removed.
+
+  **Posture scores rise.** Severity weights the score, so downgrading failures
+  raises it without any host changing. Across the corpus: ubuntu-2404-stock
+  68.83 → 70.20, alpine-320-stock 66.67 → 69.42, fedora-44-stock 59.48 → 62.76,
+  rocky-9-stock 62.42 → 65.49, ubuntu-2404-hardened 84.05 → 85.15,
+  debian-13-stock unchanged at 77.12 (it has no sysctl files, so every one of
+  these checks is `NOT_APPLICABLE`). Scores are only comparable within a
+  catalog version and `plumbline diff` already refuses to compare across one.
+
+  This correction changes results on well over 10% of hosts, so VERSIONING §2.4
+  also calls for a `plumbline scan` startup warning for one minor cycle. **No
+  such mechanism exists in the CLI yet**; it is recorded in the roadmap rather
+  than quietly skipped.
+
 ### Fixed
 - **The unparseable-configuration branch is resolved in one place.**
   `unparseableConfig` replaces the sixth copy of an identical block, with
@@ -145,21 +191,6 @@ explanation in this file is a defect.
   protections down; the RPM family relies on the kernel default and writes
   nothing. **No bundle writes `fs.suid_dumpable` at all**, and every one of them
   runs it at `0` — the kernel's own safe default, chosen by nobody.
-
-### Check interactions
-- **`KERNEL-0029` accepts `fs.suid_dumpable = 2` and `KERNEL-0005` does not.**
-  This is deliberate and the checks are asking different questions —
-  `KERNEL-0005`'s subject is whether setuid programs write dumps *at all*, so it
-  reports `2` as a `LOW` finding, while `KERNEL-0029` accepts the documented
-  suidsafe value that `systemd-coredump` requires. A host at `2` sees both.
-
-  `KERNEL-0029`'s passing detail names `KERNEL-0005` explicitly so the pair
-  reads as two questions rather than as the report contradicting itself, and
-  `TestKernel0029AndKernel0005AgreeOnWhatTheyDisagreeAbout` pins both verdicts
-  together: if `KERNEL-0005` is ever re-rated to accept `2`, that test fails and
-  the cross-reference has to go with it. **Whether the pair should be reconciled
-  is a question for the catalog-wide severity review**, not something to settle
-  inside one check.
 
 - **`KERNEL-0026`, `-0027` and `-0028`: the rest of the network sysctl
   surface.** Catalog 30, 106 checks. All three route through `persistenceGate`,

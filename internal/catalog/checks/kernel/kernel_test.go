@@ -3,6 +3,7 @@ package kernel_test
 import (
 	"context"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -201,10 +202,13 @@ func TestKernel0005SuidDumpable(t *testing.T) {
 		{fixture: "kernel-hardened", result: finding.Pass, detailContains: "do not produce core dumps"},
 		{fixture: "kernel-weak", result: finding.Fail, severity: finding.Medium, detailContains: "crashing one"},
 		{
-			// 2 still writes privileged memory to disk but only root can read
-			// it, which is a smaller exposure and a lower severity.
-			fixture: "kernel-partial", result: finding.Fail, severity: finding.Low,
-			detailContains: "only root may read",
+			// 2 — "suidsafe" — passes since catalog 32. It is what
+			// systemd-coredump needs to capture a setuid crash at all, and
+			// failing it put this check in direct contradiction with
+			// KERNEL-0029 on the same value. It is still not equivalent to 0
+			// and the verdict says so.
+			fixture: "kernel-partial", result: finding.Pass,
+			detailContains: "not equivalent to 0",
 		},
 		{fixture: "kernel-denied", result: finding.Unknown, reason: finding.ReasonPermission, detailContains: "could not be read"},
 	})
@@ -622,7 +626,7 @@ func TestKernel0017PersistentBPFHardening(t *testing.T) {
 			detailContains: "Both BPF hardening parameters are written"},
 
 		// The case the check exists for: hardened now, gone at reboot.
-		{fixture: "kernel-bpf-runtime-only", result: finding.Fail, severity: finding.High,
+		{fixture: "kernel-bpf-runtime-only", result: finding.Fail, severity: finding.Low,
 			detailContains: "is not set in any sysctl configuration file"},
 
 		// Two files disagree; which wins depends on the tool.
@@ -978,7 +982,7 @@ func TestKernel0020PtraceScopePersisted(t *testing.T) {
 			detailContains: "classic behaviour"},
 
 		// Written nowhere, and hardened at runtime — the trap.
-		{fixture: "kernel-trace-unset", result: finding.Fail, severity: finding.High,
+		{fixture: "kernel-trace-unset", result: finding.Fail, severity: finding.Low,
 			detailContains: "will not be after the next reboot"},
 
 		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
@@ -1396,7 +1400,7 @@ func TestKernel0024ReversePathFilteringIsPersisted(t *testing.T) {
 		{fixture: "kernel-net-globbed", result: finding.Pass,
 			detailContains: "withheld from glob matching"},
 
-		{fixture: "kernel-net-unset", result: finding.Fail, severity: finding.Medium,
+		{fixture: "kernel-net-unset", result: finding.Fail, severity: finding.Low,
 			detailContains: "not set in any sysctl configuration file"},
 
 		// Withheld with no pattern behind it is not a configured host: nothing
@@ -1800,7 +1804,7 @@ func TestKernel0029SuidDumpableIsPersisted(t *testing.T) {
 
 		// A safe default nobody wrote down still fails, and the detail has to
 		// say the host is safe today or it reads as an outage.
-		{fixture: "kernel-fs-unset", result: finding.Fail, severity: finding.High,
+		{fixture: "kernel-fs-unset", result: finding.Fail, severity: finding.Low,
 			detailContains: "a default nobody wrote down"},
 
 		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
@@ -1824,32 +1828,8 @@ func TestTheTwoAcceptedDumpPoliciesAreToldApart(t *testing.T) {
 	if !strings.Contains(safe.Detail, "still reaches the disk") {
 		t.Errorf("a host at 2 is not told what it is giving up: %s", safe.Detail)
 	}
-	// The report must not look like it is contradicting itself: KERNEL-0005
-	// reads the running value and fails 2, so this check names it.
-	if !strings.Contains(safe.Detail, "KERNEL-0005") {
-		t.Errorf("a host at 2 is not pointed at the check that disagrees: %s", safe.Detail)
-	}
 	if strings.Contains(off.Detail, "still reaches the disk") {
 		t.Errorf("a host at 0 was given the caveat that belongs to 2: %s", off.Detail)
-	}
-}
-
-// TestKernel0029AndKernel0005AgreeOnWhatTheyDisagreeAbout pins the one value
-// where a persistence check and its runtime counterpart part company. If
-// KERNEL-0005 is ever re-rated to accept 2, this test fails and the sentence
-// in KERNEL-0029 pointing at it has to go with it.
-func TestKernel0029AndKernel0005AgreeOnWhatTheyDisagreeAbout(t *testing.T) {
-	persist := evalFixture(t, checks.Check0029, "kernel-fs-suidsafe")
-	runtime := evalFixture(t, checks.Check0005, "kernel-fs-suidsafe")
-
-	if persist.Result != finding.Pass {
-		t.Errorf("KERNEL-0029 on suid_dumpable=2 = %s, want PASS", persist.Result)
-	}
-	if runtime.Result != finding.Fail {
-		t.Fatalf("KERNEL-0005 on suid_dumpable=2 = %s, want FAIL; KERNEL-0029's detail claims it fails", runtime.Result)
-	}
-	if runtime.Severity != finding.Low {
-		t.Errorf("KERNEL-0005 severity on 2 = %s, want LOW; KERNEL-0029 calls it low-severity", runtime.Severity)
 	}
 }
 
@@ -1861,7 +1841,7 @@ func TestKernel0030ProtectedHardlinksArePersisted(t *testing.T) {
 		{fixture: "kernel-fs-open", result: finding.Fail, severity: finding.High,
 			detailContains: "turned off in writing"},
 
-		{fixture: "kernel-fs-unset", result: finding.Fail, severity: finding.High,
+		{fixture: "kernel-fs-unset", result: finding.Fail, severity: finding.Low,
 			detailContains: "a default nobody wrote down"},
 
 		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
@@ -1879,7 +1859,7 @@ func TestKernel0031ProtectedSymlinksArePersisted(t *testing.T) {
 		{fixture: "kernel-fs-open", result: finding.Fail, severity: finding.High,
 			detailContains: "classic local privilege escalation"},
 
-		{fixture: "kernel-fs-unset", result: finding.Fail, severity: finding.High,
+		{fixture: "kernel-fs-unset", result: finding.Fail, severity: finding.Low,
 			detailContains: "a default nobody wrote down"},
 
 		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
@@ -1933,5 +1913,144 @@ func TestALinkProtectionAboveOneStillPasses(t *testing.T) {
 	}
 	if !strings.Contains(got.Detail, "only 0 and 1 are documented") {
 		t.Errorf("an undocumented value passed without being named: %s", got.Detail)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// the runtime cross-reference: what a missing setting is worth
+// ---------------------------------------------------------------------------
+
+// TestASecureRuntimeLowersAnAbsenceAndAnExposedOneDoesNot is the acceptance
+// criterion for the tiering.
+//
+// kernel-fs-unset and kernel-fs-exposed carry the *same* configuration file,
+// mentioning none of these parameters, and differ only in /proc. So the
+// severity difference below can come from nothing except the runtime
+// cross-reference, which is the property being asserted.
+func TestASecureRuntimeLowersAnAbsenceAndAnExposedOneDoesNot(t *testing.T) {
+	for _, c := range []catalog.Check{checks.Check0029, checks.Check0030, checks.Check0031} {
+		safe := evalFixture(t, c, "kernel-fs-unset")
+		exposed := evalFixture(t, c, "kernel-fs-exposed")
+
+		if safe.Result != finding.Fail || exposed.Result != finding.Fail {
+			t.Fatalf("%s: expected both to fail, got %s / %s", c.ID, safe.Result, exposed.Result)
+		}
+		if safe.Severity != finding.Low {
+			t.Errorf("%s: a secure runtime with nothing written down = %s, want LOW", c.ID, safe.Severity)
+		}
+		if exposed.Severity != finding.High {
+			t.Errorf("%s: an exposed runtime with nothing written down = %s, want HIGH", c.ID, exposed.Severity)
+		}
+		if !strings.Contains(safe.Detail, "reported at LOW") {
+			t.Errorf("%s: the downgrade is not explained: %s", c.ID, safe.Detail)
+		}
+		if strings.Contains(exposed.Detail, "reported at LOW") {
+			t.Errorf("%s: an exposed host was told it is not exposed: %s", c.ID, exposed.Detail)
+		}
+	}
+}
+
+// TestAWrittenWrongValueIsNeverDowngraded. The tiering applies only when every
+// failure is an absence. A file that sets the dangerous value is a decision
+// somebody made, and the running kernel currently overriding it does not make
+// that decision less serious — it makes it a reboot away from taking effect.
+func TestAWrittenWrongValueIsNeverDowngraded(t *testing.T) {
+	sc := fact.Sysctl{
+		Running: map[string]fact.SysctlRunning{
+			// The running kernel is at the safe value for both.
+			"fs.suid_dumpable":       {Key: "fs.suid_dumpable", State: fact.SysctlObserved, Value: "0"},
+			"fs.protected_symlinks":  {Key: "fs.protected_symlinks", State: fact.SysctlObserved, Value: "1"},
+			"fs.protected_hardlinks": {Key: "fs.protected_hardlinks", State: fact.SysctlObserved, Value: "1"},
+		},
+		Configured: map[string][]fact.SysctlSetting{
+			// ...and a file says otherwise.
+			"fs.suid_dumpable":      {{Key: "fs.suid_dumpable", Value: "1", File: "/etc/sysctl.d/99-debug.conf", Line: 1}},
+			"fs.protected_symlinks": {{Key: "fs.protected_symlinks", Value: "0", File: "/etc/sysctl.d/99-debug.conf", Line: 2}},
+		},
+		Files: []string{"/etc/sysctl.d/99-debug.conf"},
+	}
+	for _, c := range []catalog.Check{checks.Check0029, checks.Check0031} {
+		got := evalSysctl(t, c, sc)
+		if got.Result != finding.Fail {
+			t.Fatalf("%s = %s, want FAIL", c.ID, got.Result)
+		}
+		if got.Severity == finding.Low {
+			t.Errorf("%s downgraded a value written down as dangerous: %s", c.ID, got.Detail)
+		}
+		if strings.Contains(got.Detail, "reported at LOW") {
+			t.Errorf("%s claimed nothing is exposed: %s", c.ID, got.Detail)
+		}
+	}
+}
+
+// TestAnUnreadableRuntimeDoesNotBuyADowngrade. A downgrade has to be earned by
+// evidence, and missing evidence is not evidence. This is ADR-0014 pointing the
+// way it always does: an incomplete examination cannot soften a finding.
+func TestAnUnreadableRuntimeDoesNotBuyADowngrade(t *testing.T) {
+	sc := fact.Sysctl{
+		Running: map[string]fact.SysctlRunning{
+			"fs.protected_symlinks": {
+				Key: "fs.protected_symlinks", State: fact.SysctlDenied,
+				Path: "/proc/sys/fs/protected_symlinks", Msg: "permission denied",
+			},
+		},
+		Configured: map[string][]fact.SysctlSetting{
+			"kernel.dmesg_restrict": {{Key: "kernel.dmesg_restrict", Value: "1", File: "/etc/sysctl.d/60-h.conf", Line: 1}},
+		},
+		Files: []string{"/etc/sysctl.d/60-h.conf"},
+	}
+	got := evalSysctl(t, checks.Check0031, sc)
+	if got.Result != finding.Fail {
+		t.Fatalf("result = %s, want FAIL", got.Result)
+	}
+	if got.Severity == finding.Low {
+		t.Errorf("an unreadable running value bought a downgrade: %s", got.Detail)
+	}
+}
+
+// TestTheTieringPredicateAgreesWithTheCheckItBelongsTo.
+//
+// Each tiering table restates the check's own pass condition in a second place,
+// which is a standing invitation to drift: someone widens the check and forgets
+// the predicate, and the severity quietly stops matching the verdict. This
+// walks every value either of them could see and asserts they agree — the
+// predicate accepts exactly the values that, written to a file, make the check
+// pass.
+func TestTheTieringPredicateAgreesWithTheCheckItBelongsTo(t *testing.T) {
+	cases := []struct {
+		check  catalog.Check
+		key    string
+		accept func(int) bool
+		values []int
+	}{
+		{checks.Check0019, "kernel.dmesg_restrict", func(n int) bool { return n == 1 }, []int{0, 1}},
+		{checks.Check0020, "kernel.yama.ptrace_scope", func(n int) bool { return n >= 1 && n <= 3 }, []int{0, 1, 2, 3}},
+		{checks.Check0021, "kernel.sysrq", func(n int) bool { return n == 0 }, []int{0, 1, 16, 176}},
+		{checks.Check0022, "kernel.perf_event_paranoid", func(n int) bool { return n >= 2 }, []int{-1, 0, 1, 2, 3}},
+		{checks.Check0023, "net.ipv4.tcp_syncookies", func(n int) bool { return n >= 1 }, []int{0, 1, 2}},
+		{checks.Check0028, "net.ipv4.tcp_rfc1337", func(n int) bool { return n == 1 }, []int{0, 1}},
+		{checks.Check0029, "fs.suid_dumpable", func(n int) bool { return n == 0 || n == 2 }, []int{0, 1, 2}},
+		{checks.Check0030, "fs.protected_hardlinks", func(n int) bool { return n >= 1 }, []int{0, 1}},
+		{checks.Check0031, "fs.protected_symlinks", func(n int) bool { return n >= 1 }, []int{0, 1}},
+	}
+
+	for _, c := range cases {
+		for _, v := range c.values {
+			value := strconv.Itoa(v)
+			sc := fact.Sysctl{
+				Running: map[string]fact.SysctlRunning{
+					c.key: {Key: c.key, State: fact.SysctlObserved, Value: value},
+				},
+				Configured: map[string][]fact.SysctlSetting{
+					c.key: {{Key: c.key, Value: value, File: "/etc/sysctl.d/60-t.conf", Line: 1}},
+				},
+				Files: []string{"/etc/sysctl.d/60-t.conf"},
+			}
+			got := evalSysctl(t, c.check, sc)
+			if want := c.accept(v); (got.Result == finding.Pass) != want {
+				t.Errorf("%s with %s = %d: verdict %s, tiering predicate accepts = %v",
+					c.check.ID, c.key, v, got.Result, want)
+			}
+		}
 	}
 }

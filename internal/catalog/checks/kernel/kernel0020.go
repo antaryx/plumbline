@@ -69,12 +69,12 @@ kernel does not implement would be asking for a line that does nothing.`,
 					detail += fmt.Sprintf(" The running kernel has it at %d, so this host is protected now and will not be after the next reboot unless something sets it again outside these files.", v)
 				}
 			}
-			return catalog.Outcome{
+			return tierAbsence(catalog.Outcome{
 				Result:   finding.Fail,
 				Subject:  ptraceKey,
-				Detail:   detail + persistPtraceCaveat,
+				Detail:   detail,
 				Evidence: searchedEvidence(sc, nil),
-			}
+			}, sc, ptraceTiering, persistPtraceCaveat)
 		}
 
 		switch set.Value {
@@ -163,3 +163,6 @@ func runningMismatch(sc fact.Sysctl, key, configured string) string {
 	}
 	return fmt.Sprintf(" The running kernel has it at %s, which does not match the file; see KERNEL-0007.", r.Value)
 }
+
+// ptraceTiering is the runtime cross-reference for the absence case.
+var ptraceTiering = []requirement{{key: ptraceKey, accept: func(n int) bool { return n >= 1 && n <= 3 }}}

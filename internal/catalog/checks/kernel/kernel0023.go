@@ -76,12 +76,12 @@ This is a check about files. KERNEL-0016 asks what the running kernel does.`,
 					detail += fmt.Sprintf(" The running kernel has it at %d as well, so the backlog is the only thing standing between a listening socket and a SYN flood right now.", v)
 				}
 			}
-			return catalog.Outcome{
+			return tierAbsence(catalog.Outcome{
 				Result:   finding.Fail,
 				Subject:  syncookiesKey,
-				Detail:   detail + persistSyncookiesCaveat,
+				Detail:   detail,
 				Evidence: searchedEvidence(sc, nil),
-			}
+			}, sc, syncookiesTiering, persistSyncookiesCaveat)
 		}
 
 		n, err := strconv.Atoi(set.Value)
@@ -164,3 +164,6 @@ const syncookiesKey = "net.ipv4.tcp_syncookies"
 
 // persistSyncookiesCaveat names the check that reads the running value.
 var persistSyncookiesCaveat = persistCaveatFor("KERNEL-0016")
+
+// syncookiesTiering is the runtime cross-reference for the absence case.
+var syncookiesTiering = []requirement{{key: syncookiesKey, accept: func(n int) bool { return n >= 1 }}}

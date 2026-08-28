@@ -1,7 +1,7 @@
 {
   "bundle": "ubuntu-2404-hardened.plb",
   "schema": "findings/v1",
-  "catalog_version": 31,
+  "catalog_version": 32,
   "scan": {
     "started": "2026-08-27T21:29:41.441953502Z",
     "finished": "2026-08-27T21:29:41.803788605Z",
@@ -22,11 +22,11 @@
       "total": 109
     },
     "by_severity": {
-      "HIGH": 7,
-      "LOW": 4,
-      "MEDIUM": 6
+      "HIGH": 6,
+      "LOW": 6,
+      "MEDIUM": 5
     },
-    "posture": 84.05172413793103,
+    "posture": 85.1528384279476,
     "coverage": 100
   },
   "findings": [
@@ -935,11 +935,11 @@
       "check_id": "KERNEL-0022",
       "module": "KERNEL",
       "result": "FAIL",
-      "severity": "MEDIUM",
+      "severity": "LOW",
       "base_severity": "MEDIUM",
       "subject": "kernel.perf_event_paranoid",
       "fingerprint": "934fdbecba0f171c09532067bfc95978",
-      "detail": "kernel.perf_event_paranoid is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream has defaulted to 2 since Linux 4.6, which is adequate — but a default is not a decision, and a kernel built with a lower value, or a boot parameter that lowers it, leaves unprivileged processes able to measure the kernel's own execution. The running kernel has it at 2, so this host is adequate now on its default and has not written that down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0013's subject, and a disagreement between the two is KERNEL-0007's.",
+      "detail": "kernel.perf_event_paranoid is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream has defaulted to 2 since Linux 4.6, which is adequate — but a default is not a decision, and a kernel built with a lower value, or a boot parameter that lowers it, leaves unprivileged processes able to measure the kernel's own execution. The running kernel has it at 2, so this host is adequate now on its default and has not written that down. The running kernel already satisfies this (kernel.perf_event_paranoid is 2), so nothing is exposed today and the finding is reported at LOW: what is missing is the record, not the protection. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0013's subject, and a disagreement between the two is KERNEL-0007's.",
       "evidence": [
         {
           "source": "/usr/lib/sysctl.d/50-pid-max.conf",
@@ -1026,7 +1026,7 @@
       "base_severity": "LOW",
       "subject": "net.ipv4.tcp_syncookies",
       "fingerprint": "04fdc67c5c9a0e6098623af15c7722e8",
-      "detail": "net.ipv4.tcp_syncookies is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. The running kernel has it at 1, so this host is defended now on a default nobody wrote down: a performance-tuning drop-in, a container runtime or a sysctl -w in a start-up script can set it to 0 and nothing here records that it was ever meant to be 1. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0016's subject, and a disagreement between the two is KERNEL-0007's.",
+      "detail": "net.ipv4.tcp_syncookies is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. The running kernel has it at 1, so this host is defended now on a default nobody wrote down: a performance-tuning drop-in, a container runtime or a sysctl -w in a start-up script can set it to 0 and nothing here records that it was ever meant to be 1. The running kernel already satisfies this (net.ipv4.tcp_syncookies is 1), so nothing is exposed today and the finding is reported at LOW: what is missing is the record, not the protection. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0016's subject, and a disagreement between the two is KERNEL-0007's.",
       "evidence": [
         {
           "source": "/usr/lib/sysctl.d/50-pid-max.conf",
@@ -1481,11 +1481,11 @@
       "check_id": "KERNEL-0029",
       "module": "KERNEL",
       "result": "FAIL",
-      "severity": "HIGH",
+      "severity": "LOW",
       "base_severity": "HIGH",
       "subject": "fs.suid_dumpable",
       "fingerprint": "3346a096bf571f298a68769f90764579",
-      "detail": "fs.suid_dumpable is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream defaults to 0, which is correct — but a default is not a decision, and a debugging drop-in, a crash-reporting package or a sysctl -w in a start-up script can set it to 1 without anything here recording that 0 was ever intended. The running kernel has it at 0, so this host is safe now on a default nobody wrote down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0005's subject, and a disagreement between the two is KERNEL-0007's.",
+      "detail": "fs.suid_dumpable is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream defaults to 0, which is correct — but a default is not a decision, and a debugging drop-in, a crash-reporting package or a sysctl -w in a start-up script can set it to 1 without anything here recording that 0 was ever intended. The running kernel has it at 0, so this host is safe now on a default nobody wrote down. The running kernel already satisfies this (fs.suid_dumpable is 0), so nothing is exposed today and the finding is reported at LOW: what is missing is the record, not the protection. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0005's subject, and a disagreement between the two is KERNEL-0007's.",
       "evidence": [
         {
           "source": "/usr/lib/sysctl.d/50-pid-max.conf",

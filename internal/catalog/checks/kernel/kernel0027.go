@@ -60,16 +60,16 @@ This is a check about files. Nothing reads the running value yet.`,
 			return *out
 		}
 
-		failed, evidence := checkRequirements(sc, sendRedirectsPersistent)
-		if len(failed) > 0 {
-			return catalog.Outcome{
+		res := checkRequirements(sc, sendRedirectsPersistent)
+		if len(res.failed) > 0 {
+			return tierRequirementFailure(catalog.Outcome{
 				Result:  finding.Fail,
 				Subject: "sysctl configuration",
-				Detail: capitaliseFirst(strings.Join(failed, "; ")) +
+				Detail: capitaliseFirst(strings.Join(res.failed, "; ")) +
 					". Only a router has any business sending a redirect, and a host that emits one describes a route it was not asked about to whoever elicited it." +
-					forwardingNote(sc) + persistSendRedirectsCaveat,
-				Evidence: searchedEvidence(sc, evidence),
-			}
+					forwardingNote(sc),
+				Evidence: searchedEvidence(sc, res.evidence),
+			}, sc, sendRedirectsPersistent, res, persistSendRedirectsCaveat)
 		}
 
 		return catalog.Outcome{
@@ -77,7 +77,7 @@ This is a check about files. Nothing reads the running value yet.`,
 			Subject: "sysctl configuration",
 			Detail: "Sending ICMP redirects is refused in the sysctl configuration, for the host-wide key and for the template every interface created later inherits. If something enables IP forwarding on this host — a container runtime, a VPN daemon, a virtualisation stack — it still will not start advertising routes to its neighbours." +
 				runningContradiction(sc, sendRedirectsPersistent) + persistSendRedirectsCaveat,
-			Evidence: searchedEvidence(sc, evidence),
+			Evidence: searchedEvidence(sc, res.evidence),
 		}
 	},
 

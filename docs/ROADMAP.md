@@ -914,13 +914,59 @@ are protected today and fail on the same principle every check in this group
 applies: a default is not a decision. `fs.suid_dumpable` is the sharper case —
 **no bundle writes it at all**, and all six run the safe default.
 
-That is now three `HIGH` checks (`-0026`, `-0030`, `-0031`) and one `MEDIUM`
-group failing most or all of the corpus on the same reasoning. The catalog-wide
-severity review is scheduled, and the specific question it has to answer is
-whether "a safe default nobody wrote down" deserves the same severity as "the
-dangerous value, written down". `KERNEL-0018` already tiers within a check for
-exactly this reason; whether that belongs in every persistence check or whether
-the answer is a lower base severity for the whole group is the decision.
+That question — whether "a safe default nobody wrote down" deserves the same
+severity as "the dangerous value, written down" — was answered at catalog 32 by
+`runtimeTier`, and the answer was the cross-reference rather than a lower base
+severity for the group.
+
+**The fix had to come from a fact the check already had.** Both halves are in
+the same bundle: the files say what the host will do after a reboot, and
+`/proc/sys` says what it is doing now. Lowering the base severity would have
+made a genuinely exposed host easier to ignore; tiering on the runtime lowers
+only the findings where nothing is exposed, which is the distinction the
+severity field exists to carry. Three cases deliberately do not downgrade — an
+exposed running value, an unreadable one, and any failure where a *file* sets
+something wrong — and the second of those is ADR-0014 again: a downgrade has to
+be earned by evidence.
+
+**It refused to downgrade on this workstation for a reason no fixture would have
+produced.** `KERNEL-0017` needs two parameters; `kernel.unprivileged_bpf_disabled`
+reads 2, and `/proc/sys/net/core/bpf_jit_harden` is mode 0600, so an
+unprivileged scan cannot read it. One unreadable key of two blocks the
+downgrade and the finding stays HIGH — the rule working on a real host, on the
+first run.
+
+**One documented rationale had to be rewritten rather than left to rot.**
+`KERNEL-0017`'s severity comment argued for HIGH on the grounds that a boundary
+*scheduled to fall down* is worth more than one already down, which is exactly
+the case the tiering now downgrades. The comment was corrected in place rather
+than left contradicting the code: the tension is real, it was settled in favour
+of a severity field that can sort a triage queue, and what was lost is emphasis
+rather than information — the detail still says the setting came from outside
+the files and will not survive a reboot.
+
+The honest limit of the design is that a secure running value does not say where
+it came from. For `fs.protected_symlinks` a secure runtime is very likely the
+kernel's own default and will apply again after a reboot; for
+`kernel.yama.ptrace_scope`, whose default is 0, it means something set it at
+runtime and the host genuinely reverts. Both downgrade to LOW today. Encoding
+each parameter's compiled-in default would separate them, and was rejected for
+now because that default varies by build and by distribution patch — a table
+that is wrong in the permissive direction would hand out downgrades nobody
+earned. Worth revisiting with per-parameter evidence rather than from memory.
+
+Two items this leaves:
+
+- **The correction warning has no mechanism.** VERSIONING §2.4 requires a
+  `plumbline scan` startup warning for one minor cycle when a correction changes
+  results on more than roughly 10% of hosts, and this one does. Nothing in the
+  CLI implements such a warning.
+- **`KERNEL-0005` and `KERNEL-0029` agree now.** The runtime check was widened
+  to accept `fs.suid_dumpable = 2`, closing a report that carried a PASS and a
+  FAIL about the same value. That is the second time a runtime check turned out
+  to be the miscalibrated half of a pair — `KERNEL-0004` was the first — and it
+  is worth checking the rest of the pairs deliberately rather than waiting for
+  the next persistence check to trip over one.
 
 One gap remains, unchanged and not started: **redirect acceptance has no runtime
 check.** `KERNEL-0025` reads the files; nothing reads `/proc/sys` for

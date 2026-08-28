@@ -452,6 +452,10 @@ func notConfigured(sc fact.Sysctl, key string) string {
 // wrong finding.
 // requirement is one parameter a persistence check needs the configuration to
 // carry, with the wording for each way it can fail to.
+// runtimeTier uses only key and accept, so a single-key check that wants the
+// runtime cross-reference and nothing else may declare a table carrying just
+// those two. That is not a degenerate case: the absence and wrong strings
+// belong to checkRequirements, which such a check does not call.
 type requirement struct {
 	key    string
 	accept func(n int) bool
@@ -475,31 +479,135 @@ type requirement struct {
 // that is simply wrong are three different findings with three different
 // remedies, and collapsing any pair of them loses the sentence the operator
 // acts on. Three checks share it, which is the point of it being here.
-func checkRequirements(sc fact.Sysctl, reqs []requirement) ([]string, []finding.Evidence) {
-	var (
-		failed   []string
-		evidence []finding.Evidence
-	)
+func checkRequirements(sc fact.Sysctl, reqs []requirement) requirementResult {
+	var res requirementResult
 	for _, r := range reqs {
 		set, found := sc.EffectiveConfigured(r.key)
 		if !found {
-			failed = append(failed, fmt.Sprintf("%s, so %s", notConfigured(sc, r.key), r.absence))
+			res.failed = append(res.failed, fmt.Sprintf("%s, so %s", notConfigured(sc, r.key), r.absence))
+			res.absent++
 			continue
 		}
-		evidence = append(evidence, evidenceForSetting(sc, set))
+		res.evidence = append(res.evidence, evidenceForSetting(sc, set))
 
 		n, err := strconv.Atoi(strings.TrimSpace(set.Value))
 		switch {
 		case err != nil:
-			failed = append(failed, fmt.Sprintf("%s is %q %s, which is not a number",
+			res.failed = append(res.failed, fmt.Sprintf("%s is %q %s, which is not a number",
 				r.key, set.Value, configuredAt(sc, r.key, set)))
+			res.written++
 		case r.accept(n):
 		default:
-			failed = append(failed, fmt.Sprintf("%s is %d %s, so %s",
+			res.failed = append(res.failed, fmt.Sprintf("%s is %d %s, so %s",
 				r.key, n, configuredAt(sc, r.key, set), r.wrong))
+			res.written++
 		}
 	}
-	return failed, evidence
+	return res
+}
+
+// requirementResult is what a requirement table found.
+//
+// absent and written are counted separately because the severity depends on
+// which of them there were. A parameter nobody wrote down may be an unrecorded
+// safe default; a parameter a file sets to the wrong value is a decision
+// somebody made, and no amount of the running kernel currently disagreeing
+// makes that less serious. Only a failure made entirely of absences may be
+// tiered against the runtime — see runtimeTier.
+type requirementResult struct {
+	failed   []string
+	evidence []finding.Evidence
+	absent   int
+	written  int
+}
+
+// onlyAbsences reports whether every failure here is a parameter nothing sets.
+func (r requirementResult) onlyAbsences() bool {
+	return r.written == 0 && r.absent > 0
+}
+
+// runtimeTier decides whether a failure that rests on nothing being written
+// down should be reported at the check's full severity.
+//
+// **This is the answer to a real complaint about this group of checks.** Most
+// of them fail on hosts that are not exposed: the kernel's own default is
+// already correct, no file records that, and the finding is that nobody wrote
+// it down. Reporting that at the same severity as a host whose file sets the
+// dangerous value makes the two indistinguishable in a triage queue, and a
+// report where everything is red is one an operator learns to page past. The
+// severity field exists to sort work, and a severity that does not sort is
+// worse than none.
+//
+// So the running values are cross-referenced. They are already in the fact —
+// the collector filled both halves in the same pass — and they answer a
+// question the files cannot: is anything exposed *now*.
+//
+// Three rules, and the second and third matter more than the first:
+//
+//   - Every required parameter is running at a value the check accepts: the
+//     exposure is not present, and the finding drops to LOW.
+//   - Any of them is running at a value the check rejects: the host is exposed
+//     right now and the severity stands. This is the case the downgrade must
+//     never reach.
+//   - Any of them has no readable running value: a downgrade has to be earned
+//     by evidence, and missing evidence is not evidence. The severity stands.
+//     That is ADR-0014 pointing the way it always does — an incomplete
+//     examination cannot soften a finding.
+//
+// The caller is responsible for the fourth rule, which is not expressible
+// here: this may only be applied when *every* failure in the outcome is an
+// absence. A check that failed partly because a file sets a wrong value has
+// found a decision somebody made, and that does not become less serious
+// because the running kernel currently disagrees with it.
+func runtimeTier(sc fact.Sysctl, reqs []requirement) (finding.Severity, string) {
+	if len(reqs) == 0 {
+		return "", ""
+	}
+
+	var satisfied []string
+	for _, r := range reqs {
+		got, probed := sc.Run(r.key)
+		if !probed || got.State != fact.SysctlObserved {
+			return "", ""
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(got.Value))
+		if err != nil || !r.accept(n) {
+			return "", ""
+		}
+		satisfied = append(satisfied, fmt.Sprintf("%s is %d", r.key, n))
+	}
+
+	return finding.Low, fmt.Sprintf(" The running kernel already satisfies this (%s), so nothing is exposed today and the finding is reported at LOW: what is missing is the record, not the protection.",
+		strings.Join(satisfied, ", "))
+}
+
+// tierAbsence finishes a failing outcome whose failures all rest on a
+// parameter not being written down.
+//
+// It appends the caveat last, after any downgrade note, so the sentences read
+// in the order the operator needs them: what is wrong, whether it is urgent,
+// then which check owns the other half of the question.
+func tierAbsence(out catalog.Outcome, sc fact.Sysctl, reqs []requirement, caveat string) catalog.Outcome {
+	if sev, note := runtimeTier(sc, reqs); sev != "" {
+		out.Severity = sev
+		out.Detail += note
+	}
+	out.Detail += caveat
+	return out
+}
+
+// tierRequirementFailure finishes a requirement-table failure, tiering it
+// against the running kernel only when every failure in it is an absence.
+//
+// This is where the fourth rule runtimeTier cannot express is enforced: a
+// table that failed partly because a file sets a wrong value keeps its full
+// severity, because somebody wrote that value down on purpose.
+func tierRequirementFailure(out catalog.Outcome, sc fact.Sysctl, reqs []requirement, res requirementResult, caveat string) catalog.Outcome {
+	if !res.onlyAbsences() {
+		out.Detail += caveat
+		return out
+	}
+	return tierAbsence(out, sc, reqs, caveat)
 }
 
 // linkProtection is the shape KERNEL-0030 and KERNEL-0031 share.
@@ -525,6 +633,14 @@ type linkProtection struct {
 	off string
 }
 
+// tiering is the runtime cross-reference for the absence case, and is the same
+// predicate eval applies to the configured value. Both link protections
+// default to 1 on any current kernel, which is exactly the situation the
+// downgrade exists for: protected today, recorded nowhere.
+func (l linkProtection) tiering() []requirement {
+	return []requirement{{key: l.key, accept: func(n int) bool { return n >= 1 }}}
+}
+
 // eval reads the parameter and judges it.
 //
 // Anything at or above 1 passes, which matches KERNEL-0009 and KERNEL-0010 on
@@ -548,12 +664,12 @@ func (l linkProtection) eval(fs *fact.Set) catalog.Outcome {
 				detail += " The running kernel has it off as well, so the protection is absent right now and not merely undocumented."
 			}
 		}
-		return catalog.Outcome{
+		return tierAbsence(catalog.Outcome{
 			Result:   finding.Fail,
 			Subject:  l.key,
-			Detail:   detail + l.caveat,
+			Detail:   detail,
 			Evidence: searchedEvidence(sc, nil),
-		}
+		}, sc, l.tiering(), l.caveat)
 	}
 
 	n, err := strconv.Atoi(strings.TrimSpace(set.Value))

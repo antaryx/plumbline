@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 31 · 109 checks · 11 modules**
+**Catalog version 32 · 109 checks · 11 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 

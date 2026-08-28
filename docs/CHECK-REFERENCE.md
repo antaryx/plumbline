@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 31 · 109 checks · 11 modules**
+**Catalog version 32 · 109 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -2069,9 +2069,14 @@ somewhere the invoking user often can.
 
 fs.suid_dumpable takes three values. 0 means setuid programs never dump, which
 is the safe setting. 1 means they dump like any other program, and is a
-straightforward way to read privileged memory. 2 means they dump but only root
-may read the result, which is intended for debugging and still writes secrets
-to disk.
+straightforward way to read privileged memory. 2 — "suidsafe" — means they dump
+but only root may read the result.
+
+0 and 2 both pass. 2 is what systemd-coredump needs to capture a setuid crash at
+all, and on a host that collects crash reports it is a deliberate choice rather
+than an oversight. It is not equivalent to 0 and the verdict says so: the
+privileged memory still reaches the disk, where it outlives the process, is
+picked up by backups and is readable by anything that reaches root.
 
 If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
 
@@ -3538,11 +3543,9 @@ and is readable by anything that reaches root. It is a considered trade for a
 host that needs crash reports, not a hardened setting, and this check says so
 rather than passing it silently.
 
-Note that KERNEL-0005 reads the running value and holds the stricter bar: its
-subject is whether setuid programs write dumps *at all*, so it reports 2 as a
-low-severity finding where this check accepts it. A host at 2 will see both, and
-that is the two questions being different rather than the report contradicting
-itself.
+KERNEL-0005 reads the running value and, since catalog 32, accepts the same two
+values this check does. The pair used to disagree about 2, which put a PASS and
+a FAIL on the same parameter in one report.
 
 This is a check about files. The kernel already defaults to 0, so most hosts
 fail this while being safe today — which is the point: a default is not a

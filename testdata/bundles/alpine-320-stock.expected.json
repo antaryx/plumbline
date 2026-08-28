@@ -1,7 +1,7 @@
 {
   "bundle": "alpine-320-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 31,
+  "catalog_version": 32,
   "scan": {
     "started": "2026-08-25T21:31:44.169375564Z",
     "finished": "2026-08-25T21:31:44.201476282Z",
@@ -22,11 +22,11 @@
       "total": 109
     },
     "by_severity": {
-      "HIGH": 8,
-      "LOW": 2,
-      "MEDIUM": 8
+      "HIGH": 6,
+      "LOW": 5,
+      "MEDIUM": 7
     },
-    "posture": 66.66666666666666,
+    "posture": 69.42148760330579,
     "coverage": 89.83050847457628
   },
   "findings": [
@@ -664,11 +664,11 @@
       "check_id": "KERNEL-0020",
       "module": "KERNEL",
       "result": "FAIL",
-      "severity": "HIGH",
+      "severity": "LOW",
       "base_severity": "HIGH",
       "subject": "kernel.yama.ptrace_scope",
       "fingerprint": "6ebd9339297294d9152bae0288b113d7",
-      "detail": "kernel.yama.ptrace_scope is not set in any sysctl configuration file, so after the next reboot ptrace scope is whatever the kernel defaults to — 0 on most builds, meaning any process may read and write the memory of any other process owned by the same user. The running kernel has it at 1, so this host is protected now and will not be after the next reboot unless something sets it again outside these files. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0003's subject, and a disagreement between the two is KERNEL-0007's.",
+      "detail": "kernel.yama.ptrace_scope is not set in any sysctl configuration file, so after the next reboot ptrace scope is whatever the kernel defaults to — 0 on most builds, meaning any process may read and write the memory of any other process owned by the same user. The running kernel has it at 1, so this host is protected now and will not be after the next reboot unless something sets it again outside these files. The running kernel already satisfies this (kernel.yama.ptrace_scope is 1), so nothing is exposed today and the finding is reported at LOW: what is missing is the record, not the protection. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0003's subject, and a disagreement between the two is KERNEL-0007's.",
       "evidence": [
         {
           "source": "/lib/sysctl.d/00-alpine.conf",
@@ -708,11 +708,11 @@
       "check_id": "KERNEL-0022",
       "module": "KERNEL",
       "result": "FAIL",
-      "severity": "MEDIUM",
+      "severity": "LOW",
       "base_severity": "MEDIUM",
       "subject": "kernel.perf_event_paranoid",
       "fingerprint": "934fdbecba0f171c09532067bfc95978",
-      "detail": "kernel.perf_event_paranoid is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream has defaulted to 2 since Linux 4.6, which is adequate — but a default is not a decision, and a kernel built with a lower value, or a boot parameter that lowers it, leaves unprivileged processes able to measure the kernel's own execution. The running kernel has it at 2, so this host is adequate now on its default and has not written that down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0013's subject, and a disagreement between the two is KERNEL-0007's.",
+      "detail": "kernel.perf_event_paranoid is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream has defaulted to 2 since Linux 4.6, which is adequate — but a default is not a decision, and a kernel built with a lower value, or a boot parameter that lowers it, leaves unprivileged processes able to measure the kernel's own execution. The running kernel has it at 2, so this host is adequate now on its default and has not written that down. The running kernel already satisfies this (kernel.perf_event_paranoid is 2), so nothing is exposed today and the finding is reported at LOW: what is missing is the record, not the protection. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0013's subject, and a disagreement between the two is KERNEL-0007's.",
       "evidence": [
         {
           "source": "/lib/sysctl.d/00-alpine.conf",
@@ -858,11 +858,11 @@
       "check_id": "KERNEL-0029",
       "module": "KERNEL",
       "result": "FAIL",
-      "severity": "HIGH",
+      "severity": "LOW",
       "base_severity": "HIGH",
       "subject": "fs.suid_dumpable",
       "fingerprint": "3346a096bf571f298a68769f90764579",
-      "detail": "fs.suid_dumpable is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream defaults to 0, which is correct — but a default is not a decision, and a debugging drop-in, a crash-reporting package or a sysctl -w in a start-up script can set it to 1 without anything here recording that 0 was ever intended. The running kernel has it at 0, so this host is safe now on a default nobody wrote down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0005's subject, and a disagreement between the two is KERNEL-0007's.",
+      "detail": "fs.suid_dumpable is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream defaults to 0, which is correct — but a default is not a decision, and a debugging drop-in, a crash-reporting package or a sysctl -w in a start-up script can set it to 1 without anything here recording that 0 was ever intended. The running kernel has it at 0, so this host is safe now on a default nobody wrote down. The running kernel already satisfies this (fs.suid_dumpable is 0), so nothing is exposed today and the finding is reported at LOW: what is missing is the record, not the protection. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0005's subject, and a disagreement between the two is KERNEL-0007's.",
       "evidence": [
         {
           "source": "/lib/sysctl.d/00-alpine.conf",

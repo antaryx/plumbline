@@ -67,12 +67,12 @@ This reads the files. KERNEL-0004 asks what the running kernel does.`,
 			if r, ok := sc.Run(dmesgKey); ok && r.State == fact.SysctlObserved && r.Value == "1" {
 				detail += " The running kernel has it at 1, so this host is protected now and will not be after the next reboot unless something sets it again outside these files."
 			}
-			return catalog.Outcome{
+			return tierAbsence(catalog.Outcome{
 				Result:   finding.Fail,
 				Subject:  dmesgKey,
-				Detail:   detail + persistDmesgCaveat,
+				Detail:   detail,
 				Evidence: searchedEvidence(sc, nil),
-			}
+			}, sc, dmesgTiering, persistDmesgCaveat)
 		}
 
 		if set.Value == "1" {
@@ -142,3 +142,7 @@ func dmesgRunningNote(sc fact.Sysctl, configured string) string {
 	}
 	return fmt.Sprintf(" The running kernel has it at %s, which does not match the file; see KERNEL-0007.", r.Value)
 }
+
+// dmesgTiering is the runtime cross-reference for the absence case: the
+// requirement this check would have been satisfied by.
+var dmesgTiering = []requirement{{key: dmesgKey, accept: func(n int) bool { return n == 1 }}}

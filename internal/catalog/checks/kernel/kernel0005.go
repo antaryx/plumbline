@@ -21,9 +21,14 @@ somewhere the invoking user often can.
 
 fs.suid_dumpable takes three values. 0 means setuid programs never dump, which
 is the safe setting. 1 means they dump like any other program, and is a
-straightforward way to read privileged memory. 2 means they dump but only root
-may read the result, which is intended for debugging and still writes secrets
-to disk.`,
+straightforward way to read privileged memory. 2 — "suidsafe" — means they dump
+but only root may read the result.
+
+0 and 2 both pass. 2 is what systemd-coredump needs to capture a setuid crash at
+all, and on a host that collects crash reports it is a deliberate choice rather
+than an oversight. It is not equivalent to 0 and the verdict says so: the
+privileged memory still reaches the disk, where it outlives the process, is
+picked up by backups and is readable by anything that reaches root.`,
 
 	BaseSeverity: finding.Medium,
 	Tags:         []string{"kernel", "credential-theft", "information-disclosure"},
@@ -32,23 +37,21 @@ to disk.`,
 
 	Eval: intCheck(
 		"fs.suid_dumpable",
-		func(n int) bool { return n == 0 },
-		func(n int) finding.Severity {
-			// 2 still writes privileged memory to disk, but only root can
-			// read it. That is a materially smaller exposure than 1.
-			if n == 2 {
-				return finding.Low
-			}
-			return finding.Medium
-		},
+		// 0 and 2 both pass. 2 — "suidsafe" — writes the dump but leaves it
+		// readable only by root, which is what systemd-coredump needs to
+		// capture a setuid crash at all, and is the state a modern host
+		// deliberately chooses. This check failed it until catalog 32, which
+		// put it in direct contradiction with KERNEL-0029 on the same value.
+		func(n int) bool { return n == 0 || n == 2 },
+		nil,
 		func(n int, ok bool) string {
 			switch {
-			case ok:
+			case ok && n == 0:
 				return "fs.suid_dumpable is 0; setuid and setgid programs do not produce core dumps."
+			case ok:
+				return "fs.suid_dumpable is 2; setuid programs write core dumps that only root may read, which is what systemd-coredump needs to capture such a crash at all. It is not equivalent to 0: the privileged memory still reaches the disk, where it outlives the process and may be captured by backups."
 			case n == 1:
 				return "fs.suid_dumpable is 1; setuid programs dump core like any other process, so an unprivileged user can obtain a copy of privileged process memory by crashing one."
-			case n == 2:
-				return "fs.suid_dumpable is 2; setuid programs write core dumps that only root may read. Privileged memory still reaches the disk, where it outlives the process and may be captured by backups."
 			default:
 				return fmt.Sprintf("fs.suid_dumpable is %d, which is not one of the documented values 0, 1 or 2.", n)
 			}

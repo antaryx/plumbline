@@ -38,11 +38,9 @@ and is readable by anything that reaches root. It is a considered trade for a
 host that needs crash reports, not a hardened setting, and this check says so
 rather than passing it silently.
 
-Note that KERNEL-0005 reads the running value and holds the stricter bar: its
-subject is whether setuid programs write dumps *at all*, so it reports 2 as a
-low-severity finding where this check accepts it. A host at 2 will see both, and
-that is the two questions being different rather than the report contradicting
-itself.
+KERNEL-0005 reads the running value and, since catalog 32, accepts the same two
+values this check does. The pair used to disagree about 2, which put a PASS and
+a FAIL on the same parameter in one report.
 
 This is a check about files. The kernel already defaults to 0, so most hosts
 fail this while being safe today — which is the point: a default is not a
@@ -82,12 +80,12 @@ decision, and nothing on the host records that anyone chose it.`,
 					}
 				}
 			}
-			return catalog.Outcome{
+			return tierAbsence(catalog.Outcome{
 				Result:   finding.Fail,
 				Subject:  suidDumpableKey,
-				Detail:   detail + persistSuidDumpableCaveat,
+				Detail:   detail,
 				Evidence: searchedEvidence(sc, nil),
-			}
+			}, sc, suidDumpableTiering, persistSuidDumpableCaveat)
 		}
 
 		n, err := strconv.Atoi(set.Value)
@@ -110,7 +108,7 @@ decision, and nothing on the host records that anyone chose it.`,
 			return catalog.Outcome{
 				Result:  finding.Pass,
 				Subject: suidDumpableKey,
-				Detail: fmt.Sprintf("%s is 2 %s, so a setuid program's core dump is written but only root may read it — which is what systemd-coredump needs to capture such a crash at all, and is a deliberate choice rather than an inherited default. It is not the same as 0: the privileged memory still reaches the disk, where it outlives the process, is picked up by backups and is readable by anything that reaches root. KERNEL-0005 holds the stricter bar and reports this same value as a low-severity finding.%s%s",
+				Detail: fmt.Sprintf("%s is 2 %s, so a setuid program's core dump is written but only root may read it — which is what systemd-coredump needs to capture such a crash at all, and is a deliberate choice rather than an inherited default. It is not the same as 0: the privileged memory still reaches the disk, where it outlives the process, is picked up by backups and is readable by anything that reaches root.%s%s",
 					suidDumpableKey, configuredAt(sc, suidDumpableKey, set),
 					runningMismatch(sc, suidDumpableKey, set.Value), persistSuidDumpableCaveat),
 				Evidence: configuredEvidence(sc, suidDumpableKey),
@@ -171,3 +169,6 @@ const suidDumpableKey = "fs.suid_dumpable"
 
 // persistSuidDumpableCaveat names the check that reads the running value.
 var persistSuidDumpableCaveat = persistCaveatFor("KERNEL-0005")
+
+// suidDumpableTiering is the runtime cross-reference for the absence case.
+var suidDumpableTiering = []requirement{{key: suidDumpableKey, accept: func(n int) bool { return n == 0 || n == 2 }}}

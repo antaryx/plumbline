@@ -69,14 +69,14 @@ runtime counterpart yet.`,
 			return *out
 		}
 
-		failed, evidence := checkRequirements(sc, routingPersistent)
-		if len(failed) > 0 {
-			return catalog.Outcome{
+		res := checkRequirements(sc, routingPersistent)
+		if len(res.failed) > 0 {
+			return tierRequirementFailure(catalog.Outcome{
 				Result:   finding.Fail,
 				Subject:  "sysctl configuration",
-				Detail:   capitaliseFirst(strings.Join(failed, "; ")) + ". Both parameters let a party on the network decide where this host sends packets, which is a position to read and rewrite traffic from rather than a weakness in it." + persistRoutingCaveat,
-				Evidence: searchedEvidence(sc, evidence),
-			}
+				Detail:   capitaliseFirst(strings.Join(res.failed, "; ")) + ". Both parameters let a party on the network decide where this host sends packets, which is a position to read and rewrite traffic from rather than a weakness in it.",
+				Evidence: searchedEvidence(sc, res.evidence),
+			}, sc, routingPersistent, res, persistRoutingCaveat)
 		}
 
 		return catalog.Outcome{
@@ -84,7 +84,7 @@ runtime counterpart yet.`,
 			Subject: "sysctl configuration",
 			Detail: "Source routing and ICMP redirect acceptance are both refused in the sysctl configuration, for the host-wide keys and for the template every interface created later inherits. A packet carrying its own return path is dropped and an unauthenticated redirect will not rewrite this host's routing table, after the next reboot and on interfaces that do not exist yet." +
 				runningContradiction(sc, routingPersistent) + persistRoutingCaveat,
-			Evidence: searchedEvidence(sc, evidence),
+			Evidence: searchedEvidence(sc, res.evidence),
 		}
 	},
 

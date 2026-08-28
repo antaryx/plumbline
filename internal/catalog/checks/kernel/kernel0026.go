@@ -66,16 +66,15 @@ This is a check about files. Nothing reads the running value yet.`,
 			return *out
 		}
 
-		failed, evidence := checkRequirements(sc, acceptRAPersistent)
-		if len(failed) > 0 {
-			return catalog.Outcome{
+		res := checkRequirements(sc, acceptRAPersistent)
+		if len(res.failed) > 0 {
+			return tierRequirementFailure(catalog.Outcome{
 				Result:  finding.Fail,
 				Subject: "sysctl configuration",
-				Detail: capitaliseFirst(strings.Join(failed, "; ")) +
-					". Anyone able to put a frame on this segment can advertise themselves as the default gateway and read and rewrite every IPv6 flow leaving this host, without exploiting anything — router advertisements are unauthenticated by design." +
-					persistAcceptRACaveat,
-				Evidence: searchedEvidence(sc, evidence),
-			}
+				Detail: capitaliseFirst(strings.Join(res.failed, "; ")) +
+					". Anyone able to put a frame on this segment can advertise themselves as the default gateway and read and rewrite every IPv6 flow leaving this host, without exploiting anything — router advertisements are unauthenticated by design.",
+				Evidence: searchedEvidence(sc, res.evidence),
+			}, sc, acceptRAPersistent, res, persistAcceptRACaveat)
 		}
 
 		return catalog.Outcome{
@@ -83,7 +82,7 @@ This is a check about files. Nothing reads the running value yet.`,
 			Subject: "sysctl configuration",
 			Detail: "IPv6 router advertisements are refused in the sysctl configuration, for the host-wide key and for the template every interface created later inherits. A rogue advertisement will not install a default route on this host after the next reboot, and this host is therefore configured for static or DHCPv6 addressing rather than SLAAC." +
 				runningContradiction(sc, acceptRAPersistent) + persistAcceptRACaveat,
-			Evidence: searchedEvidence(sc, evidence),
+			Evidence: searchedEvidence(sc, res.evidence),
 		}
 	},
 

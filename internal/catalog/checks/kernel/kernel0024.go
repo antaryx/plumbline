@@ -72,6 +72,7 @@ interface that exists right now.`,
 			loose    []string
 			withheld []string
 			evidence []finding.Evidence
+			written  int
 		)
 		for _, key := range rpFilterPersistKeys {
 			set, found := sc.EffectiveConfigured(key)
@@ -92,12 +93,14 @@ interface that exists right now.`,
 			switch {
 			case err != nil:
 				failed = append(failed, fmt.Sprintf("%s is %q %s, which is not a number", key, set.Value, configuredAt(sc, key, set)))
+				written++
 			case n == 1:
 				// Strict. Nothing to say beyond passing.
 			case n == 2:
 				loose = append(loose, key)
 			default:
 				failed = append(failed, fmt.Sprintf("%s is %d %s, so packets are accepted whatever source address they claim", key, n, configuredAt(sc, key, set)))
+				written++
 			}
 		}
 
@@ -110,12 +113,20 @@ interface that exists right now.`,
 		}
 
 		if len(failed) > 0 {
-			return catalog.Outcome{
+			out := catalog.Outcome{
 				Result:   finding.Fail,
 				Subject:  "sysctl configuration",
-				Detail:   rpFilterFailureDetail(failed) + persistRPFilterCaveat,
+				Detail:   rpFilterFailureDetail(failed),
 				Evidence: searchedEvidence(sc, evidence),
 			}
+			if written > 0 {
+				// A file sets one of these to 0 or to something unreadable.
+				// That is a decision somebody made, and the running kernel
+				// currently disagreeing with it does not soften it.
+				out.Detail += persistRPFilterCaveat
+				return out
+			}
+			return tierAbsence(out, sc, rpFilterTiering, persistRPFilterCaveat)
 		}
 
 		detail := "Reverse-path filtering is written to the sysctl configuration: " +
@@ -244,4 +255,17 @@ func rpFilterConfiguredNotes(sc fact.Sysctl) []string {
 func rpFilterFailureDetail(failed []string) string {
 	return fmt.Sprintf("%s. A host that does not filter by reverse path accepts packets claiming any source address, so a control that trusts one can be walked past and the origin of an attack is whatever the attacker wrote in the header.",
 		capitaliseFirst(strings.Join(failed, "; ")))
+}
+
+// rpFilterTiering is the runtime cross-reference for the absence case.
+//
+// KERNEL-0008 computes the effective value per interface, taking the maximum
+// of conf.all and each interface's own. This is the simpler question the
+// downgrade needs answered — are the two host-wide keys themselves at a value
+// that filters — and it is deliberately not the per-interface computation: a
+// downgrade should rest on the same keys the check requires, not on a wider
+// claim about the host.
+var rpFilterTiering = []requirement{
+	{key: rpFilterAll, accept: func(n int) bool { return n >= 1 }},
+	{key: rpFilterDefault, accept: func(n int) bool { return n >= 1 }},
 }

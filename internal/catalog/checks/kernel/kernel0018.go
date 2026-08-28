@@ -66,12 +66,12 @@ conversation is not.`,
 
 		set, found := sc.EffectiveConfigured(kptrKey)
 		if !found {
-			return catalog.Outcome{
+			return tierAbsence(catalog.Outcome{
 				Result:   finding.Fail,
 				Subject:  kptrKey,
-				Detail:   kptrMissingDetail(sc) + persistKptrCaveat,
+				Detail:   kptrMissingDetail(sc),
 				Evidence: searchedEvidence(sc, nil),
-			}
+			}, sc, kptrTiering, persistKptrCaveat)
 		}
 
 		switch set.Value {
@@ -170,3 +170,11 @@ func kptrRunningNote(sc fact.Sysctl, configured string) string {
 	}
 	return fmt.Sprintf(" The running kernel has it at %s, which does not match the file; see KERNEL-0007.", r.Value)
 }
+
+// kptrTiering is the runtime cross-reference for the absence case.
+//
+// It accepts only 2, which is what this check accepts in a file. 1 is the
+// "insufficient effort" value this check already reports at MEDIUM when it is
+// written down, and a running 1 should not buy a downgrade for a file that
+// says nothing.
+var kptrTiering = []requirement{{key: kptrKey, accept: func(n int) bool { return n == 2 }}}

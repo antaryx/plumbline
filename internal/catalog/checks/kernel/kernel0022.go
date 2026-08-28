@@ -77,12 +77,12 @@ boot.`,
 					}
 				}
 			}
-			return catalog.Outcome{
+			return tierAbsence(catalog.Outcome{
 				Result:   finding.Fail,
 				Subject:  perfKey,
-				Detail:   detail + persistPerfCaveat,
+				Detail:   detail,
 				Evidence: searchedEvidence(sc, nil),
-			}
+			}, sc, perfTiering, persistPerfCaveat)
 		}
 
 		level, err := strconv.Atoi(set.Value)
@@ -173,3 +173,6 @@ func perfExposure(level int) string {
 		return "the kernel's own execution, which is a direct read of the layout KASLR randomises"
 	}
 }
+
+// perfTiering is the runtime cross-reference for the absence case.
+var perfTiering = []requirement{{key: perfKey, accept: func(n int) bool { return n >= 2 }}}
