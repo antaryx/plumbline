@@ -86,14 +86,7 @@ This is a check about files. KERNEL-0016 asks what the running kernel does.`,
 
 		n, err := strconv.Atoi(set.Value)
 		if err != nil {
-			return catalog.Outcome{
-				Result:        finding.Unknown,
-				UnknownReason: finding.ReasonAmbiguousState,
-				Subject:       syncookiesKey,
-				Detail: fmt.Sprintf("%s is %q at %s:%d, which is not a number. What the kernel does with a value it cannot parse depends on the build, so what this host does after a reboot cannot be determined from the file.%s",
-					syncookiesKey, set.Value, set.File, set.Line, persistSyncookiesCaveat),
-				Evidence: configuredEvidence(sc, syncookiesKey),
-			}
+			return unparseableConfig(sc, syncookiesKey, set, persistSyncookiesCaveat)
 		}
 
 		switch {

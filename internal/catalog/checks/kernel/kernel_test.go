@@ -39,6 +39,7 @@ var all = []catalog.Check{
 	checks.Check0018, checks.Check0019, checks.Check0020, checks.Check0021, checks.Check0022,
 	checks.Check0023, checks.Check0024, checks.Check0025,
 	checks.Check0026, checks.Check0027, checks.Check0028,
+	checks.Check0029, checks.Check0030, checks.Check0031,
 }
 
 // collectFixture runs the real collector against a fixture tree.
@@ -545,9 +546,9 @@ func TestCheckIdentityIsWellFormed(t *testing.T) {
 		// bulk-updated to the current version — which is what this assertion
 		// is guarding, and why it names the versions rather than accepting any.
 		switch check.SinceCatalog {
-		case 2, 3, 25, 26, 27, 28, 29, 30:
+		case 2, 3, 25, 26, 27, 28, 29, 30, 31:
 		default:
-			t.Errorf("%s declares SinceCatalog %d, want 2, 3, 25, 26, 27, 28, 29 or 30", check.ID, check.SinceCatalog)
+			t.Errorf("%s declares SinceCatalog %d, want 2, 3, 25, 26, 27, 28, 29, 30 or 31", check.ID, check.SinceCatalog)
 		}
 		if check.SinceCatalog > catalog.Version {
 			t.Errorf("%s declares SinceCatalog %d, which is ahead of catalog.Version %d",
@@ -1776,5 +1777,161 @@ func TestARequirementTableTellsItsThreeFailuresApart(t *testing.T) {
 	}
 	if strings.Contains(wrong.Detail, "not a number") {
 		t.Errorf("a wrong value was reported as unparseable: %s", wrong.Detail)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// KERNEL-0029, -0030 and -0031: the filesystem boundaries
+// ---------------------------------------------------------------------------
+
+func TestKernel0029SuidDumpableIsPersisted(t *testing.T) {
+	run(t, checks.Check0029, []tc{
+		{fixture: "kernel-fs-persisted", result: finding.Pass,
+			detailContains: "writes no core dump at all"},
+
+		// 2 passes, because systemd-coredump cannot capture a setuid crash
+		// without it — and is told what it is still giving up.
+		{fixture: "kernel-fs-suidsafe", result: finding.Pass,
+			detailContains: "only root may read it"},
+
+		// 1 is the one value that must never be set.
+		{fixture: "kernel-fs-open", result: finding.Fail, severity: finding.High,
+			detailContains: "must never be set"},
+
+		// A safe default nobody wrote down still fails, and the detail has to
+		// say the host is safe today or it reads as an outage.
+		{fixture: "kernel-fs-unset", result: finding.Fail, severity: finding.High,
+			detailContains: "a default nobody wrote down"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+// TestTheTwoAcceptedDumpPoliciesAreToldApart. 0 and 2 both pass and are not
+// equivalent: at 2 the privileged memory still reaches the disk, where it
+// outlives the process and is picked up by backups. Passing them with the same
+// sentence would claim more than the setting delivers.
+func TestTheTwoAcceptedDumpPoliciesAreToldApart(t *testing.T) {
+	off := evalFixture(t, checks.Check0029, "kernel-fs-persisted")
+	safe := evalFixture(t, checks.Check0029, "kernel-fs-suidsafe")
+
+	if off.Result != finding.Pass || safe.Result != finding.Pass {
+		t.Fatalf("expected both to pass: %s / %s", off.Result, safe.Result)
+	}
+	if !strings.Contains(safe.Detail, "still reaches the disk") {
+		t.Errorf("a host at 2 is not told what it is giving up: %s", safe.Detail)
+	}
+	// The report must not look like it is contradicting itself: KERNEL-0005
+	// reads the running value and fails 2, so this check names it.
+	if !strings.Contains(safe.Detail, "KERNEL-0005") {
+		t.Errorf("a host at 2 is not pointed at the check that disagrees: %s", safe.Detail)
+	}
+	if strings.Contains(off.Detail, "still reaches the disk") {
+		t.Errorf("a host at 0 was given the caveat that belongs to 2: %s", off.Detail)
+	}
+}
+
+// TestKernel0029AndKernel0005AgreeOnWhatTheyDisagreeAbout pins the one value
+// where a persistence check and its runtime counterpart part company. If
+// KERNEL-0005 is ever re-rated to accept 2, this test fails and the sentence
+// in KERNEL-0029 pointing at it has to go with it.
+func TestKernel0029AndKernel0005AgreeOnWhatTheyDisagreeAbout(t *testing.T) {
+	persist := evalFixture(t, checks.Check0029, "kernel-fs-suidsafe")
+	runtime := evalFixture(t, checks.Check0005, "kernel-fs-suidsafe")
+
+	if persist.Result != finding.Pass {
+		t.Errorf("KERNEL-0029 on suid_dumpable=2 = %s, want PASS", persist.Result)
+	}
+	if runtime.Result != finding.Fail {
+		t.Fatalf("KERNEL-0005 on suid_dumpable=2 = %s, want FAIL; KERNEL-0029's detail claims it fails", runtime.Result)
+	}
+	if runtime.Severity != finding.Low {
+		t.Errorf("KERNEL-0005 severity on 2 = %s, want LOW; KERNEL-0029 calls it low-severity", runtime.Severity)
+	}
+}
+
+func TestKernel0030ProtectedHardlinksArePersisted(t *testing.T) {
+	run(t, checks.Check0030, []tc{
+		{fixture: "kernel-fs-persisted", result: finding.Pass,
+			detailContains: "already owns or can read and write"},
+
+		{fixture: "kernel-fs-open", result: finding.Fail, severity: finding.High,
+			detailContains: "turned off in writing"},
+
+		{fixture: "kernel-fs-unset", result: finding.Fail, severity: finding.High,
+			detailContains: "a default nobody wrote down"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+func TestKernel0031ProtectedSymlinksArePersisted(t *testing.T) {
+	run(t, checks.Check0031, []tc{
+		{fixture: "kernel-fs-persisted", result: finding.Pass,
+			detailContains: "only followed when the follower owns the link"},
+
+		{fixture: "kernel-fs-open", result: finding.Fail, severity: finding.High,
+			detailContains: "classic local privilege escalation"},
+
+		{fixture: "kernel-fs-unset", result: finding.Fail, severity: finding.High,
+			detailContains: "a default nobody wrote down"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+// TestTheTwoLinkProtectionsDoNotShareTheirProse. They share one reading, which
+// is what stops them drifting into two interpretations of the same file — but
+// a shared implementation that also shared its sentences would tell an operator
+// about hardlinks when they are looking at symlinks.
+func TestTheTwoLinkProtectionsDoNotShareTheirProse(t *testing.T) {
+	hard := evalFixture(t, checks.Check0030, "kernel-fs-open")
+	sym := evalFixture(t, checks.Check0031, "kernel-fs-open")
+
+	if hard.Detail == sym.Detail {
+		t.Fatal("the two link protections produced identical details")
+	}
+	if strings.Contains(hard.Detail, "symlink") {
+		t.Errorf("the hardlink finding talks about symlinks: %s", hard.Detail)
+	}
+	if strings.Contains(sym.Detail, "hardlink") {
+		t.Errorf("the symlink finding talks about hardlinks: %s", sym.Detail)
+	}
+	for _, got := range []finding.Finding{hard, sym} {
+		if !strings.Contains(got.Detail, "is 0 at /etc/sysctl.d/99-debug.conf") {
+			t.Errorf("%s does not cite where the value was read: %s", got.CheckID, got.Detail)
+		}
+	}
+}
+
+// TestALinkProtectionAboveOneStillPasses. Only 0 and 1 are documented, and the
+// runtime counterparts accept anything at or above 1. A persistence check that
+// demanded exactly 1 would disagree with KERNEL-0009 and KERNEL-0010 about a
+// file none of them can do anything about.
+func TestALinkProtectionAboveOneStillPasses(t *testing.T) {
+	sc := fact.Sysctl{
+		Running: map[string]fact.SysctlRunning{
+			"fs.protected_symlinks": {Key: "fs.protected_symlinks", State: fact.SysctlObserved, Value: "1"},
+		},
+		Configured: map[string][]fact.SysctlSetting{
+			"fs.protected_symlinks": {{Key: "fs.protected_symlinks", Value: "2", File: "/etc/sysctl.d/60-fs.conf", Line: 1}},
+		},
+		Files: []string{"/etc/sysctl.d/60-fs.conf"},
+	}
+	got := evalSysctl(t, checks.Check0031, sc)
+	if got.Result != finding.Pass {
+		t.Fatalf("result = %s, want PASS: %s", got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "only 0 and 1 are documented") {
+		t.Errorf("an undocumented value passed without being named: %s", got.Detail)
 	}
 }

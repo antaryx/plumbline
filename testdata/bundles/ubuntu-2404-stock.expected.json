@@ -1,7 +1,7 @@
 {
   "bundle": "ubuntu-2404-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 30,
+  "catalog_version": 31,
   "scan": {
     "started": "2026-08-25T21:31:57.77690799Z",
     "finished": "2026-08-25T21:31:57.807262853Z",
@@ -14,20 +14,20 @@
   },
   "summary": {
     "counts": {
-      "pass": 41,
-      "fail": 22,
+      "pass": 43,
+      "fail": 23,
       "not_applicable": 37,
       "skipped": 0,
       "unknown": 6,
-      "total": 106
+      "total": 109
     },
     "by_severity": {
-      "HIGH": 7,
+      "HIGH": 8,
       "LOW": 6,
       "MEDIUM": 9
     },
-    "posture": 68.96551724137932,
-    "coverage": 91.30434782608695
+    "posture": 68.83116883116884,
+    "coverage": 91.66666666666666
   },
   "findings": [
     {
@@ -1304,6 +1304,114 @@
           "source": "/etc/sysctl.conf",
           "excerpt": "read, and does not set the parameter",
           "sha256": "97c5b93ecd5329df5318b981bbf78117a8bbc1c3644603dc65d0226fc54a340a"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0029",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "fs.suid_dumpable",
+      "fingerprint": "3346a096bf571f298a68769f90764579",
+      "detail": "fs.suid_dumpable is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream defaults to 0, which is correct — but a default is not a decision, and a debugging drop-in, a crash-reporting package or a sysctl -w in a start-up script can set it to 1 without anything here recording that 0 was ever intended. The running kernel has it at 0, so this host is safe now on a default nobody wrote down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0005's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/99-protect-links.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        },
+        {
+          "source": "/lib/sysctl.d/99-protect-links.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        },
+        {
+          "source": "/etc/sysctl.d/10-bufferbloat.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "763c2e237645fb7c3fecf16a54479e49c39aab229c2a646a42f16c83b9dd2974"
+        },
+        {
+          "source": "/etc/sysctl.d/10-console-messages.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "14524a83a266454d517b7cdbfb2141dbc4b884570543da5f65e3f08da0b814c0"
+        },
+        {
+          "source": "/etc/sysctl.d/10-ipv6-privacy.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "e07c86211944a534c6418fe0eb5896926e09a13b56162d8cb642866f37e83b04"
+        },
+        {
+          "source": "/etc/sysctl.d/10-kernel-hardening.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2bbc2c5684414517eba9da8d2fbff0a678026d944eb8fcfd6287281e11282e2f"
+        },
+        {
+          "source": "/etc/sysctl.d/10-magic-sysrq.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "f9107778c619246fb2a5a7e2a05c9419951752238ede04c771173832dd296128"
+        },
+        {
+          "source": "/etc/sysctl.d/10-map-count.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "867f4371a9cc5a79cab3b350aee03d067857b69e3cbf556a4a19aed057f9e954"
+        },
+        {
+          "source": "/etc/sysctl.d/10-network-security.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "258805ec72eada3c24a923de1c5bd8ed0fd11fe21f3673628ec78f221c31e934"
+        },
+        {
+          "source": "/etc/sysctl.d/10-ptrace.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "4add0d9ecbcc91e4018ed08e8dc66c69d4d9d142f9e31461178dcd7da0fd73c2"
+        },
+        {
+          "source": "/etc/sysctl.d/10-zeropage.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "5c745f62d086d9b9cf2ec23e4164f510cdba206c7aa6f11d2256f3f9be64c950"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "97c5b93ecd5329df5318b981bbf78117a8bbc1c3644603dc65d0226fc54a340a"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0030",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "fs.protected_hardlinks",
+      "fingerprint": "c2e7e72c15ef8f505a472ad587398c72",
+      "detail": "fs.protected_hardlinks is 1 at /lib/sysctl.d/99-protect-links.conf:8, so a hardlink may only be created to a file the user already owns or can read and write, which is what stops an unprivileged user parking a copy of a file they cannot read somewhere a privileged process will act on it. It stays that way across a reboot. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0010's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/99-protect-links.conf",
+          "line": 8,
+          "excerpt": "fs.protected_hardlinks = 1",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0031",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "fs.protected_symlinks",
+      "fingerprint": "3dea84e961f61d734a5c94c4ebaa9bd1",
+      "detail": "fs.protected_symlinks is 1 at /lib/sysctl.d/99-protect-links.conf:10, so a symlink in a world-writable sticky directory such as /tmp is only followed when the follower owns the link or owns the directory, which makes the classic race unwinnable no matter how the privileged program was written. It stays that way across a reboot. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0009's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/99-protect-links.conf",
+          "line": 10,
+          "excerpt": "fs.protected_symlinks = 1",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
         }
       ]
     },

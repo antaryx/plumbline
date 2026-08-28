@@ -75,14 +75,7 @@ This is a check about files. Nothing reads the running value yet.`,
 
 		n, err := strconv.Atoi(set.Value)
 		if err != nil {
-			return catalog.Outcome{
-				Result:        finding.Unknown,
-				UnknownReason: finding.ReasonAmbiguousState,
-				Subject:       rfc1337Key,
-				Detail: fmt.Sprintf("%s is %q %s, which is not a number. What the kernel does with a value it cannot parse depends on the build, so what this host does after a reboot cannot be determined from the file.%s",
-					rfc1337Key, set.Value, configuredAt(sc, rfc1337Key, set), persistRFC1337Caveat),
-				Evidence: configuredEvidence(sc, rfc1337Key),
-			}
+			return unparseableConfig(sc, rfc1337Key, set, persistRFC1337Caveat)
 		}
 
 		if n == 1 {

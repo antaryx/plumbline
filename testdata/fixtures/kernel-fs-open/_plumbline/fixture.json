@@ -1,0 +1,1 @@
+{ "description": "All three turned off in writing by a debugging drop-in, and the running kernel agrees. suid_dumpable at 1 is the value that must never be set — a local user crashes a setuid binary and reads privileged memory out of the dump. Distinguishes a decision somebody made from a default nobody set, which the findings word differently." }

@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 30 · 106 checks · 11 modules**
+**Catalog version 31 · 109 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -3503,6 +3503,205 @@ grep -rn tcp_rfc1337 /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysct
 
 - [RFC 1337 — TIME-WAIT Assassination Hazards in TCP](https://www.rfc-editor.org/rfc/rfc1337)
 - [Linux kernel — ip-sysctl tcp\_rfc1337](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+
+---
+
+### KERNEL-0029 — The setuid core-dump policy is written to the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | HIGH |
+| Since | catalog 31 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `information-leak` |
+
+A core dump is the crashing process's memory written to disk.
+For an ordinary program that is a debugging convenience. For a setuid program it
+is a copy of whatever the program held while running as somebody else — a
+password read from a terminal, a private key, a Kerberos ticket, a session token
+— plus the addresses everything sat at, which is a defeat of layout
+randomisation thrown in.
+
+fs.suid_dumpable decides what happens when a setuid or setgid program crashes:
+
+  - 0 — no dump. The upstream default.
+  - 1 — dump like any other process, owned by the *running* user. An
+    unprivileged user crashes a setuid binary and reads privileged memory out
+    of the resulting file. This is the value that must never be set.
+  - 2 — dump, readable only by root. "suidsafe": what systemd-coredump needs to
+    capture a crash of a setuid binary at all.
+
+**0 and 2 both pass, and they are not equivalent.** At 2 the privileged memory
+still reaches the disk, where it outlives the process, is picked up by backups,
+and is readable by anything that reaches root. It is a considered trade for a
+host that needs crash reports, not a hardened setting, and this check says so
+rather than passing it silently.
+
+Note that KERNEL-0005 reads the running value and holds the stricter bar: its
+subject is whether setuid programs write dumps *at all*, so it reports 2 as a
+low-severity finding where this check accepts it. A host at 2 will see both, and
+that is the two questions being different rather than the report contradicting
+itself.
+
+This is a check about files. The kernel already defaults to 0, so most hosts
+fail this while being safe today — which is the point: a default is not a
+decision, and nothing on the host records that anyone chose it.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write fs.suid\_dumpable = 0 to a file in /etc/sysctl.d/, or 2 where crash reports for setuid binaries are needed.
+
+1. Check what already sets it: grep -rn suid\_dumpable /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Expect nothing on most hosts — the kernel defaults to 0 and no distribution in this project's corpus writes it down.
+2. Create or extend a drop-in containing fs.suid\_dumpable = 0. Write it down even though the running kernel almost certainly reports 0 already: that is the built-in default rather than a decision, and a debugging or crash-reporting package that sets 1 will win silently.
+3. Use 2 instead only where crashes of setuid binaries genuinely have to be captured — systemd-coredump cannot collect them at 0. Understand what that buys the attacker who reaches root, and make sure the dumps are not swept into a backup or a log shipper.
+4. Apply without rebooting: sysctl --system, then confirm with sysctl fs.suid\_dumpable.
+5. Check where dumps land if you set 2: kernel.core\_pattern decides, and a pattern piping to a program runs that program as root. KERNEL-0014 covers it.
+
+```sh
+sysctl fs.suid_dumpable
+grep -rn suid_dumpable /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+sysctl kernel.core_pattern
+```
+
+> **Caution.** At 0 a crashing setuid binary produces nothing to debug with, which matters if you are actually chasing a crash in one. That is the intended trade. Note that 2 is not a middle setting for safety — it is a middle setting for debuggability, and the memory still reaches the disk.
+
+**Controls** — `nist-800-53-r5 SC-4`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — fs.suid\_dumpable](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#suid-dumpable)
+- [core(5)](https://man7.org/linux/man-pages/man5/core.5.html)
+
+---
+
+### KERNEL-0030 — Hardlink protection is written to the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | HIGH |
+| Since | catalog 31 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `privilege-escalation` |
+
+A hardlink is a second name for the same inode, and creating
+one traditionally needed no permission on the file at all — only write access to
+the directory the new name goes in. That is the whole problem. An unprivileged
+user with a writable directory could link a file they cannot read, and the link
+kept the original's contents and permissions while sitting somewhere they
+control.
+
+Two things follow, and both were real vulnerability classes:
+
+  - **A file that gets processed later gets processed at the attacker's path.**
+    Link /etc/shadow into a directory some privileged job cleans up, rotates or
+    chowns, and the job acts on the attacker's chosen inode.
+  - **Deletion stops being deletion.** A setuid program's temporary file, or a
+    file about to be shredded, survives under a name the attacker kept.
+
+fs.protected_hardlinks = 1 requires that the user creating a link either owns
+the file or can read and write it. It closed a run of CVEs at a stroke and has
+essentially no compatibility cost — which is why every distribution enables it
+and why almost none of them write it down.
+
+**The kernel defaults this to 1 on any current build, so most hosts are
+protected while failing this check.** That is the subject: a default is not a
+decision. Nothing on the host records that anyone chose it, and nothing stops a
+drop-in from setting 0.
+
+This is a check about files. KERNEL-0010 asks what the running kernel does.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write fs.protected\_hardlinks = 1 to a file in /etc/sysctl.d/.
+
+1. Check what already sets it: grep -rn protected\_hardlinks /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. systemd ships it in 50-default.conf on most systemd hosts, and Ubuntu in 99-protect-links.conf; the RPM family commonly relies on the kernel default and writes nothing.
+2. Create or extend a drop-in containing fs.protected\_hardlinks = 1. Write it down even though the running kernel reports 1: that is the kernel's built-in default rather than a decision on this host, and a drop-in setting 0 would win without anything recording that 1 was intended.
+3. Apply without rebooting: sysctl --system, then confirm with sysctl fs.protected\_hardlinks.
+4. Set fs.protected\_symlinks in the same file — the two close halves of the same problem and are always configured together. KERNEL-0031 covers it.
+
+```sh
+sysctl fs.protected_hardlinks
+grep -rn protected_hardlinks /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+systemd-analyze cat-config sysctl.d
+```
+
+> **Caution.** Effectively none. The restriction only refuses links to files the linking user could not already read and write, which no ordinary workload does. Very old backup or packaging tools that hardlink across ownership boundaries as root are unaffected, since root is exempt.
+
+**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 AC-3`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — fs.protected\_hardlinks](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-hardlinks)
+- [Linux kernel commit 800179c9b8a1 — hardlink restrictions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=800179c9b8a1)
+
+---
+
+### KERNEL-0031 — Symlink protection is written to the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | HIGH |
+| Since | catalog 31 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `privilege-escalation` |
+
+The classic local privilege escalation is four lines long. A
+privileged program opens a predictable path in /tmp; an unprivileged user
+replaces that path with a symlink to somewhere they should not be able to write;
+the privileged program follows it and writes there. It is a race, it is easy to
+win because the attacker chooses when to run, and it has been the mechanism
+behind a very long run of CVEs.
+
+fs.protected_symlinks = 1 breaks it in the kernel rather than in each program.
+In a world-writable sticky directory — /tmp, /var/tmp, /dev/shm — a symlink is
+only followed when the person following it owns the link, or owns the directory.
+An attacker's link in /tmp is therefore not followed by root, and the race
+becomes unwinnable regardless of how the program was written.
+
+This is defence for code you did not write and cannot audit: every shell script
+that redirects into /tmp, every package post-install, every log rotator. The
+restriction applies only in sticky world-writable directories, so nothing
+outside that pattern is affected.
+
+**The kernel defaults this to 1 on any current build, so most hosts are
+protected while failing this check.** That is the subject: a default is not a
+decision, and nothing here stops a drop-in from setting 0.
+
+This is a check about files. KERNEL-0009 asks what the running kernel does.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write fs.protected\_symlinks = 1 to a file in /etc/sysctl.d/.
+
+1. Check what already sets it: grep -rn protected\_symlinks /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. systemd ships it in 50-default.conf on most systemd hosts, and Ubuntu in 99-protect-links.conf; the RPM family commonly relies on the kernel default and writes nothing.
+2. Create or extend a drop-in containing fs.protected\_symlinks = 1. Write it down even though the running kernel reports 1: that is the kernel's built-in default rather than a decision on this host.
+3. Apply without rebooting: sysctl --system, then confirm with sysctl fs.protected\_symlinks.
+4. Set fs.protected\_hardlinks in the same file — the two close halves of the same problem and are always configured together. KERNEL-0030 covers it.
+5. Consider fs.protected\_regular = 2 and fs.protected\_fifos = 1 alongside them: they extend the same idea from following a link to opening a file or FIFO another user planted. KERNEL-0011 and KERNEL-0012 read the running values.
+
+```sh
+sysctl fs.protected_symlinks
+grep -rn protected_symlinks /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+systemd-analyze cat-config sysctl.d
+```
+
+> **Caution.** Effectively none. The restriction applies only inside world-writable sticky directories and only to links whose owner differs from both the follower and the directory owner, which is a pattern legitimate software does not rely on. A program that genuinely needs to follow another user's link in /tmp is describing the vulnerability rather than a requirement.
+
+**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SI-10`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — fs.protected\_symlinks](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-symlinks)
+- [Linux kernel commit 800179c9b8a1 — symlink restrictions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=800179c9b8a1)
 
 ---
 

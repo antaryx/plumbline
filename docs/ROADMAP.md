@@ -887,6 +887,41 @@ catalog-wide severity review**: `KERNEL-0025`, `-0026` and `-0027` each fail
 every bundle that has any sysctl configuration, and a report where the network
 section is uniformly red is one an operator learns to page past.
 
+`KERNEL-0029`, `-0030` and `-0031` closed the module with the filesystem
+boundaries, and were the first batch in this group to need nothing new. Every
+parameter was already collected, every one has a runtime counterpart, and
+**`persistenceGate` took them unmodified** — `internal/catalog/checks/kernel/kernel.go`
+has zero deleted lines in that commit. Five work packages of persistence checks
+have now passed through those four conditions without one of them needing to
+move, which is about as much evidence as an abstraction of that size can earn.
+
+**Two checks can disagree without the report contradicting itself, but only if
+one of them says so.** `KERNEL-0029` accepts `fs.suid_dumpable = 2` — the
+documented suidsafe value, and the only one at which `systemd-coredump` can
+capture a setuid crash — while `KERNEL-0005` fails it at `LOW`, because its
+subject is whether setuid programs write dumps *at all*. Both readings are
+defensible and a host at `2` sees both findings. What makes that legible rather
+than broken is that `KERNEL-0029`'s passing detail names `KERNEL-0005` and says
+it holds the stricter bar, and that a test pins the two verdicts together so the
+cross-reference cannot rot silently. Whether to reconcile them is severity-review
+work; leaving the reader to notice the disagreement unaided was never an option.
+
+**The distribution split here is the cleanest in the corpus.** Ubuntu and Alpine
+write both link protections down — `99-protect-links.conf` and
+`00-alpine.conf` — and the RPM family relies on the kernel default and writes
+nothing. Since the kernel has defaulted both to 1 for years, Fedora and Rocky
+are protected today and fail on the same principle every check in this group
+applies: a default is not a decision. `fs.suid_dumpable` is the sharper case —
+**no bundle writes it at all**, and all six run the safe default.
+
+That is now three `HIGH` checks (`-0026`, `-0030`, `-0031`) and one `MEDIUM`
+group failing most or all of the corpus on the same reasoning. The catalog-wide
+severity review is scheduled, and the specific question it has to answer is
+whether "a safe default nobody wrote down" deserves the same severity as "the
+dangerous value, written down". `KERNEL-0018` already tiers within a check for
+exactly this reason; whether that belongs in every persistence check or whether
+the answer is a lower base severity for the whole group is the decision.
+
 One gap remains, unchanged and not started: **redirect acceptance has no runtime
 check.** `KERNEL-0025` reads the files; nothing reads `/proc/sys` for
 `accept_redirects`, and the same is now true of `accept_ra`, `send_redirects`

@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 30 · 106 checks · 11 modules**
+**Catalog version 31 · 109 checks · 11 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 
@@ -17,14 +17,14 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | `CONTAINERS` | 8 | 2 | 0 | 3 | 3 | 0 |
 | `CRON` | 5 | 0 | 2 | 2 | 1 | 0 |
 | `FILESYS` | 10 | 2 | 3 | 4 | 1 | 0 |
-| `KERNEL` | 28 | 0 | 7 | 18 | 3 | 0 |
+| `KERNEL` | 31 | 0 | 10 | 18 | 3 | 0 |
 | `LOGGING` | 5 | 0 | 0 | 4 | 1 | 0 |
 | `MEMORY` | 4 | 0 | 0 | 3 | 1 | 0 |
 | `NETWORK` | 3 | 0 | 2 | 1 | 0 | 0 |
 | `SERVICES` | 8 | 0 | 4 | 4 | 0 | 0 |
 | `SSHD` | 19 | 1 | 7 | 8 | 3 | 0 |
 | `USERS` | 10 | 2 | 4 | 2 | 2 | 0 |
-| **total** | **106** | 7 | 32 | 51 | 16 | 0 |
+| **total** | **109** | 7 | 35 | 51 | 16 | 0 |
 
 Severity is the check's **base** severity, before any context adjustment a finding may carry.
 
@@ -111,6 +111,9 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`KERNEL-0026`](CHECK-REFERENCE.md#kernel-0026--ipv6-router-advertisements-are-refused-in-the-sysctl-configuration) IPv6 router advertisements are refused in the sysctl configuration | HIGH | `kernel.sysctl` |
 | [`KERNEL-0027`](CHECK-REFERENCE.md#kernel-0027--sending-icmp-redirects-is-refused-in-the-sysctl-configuration) Sending ICMP redirects is refused in the sysctl configuration | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0028`](CHECK-REFERENCE.md#kernel-0028--rfc-1337-time-wait-protection-is-written-to-the-sysctl-configuration) RFC 1337 TIME-WAIT protection is written to the sysctl configuration | LOW | `kernel.sysctl` |
+| [`KERNEL-0029`](CHECK-REFERENCE.md#kernel-0029--the-setuid-core-dump-policy-is-written-to-the-sysctl-configuration) The setuid core-dump policy is written to the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0030`](CHECK-REFERENCE.md#kernel-0030--hardlink-protection-is-written-to-the-sysctl-configuration) Hardlink protection is written to the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0031`](CHECK-REFERENCE.md#kernel-0031--symlink-protection-is-written-to-the-sysctl-configuration) Symlink protection is written to the sysctl configuration | HIGH | `kernel.sysctl` |
 
 ## LOGGING
 

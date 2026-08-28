@@ -1,0 +1,1 @@
+{ "description": "The three filesystem boundary parameters written to a drop-in and matching the running kernel: no core dumps from setuid programs, and both link protections on. The shape a hardening role should leave behind, and the only one where these checks pass." }

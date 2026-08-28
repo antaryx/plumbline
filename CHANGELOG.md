@@ -12,6 +12,21 @@ explanation in this file is a defect.
 ## [Unreleased]
 
 ### Fixed
+- **The unparseable-configuration branch is resolved in one place.**
+  `unparseableConfig` replaces the sixth copy of an identical block, with
+  `KERNEL-0023` and `-0028` refactored onto it and their wording unchanged.
+  `KERNEL-0020` and `-0022` keep their own, because a parameter with a
+  documented enumeration should say "not one of 0, 1, 2 or 3" rather than "not
+  a number" — that sends an operator somewhere more useful.
+
+- **The two link-protection checks share one reading of the file.**
+  `KERNEL-0030` and `-0031` differ in what they defend and not at all in how
+  they are read, so they share a `linkProtection` implementation and supply
+  their own three sentences each. A pair of checks written a day apart drifting
+  into two slightly different readings of the same parameter is the failure this
+  prevents; a test asserts their details stay distinct and neither describes the
+  other's attack.
+
 - **The three ways a required parameter can fail are resolved in one place.**
   `KERNEL-0025`, `-0026` and `-0027` each need a table of keys checked against
   a predicate, and the order inside that loop is a correctness property: a key
@@ -97,6 +112,55 @@ explanation in this file is a defect.
   inode, the way the unit collector already does for drop-in directories.
 
 ### Added
+- **`KERNEL-0029`, `-0030` and `-0031`: the filesystem boundaries.** Catalog 31,
+  109 checks. All three parameters were already collected and all three have a
+  runtime counterpart, so this batch needed no collector change and **no change
+  to `persistenceGate`** — its four conditions applied unmodified.
+
+  - **`KERNEL-0029` (setuid core-dump policy).** `HIGH`. `0` and `2` both pass
+    and are **not** equivalent: at `2` the privileged memory still reaches the
+    disk, where it outlives the process and is picked up by backups. `1` is the
+    one value that must never be set — a local user crashes a setuid binary and
+    reads credentials out of the dump.
+  - **`KERNEL-0030` (hardlink protection).** `HIGH`. Linking a file you cannot
+    read into a directory you control preserves its contents and permissions at
+    a path of your choosing, where a privileged job that cleans up or chowns
+    will act on it — and deleting the original stops deleting anything.
+  - **`KERNEL-0031` (symlink protection).** `HIGH`. The classic `/tmp` race,
+    broken in the kernel rather than in each program. This is defence for code
+    nobody here wrote or audited.
+
+  **What the corpus persists:**
+
+  | | 0029 suid_dumpable | 0030 hardlinks | 0031 symlinks |
+  |---|---|---|---|
+  | ubuntu-2404-stock | FAIL | **PASS** | **PASS** |
+  | ubuntu-2404-hardened | FAIL | **PASS** | **PASS** |
+  | alpine-320-stock | FAIL | **PASS** | **PASS** |
+  | fedora-44-stock | FAIL | FAIL | FAIL |
+  | rocky-9-stock | FAIL | FAIL | FAIL |
+  | debian-13-stock | N/A | N/A | N/A |
+
+  Ubuntu's `99-protect-links.conf` and Alpine's `00-alpine.conf` write both link
+  protections down; the RPM family relies on the kernel default and writes
+  nothing. **No bundle writes `fs.suid_dumpable` at all**, and every one of them
+  runs it at `0` — the kernel's own safe default, chosen by nobody.
+
+### Check interactions
+- **`KERNEL-0029` accepts `fs.suid_dumpable = 2` and `KERNEL-0005` does not.**
+  This is deliberate and the checks are asking different questions —
+  `KERNEL-0005`'s subject is whether setuid programs write dumps *at all*, so it
+  reports `2` as a `LOW` finding, while `KERNEL-0029` accepts the documented
+  suidsafe value that `systemd-coredump` requires. A host at `2` sees both.
+
+  `KERNEL-0029`'s passing detail names `KERNEL-0005` explicitly so the pair
+  reads as two questions rather than as the report contradicting itself, and
+  `TestKernel0029AndKernel0005AgreeOnWhatTheyDisagreeAbout` pins both verdicts
+  together: if `KERNEL-0005` is ever re-rated to accept `2`, that test fails and
+  the cross-reference has to go with it. **Whether the pair should be reconciled
+  is a question for the catalog-wide severity review**, not something to settle
+  inside one check.
+
 - **`KERNEL-0026`, `-0027` and `-0028`: the rest of the network sysctl
   surface.** Catalog 30, 106 checks. All three route through `persistenceGate`,
   and **none of the three has a runtime counterpart** — the caveat says so,

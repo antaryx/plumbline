@@ -1,7 +1,7 @@
 {
   "bundle": "fedora-44-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 30,
+  "catalog_version": 31,
   "scan": {
     "started": "2026-08-25T21:31:49.097645827Z",
     "finished": "2026-08-25T21:31:49.817305111Z",
@@ -15,19 +15,19 @@
   "summary": {
     "counts": {
       "pass": 37,
-      "fail": 24,
+      "fail": 27,
       "not_applicable": 38,
       "skipped": 0,
       "unknown": 7,
-      "total": 106
+      "total": 109
     },
     "by_severity": {
-      "HIGH": 9,
+      "HIGH": 12,
       "LOW": 4,
       "MEDIUM": 11
     },
-    "posture": 63.19444444444444,
-    "coverage": 89.70588235294117
+    "posture": 59.47712418300654,
+    "coverage": 90.14084507042254
   },
   "findings": [
     {
@@ -908,6 +908,72 @@
       "subject": "net.ipv4.tcp_rfc1337",
       "fingerprint": "d29102de5d1bc95c93c8abed88bce2d5",
       "detail": "net.ipv4.tcp_rfc1337 is not set in any sysctl configuration file, so after the next reboot it is the kernel's default of 0: a reset aimed at a socket in TIME-WAIT tears it down early, and a delayed segment from the finished connection can be accepted into a new one that has taken the same four-tuple. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. No check reads this parameter's running value yet, so this finding is the only place it appears; a disagreement between the file and the running kernel is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0029",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "fs.suid_dumpable",
+      "fingerprint": "3346a096bf571f298a68769f90764579",
+      "detail": "fs.suid_dumpable is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream defaults to 0, which is correct — but a default is not a decision, and a debugging drop-in, a crash-reporting package or a sysctl -w in a start-up script can set it to 1 without anything here recording that 0 was ever intended. The running kernel has it at 0, so this host is safe now on a default nobody wrote down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0005's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0030",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "fs.protected_hardlinks",
+      "fingerprint": "c2e7e72c15ef8f505a472ad587398c72",
+      "detail": "fs.protected_hardlinks is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Any current kernel defaults this to 1, which is correct — but nothing on this host records that, and a drop-in setting 0 would restore a class of local privilege escalation that needs no exploit: a writable directory and a privileged process that touches a path by name. The running kernel has it on, so this host is protected now on a default nobody wrote down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0010's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0031",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "fs.protected_symlinks",
+      "fingerprint": "3dea84e961f61d734a5c94c4ebaa9bd1",
+      "detail": "fs.protected_symlinks is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Any current kernel defaults this to 1, which is correct — but nothing on this host records that, and a drop-in setting 0 would restore the classic /tmp symlink race against every privileged program that opens a predictable path, including the ones nobody here wrote or audited. The running kernel has it on, so this host is protected now on a default nobody wrote down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0009's subject, and a disagreement between the two is KERNEL-0007's.",
       "evidence": [
         {
           "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",

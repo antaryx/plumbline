@@ -502,6 +502,114 @@ func checkRequirements(sc fact.Sysctl, reqs []requirement) ([]string, []finding.
 	return failed, evidence
 }
 
+// linkProtection is the shape KERNEL-0030 and KERNEL-0031 share.
+//
+// The two parameters defend against different attacks and are read in exactly
+// the same way: one boolean, enabled at 1, and the only interesting states are
+// "written and on", "written and off" and "not written". Giving them one
+// implementation and three sentences each is what stops them drifting into two
+// slightly different readings of the same file, which is the failure mode a
+// pair of checks written a day apart actually has.
+type linkProtection struct {
+	key    string
+	caveat string
+	// unset is what an absent setting means, appended after the sentence
+	// naming the key. Both parameters default to 1 on a modern kernel and are
+	// set by most distributions, so an absent setting is usually a safe host
+	// with nothing recording the choice — but the two say different things
+	// about what would be exposed if it changed.
+	unset string
+	// on is the body of the passing verdict, and off the body of the failing
+	// one, each describing what the setting does rather than that it is set.
+	on  string
+	off string
+}
+
+// eval reads the parameter and judges it.
+//
+// Anything at or above 1 passes, which matches KERNEL-0009 and KERNEL-0010 on
+// the running values. Only 0 and 1 are documented, and a check that demanded
+// exactly 1 would disagree with its own runtime counterpart about a file
+// neither of them can do anything about.
+func (l linkProtection) eval(fs *fact.Set) catalog.Outcome {
+	sc := sysctlFact(fs)
+
+	if out := persistenceGate(sc, []string{l.key}, l.caveat); out != nil {
+		return *out
+	}
+
+	set, found := sc.EffectiveConfigured(l.key)
+	if !found {
+		detail := fmt.Sprintf("%s, so after the next reboot it is whatever the kernel defaults to. %s", notConfigured(sc, l.key), l.unset)
+		if r, ok := sc.Run(l.key); ok && r.State == fact.SysctlObserved {
+			if v, isInt := r.Int(); isInt && v >= 1 {
+				detail += " The running kernel has it on, so this host is protected now on a default nobody wrote down."
+			} else if isInt {
+				detail += " The running kernel has it off as well, so the protection is absent right now and not merely undocumented."
+			}
+		}
+		return catalog.Outcome{
+			Result:   finding.Fail,
+			Subject:  l.key,
+			Detail:   detail + l.caveat,
+			Evidence: searchedEvidence(sc, nil),
+		}
+	}
+
+	n, err := strconv.Atoi(strings.TrimSpace(set.Value))
+	if err != nil {
+		return unparseableConfig(sc, l.key, set, l.caveat)
+	}
+
+	if n >= 1 {
+		note := ""
+		if n > 1 {
+			note = fmt.Sprintf(" The value is %d rather than 1; only 0 and 1 are documented for this parameter, and anything the kernel accepts above 0 enables it rather than strengthening it.", n)
+		}
+		return catalog.Outcome{
+			Result:  finding.Pass,
+			Subject: l.key,
+			Detail: fmt.Sprintf("%s is %d %s, so %s It stays that way across a reboot.%s%s%s",
+				l.key, n, configuredAt(sc, l.key, set), l.on, note,
+				runningMismatch(sc, l.key, set.Value), l.caveat),
+			Evidence: configuredEvidence(sc, l.key),
+		}
+	}
+
+	return catalog.Outcome{
+		Result:  finding.Fail,
+		Subject: l.key,
+		Detail: fmt.Sprintf("%s is 0 %s, which is the protection turned off in writing rather than merely left undocumented: %s%s%s",
+			l.key, configuredAt(sc, l.key, set), l.off,
+			runningMismatch(sc, l.key, "0"), l.caveat),
+		Evidence: configuredEvidence(sc, l.key),
+	}
+}
+
+// unparseableConfig is the outcome for a configured value that is not the
+// integer the parameter holds.
+//
+// It is the configuration-side twin of unparseable(), and the reasoning is the
+// same: fabricating a number produces a fabricated verdict, and it is a
+// fabricated PASS as readily as a fabricated FAIL. What the kernel does with a
+// value it cannot parse depends on the build — it may reject the line and
+// leave the parameter alone, or clamp it — so the file does not determine what
+// this host will do.
+//
+// A check whose parameter has a documented enumeration says so instead of
+// using this, because "not one of 0, 1, 2 or 3" sends an operator somewhere
+// more useful than "not a number". KERNEL-0020 and KERNEL-0022 do that.
+func unparseableConfig(sc fact.Sysctl, key string, set fact.SysctlSetting, caveat string) catalog.Outcome {
+	return catalog.Outcome{
+		Result:        finding.Unknown,
+		UnknownReason: finding.ReasonAmbiguousState,
+		Subject:       key,
+		Detail: fmt.Sprintf("%s is %q %s, which is not a number. What the kernel does with a value it cannot parse depends on the build, so what this host does after a reboot cannot be determined from the file.%s",
+			key, set.Value, configuredAt(sc, key, set), caveat),
+		Evidence: configuredEvidence(sc, key),
+	}
+}
+
 // refused is the accept predicate for a parameter whose only safe value is 0.
 //
 // It is a named function rather than a closure per table so that the tables

@@ -1,7 +1,7 @@
 {
   "bundle": "alpine-320-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 30,
+  "catalog_version": 31,
   "scan": {
     "started": "2026-08-25T21:31:44.169375564Z",
     "finished": "2026-08-25T21:31:44.201476282Z",
@@ -14,20 +14,20 @@
   },
   "summary": {
     "counts": {
-      "pass": 33,
-      "fail": 17,
+      "pass": 35,
+      "fail": 18,
       "not_applicable": 50,
       "skipped": 0,
       "unknown": 6,
-      "total": 106
+      "total": 109
     },
     "by_severity": {
-      "HIGH": 7,
+      "HIGH": 8,
       "LOW": 2,
       "MEDIUM": 8
     },
     "posture": 66.66666666666666,
-    "coverage": 89.28571428571429
+    "coverage": 89.83050847457628
   },
   "findings": [
     {
@@ -850,6 +850,64 @@
           "source": "/lib/sysctl.d/00-alpine.conf",
           "line": 22,
           "excerpt": "net.ipv4.tcp_rfc1337 = 1",
+          "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0029",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "fs.suid_dumpable",
+      "fingerprint": "3346a096bf571f298a68769f90764579",
+      "detail": "fs.suid_dumpable is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream defaults to 0, which is correct — but a default is not a decision, and a debugging drop-in, a crash-reporting package or a sysctl -w in a start-up script can set it to 1 without anything here recording that 0 was ever intended. The running kernel has it at 0, so this host is safe now on a default nobody wrote down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0005's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/00-alpine.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "8bba47da45bc8715c69ac904a60410eabffaa7bbbef640f9c1368ab9c48493d0"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0030",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "fs.protected_hardlinks",
+      "fingerprint": "c2e7e72c15ef8f505a472ad587398c72",
+      "detail": "fs.protected_hardlinks is 1 at /lib/sysctl.d/00-alpine.conf:34, so a hardlink may only be created to a file the user already owns or can read and write, which is what stops an unprivileged user parking a copy of a file they cannot read somewhere a privileged process will act on it. It stays that way across a reboot. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0010's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/00-alpine.conf",
+          "line": 34,
+          "excerpt": "fs.protected_hardlinks = 1",
+          "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0031",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "subject": "fs.protected_symlinks",
+      "fingerprint": "3dea84e961f61d734a5c94c4ebaa9bd1",
+      "detail": "fs.protected_symlinks is 1 at /lib/sysctl.d/00-alpine.conf:35, so a symlink in a world-writable sticky directory such as /tmp is only followed when the follower owns the link or owns the directory, which makes the classic race unwinnable no matter how the privileged program was written. It stays that way across a reboot. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0009's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/00-alpine.conf",
+          "line": 35,
+          "excerpt": "fs.protected_symlinks = 1",
           "sha256": "ee169bea2cb6859420b55ca7a9c23fb68b50adc1d26c951f904dec9e8f767380"
         }
       ]
