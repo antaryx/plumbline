@@ -24,7 +24,14 @@ attacker's link exists.
 fs.protected_hardlinks set to 1 permits a hardlink only when the user owns the
 source file, or can both read and write it.`,
 
-	BaseSeverity: finding.Medium,
+	// High from catalog 33, raised to meet KERNEL-0030 on the same parameter,
+	// and matching KERNEL-0009 for the reason KERNEL-0031 matches KERNEL-0030:
+	// the two protections close halves of one problem and splitting their
+	// severity would be arbitrary. Turning this off lets an unprivileged user
+	// park a link to a file they cannot read at a path a privileged job will
+	// act on, which is a class of local privilege escalation rather than an
+	// instance of one.
+	BaseSeverity: finding.High,
 	Tags:         []string{"kernel", "filesystem", "privilege-escalation"},
 	Requires:     []fact.ID{fact.SysctlID},
 	SinceCatalog: 3,

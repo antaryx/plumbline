@@ -200,7 +200,7 @@ func TestKernel0004DmesgRestrict(t *testing.T) {
 func TestKernel0005SuidDumpable(t *testing.T) {
 	run(t, checks.Check0005, []tc{
 		{fixture: "kernel-hardened", result: finding.Pass, detailContains: "do not produce core dumps"},
-		{fixture: "kernel-weak", result: finding.Fail, severity: finding.Medium, detailContains: "crashing one"},
+		{fixture: "kernel-weak", result: finding.Fail, severity: finding.High, detailContains: "crashing one"},
 		{
 			// 2 — "suidsafe" — passes since catalog 32. It is what
 			// systemd-coredump needs to capture a setuid crash at all, and
@@ -813,9 +813,15 @@ func TestKernel0018KptrRestrictPersisted(t *testing.T) {
 		{fixture: "kernel-leak-restricted", result: finding.Pass,
 			detailContains: "prints zeros for every reader"},
 
-		// Written at 1: a band below the host that wrote nothing.
-		{fixture: "kernel-leak-capsyslog", result: finding.Fail, severity: finding.Medium,
+		// Written at 1, which is what every mainstream distribution ships and
+		// what KERNEL-0002 passes on the running value. A pass here since
+		// catalog 33; the verdict still names what 1 does not cover.
+		{fixture: "kernel-leak-capsyslog", result: finding.Pass,
 			detailContains: "CAP_SYSLOG"},
+
+		// Written at 0: the leak held open in writing.
+		{fixture: "kernel-leak-kptr-off", result: finding.Fail, severity: finding.High,
+			detailContains: "prints real kernel addresses"},
 
 		// Written nowhere.
 		{fixture: "kernel-leak-open", result: finding.Fail, severity: finding.High,
@@ -865,11 +871,11 @@ func TestKernel0019DmesgRestrictPersisted(t *testing.T) {
 // that has done one and not the other should see exactly one finding, and the
 // two fixtures below are that host in each direction.
 func TestOneAtATimeIsHalfDone(t *testing.T) {
-	// kptr at 1, dmesg at 1: -0018 fails, -0019 passes.
-	if got := evalFixture(t, checks.Check0018, "kernel-leak-capsyslog"); got.Result != finding.Fail {
-		t.Errorf("KERNEL-0018 = %s over kptr_restrict=1: %s", got.Result, got.Detail)
+	// kptr at 0, dmesg at 1: -0018 fails, -0019 passes.
+	if got := evalFixture(t, checks.Check0018, "kernel-leak-kptr-off"); got.Result != finding.Fail {
+		t.Errorf("KERNEL-0018 = %s over kptr_restrict=0: %s", got.Result, got.Detail)
 	}
-	if got := evalFixture(t, checks.Check0019, "kernel-leak-capsyslog"); got.Result != finding.Pass {
+	if got := evalFixture(t, checks.Check0019, "kernel-leak-kptr-off"); got.Result != finding.Pass {
 		t.Errorf("KERNEL-0019 responded to kptr_restrict: %s", got.Detail)
 	}
 
@@ -882,31 +888,38 @@ func TestOneAtATimeIsHalfDone(t *testing.T) {
 	}
 }
 
-// TestTheValueThatLooksSafeIsRatedBelowTheOneNobodySet.
+// TestTheValueEveryDistributionShipsIsNotAFailureOnOneSideOnly.
 //
-// kptr_restrict = 1 is a failure and is not the same failure as an unset
-// parameter. One operator hid pointers from ordinary readers and left them
-// visible to anything holding CAP_SYSLOG; the other never considered it. Same
-// verdict, one severity band apart, and the finding says which is which — the
-// precedent is CONTAINERS-0006 rating a loopback binding below a routable one.
-func TestTheValueThatLooksSafeIsRatedBelowTheOneNobodySet(t *testing.T) {
-	written := evalFixture(t, checks.Check0018, "kernel-leak-capsyslog")
-	unset := evalFixture(t, checks.Check0018, "kernel-leak-open")
+// This test used to say the opposite, and the opposite was a bug.
+//
+// Until catalog 33, a configured kernel.kptr_restrict = 1 was a MEDIUM failure
+// here while KERNEL-0002 passed the identical running value on the same host —
+// so one report carried a PASS and a FAIL about one number, and the operator
+// had no way to tell which half to believe. Every golden bundle in the corpus
+// showed it, because 1 is what Ubuntu, Debian and Red Hat all ship.
+//
+// The runtime check was the one describing the exposure correctly: 1 hides
+// pointers from every unprivileged reader, and what it leaves open needs
+// CAP_SYSLOG. So both halves pass it now, both fail 0, and the verdict says
+// what 2 would add.
+func TestTheValueEveryDistributionShipsIsNotAFailureOnOneSideOnly(t *testing.T) {
+	for _, c := range []catalog.Check{checks.Check0002, checks.Check0018} {
+		if got := evalFixture(t, c, "kernel-leak-capsyslog"); got.Result != finding.Pass {
+			t.Errorf("%s = %s over kptr_restrict=1: %s", c.ID, got.Result, got.Detail)
+		}
+		if got := evalFixture(t, c, "kernel-leak-kptr-off"); got.Result != finding.Fail {
+			t.Errorf("%s = %s over kptr_restrict=0: %s", c.ID, got.Result, got.Detail)
+		}
+	}
 
-	if written.Result != finding.Fail || unset.Result != finding.Fail {
-		t.Fatalf("expected both to fail: %s / %s", written.Result, unset.Result)
+	// The pass is not silent about what it does not cover: an operator running
+	// a container with CAP_SYSLOG needs to know 1 does not stop it.
+	written := evalFixture(t, checks.Check0018, "kernel-leak-capsyslog")
+	if !strings.Contains(written.Detail, "CAP_SYSLOG") {
+		t.Errorf("the pass does not say what 1 leaves open: %s", written.Detail)
 	}
-	if written.Severity != finding.Medium {
-		t.Errorf("kptr_restrict=1 rated %s, want MEDIUM", written.Severity)
-	}
-	if unset.Severity != finding.High {
-		t.Errorf("an unset kptr_restrict rated %s, want HIGH", unset.Severity)
-	}
-	if !strings.Contains(written.Detail, "Set it to 2") {
-		t.Errorf("the weaker value is not told what to do: %s", written.Detail)
-	}
-	// And the vendor file that set it is cited, because that is the file the
-	// operator has to out-rank.
+	// And the file that set it is cited, so the operator raising it to 2 knows
+	// which file they have to out-rank.
 	if len(written.Evidence) == 0 || !strings.Contains(written.Evidence[0].Source, "/usr/lib/sysctl.d/") {
 		t.Errorf("the vendor file that set 1 is not cited: %+v", written.Evidence)
 	}
@@ -977,8 +990,9 @@ func TestKernel0020PtraceScopePersisted(t *testing.T) {
 		{fixture: "kernel-trace-adminonly", result: finding.Pass,
 			detailContains: "CAP_SYS_PTRACE"},
 
-		// Written down and wide open.
-		{fixture: "kernel-trace-open", result: finding.Fail, severity: finding.High,
+		// Written down and wide open. Medium since catalog 33, level with
+		// KERNEL-0003 on the running parameter.
+		{fixture: "kernel-trace-open", result: finding.Fail, severity: finding.Medium,
 			detailContains: "classic behaviour"},
 
 		// Written nowhere, and hardened at runtime — the trap.
@@ -2023,6 +2037,7 @@ func TestTheTieringPredicateAgreesWithTheCheckItBelongsTo(t *testing.T) {
 		accept func(int) bool
 		values []int
 	}{
+		{checks.Check0018, "kernel.kptr_restrict", func(n int) bool { return n >= 1 }, []int{0, 1, 2}},
 		{checks.Check0019, "kernel.dmesg_restrict", func(n int) bool { return n == 1 }, []int{0, 1}},
 		{checks.Check0020, "kernel.yama.ptrace_scope", func(n int) bool { return n >= 1 && n <= 3 }, []int{0, 1, 2, 3}},
 		{checks.Check0021, "kernel.sysrq", func(n int) bool { return n == 0 }, []int{0, 1, 16, 176}},
@@ -2051,6 +2066,108 @@ func TestTheTieringPredicateAgreesWithTheCheckItBelongsTo(t *testing.T) {
 				t.Errorf("%s with %s = %d: verdict %s, tiering predicate accepts = %v",
 					c.check.ID, c.key, v, got.Result, want)
 			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// the runtime/persistence pairs
+// ---------------------------------------------------------------------------
+
+// pairedChecks is every KERNEL parameter that two checks judge: one reading the
+// running kernel, one reading the files that set it.
+//
+// Only same-key pairs are here. KERNEL-0008/-0024 and KERNEL-0015/-0025 are
+// pairs in subject and not in key — the runtime halves compute a value per
+// interface from net.ipv4.conf.<iface>.*, the persistence halves read conf.all
+// and conf.default — so "the same value" is not a question that can be put to
+// both, and their agreement is held by fixtures instead.
+var pairedChecks = []struct {
+	parameter string
+	runtime   catalog.Check
+	persisted catalog.Check
+	values    []int
+	// alsoRunning and alsoConfigured are the other keys a check of the pair
+	// needs before it will judge anything, held at a value it accepts so that
+	// the verdict tracks parameter alone.
+	also map[string]string
+}{
+	{parameter: "kernel.kptr_restrict", runtime: checks.Check0002, persisted: checks.Check0018, values: []int{0, 1, 2}},
+	{parameter: "kernel.yama.ptrace_scope", runtime: checks.Check0003, persisted: checks.Check0020, values: []int{0, 1, 2, 3}},
+	{parameter: "kernel.dmesg_restrict", runtime: checks.Check0004, persisted: checks.Check0019, values: []int{0, 1}},
+	{parameter: "fs.suid_dumpable", runtime: checks.Check0005, persisted: checks.Check0029, values: []int{0, 1, 2}},
+	{
+		parameter: "kernel.unprivileged_bpf_disabled", runtime: checks.Check0006, persisted: checks.Check0017,
+		values: []int{0, 1, 2},
+		// KERNEL-0017 reads a second parameter; held at a passing value so
+		// that what moves is the one both checks share.
+		also: map[string]string{"net.core.bpf_jit_harden": "2"},
+	},
+	{parameter: "fs.protected_symlinks", runtime: checks.Check0009, persisted: checks.Check0031, values: []int{0, 1}},
+	{parameter: "fs.protected_hardlinks", runtime: checks.Check0010, persisted: checks.Check0030, values: []int{0, 1}},
+	{parameter: "kernel.perf_event_paranoid", runtime: checks.Check0013, persisted: checks.Check0022, values: []int{-1, 0, 1, 2, 3}},
+	{parameter: "net.ipv4.tcp_syncookies", runtime: checks.Check0016, persisted: checks.Check0023, values: []int{0, 1, 2}},
+}
+
+// TestBothHalvesOfAPairAgreeAboutTheSameValue.
+//
+// A parameter set to v in a file, on a kernel running v, is one fact. Two
+// checks look at it from different sides and they must not reach opposite
+// verdicts about it — a report saying PASS and FAIL about one number tells the
+// operator nothing except that the tool is confused, and they have no way to
+// know which half to believe.
+//
+// This is not hypothetical. Until catalog 33, KERNEL-0002 passed
+// kernel.kptr_restrict = 1 while KERNEL-0018 failed it, on every host in the
+// golden corpus, because 1 is the value Ubuntu, Debian and Red Hat all ship.
+// The audit found it by reading the two files side by side. This finds it the
+// next time.
+func TestBothHalvesOfAPairAgreeAboutTheSameValue(t *testing.T) {
+	for _, p := range pairedChecks {
+		for _, v := range p.values {
+			value := strconv.Itoa(v)
+
+			running := map[string]fact.SysctlRunning{
+				p.parameter: {Key: p.parameter, State: fact.SysctlObserved, Value: value},
+			}
+			configured := map[string][]fact.SysctlSetting{
+				p.parameter: {{Key: p.parameter, Value: value, File: "/etc/sysctl.d/60-t.conf", Line: 1}},
+			}
+			for k, held := range p.also {
+				running[k] = fact.SysctlRunning{Key: k, State: fact.SysctlObserved, Value: held}
+				configured[k] = []fact.SysctlSetting{{Key: k, Value: held, File: "/etc/sysctl.d/60-t.conf", Line: 2}}
+			}
+			sc := fact.Sysctl{Running: running, Configured: configured, Files: []string{"/etc/sysctl.d/60-t.conf"}}
+
+			live := evalSysctl(t, p.runtime, sc)
+			written := evalSysctl(t, p.persisted, sc)
+			if (live.Result == finding.Pass) != (written.Result == finding.Pass) {
+				t.Errorf("%s = %d: %s says %s, %s says %s\n  running:    %s\n  configured: %s",
+					p.parameter, v, p.runtime.ID, live.Result, p.persisted.ID, written.Result,
+					live.Detail, written.Detail)
+			}
+		}
+	}
+}
+
+// TestAParameterCarriesOneSeverityWhicheverHalfAsks.
+//
+// The persistence half of every pair used to sit one severity band above the
+// runtime half, on an argument recorded in KERNEL-0017: a boundary scheduled to
+// fall down at the next reboot outranks one an operator can see today. Catalog
+// 32's runtime tiering retired that argument — the case it described is now the
+// one that gets *downgraded* — and catalog 33 closed the six gaps it had left
+// behind.
+//
+// What is left is one severity per parameter. A file that says 0 and a kernel
+// running 0 are the same exposure, and which check noticed it is not a fact
+// about the host.
+func TestAParameterCarriesOneSeverityWhicheverHalfAsks(t *testing.T) {
+	for _, p := range pairedChecks {
+		if p.runtime.BaseSeverity != p.persisted.BaseSeverity {
+			t.Errorf("%s: %s is %s and %s is %s; a parameter has one severity",
+				p.parameter, p.runtime.ID, p.runtime.BaseSeverity,
+				p.persisted.ID, p.persisted.BaseSeverity)
 		}
 	}
 }

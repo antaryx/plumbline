@@ -68,7 +68,7 @@ The rule:
 
 - Correcting a check's verdict logic is a **PATCH**, and it bumps the **catalog version**.
 - It must appear in `CHANGELOG.md` under a mandatory `### Check corrections` heading, stating the check ID, the old behaviour, the new behaviour, and who is affected.
-- If the correction is likely to change results on more than roughly 10% of hosts, it also carries a `plumbline scan` startup warning for one minor cycle.
+- If the correction is likely to change results on more than roughly 10% of hosts, it also carries a `plumbline scan` startup warning for one minor cycle. The mechanism is `internal/cli/notice.go`: a register of entries, each naming the catalog version it landed in and the tool version at which it stops being shown, rendered to stderr before collection begins (CLI-SPEC.md §7). Adding a scoring change means adding an entry; expiry needs nobody to remember it.
 - **Making a check stricter** (new conditions cause new failures) is *not* a correction — it is a new check with a new ID, or a MINOR release. Never sneak stricter checks into a patch, because someone's pipeline goes red overnight for no reason they can see.
 
 ### 2.5 Pre-1.0

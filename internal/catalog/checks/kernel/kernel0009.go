@@ -25,7 +25,17 @@ directory owner owns it. That breaks the attack at the point of use, without
 requiring every privileged program in the distribution to be audited for the
 race it depends on.`,
 
-	BaseSeverity: finding.Medium,
+	// High from catalog 33, raised to meet KERNEL-0031 on the same parameter.
+	//
+	// Both halves of the pair describe the same thing — whether a privileged
+	// program that opens a predictable path in /tmp can be made to follow an
+	// unprivileged user's symlink — and rating the file a band above the
+	// running kernel was the retired "scheduled to fall down" argument, not a
+	// judgement about symlink races. The judgement is KERNEL-0031's: this is a
+	// route from an ordinary local account to root that needs no exploit
+	// beyond winning a race the attacker chooses when to start, against
+	// programs nobody here wrote.
+	BaseSeverity: finding.High,
 	Tags:         []string{"kernel", "filesystem", "privilege-escalation", "toctou"},
 	Requires:     []fact.ID{fact.SysctlID},
 	SinceCatalog: 3,

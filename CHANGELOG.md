@@ -13,6 +13,62 @@ explanation in this file is a defect.
 
 ### Check corrections
 
+Catalog 33. The runtime/persistence pair audit. One check widens what it
+accepts, six are re-severitied, and **nothing is made stricter** — no pipeline
+goes red because of this (VERSIONING §2.4).
+
+- **`KERNEL-0018` accepts a configured `kernel.kptr_restrict = 1`.**
+  *Old behaviour:* only `2` passed; `1` was a `MEDIUM` failure telling the
+  operator to set `2`. *New behaviour:* `1` and `2` both pass, and the verdict
+  says what `1` does not cover — anything holding `CAP_SYSLOG` still reads
+  pointers in full — and what `2` costs, which is `perf`, `bpftrace` and crash
+  analysis seeing zeros as root. *Affected:* every host that persists `1`, which
+  is Ubuntu, Debian and the RPM family as shipped.
+
+  This closes a flat contradiction. `KERNEL-0002` passed the identical running
+  value on the same host, so one report carried a PASS and a FAIL about one
+  number with nothing to say which half to believe — on **all six** golden
+  bundles, because `1` is what everybody ships. The runtime check was the one
+  describing the exposure correctly: `1` hides pointers from every unprivileged
+  reader, and what it leaves open needs a capability.
+
+  `kptrTiering` widened with it. It had demanded `2`, which is the same
+  disagreement in a second place and a worse one — it meant catalog 32's
+  downgrade could never fire on a realistic host.
+
+- **Six severity changes, one band each, so that a parameter has one severity.**
+  `KERNEL-0002`, `-0005`, `-0006`, `-0009` and `-0010` rise `MEDIUM` to `HIGH`;
+  `KERNEL-0020` falls `HIGH` to `MEDIUM`. *Rationale:* every persistence check
+  sat a band above its runtime counterpart on an argument recorded in
+  `KERNEL-0017` — a boundary scheduled to fall down outranks one you can see
+  today — and catalog 32's tiering retired that argument, because the case it
+  described is now the one that gets downgraded. Nothing replaced it. Each pair
+  was then rated on what its failing state means rather than on which check
+  noticed it; `docs/ROADMAP.md` carries the table and the reasoning per pair.
+  *Affected:* every host, since five of the six are checks that pass on a
+  healthy system and posture is severity-weighted.
+
+  `kernel.yama.ptrace_scope` is the only pair that closed downward. At `0` a
+  process reads the memory of another process **owned by the same user**, which
+  is lateral movement for an attacker who already has that account rather than a
+  privilege boundary being crossed — and it is the upstream default and the
+  whole RPM family's default, so `HIGH` would have put a red line on every Red
+  Hat host for a setting nobody chose.
+
+  **Posture rises across the corpus**, because five of the six re-rated checks
+  pass on every bundle and a passing check's weight is in the numerator:
+  ubuntu-2404-stock 70.20 → 72.44, debian-13-stock 77.12 → 78.05,
+  alpine-320-stock 69.42 → 71.77, fedora-44-stock 62.76 → 65.31,
+  rocky-9-stock 65.49 → 68.71, ubuntu-2404-hardened 85.15 → 86.32. Only two
+  verdicts moved anywhere: `KERNEL-0018` `FAIL` → `PASS` on the three bundles
+  that write `kptr_restrict = 1`.
+
+  Two pairs disagree on paper and cannot in practice, and were left alone rather
+  than churned: `KERNEL-0004` accepts `dmesg_restrict >= 1` where `KERNEL-0019`
+  accepts exactly `1`, and `KERNEL-0003` accepts `ptrace_scope >= 1` where
+  `KERNEL-0020` accepts `1` to `3`. The kernel clamps both to their documented
+  range, so no running value can reach the gap.
+
 Catalog 32. Two corrections, both of which **lower** severities or widen what a
 check accepts. Neither makes any check stricter — nobody's pipeline goes red
 because of this release (VERSIONING §2.4).
@@ -53,9 +109,9 @@ because of this release (VERSIONING §2.4).
   catalog version and `plumbline diff` already refuses to compare across one.
 
   This correction changes results on well over 10% of hosts, so VERSIONING §2.4
-  also calls for a `plumbline scan` startup warning for one minor cycle. **No
-  such mechanism exists in the CLI yet**; it is recorded in the roadmap rather
-  than quietly skipped.
+  also calls for a `plumbline scan` startup warning for one minor cycle. That
+  mechanism did not exist when this landed and now does — see **Added**, below;
+  this correction is one of the entries it carries.
 
 ### Fixed
 - **The unparseable-configuration branch is resolved in one place.**
@@ -158,6 +214,38 @@ because of this release (VERSIONING §2.4).
   inode, the way the unit collector already does for drop-in directories.
 
 ### Added
+- **A startup notice for scoring changes (`internal/cli/notice.go`).**
+  VERSIONING §2.4 has required a `plumbline scan` startup warning for a
+  high-impact correction since v1.0.0 and nothing implemented one. This does.
+
+  A register of entries — each naming the catalog version it landed in, the tool
+  version at which it stops being shown, a headline and a body — rendered to
+  **stderr** before `scan` collects anything. It ships carrying four: the
+  `KERNEL-0004` re-rating from catalog 27, and all three of the catalog 32 and
+  33 corrections above.
+
+  - **stdout never sees it**, so `--format json` still emits a document and
+    nothing else. `reportScoringNotices` takes one writer and `scan` hands it
+    stderr; a test runs all three formats and asserts it.
+  - **Entries expire on their own**, keyed to the tool version, because §2.4 is
+    written as "one minor cycle". A notice nobody retires is a banner everybody
+    learns to skip. A build with no release identity shows everything — it has
+    passed no expiry, and a stale notice costs less than a missing one.
+  - **It is drawn where no human is watching**, unlike the progress indicator.
+    That is an animation and useless in a log; this is one static block, and CI
+    is exactly where an unexplained posture movement trips a `--threshold` gate.
+  - **`PLUMBLINE_NO_NOTICES`** silences it, honoured on presence like
+    `NO_COLOR` and `PLUMBLINE_NO_PROGRESS` (CLI-SPEC.md §8).
+
+- **Two drift guards over the runtime/persistence pairs.** The `kptr_restrict`
+  contradiction above was found by reading two files side by side, which is not
+  a method. `TestBothHalvesOfAPairAgreeAboutTheSameValue` sweeps every plausible
+  value of every same-key pair with the file and `/proc` set to it and asserts
+  the two checks do not reach opposite verdicts;
+  `TestAParameterCarriesOneSeverityWhicheverHalfAsks` asserts the base
+  severities match. `KERNEL-0018` also joined the tiering drift guard, which it
+  could not be in while its own predicate and verdict disagreed about `1`.
+
 - **`KERNEL-0029`, `-0030` and `-0031`: the filesystem boundaries.** Catalog 31,
   109 checks. All three parameters were already collected and all three have a
   runtime counterpart, so this batch needed no collector change and **no change

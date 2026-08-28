@@ -27,7 +27,17 @@ raised to 1. Set to 0 unprivileged loading is permitted.
 The parameter does not exist on kernels built without BPF, where this check is
 NOT_APPLICABLE.`,
 
-	BaseSeverity: finding.Medium,
+	// High from catalog 33, raised to meet KERNEL-0017 on the same parameters.
+	//
+	// KERNEL-0017's own comment recorded the gap and the argument that opened
+	// it, and catalog 32 retired that argument. Closing the gap upward rather
+	// than downward is the honest direction here: unprivileged BPF loading is
+	// an attacker-supplied program run inside the kernel, gated only by a
+	// verifier that has been the subject of a long run of local privilege
+	// escalations. Every current distribution ships 2 for that reason, so a
+	// host at 0 has either an old kernel or a deliberate change, and both are
+	// worth more than a Medium.
+	BaseSeverity: finding.High,
 	Tags:         []string{"kernel", "bpf", "privilege-escalation", "attack-surface"},
 	Requires:     []fact.ID{fact.SysctlID},
 	SinceCatalog: 2,

@@ -50,9 +50,14 @@ decision, and nothing on the host records that anyone chose it.`,
 	// the common failure, and the two differ more here than anywhere else in
 	// the module: a file setting 1 hands unprivileged users the contents of
 	// privileged memory, and a file setting nothing leaves a safe default
-	// undocumented. Both fail; the detail is what tells them apart, and
-	// separating them by severity is a question for the catalog-wide review
-	// rather than something to decide inside one check.
+	// undocumented.
+	//
+	// Both of those questions have since been answered elsewhere and this
+	// rating survived both. Catalog 32's runtime tiering separated them by
+	// severity after all — the undocumented-but-safe host now reports LOW —
+	// and the catalog 33 audit raised KERNEL-0005 from Medium to High rather
+	// than lowering this, because what suid_dumpable = 1 does is disclose one
+	// user's privileged memory to another.
 	BaseSeverity: finding.High,
 	Tags:         []string{"kernel", "sysctl", "persistence", "information-leak"},
 	Requires:     []fact.ID{fact.SysctlID},

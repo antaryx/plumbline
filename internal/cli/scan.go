@@ -64,6 +64,16 @@ re-evaluated or diffed; the two are not interchangeable.`,
 				return err
 			}
 
+			// Before anything is collected, and therefore before the
+			// progress indicator claims the line (VERSIONING §2.4). A
+			// scoring change has to be stated before the score it moved is
+			// reported, not after it — an operator reading a number they
+			// cannot explain has already started investigating the host.
+			//
+			// stderr, so a --format json run still hands stdout a document
+			// and nothing else.
+			reportScoringNotices(stderr, useColor(stderr, out.noColor, false))
+
 			ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 			defer cancel()
 

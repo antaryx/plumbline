@@ -40,15 +40,18 @@ checks give it.
 
 This reads the files. KERNEL-0004 asks what the running kernel does.`,
 
-	// High as specified for this work package. It is worth recording that this
-	// sits two bands above KERNEL-0004, which rates the *running* parameter
-	// Low — and a persistence check should not outrank the runtime check it
-	// persists by more than the "scheduled to fall down" argument justifies,
-	// which is one band. Either this is a band too high or KERNEL-0004 is a
-	// band or two too low; the second is the likelier reading, since an open
-	// ring buffer on a host with kptr_restrict at 0 is a KASLR defeat rather
-	// than an untidiness. Resolving it means re-rating a shipped check, which
-	// is a change with its own diff and its own note in the changelog.
+	// High, and level with KERNEL-0004 on the running parameter.
+	//
+	// This comment used to record an open disagreement: KERNEL-0004 rated the
+	// *running* ring buffer Low while this rated the file High, and it argued
+	// that the runtime check was the miscalibrated half. It was. KERNEL-0004
+	// was re-rated Low to High at catalog 27, and the catalog 33 audit of every
+	// runtime/persistence pair found this one already aligned and left it
+	// alone — the only pair in the module that needed nothing.
+	//
+	// What the pair agrees on is the substance: an open ring buffer holds
+	// kernel and module load addresses, so an unprivileged `dmesg` defeats
+	// KASLR outright. That is not an untidiness in either half.
 	BaseSeverity: finding.High,
 	Tags:         []string{"kernel", "sysctl", "persistence", "information-disclosure"},
 	Requires:     []fact.ID{fact.SysctlID},

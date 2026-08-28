@@ -30,7 +30,17 @@ than an oversight. It is not equivalent to 0 and the verdict says so: the
 privileged memory still reaches the disk, where it outlives the process, is
 picked up by backups and is readable by anything that reaches root.`,
 
-	BaseSeverity: finding.Medium,
+	// High from catalog 33, raised to meet KERNEL-0029 on the same parameter.
+	//
+	// The pair already agreed on values as of catalog 32 — 0 and 2 both pass —
+	// and disagreed only on how much it matters, which is the leftover of the
+	// retired "scheduled to fall down" argument rather than a judgement anyone
+	// made about setuid core dumps. What suid_dumpable = 1 does is write the
+	// memory of a process running as another user to a file the invoking user
+	// can read: keys, password hashes, session tokens, whatever the program
+	// held when it crashed. That is credential disclosure across a privilege
+	// boundary, and it belongs with the module's other High findings.
+	BaseSeverity: finding.High,
 	Tags:         []string{"kernel", "credential-theft", "information-disclosure"},
 	Requires:     []fact.ID{fact.SysctlID},
 	SinceCatalog: 2,

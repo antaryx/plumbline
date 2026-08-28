@@ -24,7 +24,18 @@ replaces them with zeros for processes without CAP_SYSLOG. 2 replaces them for
 everyone, including root, which is stricter and occasionally breaks
 profiling tools such as perf.`,
 
-	BaseSeverity: finding.Medium,
+	// High from catalog 33, raised to meet KERNEL-0018 on the same parameter.
+	//
+	// The two disagreed by a band because the persistence check was written
+	// under an argument — a boundary scheduled to fall down outranks one you
+	// can see today — that catalog 32's runtime tiering retired. With it gone
+	// the parameter needs one severity, and Medium was the wrong one to keep:
+	// kptr_restrict at 0 hands the kernel's layout to any local account
+	// through a text file, which is a KASLR defeat by exactly the mechanism
+	// KERNEL-0004 was re-rated to High for at catalog 27. Two checks on two
+	// parameters that break the same mitigation the same way should not be
+	// rated a band apart.
+	BaseSeverity: finding.High,
 	Tags:         []string{"kernel", "information-disclosure", "exploit-mitigation"},
 	Requires:     []fact.ID{fact.SysctlID},
 	SinceCatalog: 2,

@@ -1987,3 +1987,55 @@ func TestABundleFromASecretBearingHostCarriesNoSecret(t *testing.T) {
 			"    where a logging driver's credentials are configured.", found)
 	}
 }
+
+// TestTheScoringNoticeNeverReachesStdout.
+//
+// stdout is the contract (CLI-SPEC.md §7) and a findings document with a
+// warning banner in it is not a findings document — the pipeline that parses it
+// does not fail loudly, it fails at whatever consumes the parse. The startup
+// notice is written by one call taking one writer, and scan hands it stderr, so
+// this holds by construction; the test is here because "by construction" is a
+// claim somebody can break with one edit.
+func TestTheScoringNoticeNeverReachesStdout(t *testing.T) {
+	for _, format := range []string{"terminal", "json", "sarif"} {
+		t.Run(format, func(t *testing.T) {
+			code, stdout, stderr := run(t, "scan", "--root", hostFixture, "--format", format)
+			if code != 0 {
+				t.Fatalf("exit %d\n%s", code, stderr)
+			}
+			if strings.Contains(stdout, "SCORING NOTICE") {
+				t.Errorf("the notice is on stdout in %s output", format)
+			}
+			if !strings.Contains(stderr, "SCORING NOTICE") {
+				t.Errorf("the notice is not on stderr in %s output", format)
+			}
+			if format == "json" || format == "sarif" {
+				var any map[string]any
+				if err := json.Unmarshal([]byte(stdout), &any); err != nil {
+					t.Errorf("%s output does not parse: %v", format, err)
+				}
+			}
+		})
+	}
+}
+
+// TestTheScoringNoticeIsDrawnWhereNoHumanIsWatching.
+//
+// This is the deliberate opposite of the progress indicator's policy. That one
+// disables itself on anything that is not a terminal, because an animation in a
+// log is noise at best; a test buffer is never a terminal and never gets one.
+// This block is static, and CI is precisely where an unexplained posture
+// movement trips a --threshold gate that nobody can explain the next morning.
+// So it appears on a buffer, and the only thing that stops it is the operator.
+func TestTheScoringNoticeIsDrawnWhereNoHumanIsWatching(t *testing.T) {
+	_, _, stderr := run(t, "scan", "--root", hostFixture)
+	if !strings.Contains(stderr, "SCORING NOTICE") {
+		t.Fatalf("no notice on a non-terminal stderr:\n%s", stderr)
+	}
+
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+	_, _, quiet := run(t, "scan", "--root", hostFixture)
+	if strings.Contains(quiet, "SCORING NOTICE") {
+		t.Errorf("PLUMBLINE_NO_NOTICES did not silence it:\n%s", quiet)
+	}
+}

@@ -955,18 +955,19 @@ now because that default varies by build and by distribution patch — a table
 that is wrong in the permissive direction would hand out downgrades nobody
 earned. Worth revisiting with per-parameter evidence rather than from memory.
 
-Two items this leaves:
+Two items this left, **both closed at catalog 33** and described in the section
+below:
 
-- **The correction warning has no mechanism.** VERSIONING §2.4 requires a
+- **The correction warning had no mechanism.** VERSIONING §2.4 requires a
   `plumbline scan` startup warning for one minor cycle when a correction changes
-  results on more than roughly 10% of hosts, and this one does. Nothing in the
-  CLI implements such a warning.
+  results on more than roughly 10% of hosts, and this one did. `internal/cli/notice.go`
+  is now that mechanism.
 - **`KERNEL-0005` and `KERNEL-0029` agree now.** The runtime check was widened
   to accept `fs.suid_dumpable = 2`, closing a report that carried a PASS and a
-  FAIL about the same value. That is the second time a runtime check turned out
-  to be the miscalibrated half of a pair — `KERNEL-0004` was the first — and it
-  is worth checking the rest of the pairs deliberately rather than waiting for
-  the next persistence check to trip over one.
+  FAIL about the same value. That was the second time a runtime check turned out
+  to be the miscalibrated half of a pair — `KERNEL-0004` was the first — and the
+  rest of the pairs have now been audited deliberately rather than one accident
+  at a time.
 
 One gap remains, unchanged and not started: **redirect acceptance has no runtime
 check.** `KERNEL-0025` reads the files; nothing reads `/proc/sys` for
@@ -976,6 +977,114 @@ the only missing piece. Whether the module wants a runtime counterpart for every
 persistence check, or whether the persistence half is the one that matters and
 the pairing should stop being the expectation, is a question worth answering
 once rather than four more times.
+
+---
+
+## The startup notice, and the runtime/persistence audit
+
+Two debts from the tiering work, cleared together because the second produced
+the changes the first exists to announce.
+
+### The notice
+
+`internal/cli/notice.go` is a register of scoring changes and a renderer for
+them. An entry names the catalog version it landed in, the tool version at which
+it stops being shown, a headline and a body; `scan` writes the active ones to
+**stderr** before it collects anything.
+
+Four properties, and the second is the one that makes this maintainable:
+
+- **stdout never sees it.** `reportScoringNotices` takes one writer and `scan`
+  hands it stderr, so no `--format` can put a banner in a document a pipeline
+  parses. A test runs all three formats and asserts it.
+- **It expires without anybody remembering.** A notice nobody retires is a
+  banner everybody learns to scroll past, which is the same as no banner and
+  costs a line of every terminal forever. Expiry is keyed on the tool version
+  because VERSIONING §2.4 is written in those terms — "one minor cycle" — and a
+  build with no release identity (`go run`, a test binary, `git describe` with
+  no tags) shows everything, because it has demonstrably passed no expiry.
+- **It is drawn where no human is watching**, which is the deliberate opposite
+  of the progress indicator's policy. That indicator is an animation and is
+  useless in a log; this is one static block, and CI is exactly where an
+  unexplained posture movement trips a `--threshold` gate at three in the
+  morning. Terminal detection would suppress it precisely where it is needed.
+- **`PLUMBLINE_NO_NOTICES` turns it off**, honoured on presence like `NO_COLOR`
+  and `PLUMBLINE_NO_PROGRESS`, and weakening nothing (CLI-SPEC.md §8).
+
+### The audit
+
+Eleven KERNEL parameters have both a runtime check and a persistence check.
+Every pair was compared on two axes: the values each accepts, and the base
+severity each carries.
+
+**One value discrepancy, and it was on every bundle in the corpus.**
+`KERNEL-0002` passed `kernel.kptr_restrict = 1`; `KERNEL-0018` failed the same
+value at MEDIUM. Ubuntu, Debian and Red Hat all ship 1, so every golden bundle
+carried a PASS and a FAIL about one number, and an operator reading both had no
+way to tell which half to believe. The runtime check was right: 1 hides pointers
+from every unprivileged reader, and what it leaves open needs CAP_SYSLOG. So 1
+passes both halves now, 2 is a recommendation in the verdict rather than a
+requirement, and `kptrTiering` widened to match — it had demanded 2, which meant
+the catalog 32 downgrade could never fire on a realistic host.
+
+Two other pairs disagree on paper and cannot in practice, and are recorded here
+so the next reader does not re-derive it: `KERNEL-0004` accepts
+`dmesg_restrict >= 1` where `KERNEL-0019` accepts exactly 1, and `KERNEL-0003`
+accepts `ptrace_scope >= 1` where `KERNEL-0020` accepts 1 to 3. The kernel
+clamps both parameters to their documented range, so no running value can reach
+the gap. Nothing was changed for an unreachable difference.
+
+**Six severity misalignments, all of them the same leftover.** Every persistence
+check sat one band above its runtime counterpart, on the argument recorded in
+`KERNEL-0017` — a boundary scheduled to fall down outranks one you can see
+today. Catalog 32 retired that argument, because the case it described is now
+the one that gets *downgraded*. Nothing replaced it, so six pairs were a band
+apart for no reason at all.
+
+The rule now is one severity per parameter, decided on what the failing state
+means rather than on which check noticed it:
+
+| parameter | was | now | why |
+|---|---|---|---|
+| `kernel.kptr_restrict` | -0002 MEDIUM, -0018 HIGH | both HIGH | at 0 an unprivileged read of a text file defeats KASLR — the same mechanism `KERNEL-0004` was re-rated HIGH for at catalog 27 |
+| `fs.suid_dumpable` | -0005 MEDIUM, -0029 HIGH | both HIGH | at 1, one user's privileged memory reaches a file another user can read |
+| `kernel.unprivileged_bpf_disabled` | -0006 MEDIUM, -0017 HIGH | both HIGH | an attacker-supplied program run in the kernel behind a verifier with a long CVE history |
+| `fs.protected_symlinks` | -0009 MEDIUM, -0031 HIGH | both HIGH | a route from an ordinary account to root that needs no exploit |
+| `fs.protected_hardlinks` | -0010 MEDIUM, -0030 HIGH | both HIGH | the other half of the same problem; splitting them would be arbitrary |
+| `kernel.yama.ptrace_scope` | -0003 MEDIUM, -0020 HIGH | both MEDIUM | same-uid memory access: lateral movement for an attacker who already has the account, not a privilege boundary crossed |
+
+`kernel.yama.ptrace_scope` is the only pair that closed downward, and it is
+worth saying why rather than letting it look like an exception. It is also the
+upstream default and the shipped default of the whole RPM family, so rating it
+HIGH would have put a red line on every Red Hat host for a setting nobody chose
+— the alert fatigue catalog 32 was spent removing.
+
+Two pairs are pairs in subject and not in key and were deliberately left out of
+the mechanical comparison: `KERNEL-0008`/`-0024` and `KERNEL-0015`/`-0025`. The
+runtime halves compute a value per interface from `net.ipv4.conf.<iface>.*` and
+the persistence halves read `conf.all` and `conf.default`, so "do they agree
+about the same value" is not a question that can be put to both. Fixtures hold
+them instead.
+
+**The audit found the kptr contradiction by hand, and a test finds it next
+time.** `TestBothHalvesOfAPairAgreeAboutTheSameValue` sweeps every plausible
+value of every same-key pair with the file and `/proc` set to it, and asserts
+the two checks do not reach opposite verdicts;
+`TestAParameterCarriesOneSeverityWhicheverHalfAsks` holds the table above.
+`KERNEL-0018` also joined the tiering drift guard, which it could not be in
+while its predicate and its verdict disagreed about 1.
+
+What this leaves:
+
+- **`eval` gets no notice.** VERSIONING §2.4 names `plumbline scan`, and that is
+  what was built, but `eval` re-evaluates a stored bundle against today's
+  catalog and its posture moves for exactly the same reason. One line wires it;
+  the question is whether a notice on a command that reads an archived bundle
+  helps or just repeats itself. Worth deciding rather than drifting into.
+- **The register is prose and nothing checks it against the changelog.** A
+  scoring change landing without an entry is a silent score movement again, and
+  the only thing preventing it is somebody remembering. A test that compared the
+  register against `### Check corrections` headings would close it.
 
 ---
 

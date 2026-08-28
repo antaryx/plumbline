@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 32 · 109 checks · 11 modules**
+**Catalog version 33 · 109 checks · 11 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 
@@ -17,14 +17,14 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | `CONTAINERS` | 8 | 2 | 0 | 3 | 3 | 0 |
 | `CRON` | 5 | 0 | 2 | 2 | 1 | 0 |
 | `FILESYS` | 10 | 2 | 3 | 4 | 1 | 0 |
-| `KERNEL` | 31 | 0 | 10 | 18 | 3 | 0 |
+| `KERNEL` | 31 | 0 | 14 | 14 | 3 | 0 |
 | `LOGGING` | 5 | 0 | 0 | 4 | 1 | 0 |
 | `MEMORY` | 4 | 0 | 0 | 3 | 1 | 0 |
 | `NETWORK` | 3 | 0 | 2 | 1 | 0 | 0 |
 | `SERVICES` | 8 | 0 | 4 | 4 | 0 | 0 |
 | `SSHD` | 19 | 1 | 7 | 8 | 3 | 0 |
 | `USERS` | 10 | 2 | 4 | 2 | 2 | 0 |
-| **total** | **109** | 7 | 35 | 51 | 16 | 0 |
+| **total** | **109** | 7 | 39 | 47 | 16 | 0 |
 
 Severity is the check's **base** severity, before any context adjustment a finding may carry.
 
@@ -84,15 +84,15 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | Check | Severity | Reads |
 |---|---|---|
 | [`KERNEL-0001`](CHECK-REFERENCE.md#kernel-0001--address-space-layout-randomisation-is-fully-enabled) Address-space layout randomisation is fully enabled | HIGH | `kernel.sysctl` |
-| [`KERNEL-0002`](CHECK-REFERENCE.md#kernel-0002--kernel-pointers-are-not-exposed-to-unprivileged-users) Kernel pointers are not exposed to unprivileged users | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0002`](CHECK-REFERENCE.md#kernel-0002--kernel-pointers-are-not-exposed-to-unprivileged-users) Kernel pointers are not exposed to unprivileged users | HIGH | `kernel.sysctl` |
 | [`KERNEL-0003`](CHECK-REFERENCE.md#kernel-0003--debugging-other-processes-with-ptrace-is-restricted) Debugging other processes with ptrace is restricted | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0004`](CHECK-REFERENCE.md#kernel-0004--the-kernel-ring-buffer-is-not-readable-by-unprivileged-users) The kernel ring buffer is not readable by unprivileged users | HIGH | `kernel.sysctl` |
-| [`KERNEL-0005`](CHECK-REFERENCE.md#kernel-0005--setuid-programs-do-not-write-core-dumps) Setuid programs do not write core dumps | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0006`](CHECK-REFERENCE.md#kernel-0006--unprivileged-users-cannot-load-bpf-programs) Unprivileged users cannot load BPF programs | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0005`](CHECK-REFERENCE.md#kernel-0005--setuid-programs-do-not-write-core-dumps) Setuid programs do not write core dumps | HIGH | `kernel.sysctl` |
+| [`KERNEL-0006`](CHECK-REFERENCE.md#kernel-0006--unprivileged-users-cannot-load-bpf-programs) Unprivileged users cannot load BPF programs | HIGH | `kernel.sysctl` |
 | [`KERNEL-0007`](CHECK-REFERENCE.md#kernel-0007--the-running-kernel-parameters-match-the-configured-ones) The running kernel parameters match the configured ones | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0008`](CHECK-REFERENCE.md#kernel-0008--reverse-path-filtering-is-enabled-on-every-network-interface) Reverse-path filtering is enabled on every network interface | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0009`](CHECK-REFERENCE.md#kernel-0009--symlink-following-is-restricted-in-world-writable-directories) Symlink following is restricted in world-writable directories | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0010`](CHECK-REFERENCE.md#kernel-0010--hardlink-creation-is-restricted-to-files-the-user-can-already-read) Hardlink creation is restricted to files the user can already read | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0009`](CHECK-REFERENCE.md#kernel-0009--symlink-following-is-restricted-in-world-writable-directories) Symlink following is restricted in world-writable directories | HIGH | `kernel.sysctl` |
+| [`KERNEL-0010`](CHECK-REFERENCE.md#kernel-0010--hardlink-creation-is-restricted-to-files-the-user-can-already-read) Hardlink creation is restricted to files the user can already read | HIGH | `kernel.sysctl` |
 | [`KERNEL-0011`](CHECK-REFERENCE.md#kernel-0011--opening-another-users-fifo-in-a-shared-directory-is-restricted) Opening another user's FIFO in a shared directory is restricted | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0012`](CHECK-REFERENCE.md#kernel-0012--opening-another-users-file-in-a-shared-directory-is-restricted) Opening another user's file in a shared directory is restricted | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0013`](CHECK-REFERENCE.md#kernel-0013--unprivileged-access-to-performance-counters-is-restricted) Unprivileged access to performance counters is restricted | MEDIUM | `kernel.sysctl` |
@@ -102,7 +102,7 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`KERNEL-0017`](CHECK-REFERENCE.md#kernel-0017--bpf-hardening-is-written-to-the-sysctl-configuration) BPF hardening is written to the sysctl configuration | HIGH | `kernel.sysctl` |
 | [`KERNEL-0018`](CHECK-REFERENCE.md#kernel-0018--kernel-pointer-restriction-is-written-to-the-sysctl-configuration) Kernel pointer restriction is written to the sysctl configuration | HIGH | `kernel.sysctl` |
 | [`KERNEL-0019`](CHECK-REFERENCE.md#kernel-0019--kernel-ring-buffer-restriction-is-written-to-the-sysctl-configuration) Kernel ring buffer restriction is written to the sysctl configuration | HIGH | `kernel.sysctl` |
-| [`KERNEL-0020`](CHECK-REFERENCE.md#kernel-0020--yama-ptrace-restriction-is-written-to-the-sysctl-configuration) Yama ptrace restriction is written to the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0020`](CHECK-REFERENCE.md#kernel-0020--yama-ptrace-restriction-is-written-to-the-sysctl-configuration) Yama ptrace restriction is written to the sysctl configuration | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0021`](CHECK-REFERENCE.md#kernel-0021--the-magic-sysrq-key-is-disabled-in-the-sysctl-configuration) The magic SysRq key is disabled in the sysctl configuration | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0022`](CHECK-REFERENCE.md#kernel-0022--perf-event-restriction-is-written-to-the-sysctl-configuration) Perf event restriction is written to the sysctl configuration | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0023`](CHECK-REFERENCE.md#kernel-0023--tcp-syn-cookies-are-written-to-the-sysctl-configuration) TCP SYN cookies are written to the sysctl configuration | LOW | `kernel.sysctl` |

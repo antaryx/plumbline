@@ -45,11 +45,24 @@ has nothing to drift from.
 the LSM is built in and enabled, and asking a file to set a parameter the
 kernel does not implement would be asking for a line that does nothing.`,
 
-	// High, matching the other persistence checks in this group and above
-	// KERNEL-0003's Medium for the reason given there: a boundary scheduled to
-	// fall down at the next reboot, on a host whose runtime check passes, is
-	// worth more than one an operator can see today.
-	BaseSeverity: finding.High,
+	// Medium from catalog 33, lowered to meet KERNEL-0003 on the same
+	// parameter. This is the one pair in the audit that closed downward.
+	//
+	// The gap was the "scheduled to fall down" argument, which catalog 32's
+	// tiering retired, so the parameter needed one severity. Ptrace scope is
+	// the weakest of the group that carried High: at 0 a process reads the
+	// memory of another process **owned by the same user**, which is a
+	// credential-theft and lateral-movement primitive for an attacker who
+	// already has that account, and not a privilege boundary being crossed.
+	// The module's High findings are ASLR defeated, KASLR defeated, root
+	// memory disclosed and a route to root that needs no exploit; this sits
+	// below them.
+	//
+	// It is also the upstream default and the shipped default of the whole RPM
+	// family, so rating it High would put a red line on every Red Hat host for
+	// a kernel setting nobody chose — the alert fatigue catalog 32 was spent
+	// removing.
+	BaseSeverity: finding.Medium,
 	Tags:         []string{"kernel", "sysctl", "persistence", "credential-access"},
 	Requires:     []fact.ID{fact.SysctlID},
 	SinceCatalog: 27,

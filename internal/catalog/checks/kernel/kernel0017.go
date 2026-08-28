@@ -55,10 +55,11 @@ after a reboot, which is the one thing this check exists to describe.`,
 
 	// High is the base, which is what a host with nothing hardening BPF gets.
 	//
-	// This comment used to end there, and the reasoning was that KERNEL-0006 is
-	// Medium because it describes a boundary that is up right now, while this
-	// describes one scheduled to fall down on a host whose operator believes it
-	// is hardened. **That reasoning is now in tension with runtimeTier**, which
+	// This comment used to end there, and the reasoning was that KERNEL-0006
+	// sat a band below because it describes a boundary that is up right now,
+	// while this describes one scheduled to fall down on a host whose operator
+	// believes it is hardened. **That reasoning is now in tension with
+	// runtimeTier**, which
 	// drops this to LOW precisely when the running kernel is hardened and no
 	// file says so — the case the paragraph above called the worst one.
 	//
@@ -70,6 +71,10 @@ after a reboot, which is the one thing this check exists to describe.`,
 	// the setting came from outside these files and will not survive a reboot,
 	// and an operator filtering on LOW is filtering on "not exposed today"
 	// rather than on "unimportant".
+	//
+	// Catalog 33 finished the job the paragraph above started: KERNEL-0006 was
+	// raised to High rather than this being lowered, so the parameter carries
+	// one severity and the retired argument leaves nothing behind it.
 	BaseSeverity: finding.High,
 	Tags:         []string{"kernel", "bpf", "sysctl", "persistence", "privilege-escalation"},
 	Requires:     []fact.ID{fact.SysctlID},

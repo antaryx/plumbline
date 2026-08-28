@@ -637,6 +637,42 @@ document with a progress spinner in it is not a JSON document. That holds by
 construction rather than by care: the indicator's only writer is stderr, so no
 format can put one on stdout.
 
+### The scoring notice
+
+`scan` writes a block to **stderr** before it collects anything, naming the
+recent changes that moved posture scores:
+
+```
+──────────────────────────────────────────────────────────────────────────
+plumbline: SCORING NOTICE — 4 recent changes moved posture scores
+
+  catalog 33  Six KERNEL checks were re-rated so each parameter has one severity.
+      ...
+
+  Posture is severity-weighted, so these moved scores on hosts that did not
+  change. Reports from before them are not directly comparable; `plumbline
+  diff` refuses to compare across catalog versions for the same reason.
+  Set PLUMBLINE_NO_NOTICES to silence this.
+──────────────────────────────────────────────────────────────────────────
+```
+
+VERSIONING §2.4 requires it: a correction likely to change results on more than
+roughly 10% of hosts "carries a `plumbline scan` startup warning for one minor
+cycle". The problem is narrow. Posture is severity-weighted, so re-rating a
+check moves the number on a host nobody touched, and an operator has two
+explanations available — the host changed, or the tool did — with only one of
+them worth an afternoon.
+
+| Rule | Why |
+|---|---|
+| stderr only | stdout is the contract. The notice is written by one call taking one writer, and `scan` hands it stderr, so no `--format` can put a banner in a parsed document. |
+| Before collection | A scoring change has to be stated before the score it moved is reported. It is also before the progress indicator claims the line. |
+| Each entry expires on its own | Keyed to the tool version at which it stops being shown. A build with no release identity — `go run`, a test binary, `git describe` with no tags — shows every entry, because it has passed no expiry and a stale notice costs less than a missing one. |
+| **Not** conditional on a terminal | The opposite of the progress indicator's policy, deliberately. That is an animation and useless in a log; this is one static block, and CI is where an unexplained posture movement trips a `--threshold` gate nobody can explain the next morning. |
+| `PLUMBLINE_NO_NOTICES` silences it | Honoured on presence, not value (§8). |
+
+`eval` does not write it. VERSIONING §2.4 names `scan`.
+
 ### The progress indicator
 
 `scan` and `collect` draw a transient one-line indicator on **stderr** while
@@ -683,6 +719,7 @@ stop clears the line before the exit message is printed (§6.1).
 | `PLUMBLINE_CONFIG` | Config path (below `--config`) |
 | `NO_COLOR` | Any value disables colour |
 | `PLUMBLINE_NO_PROGRESS` | Any value disables the progress indicator (§7) |
+| `PLUMBLINE_NO_NOTICES` | Any value disables the scoring notice (§7) |
 
 No environment variable may enable a behaviour that a flag cannot, and none may
 weaken a security control. Configuration surface is attack surface.
