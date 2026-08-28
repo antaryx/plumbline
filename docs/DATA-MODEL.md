@@ -155,7 +155,7 @@ gets produced.
 |---|---|---|---|
 | `sshd.config` | 1 | `collect/collectors/sshd` | `Installed`, `Files`, `Directives[]`, `UnresolvedIncludes[]`, `Digests{}` |
 | `fs.<interest>` | 1 | `collect/walker` (`fswalk`) | `Interest`, `Roots[]`, `Rows[]`, `Truncated`, `TruncationReasons[]`, `Overflow`, `InodesVisited` |
-| `kernel.sysctl` | 1 | `collect/collectors/kernel` | `Running{}`, `Configured{}`, `Files[]`, `Digests{}`, `UnreadableFiles[]` |
+| `kernel.sysctl` | 1 | `collect/collectors/kernel` | `Running{}`, `Configured{}`, `Excluded[]`, `Files[]`, `Digests{}`, `Resolved{}`, `UnreadableFiles[]` |
 | `users.passwd` | 1 | `collect/collectors/users` | `Entries[]`, `CompatEntries[]`, `Malformed[]`, `Path`, `Digest` |
 | `users.shadow` | 1 | `collect/collectors/users` | `Entries[]`, `Malformed[]`, `Path` |
 | `users.group` | 1 | `collect/collectors/users` | `Entries[]`, `CompatEntries[]`, `Malformed[]`, `Path`, `Digest` |
@@ -474,6 +474,37 @@ different values, which is the case where the application order of the drop-in
 directories differs between `systemd-sysctl` and procps `sysctl --system`. A
 check meeting a conflict returns `UNKNOWN` rather than picking a winner; see
 `docs/checks/KERNEL-0007.md` §4.
+
+**A key may be assigned by a name it does not contain.** `sysctl.d(5)` allows a
+glob pattern, and the distributions use it: Red Hat's `50-redhat.conf` writes
+`net.ipv4.conf.*.rp_filter` rather than naming interfaces. `Configured` stores
+what the file said, pattern and all, and `Sysctl.SettingsFor` resolves a key
+against it. **No check should index `Configured` directly** — reading only the
+literal key name reports a configured host as unconfigured.
+
+The resolution order is the man page's, and only the first rule is not
+application order:
+
+1. An explicit assignment wins outright over any pattern, wherever either sits.
+   "Keys for which an explicit pattern exists will be excluded from any glob
+   matching."
+2. Otherwise an entry in `Excluded` — a bare `-key` line with no `=` —
+   suppresses every pattern, and the key is unset however many match.
+3. Otherwise every matching pattern applies, in application order.
+
+`Excluded` is separate from `Configured` because an exclusion assigns nothing;
+it is a statement about the other lines in these files. It is also how systemd's
+own `50-default.conf` reads correctly: that file sets
+`net.ipv4.conf.*.rp_filter` and then withholds `net.ipv4.conf.all.rp_filter` on
+purpose, so `all` stays at 0 and filtering can still be lowered on one
+interface. `Excluded` is optional, so a bundle recorded before it existed
+re-evaluates with rules 1 and 3 alone, which is the reading that build had.
+
+Matching is on the path form, so a pattern's `*` spans one component and not the
+separators around it. A key naming a VLAN interface is the one shape this cannot
+resolve exactly: `eth0.1` contains the separator character, so the dotted form
+of `net.ipv4.conf.eth0.1.rp_filter` is ambiguous about where the components
+divide. No check asks about a named interface.
 
 `UnreadableFiles` carries the reason a configuration file could not be read, so
 a check can map the gap to the right `UNKNOWN` code rather than guessing at

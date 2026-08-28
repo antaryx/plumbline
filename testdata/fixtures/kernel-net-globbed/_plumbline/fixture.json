@@ -1,0 +1,1 @@
+{ "description": "systemd's own 50-default.conf verbatim in shape: reverse-path filtering set on every interface by a glob, the conf.all key deliberately withheld from that glob with a bare '-' line, and loose mode rather than strict. A configured host that a check reading only literal key names would report as having no reverse-path filtering at all." }

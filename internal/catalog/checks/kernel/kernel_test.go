@@ -37,6 +37,7 @@ var all = []catalog.Check{
 	checks.Check0015,
 	checks.Check0016, checks.Check0017,
 	checks.Check0018, checks.Check0019, checks.Check0020, checks.Check0021, checks.Check0022,
+	checks.Check0023, checks.Check0024, checks.Check0025,
 }
 
 // collectFixture runs the real collector against a fixture tree.
@@ -543,9 +544,9 @@ func TestCheckIdentityIsWellFormed(t *testing.T) {
 		// bulk-updated to the current version — which is what this assertion
 		// is guarding, and why it names the versions rather than accepting any.
 		switch check.SinceCatalog {
-		case 2, 3, 25, 26, 27, 28:
+		case 2, 3, 25, 26, 27, 28, 29:
 		default:
-			t.Errorf("%s declares SinceCatalog %d, want 2, 3, 25, 26, 27 or 28", check.ID, check.SinceCatalog)
+			t.Errorf("%s declares SinceCatalog %d, want 2, 3, 25, 26, 27, 28 or 29", check.ID, check.SinceCatalog)
 		}
 		if check.SinceCatalog > catalog.Version {
 			t.Errorf("%s declares SinceCatalog %d, which is ahead of catalog.Version %d",
@@ -1307,6 +1308,20 @@ func TestTheTwoAcceptedPerfLevelsAreToldApart(t *testing.T) {
 	}
 }
 
+// evalSysctl runs one check against a hand-built fact, for the value
+// combinations no fixture on disk needs to exist for.
+func evalSysctl(t *testing.T, check catalog.Check, sc fact.Sysctl) finding.Finding {
+	t.Helper()
+
+	fs := fact.NewSet()
+	fs.Put(sc)
+	got := catalog.MustNew(check).Evaluate(fs)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(got))
+	}
+	return got[0]
+}
+
 // sysctlFromFixture collects the fact itself, for the assertions that are about
 // the reading rather than about a verdict.
 func sysctlFromFixture(t *testing.T, name string) fact.Sysctl {
@@ -1316,4 +1331,276 @@ func sysctlFromFixture(t *testing.T, name string) fact.Sysctl {
 		t.Fatalf("kernel.sysctl missing from %s", name)
 	}
 	return sc
+}
+
+// ---------------------------------------------------------------------------
+// the network persistence group: KERNEL-0023, -0024 and -0025
+// ---------------------------------------------------------------------------
+
+func TestKernel0023SynCookiesArePersisted(t *testing.T) {
+	run(t, checks.Check0023, []tc{
+		{fixture: "kernel-net-persisted", result: finding.Pass,
+			detailContains: "falls back to cookies"},
+
+		// The finding this check exists for: running on a default nobody wrote
+		// down. The verdict has to say the host is defended *now*, or an
+		// operator reads it as an outage and stops trusting the report.
+		{fixture: "kernel-net-unset", result: finding.Fail, severity: finding.Low,
+			detailContains: "a default nobody wrote down"},
+
+		// Written down and written off.
+		{fixture: "kernel-net-disabled", result: finding.Fail, severity: finding.Low,
+			detailContains: "a decision somebody made"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+// TestSynCookiesAtTwoPassAndAreToldWhatItCosts. 2 is stricter than the 1 this
+// check asks for, so failing it would punish a host that went further; but it
+// gives up window scaling, SACK and timestamps on every connection rather than
+// only during a flood, which the operator should hear about.
+func TestSynCookiesAtTwoPassAndAreToldWhatItCosts(t *testing.T) {
+	sc := fact.Sysctl{
+		Running: map[string]fact.SysctlRunning{
+			"net.ipv4.tcp_syncookies": {Key: "net.ipv4.tcp_syncookies", State: fact.SysctlObserved, Value: "2"},
+		},
+		Configured: map[string][]fact.SysctlSetting{
+			"net.ipv4.tcp_syncookies": {{Key: "net.ipv4.tcp_syncookies", Value: "2", File: "/etc/sysctl.d/60-net.conf", Line: 1}},
+		},
+		Files: []string{"/etc/sysctl.d/60-net.conf"},
+	}
+	got := evalSysctl(t, checks.Check0023, sc)
+	if got.Result != finding.Pass {
+		t.Fatalf("result = %s, want PASS: %s", got.Result, got.Detail)
+	}
+	for _, want := range []string{"every connection", "window scaling"} {
+		if !strings.Contains(got.Detail, want) {
+			t.Errorf("detail does not mention %q: %s", want, got.Detail)
+		}
+	}
+}
+
+func TestKernel0024ReversePathFilteringIsPersisted(t *testing.T) {
+	run(t, checks.Check0024, []tc{
+		{fixture: "kernel-net-persisted", result: finding.Pass,
+			detailContains: "template for every interface created after boot"},
+
+		// The shape systemd and Red Hat actually ship: set by a pattern, with
+		// the conf.all key withheld from that pattern on purpose.
+		{fixture: "kernel-net-globbed", result: finding.Pass,
+			detailContains: "withheld from glob matching"},
+
+		{fixture: "kernel-net-unset", result: finding.Fail, severity: finding.Medium,
+			detailContains: "not set in any sysctl configuration file"},
+
+		// Withheld with no pattern behind it is not a configured host: nothing
+		// raises filtering on the interfaces that are already up.
+		{fixture: "kernel-net-withheld", result: finding.Fail, severity: finding.Medium,
+			detailContains: "withheld from glob matching"},
+
+		{fixture: "kernel-net-disabled", result: finding.Fail, severity: finding.Medium,
+			detailContains: "whatever source address they claim"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+// TestLooseReversePathFilteringPassesAndIsNamed. Loose mode is the deliberate
+// and correct choice on a multi-homed host with asymmetric routing, so it has
+// to pass; but on a host with one default route it is strictly weaker than the
+// alternative for no gain, so the verdict says which mode is in force.
+func TestLooseReversePathFilteringPassesAndIsNamed(t *testing.T) {
+	got := evalFixture(t, checks.Check0024, "kernel-net-globbed")
+	if got.Result != finding.Pass {
+		t.Fatalf("result = %s, want PASS: %s", got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "loose mode") {
+		t.Errorf("loose mode is not named: %s", got.Detail)
+	}
+	if !strings.Contains(got.Detail, "asymmetric routing") {
+		t.Errorf("the reason loose mode is legitimate is not given: %s", got.Detail)
+	}
+}
+
+func TestKernel0025SourceRoutingAndRedirectsArePersisted(t *testing.T) {
+	run(t, checks.Check0025, []tc{
+		{fixture: "kernel-net-persisted", result: finding.Pass,
+			detailContains: "will not rewrite this host's routing table"},
+
+		{fixture: "kernel-net-unset", result: finding.Fail, severity: finding.Medium,
+			detailContains: "the kernel defaults this one to 1"},
+
+		{fixture: "kernel-net-disabled", result: finding.Fail, severity: finding.Medium,
+			detailContains: "carry its own return path"},
+
+		{fixture: "kernel-bpf-noconfig", result: finding.NotApplicable,
+			detailContains: "No sysctl configuration file exists"},
+		{fixture: "kernel-denied", result: finding.Unknown,
+			detailContains: "could not be read"},
+	})
+}
+
+// TestTheTwoRoutingParametersAreNotDescribedAlike. accept_source_route defaults
+// to 0 and accept_redirects defaults to 1, so an unset key means something
+// different for each: an undocumented default in one case and an open door in
+// the other. A shared sentence would have to be vague enough to be true of
+// both, which would make it useless for the one that matters.
+func TestTheTwoRoutingParametersAreNotDescribedAlike(t *testing.T) {
+	got := evalFixture(t, checks.Check0025, "kernel-net-unset")
+	if got.Result != finding.Fail {
+		t.Fatalf("result = %s, want FAIL", got.Result)
+	}
+	if !strings.Contains(got.Detail, "which is correct and is not a decision anybody made") {
+		t.Errorf("source routing's harmless default is not distinguished: %s", got.Detail)
+	}
+	if !strings.Contains(got.Detail, "this host will accept ICMP redirects") {
+		t.Errorf("redirects defaulting to on is not called out: %s", got.Detail)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// glob resolution: sysctl.d(5) patterns, and the exclusion syntax
+// ---------------------------------------------------------------------------
+
+// TestAGlobSetsEveryKeyItMatches. Red Hat's 50-redhat.conf writes
+// net.ipv4.conf.*.rp_filter rather than naming interfaces. Reading only literal
+// key names reported that host as having no reverse-path filtering at all,
+// which is a false positive on a stock distribution.
+func TestAGlobSetsEveryKeyItMatches(t *testing.T) {
+	sc := fact.Sysctl{
+		Configured: map[string][]fact.SysctlSetting{
+			"net.ipv4.conf.*.rp_filter": {{Key: "net.ipv4.conf.*.rp_filter", Value: "1", File: "/usr/lib/sysctl.d/50-redhat.conf", Line: 5}},
+		},
+		Files: []string{"/usr/lib/sysctl.d/50-redhat.conf"},
+	}
+	for _, key := range []string{
+		"net.ipv4.conf.all.rp_filter",
+		"net.ipv4.conf.default.rp_filter",
+		"net.ipv4.conf.eth0.rp_filter",
+	} {
+		set, found := sc.EffectiveConfigured(key)
+		if !found {
+			t.Errorf("%s: the pattern that sets it was not found", key)
+			continue
+		}
+		if set.Value != "1" {
+			t.Errorf("%s = %q, want 1", key, set.Value)
+		}
+	}
+}
+
+// TestAGlobDoesNotCrossASeparator. "*" is glob(7)'s, which spans one component
+// and not the separators around it. A pattern for the interfaces must not be
+// read as also setting a key one level up or two levels down.
+func TestAGlobDoesNotCrossASeparator(t *testing.T) {
+	sc := fact.Sysctl{
+		Configured: map[string][]fact.SysctlSetting{
+			"net.ipv4.conf.*.rp_filter": {{Key: "net.ipv4.conf.*.rp_filter", Value: "1", File: "/usr/lib/sysctl.d/50-redhat.conf", Line: 5}},
+		},
+		Files: []string{"/usr/lib/sysctl.d/50-redhat.conf"},
+	}
+	for _, key := range []string{
+		"net.ipv4.rp_filter",
+		"net.ipv4.conf.all.inner.rp_filter",
+		"net.ipv4.conf.all.accept_redirects",
+	} {
+		if _, found := sc.EffectiveConfigured(key); found {
+			t.Errorf("%s was matched by net.ipv4.conf.*.rp_filter", key)
+		}
+	}
+}
+
+// TestAnExplicitAssignmentBeatsAGlob. sysctl.d(5): "Keys for which an explicit
+// pattern exists will be excluded from any glob matching." It is the one rule
+// here that application order does not decide — the literal wins wherever it
+// sits, so a file may set a family and then name one member differently.
+func TestAnExplicitAssignmentBeatsAGlob(t *testing.T) {
+	sc := fact.Sysctl{
+		Configured: map[string][]fact.SysctlSetting{
+			"net.ipv4.conf.all.rp_filter": {{Key: "net.ipv4.conf.all.rp_filter", Value: "0", File: "/etc/sysctl.d/10-first.conf", Line: 1}},
+			"net.ipv4.conf.*.rp_filter":   {{Key: "net.ipv4.conf.*.rp_filter", Value: "1", File: "/etc/sysctl.d/99-last.conf", Line: 1}},
+		},
+		Files: []string{"/etc/sysctl.d/10-first.conf", "/etc/sysctl.d/99-last.conf"},
+	}
+	set, found := sc.EffectiveConfigured("net.ipv4.conf.all.rp_filter")
+	if !found {
+		t.Fatal("the explicit assignment was lost")
+	}
+	if set.Value != "0" {
+		t.Errorf("value = %q, want 0: the glob in the later file overrode an explicit assignment", set.Value)
+	}
+	if sc.ConfiguredConflict("net.ipv4.conf.all.rp_filter") {
+		t.Error("an explicit assignment and a glob were reported as a conflict; the rule decides between them")
+	}
+}
+
+// TestAnExcludedKeyIsSetByNoGlob. A bare "-name" line withholds that key from
+// every pattern. systemd's 50-default.conf uses it so conf.all stays at 0 while
+// the interfaces themselves are set, and reading the pattern without the
+// exclusion would claim a value the file went out of its way not to assign.
+func TestAnExcludedKeyIsSetByNoGlob(t *testing.T) {
+	sc := sysctlFromFixture(t, "kernel-net-globbed")
+
+	if _, found := sc.EffectiveConfigured("net.ipv4.conf.all.rp_filter"); found {
+		t.Error("the withheld key was reported as configured")
+	}
+	ex, excluded := sc.ExcludedFrom("net.ipv4.conf.all.rp_filter")
+	if !excluded {
+		t.Fatal("the exclusion line was not recorded")
+	}
+	if ex.Value != "" {
+		t.Errorf("an exclusion carried a value %q; it assigns nothing", ex.Value)
+	}
+	// The keys the exclusion does not name are still set by the pattern.
+	if set, found := sc.EffectiveConfigured("net.ipv4.conf.eth0.rp_filter"); !found || set.Value != "2" {
+		t.Errorf("eth0 = %q/%v, want 2 from the pattern", set.Value, found)
+	}
+}
+
+// TestAnExclusionIsNotAnErrorIgnoringPrefix. sysctl.d(5) gives "-" two
+// unrelated meanings and only one of them withholds anything: a leading "-" on
+// an assignment says failures may be ignored, and the assignment still happens.
+// Treating them alike would silently drop settings from the fact.
+func TestAnExclusionIsNotAnErrorIgnoringPrefix(t *testing.T) {
+	sc := sysctlFromFixture(t, "kernel-net-globbed")
+	if len(sc.Excluded) != 1 {
+		t.Fatalf("recorded %d exclusions, want 1: %+v", len(sc.Excluded), sc.Excluded)
+	}
+	if sc.Excluded[0].Key != "net.ipv4.conf.all.rp_filter" {
+		t.Errorf("excluded key = %q", sc.Excluded[0].Key)
+	}
+}
+
+// TestAPersistenceCheckNamesItsOwnParametersWhenTheConfigIsUnreadable. The
+// shared gate said "the BPF parameters" in a string, so every later check of
+// this shape reported an unreadable file as being about BPF — a ptrace finding
+// that sent the operator looking for the wrong thing.
+func TestAPersistenceCheckNamesItsOwnParametersWhenTheConfigIsUnreadable(t *testing.T) {
+	for _, c := range []struct {
+		check catalog.Check
+		want  string
+	}{
+		{checks.Check0020, "kernel.yama.ptrace_scope"},
+		{checks.Check0023, "net.ipv4.tcp_syncookies"},
+		{checks.Check0024, "net.ipv4.conf.all.rp_filter"},
+	} {
+		got := evalFixture(t, c.check, "kernel-denied")
+		if got.Result != finding.Unknown {
+			t.Errorf("%s: result = %s, want UNKNOWN", c.check.ID, got.Result)
+			continue
+		}
+		if !strings.Contains(got.Detail, c.want) {
+			t.Errorf("%s does not name %s: %s", c.check.ID, c.want, got.Detail)
+		}
+		if strings.Contains(got.Detail, "BPF") && c.check.ID != "KERNEL-0017" {
+			t.Errorf("%s reports an unreadable file as being about BPF: %s", c.check.ID, got.Detail)
+		}
+	}
 }

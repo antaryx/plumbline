@@ -1,0 +1,1 @@
+{ "description": "The common real-world shape: a host with a hardening drop-in that covers the kernel parameters and none of the network ones. The running kernel already has SYN cookies and reverse-path filtering on its own defaults, and accept_redirects at 1 because that is what the kernel defaults to — none of it written down anywhere." }

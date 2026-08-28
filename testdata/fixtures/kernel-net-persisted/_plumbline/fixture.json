@@ -1,0 +1,1 @@
+{ "description": "Every network parameter this module asks about is written to a drop-in and matches the running kernel: SYN cookies at 1, strict reverse-path filtering on both the floor and the template, and source routing and ICMP redirects refused on both. The shape a hardening role should leave behind." }

@@ -1,7 +1,7 @@
 {
   "bundle": "rocky-9-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 28,
+  "catalog_version": 29,
   "scan": {
     "started": "2026-08-25T21:31:51.893733451Z",
     "finished": "2026-08-25T21:31:52.46518356Z",
@@ -14,20 +14,20 @@
   },
   "summary": {
     "counts": {
-      "pass": 37,
-      "fail": 17,
+      "pass": 38,
+      "fail": 19,
       "not_applicable": 39,
       "skipped": 0,
       "unknown": 7,
-      "total": 100
+      "total": 103
     },
     "by_severity": {
       "HIGH": 6,
-      "LOW": 2,
-      "MEDIUM": 9
+      "LOW": 3,
+      "MEDIUM": 10
     },
-    "posture": 70.54263565891473,
-    "coverage": 88.52459016393442
+    "posture": 69.40298507462687,
+    "coverage": 89.0625
   },
   "findings": [
     {
@@ -523,7 +523,7 @@
       "severity": "MEDIUM",
       "base_severity": "MEDIUM",
       "fingerprint": "e5a4134804971639d52d79e259e2722d",
-      "detail": "2 kernel parameter(s) differ between the running kernel and the configuration that will be applied at the next boot: kernel.yama.ptrace_scope, net.ipv4.conf.default.rp_filter. Each is listed in the evidence with both values.",
+      "detail": "5 kernel parameter(s) differ between the running kernel and the configuration that will be applied at the next boot: kernel.yama.ptrace_scope, net.ipv4.conf.all.rp_filter, net.ipv4.conf.default.rp_filter, net.ipv4.conf.eth0.rp_filter, net.ipv4.conf.lo.rp_filter. Each is listed in the evidence with both values.",
       "evidence": [
         {
           "source": "/proc/sys/kernel/yama/ptrace_scope",
@@ -536,6 +536,16 @@
           "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
         },
         {
+          "source": "/proc/sys/net/ipv4/conf/all/rp_filter",
+          "excerpt": "net.ipv4.conf.all.rp_filter = 2"
+        },
+        {
+          "source": "/lib/sysctl.d/50-redhat.conf",
+          "line": 7,
+          "excerpt": "net.ipv4.conf.*.rp_filter = 1",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        },
+        {
           "source": "/proc/sys/net/ipv4/conf/default/rp_filter",
           "excerpt": "net.ipv4.conf.default.rp_filter = 2"
         },
@@ -543,6 +553,26 @@
           "source": "/lib/sysctl.d/50-redhat.conf",
           "line": 6,
           "excerpt": "net.ipv4.conf.default.rp_filter = 1",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        },
+        {
+          "source": "/proc/sys/net/ipv4/conf/eth0/rp_filter",
+          "excerpt": "net.ipv4.conf.eth0.rp_filter = 2"
+        },
+        {
+          "source": "/lib/sysctl.d/50-redhat.conf",
+          "line": 7,
+          "excerpt": "net.ipv4.conf.*.rp_filter = 1",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        },
+        {
+          "source": "/proc/sys/net/ipv4/conf/lo/rp_filter",
+          "excerpt": "net.ipv4.conf.lo.rp_filter = 2"
+        },
+        {
+          "source": "/lib/sysctl.d/50-redhat.conf",
+          "line": 7,
+          "excerpt": "net.ipv4.conf.*.rp_filter = 1",
           "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
         }
       ]
@@ -824,6 +854,94 @@
       "subject": "kernel.perf_event_paranoid",
       "fingerprint": "934fdbecba0f171c09532067bfc95978",
       "detail": "kernel.perf_event_paranoid is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream has defaulted to 2 since Linux 4.6, which is adequate — but a default is not a decision, and a kernel built with a lower value, or a boot parameter that lowers it, leaves unprivileged processes able to measure the kernel's own execution. The running kernel has it at 2, so this host is adequate now on its default and has not written that down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0013's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/usr/lib/sysctl.d/50-redhat.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/50-redhat.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0023",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "subject": "net.ipv4.tcp_syncookies",
+      "fingerprint": "04fdc67c5c9a0e6098623af15c7722e8",
+      "detail": "net.ipv4.tcp_syncookies is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. The running kernel has it at 1, so this host is defended now on a default nobody wrote down: a performance-tuning drop-in, a container runtime or a sysctl -w in a start-up script can set it to 0 and nothing here records that it was ever meant to be 1. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0016's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/usr/lib/sysctl.d/50-redhat.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/50-redhat.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0024",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "sysctl configuration",
+      "fingerprint": "3c8df258bf7dd703d807701e41444a70",
+      "detail": "Reverse-path filtering is written to the sysctl configuration: net.ipv4.conf.all.rp_filter is 1 by the pattern net.ipv4.conf.*.rp_filter at /lib/sysctl.d/50-redhat.conf:7; net.ipv4.conf.default.rp_filter is 1 at /lib/sysctl.d/50-redhat.conf:6. The floor is set for the interfaces already up and the template for every interface created after boot, so a spoofed source address is dropped after the next reboot either way. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0008's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/lib/sysctl.d/50-redhat.conf",
+          "line": 7,
+          "excerpt": "net.ipv4.conf.*.rp_filter = 1",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        },
+        {
+          "source": "/lib/sysctl.d/50-redhat.conf",
+          "line": 6,
+          "excerpt": "net.ipv4.conf.default.rp_filter = 1",
+          "sha256": "2aed478137a688e44c9c2b40b0d02ae89826060b807411a1b7daca262657aeca"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0025",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "sysctl configuration",
+      "fingerprint": "305300b43b78bf505eb4acad2afad4b8",
+      "detail": "net.ipv4.conf.all.accept_source_route is not set in any sysctl configuration file, so nothing on this host records that source-routed packets should be dropped; the kernel's own default is 0, which is correct and is not a decision anybody made; net.ipv4.conf.default.accept_source_route is not set in any sysctl configuration file, so an interface created after boot — a container veth, a VPN tunnel, a hot-plugged NIC — inherits whatever the kernel defaults to rather than a value this host chose; net.ipv4.conf.all.accept_redirects is not set in any sysctl configuration file, so this host will accept ICMP redirects, because unlike source routing the kernel defaults this one to 1: any party on the segment can rewrite its routing table with an unauthenticated packet; net.ipv4.conf.default.accept_redirects is not set in any sysctl configuration file, so every interface created after boot will accept ICMP redirects, since the kernel defaults this one to 1 and nothing here overrides it. Both parameters let a party on the network decide where this host sends packets, which is a position to read and rewrite traffic from rather than a weakness in it. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. What it is doing now is KERNEL-0015's subject for source routing and nothing's yet for redirect acceptance, and a disagreement between file and kernel is KERNEL-0007's.",
       "evidence": [
         {
           "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",

@@ -1,7 +1,7 @@
 {
   "bundle": "fedora-44-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 28,
+  "catalog_version": 29,
   "scan": {
     "started": "2026-08-25T21:31:49.097645827Z",
     "finished": "2026-08-25T21:31:49.817305111Z",
@@ -15,19 +15,19 @@
   "summary": {
     "counts": {
       "pass": 37,
-      "fail": 18,
+      "fail": 21,
       "not_applicable": 38,
       "skipped": 0,
       "unknown": 7,
-      "total": 100
+      "total": 103
     },
     "by_severity": {
       "HIGH": 8,
-      "LOW": 2,
-      "MEDIUM": 8
+      "LOW": 3,
+      "MEDIUM": 10
     },
-    "posture": 68.42105263157895,
-    "coverage": 88.70967741935483
+    "posture": 65.94202898550725,
+    "coverage": 89.23076923076924
   },
   "findings": [
     {
@@ -776,6 +776,72 @@
       "subject": "kernel.perf_event_paranoid",
       "fingerprint": "934fdbecba0f171c09532067bfc95978",
       "detail": "kernel.perf_event_paranoid is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream has defaulted to 2 since Linux 4.6, which is adequate — but a default is not a decision, and a kernel built with a lower value, or a boot parameter that lowers it, leaves unprivileged processes able to measure the kernel's own execution. The running kernel has it at 2, so this host is adequate now on its default and has not written that down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0013's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0023",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "subject": "net.ipv4.tcp_syncookies",
+      "fingerprint": "04fdc67c5c9a0e6098623af15c7722e8",
+      "detail": "net.ipv4.tcp_syncookies is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. The running kernel has it at 1, so this host is defended now on a default nobody wrote down: a performance-tuning drop-in, a container runtime or a sysctl -w in a start-up script can set it to 0 and nothing here records that it was ever meant to be 1. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0016's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0024",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "sysctl configuration",
+      "fingerprint": "3c8df258bf7dd703d807701e41444a70",
+      "detail": "net.ipv4.conf.all.rp_filter is not set in any sysctl configuration file; net.ipv4.conf.default.rp_filter is not set in any sysctl configuration file. A host that does not filter by reverse path accepts packets claiming any source address, so a control that trusts one can be walked past and the origin of an attack is whatever the attacker wrote in the header. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0008's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        },
+        {
+          "source": "/lib/sysctl.d/10-default-yama-scope.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2411b554d569a269581e12f946b5746e6eab4d0be621df030865cd7528ddca95"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0025",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "sysctl configuration",
+      "fingerprint": "305300b43b78bf505eb4acad2afad4b8",
+      "detail": "net.ipv4.conf.all.accept_source_route is not set in any sysctl configuration file, so nothing on this host records that source-routed packets should be dropped; the kernel's own default is 0, which is correct and is not a decision anybody made; net.ipv4.conf.default.accept_source_route is not set in any sysctl configuration file, so an interface created after boot — a container veth, a VPN tunnel, a hot-plugged NIC — inherits whatever the kernel defaults to rather than a value this host chose; net.ipv4.conf.all.accept_redirects is not set in any sysctl configuration file, so this host will accept ICMP redirects, because unlike source routing the kernel defaults this one to 1: any party on the segment can rewrite its routing table with an unauthenticated packet; net.ipv4.conf.default.accept_redirects is not set in any sysctl configuration file, so every interface created after boot will accept ICMP redirects, since the kernel defaults this one to 1 and nothing here overrides it. Both parameters let a party on the network decide where this host sends packets, which is a position to read and rewrite traffic from rather than a weakness in it. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. What it is doing now is KERNEL-0015's subject for source routing and nothing's yet for redirect acceptance, and a disagreement between file and kernel is KERNEL-0007's.",
       "evidence": [
         {
           "source": "/usr/lib/sysctl.d/10-default-yama-scope.conf",

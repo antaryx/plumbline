@@ -232,6 +232,15 @@ func runningFor(sc fact.Sysctl, key string) (fact.SysctlRunning, catalog.Outcome
 	return r, catalog.Outcome{}, true
 }
 
+// pronounFor keeps the "a setting for ..." clause grammatical whether the
+// check holds one parameter or several.
+func pronounFor(keys []string) string {
+	if len(keys) == 1 {
+		return "it"
+	}
+	return "them"
+}
+
 // joinKeys renders a sorted key list for a detail string.
 func joinKeys(in []string) string {
 	out := append([]string(nil), in...)
@@ -295,7 +304,7 @@ func persistenceGate(sc fact.Sysctl, keys []string, caveat string) *catalog.Outc
 	//    be concluded. This comes before the value test because every verdict
 	//    below rests on *not* finding something — ADR-0014 in the direction it
 	//    points here.
-	if out, stop := configUnreadable(sc, caveat); stop {
+	if out, stop := configUnreadable(sc, keys, caveat); stop {
 		return &out
 	}
 
@@ -331,10 +340,17 @@ func persistenceGate(sc fact.Sysctl, keys []string, caveat string) *catalog.Outc
 // configUnreadable stops the check when a configuration file exists and could
 // not be read.
 //
+// The keys are named in the verdict rather than described. This function was
+// written for KERNEL-0017 and said "the BPF parameters" in a string, which
+// every later check of this shape then reported about its own parameters —
+// a ptrace finding that told the operator to go looking for BPF. A detail
+// string that names the wrong subject is worse than a vague one, because it
+// sends someone to the wrong file.
+//
 // The verdict below rests on *not* finding a setting, and a file nobody opened
 // may contain it. That is ADR-0014 in the direction it points here: an
 // incomplete examination invalidates a negative result.
-func configUnreadable(sc fact.Sysctl, caveat string) (catalog.Outcome, bool) {
+func configUnreadable(sc fact.Sysctl, keys []string, caveat string) (catalog.Outcome, bool) {
 	names := sc.UnreadableFileNames()
 	if len(names) == 0 {
 		return catalog.Outcome{}, false
@@ -359,8 +375,8 @@ func configUnreadable(sc fact.Sysctl, caveat string) (catalog.Outcome, bool) {
 		Result:        finding.Unknown,
 		UnknownReason: reason,
 		Subject:       "sysctl configuration",
-		Detail: fmt.Sprintf("This verdict would rest on not finding the BPF parameters in any configuration file, and %s could not be read — so a setting for them may be in a file this scan never opened.%s",
-			joinKeys(names), caveat),
+		Detail: fmt.Sprintf("This verdict would rest on not finding %s in any configuration file, and %s could not be read — so a setting for %s may be in a file this scan never opened.%s",
+			joinKeys(keys), joinKeys(names), pronounFor(keys), caveat),
 		Evidence: ev,
 	}, true
 }
@@ -393,6 +409,37 @@ func configuredEvidence(sc fact.Sysctl, key string) []finding.Evidence {
 		return []finding.Evidence{evidenceForSetting(sc, set)}
 	}
 	return searchedEvidence(sc, nil)
+}
+
+// configuredAt renders where a parameter got its value, which is not always
+// the place its name appears.
+//
+// A distribution commonly sets a whole family at once —
+// net.ipv4.conf.*.rp_filter = 1 — and never writes the individual key down. A
+// finding that said "net.ipv4.conf.all.rp_filter is 1 at 50-redhat.conf:5"
+// would send an operator to a line that does not contain that string. Naming
+// the pattern instead is the difference between evidence they can follow and
+// evidence they will conclude is wrong.
+func configuredAt(sc fact.Sysctl, key string, set fact.SysctlSetting) string {
+	if glob, ok := sc.GlobbedBy(key); ok {
+		return fmt.Sprintf("by the pattern %s at %s:%d", glob.Key, glob.File, glob.Line)
+	}
+	return fmt.Sprintf("at %s:%d", set.File, set.Line)
+}
+
+// notConfigured renders why a parameter has no value, distinguishing a file
+// that withheld it from files that simply never mention it.
+//
+// The two are different states of the world and only one of them is a decision
+// somebody made. A key excluded by "-name" is one the distribution set for
+// every interface and then deliberately left alone; telling its operator that
+// "nothing sets this" would be false, and would send them to add a line whose
+// absence is the point.
+func notConfigured(sc fact.Sysctl, key string) string {
+	if ex, ok := sc.ExcludedFrom(key); ok {
+		return fmt.Sprintf("%s is withheld from glob matching by %s:%d and set by nothing else", key, ex.File, ex.Line)
+	}
+	return fmt.Sprintf("%s is not set in any sysctl configuration file", key)
 }
 
 // persistCaveatFor builds the sentence every persistence verdict ends with,

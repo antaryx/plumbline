@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 28 · 100 checks · 11 modules**
+**Catalog version 29 · 103 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -3075,6 +3075,230 @@ systemd-analyze cat-config sysctl.d
 
 - [Linux kernel — perf\_event\_paranoid](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#perf-event-paranoid)
 - [perf\_event\_open(2)](https://man7.org/linux/man-pages/man2/perf_event_open.2.html)
+
+---
+
+### KERNEL-0023 — TCP SYN cookies are written to the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | LOW |
+| Since | catalog 29 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `denial-of-service` |
+
+A SYN flood fills a listening socket's backlog with half-open
+connections from addresses that never complete the handshake. The queue is
+finite, so once it is full the service refuses legitimate clients while the
+attacker spends almost nothing. SYN cookies remove the queue from the
+equation: on overflow the kernel stops storing connection state and encodes it
+in the sequence number it returns, reconstructing the connection only if the
+client completes the handshake.
+
+net.ipv4.tcp_syncookies takes three values:
+
+  - 0 — never. The backlog is the only defence.
+  - 1 — on overflow. The upstream default, and the value to write down.
+  - 2 — always, rather than only under overflow.
+
+**Every distribution the corpus covers runs 1 already, and almost none of them
+say so in a file.** That is the finding. A running value with nothing behind it
+is one container runtime, one network-tuning role, or one sysctl -w in a
+start-up script away from being 0, and nothing on the host records that anyone
+ever chose it. The parameter is also a favourite of performance tuning guides,
+which is a specific way it gets turned off by someone who is not thinking about
+floods.
+
+2 passes. It uses cookies for every connection rather than only under overflow,
+which is stricter and costs a few TCP options — window scaling, SACK and
+timestamps cannot be carried in a cookie — on every connection rather than only
+during an attack. That is a throughput decision, not a security one, so a host
+that has made it is passed and told what it costs.
+
+This is a check about files. KERNEL-0016 asks what the running kernel does.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write net.ipv4.tcp\_syncookies = 1 to a file in /etc/sysctl.d/.
+
+1. Check what already sets it: grep -rn tcp\_syncookies /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Alpine ships it in a vendor file; most distributions rely on the kernel default and write nothing.
+2. Create or extend a drop-in containing net.ipv4.tcp\_syncookies = 1. Write it down even though the running kernel almost certainly reports 1 already: that is the built-in default, not a decision, and a tuning drop-in that sets it to 0 will win silently.
+3. Leave it at 1 rather than 2 unless something specific calls for it. 1 uses cookies only when a backlog overflows, so a normal connection keeps window scaling, SACK and timestamps; 2 gives those up on every connection for no benefit outside a sustained flood.
+4. Apply without rebooting: sysctl --system, then confirm with sysctl net.ipv4.tcp\_syncookies.
+5. Raise the backlog as well if the service is genuinely busy: cookies are the fallback for an overflowing queue, and net.core.somaxconn together with the application's own listen() backlog decide how often the fallback is reached.
+
+```sh
+sysctl net.ipv4.tcp_syncookies
+grep -rn tcp_syncookies /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+systemd-analyze cat-config sysctl.d
+```
+
+> **Caution.** Value 1 costs nothing on a host that is not under attack, because the fallback only engages when a backlog overflows. Value 2 is the one to be careful with: it drops window scaling, SACK and timestamps on every connection, which is measurable on a high-throughput or high-latency link.
+
+**Controls** — `nist-800-53-r5 SC-5`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — ip-sysctl tcp\_syncookies](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
+
+---
+
+### KERNEL-0024 — Reverse-path filtering is written to the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | MEDIUM |
+| Since | catalog 29 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `spoofing` |
+
+Reverse-path filtering makes the kernel drop an incoming packet
+whose source address it would not route back out of the interface the packet
+arrived on. Without it a host accepts packets claiming to come from anywhere,
+which is what makes source-address spoofing useful: an attacker on one segment
+impersonates an address on another, defeating any control that trusts a source
+address and hiding where the traffic really came from.
+
+Two keys are checked, because they answer different questions:
+
+  - net.ipv4.conf.default.rp_filter is the template every interface created
+    after boot inherits — a container's veth, a VPN tunnel, a hot-plugged NIC.
+    Nothing else covers those, because they do not exist when the files are
+    applied.
+  - net.ipv4.conf.all.rp_filter is the floor. The kernel takes the *maximum*
+    of it and the interface's own value, so it can raise filtering everywhere
+    but never lower it.
+
+Either 1 or 2 passes. 1 is strict — the reverse path must be the same
+interface — and 2 is loose, requiring only that the source be routable
+somewhere. Loose mode is the correct and deliberate choice on a multi-homed
+host with asymmetric routing, so failing it would punish the operators who
+thought about it hardest.
+
+**A key set by a glob counts as set.** Red Hat's 50-redhat.conf writes
+net.ipv4.conf.*.rp_filter rather than naming interfaces, and systemd's
+50-default.conf does the same and then withholds the "all" key with a bare
+-net.ipv4.conf.all.rp_filter line, so that "all" stays 0 and an operator keeps
+the ability to turn filtering down on one interface. Both are configured hosts.
+A check that only looked up the literal key name would report them as having no
+reverse-path filtering at all, which is the kind of false positive that teaches
+an operator to stop reading the report.
+
+This is a check about files. KERNEL-0008 computes the effective value for each
+interface that exists right now.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write net.ipv4.conf.all.rp\_filter = 1 and net.ipv4.conf.default.rp\_filter = 1 to a file in /etc/sysctl.d/.
+
+1. Check what already sets them, patterns included: grep -rn rp\_filter /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. A line reading net.ipv4.conf.\*.rp\_filter sets every interface, and a bare -net.ipv4.conf.all.rp\_filter withholds that one key from it on purpose.
+2. Create or extend a drop-in containing net.ipv4.conf.all.rp\_filter = 1 and net.ipv4.conf.default.rp\_filter = 1. Set both: default is the template for interfaces that do not exist yet, and all is the floor for the ones that do.
+3. Use 2 rather than 1 on a multi-homed host where traffic legitimately arrives on one interface and would leave by another. Loose mode still drops a source address that is routable nowhere, which is most spoofing.
+4. Apply without rebooting: sysctl --system, then confirm per interface with sysctl -a \| grep '\.rp\_filter'.
+5. Check the interfaces that already exist afterwards. Neither key changes an interface that is up and has its own value; all raises the floor for it, and default does not apply to it at all.
+
+```sh
+sysctl -a 2>/dev/null | grep '\.rp_filter'
+grep -rn rp_filter /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+systemd-analyze cat-config sysctl.d
+```
+
+> **Caution.** Strict mode drops legitimate traffic on a host with asymmetric routing — multiple uplinks, policy routing, or a router doing anything other than symmetric forwarding. Check the routing table before setting 1 host-wide; loose mode (2) is the safe answer where routing is not symmetric, and a per-interface override is the answer where only one interface is affected.
+
+**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-5`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — ip-sysctl rp\_filter](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [RFC 3704 — Ingress Filtering for Multihomed Networks](https://www.rfc-editor.org/rfc/rfc3704)
+- [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
+
+---
+
+### KERNEL-0025 — Source routing and ICMP redirects are refused in the sysctl configuration
+
+| | |
+|---|---|
+| Module | `KERNEL` |
+| Base severity | MEDIUM |
+| Since | catalog 29 |
+| Reads | `kernel.sysctl` |
+| Tags | `kernel`, `sysctl`, `persistence`, `routing` |
+
+Two ways a remote party can tell this host how to route, both
+of them obsolete and both still enabled somewhere:
+
+**Source routing.** A source-routed packet carries its own return path. Accept
+one and an attacker chooses the route their reply takes, which lets them reach
+a host they have no route to, bypass a firewall that filters on path, and
+receive replies to a source address they have spoofed. RFC 7126 records that
+the correct handling on a host is to drop these, and there is no modern
+legitimate use.
+
+**ICMP redirects.** A redirect is an unauthenticated packet that rewrites this
+host's routing table. Accept one from an attacker on the same segment and
+traffic to a chosen destination goes through them instead — a
+man-in-the-middle that needs no ARP spoofing and leaves nothing on disk. A host
+that does not route has no reason to take routing advice from the network.
+
+All four keys must be 0: conf.all and conf.default for each. **default is not
+redundant with all** — it is the template copied into interfaces created after
+the files are applied, which is every container veth, VPN tunnel and hot-plugged
+NIC on a modern host, and nothing else covers them.
+
+The two parameters combine differently, which is why they are worth stating
+separately even though the fix is the same line twice:
+
+  - accept_source_route is the logical AND of conf.all and the interface's own,
+    so conf.all at 0 refuses it everywhere.
+  - accept_redirects on a host that does not forward is the logical OR, so
+    conf.all at 0 refuses nothing on its own; the interface's own value has to
+    be 0 too. It also **defaults to 1**, unlike accept_source_route, so the
+    absence of any configuration is materially worse here.
+
+A key set by a glob counts as set: a file writing net.ipv4.conf.*.accept_source_route
+has configured every interface it matched, and a bare -net.ipv4.conf.all.…
+line withholds that one key from the pattern deliberately.
+
+This is a check about files. KERNEL-0015 computes the effective source-routing
+value for each interface that exists right now; redirect acceptance has no
+runtime counterpart yet.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Write all four keys as 0 to a file in /etc/sysctl.d/.
+
+1. Check what already sets them, patterns included: grep -rn 'accept\_source\_route\\|accept\_redirects' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d.
+2. Create or extend a drop-in with all four lines: net.ipv4.conf.all.accept\_source\_route = 0, net.ipv4.conf.default.accept\_source\_route = 0, net.ipv4.conf.all.accept\_redirects = 0, net.ipv4.conf.default.accept\_redirects = 0.
+3. Set the default keys even though the all keys look sufficient. default is the template for interfaces created after the files are applied — container veths, VPN tunnels, hot-plugged NICs — and nothing else reaches them.
+4. Add the IPv6 equivalents where IPv6 is in use: net.ipv6.conf.all.accept\_ra, net.ipv6.conf.all.accept\_redirects and net.ipv6.conf.default.accept\_redirects. IPv6 has no source-routing key to set, having removed the header, but router advertisements are the larger equivalent exposure.
+5. Apply without rebooting: sysctl --system, then confirm per interface with sysctl -a \| grep -E 'accept\_(source\_route\|redirects)'.
+6. Set net.ipv4.conf.all.secure\_redirects = 0 as well if nothing needs redirects at all; on its own it only narrows acceptance to the current default gateways rather than refusing them.
+
+```sh
+sysctl -a 2>/dev/null | grep -E 'accept_(source_route|redirects)'
+grep -rn 'accept_source_route\|accept_redirects' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
+systemd-analyze cat-config sysctl.d
+```
+
+> **Caution.** Refusing redirects is safe on a host with a single default gateway and changes routing behaviour on one that depends on being redirected — an unusual arrangement, but check the routing table on a router or a multi-homed host first. Refusing source routing breaks nothing in modern use; the feature has been deprecated for two decades.
+
+**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`, `nist-800-53-r5 CM-6`
+
+**References**
+
+- [Linux kernel — ip-sysctl accept\_source\_route and accept\_redirects](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [RFC 7126 — Filtering of IP-Optioned Packets](https://www.rfc-editor.org/rfc/rfc7126)
+- [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
 
 ---
 

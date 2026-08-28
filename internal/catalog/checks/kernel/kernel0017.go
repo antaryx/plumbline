@@ -253,9 +253,34 @@ func runningNote(sc fact.Sysctl) string {
 		strings.Join(pending, " and "))
 }
 
+// capitaliseFirst starts a sentence, unless the sentence starts with a sysctl
+// key — in which case it leaves it alone.
+//
+// "Kernel.unprivileged_bpf_disabled" and "Net.ipv4.conf.all.rp_filter" are not
+// the names of anything. An operator who copies one into a grep gets nothing
+// back, and a detail string whose first word cannot be searched for is worse
+// than one that starts in lower case.
 func capitaliseFirst(s string) string {
-	if s == "" {
+	if s == "" || startsWithSysctlKey(s) {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// startsWithSysctlKey reports whether the first word is a dotted parameter
+// name, which is the one thing that must not be capitalised.
+func startsWithSysctlKey(s string) bool {
+	word, _, _ := strings.Cut(s, " ")
+	if !strings.Contains(word, ".") {
+		return false
+	}
+	for _, r := range word {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+		case r == '.', r == '_', r == '-', r == '*', r == '?':
+		default:
+			return false
+		}
+	}
+	return true
 }

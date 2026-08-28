@@ -812,6 +812,59 @@ remaining five bundles still predate `containers.docker_service` and
 `services.hardening`; re-recording them is the outstanding work package, and it
 is now a smaller and better-understood one.
 
+`KERNEL-0023`, `-0024` and `-0025` moved the group to the network stack: SYN
+cookies, reverse path filtering, and source routing with ICMP redirects. Three
+things came out of them.
+
+**The configuration language was bigger than the parser.** `sysctl.d(5)` allows
+a glob pattern, and the distributions rely on it — Red Hat's `50-redhat.conf`
+sets `net.ipv4.conf.*.rp_filter` rather than naming interfaces, and systemd's
+`50-default.conf` does the same and then withholds `net.ipv4.conf.all.rp_filter`
+with a bare `-` line so that `all` stays at 0 and filtering can still be lowered
+on one interface. Every lookup in this module was by literal key name. Shipping
+`KERNEL-0024` without the glob rules would have failed `rocky-9-stock` for
+having no reverse-path filtering while its vendor file configures it, which is
+the class of false positive that teaches an operator to stop reading the report.
+
+The exclusion syntax is the sharper half. `-` means two unrelated things in that
+file format — "ignore failures applying this assignment" on a line with `=`, and
+"withhold this key from every pattern" on a line without one — and a parser that
+looks only for `=` drops the second as unparseable. It is not an obscure corner:
+systemd's own default file depends on it, so the reading of the most common
+configuration on the most common init system was wrong in a way no fixture
+written from the same misunderstanding would have caught.
+
+**Reading the man page beat reasoning from the values.** Both of these were
+found by grepping a live workstation for the keys the new checks needed and not
+recognising what came back, then reading `sysctl.d(5)` rather than guessing from
+the file. The same move as the base-0 `kernel.sysrq` catch a work package
+earlier, and the same lesson: the fixtures encode what their author already
+believed.
+
+**A check that passes tells you more than one that fails.** `KERNEL-0025` fails
+on all five bundles that have any sysctl configuration, and on its own that is
+the shape of a bar set too high. `KERNEL-0024` passing on four of them — three
+of those on vendor files nobody edited — is what says the bar is reachable and
+the group is measuring distributions rather than measuring itself. `KERNEL-0023`
+sits between: `alpine-320-stock` is the only bundle in the corpus that writes
+SYN cookies down, and all six run `tcp_syncookies = 1` on the kernel default.
+That gap between "running" and "written down" is the entire subject of this
+group of checks, and the network keys show it more starkly than the kernel ones
+did.
+
+Two gaps this left, neither started:
+
+- **Redirect acceptance has no runtime check.** `KERNEL-0025` reads the files;
+  nothing reads `/proc/sys` for `accept_redirects`, so its caveat names
+  `KERNEL-0015` for the source-routing half and admits the other has no
+  counterpart. The collector now reads the values, so the check is the only
+  missing piece.
+- **IPv6 is absent from the module.** `net.ipv6.conf.*.accept_redirects` and
+  `accept_ra` are the larger exposure on a dual-stacked host — there is no
+  source-routing key to set, the header having been removed, but router
+  advertisements do more than a redirect does. `alpine-320-stock` already
+  configures the IPv6 keys and no check reads them.
+
 ---
 
 ## SERVICES, sandboxing

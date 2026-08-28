@@ -1,7 +1,7 @@
 {
   "bundle": "ubuntu-2404-hardened.plb",
   "schema": "findings/v1",
-  "catalog_version": 28,
+  "catalog_version": 29,
   "scan": {
     "started": "2026-08-27T21:29:41.441953502Z",
     "finished": "2026-08-27T21:29:41.803788605Z",
@@ -14,19 +14,19 @@
   },
   "summary": {
     "counts": {
-      "pass": 81,
-      "fail": 11,
+      "pass": 82,
+      "fail": 13,
       "not_applicable": 8,
       "skipped": 0,
       "unknown": 0,
-      "total": 100
+      "total": 103
     },
     "by_severity": {
       "HIGH": 5,
-      "LOW": 2,
-      "MEDIUM": 4
+      "LOW": 3,
+      "MEDIUM": 5
     },
-    "posture": 88.20754716981132,
+    "posture": 87.09677419354838,
     "coverage": 100
   },
   "findings": [
@@ -940,6 +940,204 @@
       "subject": "kernel.perf_event_paranoid",
       "fingerprint": "934fdbecba0f171c09532067bfc95978",
       "detail": "kernel.perf_event_paranoid is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. Upstream has defaulted to 2 since Linux 4.6, which is adequate — but a default is not a decision, and a kernel built with a lower value, or a boot parameter that lowers it, leaves unprivileged processes able to measure the kernel's own execution. The running kernel has it at 2, so this host is adequate now on its default and has not written that down. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0013's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/50-pid-max.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "a8917a1218bf2809643c2f3931f794ac6d4edfd6da28b250526f9bf11f34f1fd"
+        },
+        {
+          "source": "/usr/lib/sysctl.d/99-protect-links.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        },
+        {
+          "source": "/lib/sysctl.d/50-pid-max.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "a8917a1218bf2809643c2f3931f794ac6d4edfd6da28b250526f9bf11f34f1fd"
+        },
+        {
+          "source": "/lib/sysctl.d/99-protect-links.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        },
+        {
+          "source": "/etc/sysctl.d/10-bufferbloat.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "763c2e237645fb7c3fecf16a54479e49c39aab229c2a646a42f16c83b9dd2974"
+        },
+        {
+          "source": "/etc/sysctl.d/10-console-messages.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "14524a83a266454d517b7cdbfb2141dbc4b884570543da5f65e3f08da0b814c0"
+        },
+        {
+          "source": "/etc/sysctl.d/10-ipv6-privacy.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "e07c86211944a534c6418fe0eb5896926e09a13b56162d8cb642866f37e83b04"
+        },
+        {
+          "source": "/etc/sysctl.d/10-kernel-hardening.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2bbc2c5684414517eba9da8d2fbff0a678026d944eb8fcfd6287281e11282e2f"
+        },
+        {
+          "source": "/etc/sysctl.d/10-magic-sysrq.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "f9107778c619246fb2a5a7e2a05c9419951752238ede04c771173832dd296128"
+        },
+        {
+          "source": "/etc/sysctl.d/10-map-count.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "867f4371a9cc5a79cab3b350aee03d067857b69e3cbf556a4a19aed057f9e954"
+        },
+        {
+          "source": "/etc/sysctl.d/10-network-security.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "258805ec72eada3c24a923de1c5bd8ed0fd11fe21f3673628ec78f221c31e934"
+        },
+        {
+          "source": "/etc/sysctl.d/10-ptrace.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "4add0d9ecbcc91e4018ed08e8dc66c69d4d9d142f9e31461178dcd7da0fd73c2"
+        },
+        {
+          "source": "/etc/sysctl.d/10-zeropage.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "5c745f62d086d9b9cf2ec23e4164f510cdba206c7aa6f11d2256f3f9be64c950"
+        },
+        {
+          "source": "/etc/sysctl.d/99-sysctl.conf",
+          "excerpt": "read, and does not set the parameter; a symbolic link to /etc/sysctl.conf",
+          "sha256": "97c5b93ecd5329df5318b981bbf78117a8bbc1c3644603dc65d0226fc54a340a"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "97c5b93ecd5329df5318b981bbf78117a8bbc1c3644603dc65d0226fc54a340a"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0023",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "subject": "net.ipv4.tcp_syncookies",
+      "fingerprint": "04fdc67c5c9a0e6098623af15c7722e8",
+      "detail": "net.ipv4.tcp_syncookies is not set in any sysctl configuration file, so after the next reboot it is whatever the kernel defaults to. The running kernel has it at 1, so this host is defended now on a default nobody wrote down: a performance-tuning drop-in, a container runtime or a sysctl -w in a start-up script can set it to 0 and nothing here records that it was ever meant to be 1. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0016's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/usr/lib/sysctl.d/50-pid-max.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "a8917a1218bf2809643c2f3931f794ac6d4edfd6da28b250526f9bf11f34f1fd"
+        },
+        {
+          "source": "/usr/lib/sysctl.d/99-protect-links.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        },
+        {
+          "source": "/lib/sysctl.d/50-pid-max.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "a8917a1218bf2809643c2f3931f794ac6d4edfd6da28b250526f9bf11f34f1fd"
+        },
+        {
+          "source": "/lib/sysctl.d/99-protect-links.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "3481c657d4838e73c2c66afc21b565cbba9dbf5473f4ad705561d10d2eced0f6"
+        },
+        {
+          "source": "/etc/sysctl.d/10-bufferbloat.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "763c2e237645fb7c3fecf16a54479e49c39aab229c2a646a42f16c83b9dd2974"
+        },
+        {
+          "source": "/etc/sysctl.d/10-console-messages.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "14524a83a266454d517b7cdbfb2141dbc4b884570543da5f65e3f08da0b814c0"
+        },
+        {
+          "source": "/etc/sysctl.d/10-ipv6-privacy.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "e07c86211944a534c6418fe0eb5896926e09a13b56162d8cb642866f37e83b04"
+        },
+        {
+          "source": "/etc/sysctl.d/10-kernel-hardening.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "2bbc2c5684414517eba9da8d2fbff0a678026d944eb8fcfd6287281e11282e2f"
+        },
+        {
+          "source": "/etc/sysctl.d/10-magic-sysrq.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "f9107778c619246fb2a5a7e2a05c9419951752238ede04c771173832dd296128"
+        },
+        {
+          "source": "/etc/sysctl.d/10-map-count.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "867f4371a9cc5a79cab3b350aee03d067857b69e3cbf556a4a19aed057f9e954"
+        },
+        {
+          "source": "/etc/sysctl.d/10-network-security.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "258805ec72eada3c24a923de1c5bd8ed0fd11fe21f3673628ec78f221c31e934"
+        },
+        {
+          "source": "/etc/sysctl.d/10-ptrace.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "4add0d9ecbcc91e4018ed08e8dc66c69d4d9d142f9e31461178dcd7da0fd73c2"
+        },
+        {
+          "source": "/etc/sysctl.d/10-zeropage.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "5c745f62d086d9b9cf2ec23e4164f510cdba206c7aa6f11d2256f3f9be64c950"
+        },
+        {
+          "source": "/etc/sysctl.d/99-sysctl.conf",
+          "excerpt": "read, and does not set the parameter; a symbolic link to /etc/sysctl.conf",
+          "sha256": "97c5b93ecd5329df5318b981bbf78117a8bbc1c3644603dc65d0226fc54a340a"
+        },
+        {
+          "source": "/etc/sysctl.conf",
+          "excerpt": "read, and does not set the parameter",
+          "sha256": "97c5b93ecd5329df5318b981bbf78117a8bbc1c3644603dc65d0226fc54a340a"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0024",
+      "module": "KERNEL",
+      "result": "PASS",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "sysctl configuration",
+      "fingerprint": "3c8df258bf7dd703d807701e41444a70",
+      "detail": "Reverse-path filtering is written to the sysctl configuration: net.ipv4.conf.all.rp_filter is 2 at /etc/sysctl.d/10-network-security.conf:5; net.ipv4.conf.default.rp_filter is 2 at /etc/sysctl.d/10-network-security.conf:4. The floor is set for the interfaces already up and the template for every interface created after boot, so a spoofed source address is dropped after the next reboot either way. net.ipv4.conf.all.rp_filter, net.ipv4.conf.default.rp_filter are at 2, which is loose mode: the source has to be routable by some interface rather than by the one the packet arrived on. That is the right choice on a multi-homed host with asymmetric routing and the wrong one on a host with a single default route, where strict mode costs nothing. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot; what it is doing now is KERNEL-0008's subject, and a disagreement between the two is KERNEL-0007's.",
+      "evidence": [
+        {
+          "source": "/etc/sysctl.d/10-network-security.conf",
+          "line": 5,
+          "excerpt": "net.ipv4.conf.all.rp_filter = 2",
+          "sha256": "258805ec72eada3c24a923de1c5bd8ed0fd11fe21f3673628ec78f221c31e934"
+        },
+        {
+          "source": "/etc/sysctl.d/10-network-security.conf",
+          "line": 4,
+          "excerpt": "net.ipv4.conf.default.rp_filter = 2",
+          "sha256": "258805ec72eada3c24a923de1c5bd8ed0fd11fe21f3673628ec78f221c31e934"
+        }
+      ]
+    },
+    {
+      "check_id": "KERNEL-0025",
+      "module": "KERNEL",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "subject": "sysctl configuration",
+      "fingerprint": "305300b43b78bf505eb4acad2afad4b8",
+      "detail": "net.ipv4.conf.all.accept_source_route is not set in any sysctl configuration file, so nothing on this host records that source-routed packets should be dropped; the kernel's own default is 0, which is correct and is not a decision anybody made; net.ipv4.conf.default.accept_source_route is not set in any sysctl configuration file, so an interface created after boot — a container veth, a VPN tunnel, a hot-plugged NIC — inherits whatever the kernel defaults to rather than a value this host chose; net.ipv4.conf.all.accept_redirects is not set in any sysctl configuration file, so this host will accept ICMP redirects, because unlike source routing the kernel defaults this one to 1: any party on the segment can rewrite its routing table with an unauthenticated packet; net.ipv4.conf.default.accept_redirects is not set in any sysctl configuration file, so every interface created after boot will accept ICMP redirects, since the kernel defaults this one to 1 and nothing here overrides it. Both parameters let a party on the network decide where this host sends packets, which is a position to read and rewrite traffic from rather than a weakness in it. This reads the sysctl configuration files, which describe what the kernel will do after the next reboot. What it is doing now is KERNEL-0015's subject for source routing and nothing's yet for redirect acceptance, and a disagreement between file and kernel is KERNEL-0007's.",
       "evidence": [
         {
           "source": "/usr/lib/sysctl.d/50-pid-max.conf",

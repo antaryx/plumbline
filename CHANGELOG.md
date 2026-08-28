@@ -12,6 +12,50 @@ explanation in this file is a defect.
 ## [Unreleased]
 
 ### Fixed
+- **A sysctl key set by a glob pattern is now read as set.** `sysctl.d(5)` lets
+  a file write `net.ipv4.conf.*.rp_filter = 2` instead of naming every
+  interface, and the distributions use it: Red Hat's `50-redhat.conf` and
+  systemd's own `50-default.conf` both configure reverse path filtering that
+  way. Every lookup here was by literal key name, so those hosts read as having
+  no reverse-path filtering configured at all.
+
+  `fact.Sysctl.SettingsFor` now resolves the three rules the man page gives, in
+  order: an explicit assignment wins outright over any pattern, wherever either
+  sits; otherwise an exclusion suppresses every pattern; otherwise all matching
+  patterns apply in application order. Matching is done on the path form, so
+  `*` spans one component and not the separators around it.
+
+  **This moved a verdict in the corpus.** `rocky-9-stock` sets
+  `net.ipv4.conf.*.rp_filter = 1` and nothing else, and `KERNEL-0024` passes on
+  it where a literal-name reading would have failed it. It also completed an
+  existing finding: `KERNEL-0007` on the same bundle reported 2 parameters
+  drifting from the running kernel and now reports 5, because the three keys the
+  pattern sets were previously invisible to it.
+
+- **The `-key` exclusion syntax is recorded rather than skipped.** `sysctl.d(5)`
+  gives `-` two unrelated meanings: on an assignment it says failures may be
+  ignored and the assignment still happens; on a bare key name with no `=` it
+  withholds that key from every glob pattern. The parser looked only for `=`,
+  so the second was dropped as an unparseable line.
+
+  systemd's `50-default.conf` depends on it — it sets `net.ipv4.conf.*.rp_filter`
+  and then withholds `net.ipv4.conf.all.rp_filter`, deliberately, so that `all`
+  stays at 0 and an operator keeps the ability to lower filtering on one
+  interface. Without the record, the pattern appeared to set a key the file went
+  out of its way not to set. `fact.Sysctl` gained `Excluded` for this; it is
+  optional, so bundles recorded before this build re-evaluate unchanged.
+
+- **A persistence check no longer reports an unreadable configuration file as
+  being about BPF.** The shared gate named "the BPF parameters" in a string, so
+  `KERNEL-0018` through `-0022` all told an operator with an unreadable
+  `sysctl.d` file to go looking for the wrong parameters. Each check now names
+  its own.
+
+- **`capitaliseFirst` no longer mangles a parameter name.** A detail string
+  beginning with a sysctl key was rendered `Kernel.unprivileged_bpf_disabled`
+  and `Net.ipv4.conf.all.rp_filter`, which are not the names of anything an
+  operator can grep for. Affected `KERNEL-0017`'s passing detail.
+
 - **A parameter set twice in the same directory is resolved, not reported as a
   conflict.** `ConfiguredConflict` flagged any repeat with differing values,
   which produced `UNKNOWN` on hosts whose answer is perfectly determinable.
@@ -45,6 +89,53 @@ explanation in this file is a defect.
   inode, the way the unit collector already does for drop-in directories.
 
 ### Added
+- **`KERNEL-0023`, `-0024` and `-0025`: the network stack, in the files rather
+  than in `/proc`.** Catalog 29, 103 checks. Each is the persistence counterpart
+  to a runtime check that already existed, and each routes through the same
+  `persistenceGate`.
+
+  - **`KERNEL-0023` (SYN cookies persisted).** `LOW`, matching `KERNEL-0016`
+    rather than sitting a band above it: this is availability hardening, and
+    ranking it alongside an unwritten ptrace scope would mis-sort a triage
+    queue. `2` passes and is told what it costs — cookies on every connection
+    give up window scaling, SACK and timestamps rather than only during a flood.
+  - **`KERNEL-0024` (reverse path filtering persisted).** `MEDIUM`. Both
+    `conf.all` — the floor the kernel takes a maximum against — and
+    `conf.default` — the template every interface created after boot inherits.
+    `1` and `2` both pass, because loose mode is the correct choice on a
+    multi-homed host with asymmetric routing.
+  - **`KERNEL-0025` (source routing and ICMP redirects refused).** `MEDIUM`.
+    Four keys, `all` and `default` for each parameter. The two are described
+    separately on purpose: `accept_source_route` defaults to 0, so an unset key
+    is an undocumented default; `accept_redirects` defaults to **1**, so an
+    unset key is a host that will let anyone on the segment rewrite its routing
+    table. Redirect acceptance has no runtime counterpart yet, and the verdict
+    says so rather than leaving a reader to conclude they misread it.
+
+  **What the corpus actually persists**, which is the question these checks
+  exist to ask:
+
+  | | 0023 syncookies | 0024 rp_filter | 0025 routing |
+  |---|---|---|---|
+  | alpine-320-stock | PASS | PASS | FAIL |
+  | rocky-9-stock | FAIL | PASS | FAIL |
+  | ubuntu-2404-stock | FAIL | PASS | FAIL |
+  | ubuntu-2404-hardened | FAIL | PASS | FAIL |
+  | fedora-44-stock | FAIL | FAIL | FAIL |
+  | debian-13-stock | N/A | N/A | N/A |
+
+  Alpine's `/lib/sysctl.d/00-alpine.conf` is the only file in the corpus that
+  writes down SYN cookies. Every one of the six runs `tcp_syncookies = 1` and
+  five of them have nothing on disk saying so. `debian-13-stock` ships no sysctl
+  configuration file at all, which is `NOT_APPLICABLE` and not a pass.
+
+- **`net.ipv4.conf.*.accept_redirects` is collected.** The parameter had no
+  check and was not read. It combines with `conf.all` by a rule that depends on
+  whether the interface forwards — both must be set when forwarding is on,
+  either one suffices when it is off — which is the opposite of the rule for
+  `accept_source_route` and neither is the maximum `rp_filter` takes, so the
+  per-interface values are collected and the combining left to the check.
+
 - **`KERNEL-0022` (perf event restriction persisted).** Catalog 28, 100 checks.
   `MEDIUM`. Below `perf_event_paranoid = 2` an unprivileged process can measure
   the kernel's own execution, which is a direct read of the layout KASLR

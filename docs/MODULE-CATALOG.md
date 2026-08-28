@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 28 · 100 checks · 11 modules**
+**Catalog version 29 · 103 checks · 11 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 
@@ -17,14 +17,14 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | `CONTAINERS` | 8 | 2 | 0 | 3 | 3 | 0 |
 | `CRON` | 5 | 0 | 2 | 2 | 1 | 0 |
 | `FILESYS` | 10 | 2 | 3 | 4 | 1 | 0 |
-| `KERNEL` | 22 | 0 | 6 | 15 | 1 | 0 |
+| `KERNEL` | 25 | 0 | 6 | 17 | 2 | 0 |
 | `LOGGING` | 5 | 0 | 0 | 4 | 1 | 0 |
 | `MEMORY` | 4 | 0 | 0 | 3 | 1 | 0 |
 | `NETWORK` | 3 | 0 | 2 | 1 | 0 | 0 |
 | `SERVICES` | 8 | 0 | 4 | 4 | 0 | 0 |
 | `SSHD` | 19 | 1 | 7 | 8 | 3 | 0 |
 | `USERS` | 10 | 2 | 4 | 2 | 2 | 0 |
-| **total** | **100** | 7 | 31 | 48 | 14 | 0 |
+| **total** | **103** | 7 | 31 | 50 | 15 | 0 |
 
 Severity is the check's **base** severity, before any context adjustment a finding may carry.
 
@@ -105,6 +105,9 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`KERNEL-0020`](CHECK-REFERENCE.md#kernel-0020--yama-ptrace-restriction-is-written-to-the-sysctl-configuration) Yama ptrace restriction is written to the sysctl configuration | HIGH | `kernel.sysctl` |
 | [`KERNEL-0021`](CHECK-REFERENCE.md#kernel-0021--the-magic-sysrq-key-is-disabled-in-the-sysctl-configuration) The magic SysRq key is disabled in the sysctl configuration | MEDIUM | `kernel.sysctl` |
 | [`KERNEL-0022`](CHECK-REFERENCE.md#kernel-0022--perf-event-restriction-is-written-to-the-sysctl-configuration) Perf event restriction is written to the sysctl configuration | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0023`](CHECK-REFERENCE.md#kernel-0023--tcp-syn-cookies-are-written-to-the-sysctl-configuration) TCP SYN cookies are written to the sysctl configuration | LOW | `kernel.sysctl` |
+| [`KERNEL-0024`](CHECK-REFERENCE.md#kernel-0024--reverse-path-filtering-is-written-to-the-sysctl-configuration) Reverse-path filtering is written to the sysctl configuration | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0025`](CHECK-REFERENCE.md#kernel-0025--source-routing-and-icmp-redirects-are-refused-in-the-sysctl-configuration) Source routing and ICMP redirects are refused in the sysctl configuration | MEDIUM | `kernel.sysctl` |
 
 ## LOGGING
 

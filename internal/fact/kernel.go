@@ -1,6 +1,7 @@
 package fact
 
 import (
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -116,6 +117,26 @@ type Sysctl struct {
 	// Present only for the files that are links, so its absence is the common
 	// case rather than missing information.
 	Resolved map[string]string `json:"resolved,omitempty"`
+	// Excluded lists the keys a configuration file explicitly withheld from
+	// glob matching: a line naming the key prefixed with "-" and *not*
+	// followed by "=". sysctl.d(5) gives that syntax exactly one meaning —
+	// "this key is excluded from being set by any matching glob pattern" — and
+	// it is not the same as the "-" that prefixes an assignment, which only
+	// says failures to apply it may be ignored.
+	//
+	// It has to be recorded because the distributions use it. systemd's own
+	// 50-default.conf sets net.ipv4.conf.*.rp_filter and then withholds
+	// net.ipv4.conf.all.rp_filter, so that the per-interface values stand on
+	// their own and "all" stays at 0 — which is deliberate, because "all" is a
+	// floor the kernel takes the maximum against, and pinning it would take
+	// away an operator's ability to turn filtering down on one interface.
+	// Without this field a glob would appear to set a key the file went out of
+	// its way not to set.
+	//
+	// The Value of each entry is empty: an exclusion has no value, which is
+	// what distinguishes it from an assignment.
+	Excluded []SysctlSetting `json:"excluded,omitempty"`
+
 	// UnreadableFiles lists configuration files that exist and could not be
 	// read, with why. A check comparing running against configured must not
 	// conclude "not configured" while one of these is outstanding: the setting
@@ -167,11 +188,127 @@ func (s Sysctl) RunningMatching(prefix, suffix string) []SysctlRunning {
 //
 // The second return is false when no file sets the parameter.
 func (s Sysctl) EffectiveConfigured(key string) (SysctlSetting, bool) {
-	all := s.Configured[key]
+	all := s.SettingsFor(key)
 	if len(all) == 0 {
 		return SysctlSetting{}, false
 	}
 	return all[len(all)-1], true
+}
+
+// SettingsFor returns every setting that assigns key, in application order,
+// resolving the three rules sysctl.d(5) gives for glob patterns.
+//
+// A file may assign a key by naming it, or by naming a glob that matches it.
+// Reading only the literal name misses the second, and the distributions use
+// it: Red Hat's 50-redhat.conf sets net.ipv4.conf.*.rp_filter rather than
+// listing the interfaces, so a check that looked up
+// net.ipv4.conf.all.rp_filter by name found nothing and reported a host with
+// reverse path filtering configured as a host without it.
+//
+// The rules, in the order they resolve:
+//
+//  1. An explicit assignment wins outright. "Keys for which an explicit
+//     pattern exists will be excluded from any glob matching" — so a literal
+//     line beats a glob no matter which file or line either is on, and this is
+//     the one case where application order does not decide.
+//  2. Otherwise an exclusion — "-key" with no "=" — means no glob may set it,
+//     and the key is unset however many patterns match.
+//  3. Otherwise every matching glob applies, in application order.
+//
+// Matching is done on the path form, so a pattern's "*" spans one component
+// and not the separators around it, which is what glob(7) does and therefore
+// what systemd does. A key naming a VLAN interface is the one shape this
+// cannot resolve exactly — "eth0.1" contains the separator character, so the
+// dotted form of net.ipv4.conf.eth0.1.rp_filter is ambiguous about where the
+// components divide. No check asks about a named interface; the two keys they
+// ask about, "all" and "default", have no dots in them.
+func (s Sysctl) SettingsFor(key string) []SysctlSetting {
+	if literal := s.Configured[key]; len(literal) > 0 {
+		return literal
+	}
+	for _, ex := range s.Excluded {
+		if ex.Key == key {
+			return nil
+		}
+	}
+
+	var out []SysctlSetting
+	for pattern, sets := range s.Configured {
+		if !isGlob(pattern) || !globMatches(pattern, key) {
+			continue
+		}
+		out = append(out, sets...)
+	}
+	if len(out) < 2 {
+		return out
+	}
+	// Two patterns can match the same key, and Configured is a map, so the
+	// order they came out in is not the order they are applied in. Files is in
+	// application order, which is what restores it.
+	pos := make(map[string]int, len(s.Files))
+	for i, f := range s.Files {
+		if _, seen := pos[f]; !seen {
+			pos[f] = i
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if pi, pj := pos[out[i].File], pos[out[j].File]; pi != pj {
+			return pi < pj
+		}
+		return out[i].Line < out[j].Line
+	})
+	return out
+}
+
+// GlobbedBy reports the pattern that assigns key when nothing names it
+// explicitly, so a finding can quote the line that is actually doing the work
+// rather than claiming the key was named.
+func (s Sysctl) GlobbedBy(key string) (SysctlSetting, bool) {
+	if len(s.Configured[key]) > 0 {
+		return SysctlSetting{}, false
+	}
+	set, found := s.EffectiveConfigured(key)
+	if !found || !isGlob(set.Key) {
+		return SysctlSetting{}, false
+	}
+	return set, true
+}
+
+// ExcludedFrom reports the line that withheld key from glob matching.
+//
+// The distinction matters to a reader of a finding. "Nothing sets this" and
+// "a file sets every interface and then deliberately withheld this one" are
+// different states of the world, and only the second is a decision somebody
+// made.
+func (s Sysctl) ExcludedFrom(key string) (SysctlSetting, bool) {
+	if len(s.Configured[key]) > 0 {
+		return SysctlSetting{}, false
+	}
+	for _, ex := range s.Excluded {
+		if ex.Key == key {
+			return ex, true
+		}
+	}
+	return SysctlSetting{}, false
+}
+
+// isGlob reports whether a configured key is a pattern rather than a name.
+func isGlob(key string) bool {
+	return strings.ContainsAny(key, "*?[")
+}
+
+// globMatches reports whether a sysctl glob pattern covers a key.
+//
+// Both are converted to the path form first. path.Match gives "*" the meaning
+// glob(7) gives it — everything except the separator — which is the whole
+// reason net.ipv4.conf.*.rp_filter covers "all" and "default" and not
+// "ipv4.conf.all".
+func globMatches(pattern, key string) bool {
+	ok, err := path.Match(
+		strings.ReplaceAll(pattern, ".", "/"),
+		strings.ReplaceAll(key, ".", "/"),
+	)
+	return err == nil && ok
 }
 
 // ConfiguredConflict reports whether this parameter's value after the next
@@ -226,7 +363,7 @@ func (s Sysctl) ConfiguredConflict(key string) bool {
 // sorted within a directory, and lines in file order. Both tools compute that
 // same value for a single directory, which is what makes it safe to reduce.
 func (s Sysctl) directoryWinners(key string) []SysctlSetting {
-	all := s.Configured[key]
+	all := s.SettingsFor(key)
 	if len(all) == 0 {
 		return nil
 	}

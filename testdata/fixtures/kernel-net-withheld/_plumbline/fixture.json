@@ -1,0 +1,1 @@
+{ "description": "The exclusion syntax used without the glob it exists to modify: conf.all is withheld and no pattern sets the interfaces, so nothing raises filtering on the interfaces that are already up. The running kernel confirms it at 0. This is what separates a withheld key from a configured one." }

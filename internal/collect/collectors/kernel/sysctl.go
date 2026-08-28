@@ -98,6 +98,13 @@ const interfaceConfDir = "/proc/sys/net/ipv4/conf"
 
 // perInterfaceLeaves are the parameters collected for every interface.
 var perInterfaceLeaves = []string{
+	// accept_redirects combines with conf/all by a rule that depends on
+	// whether the interface forwards: both must be set when forwarding is on,
+	// either one is enough when it is off. That is the opposite of the rule
+	// for accept_source_route and neither is the maximum rp_filter takes, so
+	// the per-interface values are collected and the combining is left to the
+	// check that knows which parameter it is holding.
+	"accept_redirects",
 	"accept_source_route",
 	"rp_filter",
 }
@@ -427,16 +434,25 @@ func recordConfig(file, digest string, data []byte, sc *fact.Sysctl) {
 	sc.Digests[file] = digest
 
 	for n, raw := range strings.Split(string(data), "\n") {
-		key, value, ok := parseSysctlLine(raw)
-		if !ok {
-			continue
+		key, value, kind := parseSysctlLine(raw)
+		switch kind {
+		case lineAssignment:
+			sc.Configured[key] = append(sc.Configured[key], fact.SysctlSetting{
+				Key:   key,
+				Value: value,
+				File:  file,
+				Line:  n + 1,
+			})
+		case lineExclusion:
+			// No Value: an exclusion assigns nothing. It says a glob may not
+			// assign this key either, which is a fact about the other lines in
+			// these files and is resolved in fact.Sysctl.SettingsFor.
+			sc.Excluded = append(sc.Excluded, fact.SysctlSetting{
+				Key:  key,
+				File: file,
+				Line: n + 1,
+			})
 		}
-		sc.Configured[key] = append(sc.Configured[key], fact.SysctlSetting{
-			Key:   key,
-			Value: value,
-			File:  file,
-			Line:  n + 1,
-		})
 	}
 }
 
@@ -570,24 +586,59 @@ func resolveLinkPath(link, dest string) string {
 // setting and not part of the key. Values may contain spaces and are taken
 // verbatim after the first "="; whitespace around both sides is not
 // significant.
-func parseSysctlLine(raw string) (key, value string, ok bool) {
+// sysctlLineKind is what one line of a configuration file turned out to be.
+//
+// The three-way split exists because sysctl.d(5) gives "-" two unrelated
+// meanings and the difference is invisible if a parser only looks for "=". A
+// leading "-" on an assignment says failures to apply it may be ignored, and
+// the assignment still happens. A leading "-" on a bare key name says the key
+// is withheld from glob matching, and nothing is assigned at all. Treating the
+// second as "a line with no = , skip it" loses the only record that a file
+// made a decision about that key.
+type sysctlLineKind int
+
+const (
+	lineIgnored sysctlLineKind = iota
+	lineAssignment
+	lineExclusion
+)
+
+// parseSysctlLine classifies one line of a sysctl configuration file.
+func parseSysctlLine(raw string) (key, value string, kind sysctlLineKind) {
 	line := strings.TrimSpace(strings.TrimSuffix(raw, "\r"))
 	if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
-		return "", "", false
+		return "", "", lineIgnored
 	}
+
 	eq := strings.Index(line, "=")
 	if eq < 0 {
-		return "", "", false
+		// No assignment. A bare "-name" withholds that key from any glob that
+		// would otherwise match it; anything else on a line of its own is not
+		// syntax either tool acts on.
+		if rest, found := strings.CutPrefix(line, "-"); found {
+			if k := normaliseSysctlKey(rest); k != "" {
+				return k, "", lineExclusion
+			}
+		}
+		return "", "", lineIgnored
 	}
-	key = strings.TrimSpace(line[:eq])
-	key = strings.TrimPrefix(key, "-")
-	key = strings.TrimSpace(key)
+
+	key = normaliseSysctlKey(strings.TrimPrefix(strings.TrimSpace(line[:eq]), "-"))
 	if key == "" {
-		return "", "", false
+		return "", "", lineIgnored
 	}
-	// A key may be written with slashes instead of dots; sysctl accepts both.
-	// Normalising here means a check comparing against a running key does not
-	// have to know which form the operator used.
-	key = strings.ReplaceAll(key, "/", ".")
-	return key, strings.TrimSpace(line[eq+1:]), true
+	return key, strings.TrimSpace(line[eq+1:]), lineAssignment
+}
+
+// normaliseSysctlKey trims a key and puts it in the dotted form.
+//
+// A key may be written with slashes instead of dots; sysctl accepts both.
+// Normalising here means a check comparing against a running key does not have
+// to know which form the operator used.
+func normaliseSysctlKey(k string) string {
+	k = strings.TrimSpace(k)
+	if k == "" {
+		return ""
+	}
+	return strings.ReplaceAll(k, "/", ".")
 }

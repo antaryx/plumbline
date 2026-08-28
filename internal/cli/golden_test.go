@@ -230,8 +230,8 @@ var pinned = map[string]pin{
 	// syslog daemon, and a check that declines to judge an absent subject is
 	// the behaviour, not a gap.
 	"ubuntu-2404-stock": {
-		catalog: 28, pass: 40, fail: 17, notApplicable: 37, unknown: 6, skipped: 0,
-		posture: 73.13432835820896, coverage: 90.47619047619048,
+		catalog: 29, pass: 41, fail: 19, notApplicable: 37, unknown: 6, skipped: 0,
+		posture: 71.94244604316546, coverage: 90.9090909090909,
 		why: "the unhardened baseline every other number is measured against",
 	},
 
@@ -239,7 +239,7 @@ var pinned = map[string]pin{
 	// check cares about. One PASS and one NOT_APPLICABLE separate them here,
 	// and which ones is the interesting part of any diff on this pair.
 	"debian-13-stock": {
-		catalog: 28, pass: 37, fail: 13, notApplicable: 44, unknown: 6, skipped: 0,
+		catalog: 29, pass: 37, fail: 13, notApplicable: 47, unknown: 6, skipped: 0,
 		posture: 77.11864406779661, coverage: 89.28571428571429,
 		why: "Debian's defaults, which are not Ubuntu's",
 	},
@@ -248,8 +248,8 @@ var pinned = map[string]pin{
 	// is the bundle that catches a check quietly assuming a Debian-shaped /etc
 	// and reporting a verdict about a file that was never there.
 	"alpine-320-stock": {
-		catalog: 28, pass: 30, fail: 14, notApplicable: 50, unknown: 6, skipped: 0,
-		posture: 69.81132075471697, coverage: 88,
+		catalog: 29, pass: 32, fail: 15, notApplicable: 50, unknown: 6, skipped: 0,
+		posture: 69.36936936936937, coverage: 88.67924528301887,
 		why: "the distribution least like the others, where guessing shows up",
 	},
 
@@ -261,8 +261,8 @@ var pinned = map[string]pin{
 	// binary, not of any file on the host. AUTH-0002 says it does not know.
 	// Every other scanner reports the documented default and calls it a PASS.
 	"fedora-44-stock": {
-		catalog: 28, pass: 37, fail: 18, notApplicable: 38, unknown: 7, skipped: 0,
-		posture: 68.42105263157895, coverage: 88.70967741935483,
+		catalog: 29, pass: 37, fail: 21, notApplicable: 38, unknown: 7, skipped: 0,
+		posture: 65.94202898550725, coverage: 89.23076923076924,
 		why: "the RPM family's leading edge, where authselect owns the PAM stack",
 	},
 
@@ -270,8 +270,8 @@ var pinned = map[string]pin{
 	// point of it. One FAIL and one NOT_APPLICABLE separate the two, and which
 	// ones is the interesting part of any diff on this pair.
 	"rocky-9-stock": {
-		catalog: 28, pass: 37, fail: 17, notApplicable: 39, unknown: 7, skipped: 0,
-		posture: 70.54263565891473, coverage: 88.52459016393442,
+		catalog: 29, pass: 38, fail: 19, notApplicable: 39, unknown: 7, skipped: 0,
+		posture: 69.40298507462687, coverage: 89.0625,
 		why: "the enterprise RPM baseline most real audits run against",
 	},
 
@@ -311,8 +311,8 @@ var pinned = map[string]pin{
 	// and a run in which any of them became a PASS would be a serious
 	// regression rather than an improvement.
 	"ubuntu-2404-hardened": {
-		catalog: 28, pass: 81, fail: 11, notApplicable: 8, unknown: 0, skipped: 0,
-		posture: 88.20754716981132, coverage: 100,
+		catalog: 29, pass: 82, fail: 13, notApplicable: 8, unknown: 0, skipped: 0,
+		posture: 87.09677419354838, coverage: 100,
 		why: "the only bundle on which every check in the catalog evaluates",
 	},
 }
