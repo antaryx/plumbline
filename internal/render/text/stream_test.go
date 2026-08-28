@@ -162,15 +162,22 @@ func TestANarrowTerminalIsNotWidenedToFitTheLayout(t *testing.T) {
 	}
 }
 
-func TestTheTokensSayWhatHappened(t *testing.T) {
+// TestTheStreamAndTheReportUseOneVocabulary.
+//
+// The two appear in the same session — the stream on stderr while the scan
+// runs, the report on stdout under --verbose — and an operator who watched
+// `[ WARNING ]` scroll past must find `[ WARNING ]` when they grep the report.
+// The words therefore come from statusToken, which the report also uses, and
+// this pins the mapping so a future edit to either cannot split them.
+func TestTheStreamAndTheReportUseOneVocabulary(t *testing.T) {
 	cases := []struct {
 		result finding.Result
 		want   string
 	}{
-		{finding.Pass, "[ PASS ]"},
-		{finding.Fail, "[ FAIL ]"},
+		{finding.Pass, "[ OK ]"},
+		{finding.Fail, "[ WARNING ]"},
 		{finding.Unknown, "[ UNKNOWN ]"},
-		{finding.NotApplicable, "[ N/A ]"},
+		{finding.NotApplicable, "[ SKIPPED ]"},
 	}
 	for _, c := range cases {
 		var buf bytes.Buffer
@@ -179,6 +186,55 @@ func TestTheTokensSayWhatHappened(t *testing.T) {
 		if !strings.Contains(visible(buf.String()), c.want) {
 			t.Errorf("%s rendered as %q, want %s", c.result, visible(buf.String()), c.want)
 		}
+	}
+}
+
+// The colours are the report's in every state but one. NOT_APPLICABLE is dim in
+// the report so that rows carrying no verdict do not compete with the three
+// that do; in a scrolling stream the same rows read as a display failure rather
+// than an answer, so they are cyan — a category of their own, and visibly not a
+// warning.
+func TestTheStreamColoursItsStates(t *testing.T) {
+	cases := []struct {
+		result finding.Result
+		want   string
+	}{
+		{finding.Pass, "\x1b[1;38;2;34;197;94m"},         // green
+		{finding.Fail, "\x1b[1;38;2;239;68;68m"},         // red
+		{finding.Unknown, "\x1b[1;38;2;245;158;11m"},     // amber
+		{finding.NotApplicable, "\x1b[38;2;96;165;250m"}, // cyan
+	}
+	for _, c := range cases {
+		var buf bytes.Buffer
+		s := text.NewStream(&buf, true, fixedWidth(80))
+		s.CheckDone(finding.Finding{CheckID: "T-0001", Title: "t", Result: c.result})
+		if !strings.Contains(buf.String(), c.want) {
+			t.Errorf("%s drawn as %q, want the sequence %q", c.result, buf.String(), c.want)
+		}
+	}
+}
+
+// --quiet keeps the tally and drops the narration. The counters still count:
+// the tally is of what was evaluated, not of what was printed.
+func TestQuietDropsTheRowsAndKeepsTheTally(t *testing.T) {
+	var buf bytes.Buffer
+	s := text.NewStream(&buf, false, fixedWidth(80)).Quiet(true)
+	s.Phase("Evaluating")
+	for _, f := range sampleFindings() {
+		s.CheckDone(f)
+	}
+	s.CollectorDone("kernel", "ok", 0)
+	s.Close(score.Compute(sampleFindings(), 33))
+
+	out := visible(buf.String())
+	if strings.Contains(out, "[+] ") {
+		t.Errorf("--quiet still narrated:\n%s", out)
+	}
+	if strings.Contains(out, "[*] Evaluating") {
+		t.Errorf("--quiet still announced a phase:\n%s", out)
+	}
+	if !strings.Contains(out, "1 passed, 1 failed, 1 unknown, 1 not applicable") {
+		t.Errorf("--quiet lost the tally it exists to keep:\n%s", out)
 	}
 }
 
@@ -241,6 +297,7 @@ func TestTheClosingTallyNamesTheFailures(t *testing.T) {
 	for _, f := range sampleFindings() {
 		s.CheckDone(f)
 	}
+	s.Hint("run again with --verbose for evidence, remediation and cautions")
 	s.Close(score.Compute(sampleFindings(), 33))
 
 	out := visible(buf.String())
@@ -248,8 +305,9 @@ func TestTheClosingTallyNamesTheFailures(t *testing.T) {
 		"posture", "coverage",
 		"1 passed, 1 failed, 1 unknown, 1 not applicable",
 		"KERNEL-0004",
-		// The stream is not the report and must not be mistaken for one.
-		"follows on stdout",
+		// A screen with no detail on it reads as a tool that found nothing to
+		// say, so the last line always names where the rest went.
+		"--verbose",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the tally does not mention %q:\n%s", want, out)

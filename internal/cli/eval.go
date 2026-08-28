@@ -89,7 +89,11 @@ collected on a production host be analysed somewhere safer.`,
 			// the offline, re-evaluate-an-archive path. Streaming it would put
 			// a hundred lines of progress in front of a report that was
 			// already instant.
-			return renderAndGate(b, failOn, gt, format, out, sup, prof, nil, stdout, stderr)
+			// nil presenter, and the report always written: eval has no
+			// collection phase to narrate and nothing has shown the operator
+			// anything yet, so withholding the document would leave the
+			// command with no output at all.
+			return renderAndGate(b, failOn, gt, format, out, sup, prof, nil, true, stdout, stderr)
 		},
 	}
 
@@ -106,7 +110,7 @@ collected on a production host be analysed somewhere safer.`,
 // Rendering is chosen here rather than inside each command for the same
 // reason: a report and its exit code are one answer, and a second call site
 // would be a second place for the two to disagree.
-func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, prof *profile.Profile, live *rendertext.Stream, stdout, stderr io.Writer) error {
+func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, prof *profile.Profile, live *rendertext.Stream, detail bool, stdout, stderr io.Writer) error {
 	// The presenter is handed to the catalog rather than to the renderer,
 	// because what it shows is evaluation happening — one line as each check
 	// reaches a verdict — and by the time there is a slice to render, there is
@@ -143,27 +147,33 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 	// cannot survive.
 	live.Close(sc)
 
-	w, closeOut, err := writeTo(out.output, stdout)
-	if err != nil {
-		return exitError{code: ExitInternal, message: err.Error()}
-	}
+	// The gate runs whether or not a document was written. An exit code is not
+	// a rendering choice: `plumbline scan --fail-on high` has to mean the same
+	// thing on a terminal that withheld the report as in a pipe that did not,
+	// or the flag is worthless in the only place it is used.
+	if detail {
+		w, closeOut, err := writeTo(out.output, stdout)
+		if err != nil {
+			return exitError{code: ExitInternal, message: err.Error()}
+		}
 
-	var renderErr error
-	switch format {
-	case FormatJSON:
-		renderErr = renderJSON(w, b, sc, findings, factErrors, prof.Name())
-	case FormatSARIF:
-		renderErr = renderSARIF(w, b, sc, findings, len(factErrors) > 0, prof.Name())
-	default:
-		renderErr = renderTerminal(w, b, sc, findings, factErrors,
-			useColor(w, out.noColor, out.output != ""), prof.Name())
-	}
+		var renderErr error
+		switch format {
+		case FormatJSON:
+			renderErr = renderJSON(w, b, sc, findings, factErrors, prof.Name())
+		case FormatSARIF:
+			renderErr = renderSARIF(w, b, sc, findings, len(factErrors) > 0, prof.Name())
+		default:
+			renderErr = renderTerminal(w, b, sc, findings, factErrors,
+				useColor(w, out.noColor, out.output != ""), prof.Name())
+		}
 
-	if cerr := closeOut(); renderErr == nil {
-		renderErr = cerr
-	}
-	if renderErr != nil {
-		return exitError{code: ExitInternal, message: renderErr.Error()}
+		if cerr := closeOut(); renderErr == nil {
+			renderErr = cerr
+		}
+		if renderErr != nil {
+			return exitError{code: ExitInternal, message: renderErr.Error()}
+		}
 	}
 
 	return gateOn(sc, findings, factErrors, failOn, gt)

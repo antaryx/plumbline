@@ -213,6 +213,42 @@ because of this release (VERSIONING §2.4).
   host, and every vendor file was being read and recorded twice. Deduped by
   inode, the way the unit collector already does for drop-in directories.
 
+### Changed
+- **A terminal scan no longer prints the detailed report by default.** The live
+  stream puts every check on the screen as it happens; following it with the
+  same checks again, regrouped and trailed by every remediation the catalog
+  holds, buried the thing the operator was watching under several hundred lines.
+
+  The report is withheld **only** when a stream has already narrated the scan to
+  the same terminal and the operator did not ask for it. Four exceptions keep
+  it, and between them they cover everything that is not a person watching their
+  own screen: `--verbose`, no stream having run (a pipe, CI, `--format json`,
+  `PLUMBLINE_NO_PROGRESS`), `--output` naming a file, and a stdout that is not a
+  terminal. `plumbline scan > report.txt` therefore plays the stream on the
+  terminal *and* writes the whole report to the file.
+
+  This is the only place where stdout's content depends on what stdout is. It is
+  a deliberate exception, and the exit code is not part of it: `--fail-on` gates
+  identically whether or not a document was written.
+
+  New flags on `scan`: **`--verbose`/`-v`** restores the report, **`--quiet`/`-q`**
+  drops the per-check rows and keeps the closing tally. Passing both is a usage
+  error. `--quiet` does not silence the scoring notice, which is a correctness
+  warning rather than progress chatter and has `PLUMBLINE_NO_NOTICES` of its own.
+
+- **The stream uses the report's vocabulary.** `[ OK ]`, `[ WARNING ]`,
+  `[ UNKNOWN ]` and `[ SKIPPED ]`, from the same `statusToken` the report calls,
+  replacing the stream's own `PASS`/`FAIL`/`N/A`. The argument for separate words
+  — a commentary wants the verdict, a report wants the action — did not survive
+  contact with the two appearing in one session: an operator who watches
+  `[ FAIL ]` go past and then greps the report for "FAIL" finds `[ WARNING ]`.
+  One word per state, produced in one place.
+
+  Colours follow the report in every state but one. `SKIPPED` is cyan in the
+  stream and stays dim in the report: a row carrying no verdict recedes
+  correctly on a dense grouped page and reads as a display failure in a
+  scrolling list.
+
 ### Added
 - **A live scan stream (`internal/render/text/stream.go`).** `scan --format
   terminal` now narrates the scan on **stderr** as it happens — one row per

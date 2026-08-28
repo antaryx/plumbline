@@ -1134,16 +1134,30 @@ destroying the column far more thoroughly than a short row would; the floor is
 now a guard against absurd arithmetic and the row drops to its compact form
 instead.
 
-What this leaves:
+**Both open questions about the display were settled immediately, by watching
+it.** A screen recording made the answer obvious in a way the reasoning had not:
 
-- **The stream and the report are both on screen for a bare `plumbline scan`.**
-  stderr and stdout are usually the same terminal, so the operator sees the
-  live rows and then the report's own scan phase — the same checks, in a
-  different vocabulary, twice. It is defensible (one is progress, one is the
-  record, and lynis has the same shape) and it is not obviously right.
-  Suppressing the report's scan phase when a stream ran would fix it, at the
-  cost of making stdout depend on whether anybody was watching. Worth deciding
-  deliberately rather than leaving to whoever notices it next.
+- **The report is withheld from a terminal that watched the scan.** The stream
+  and the report were both on screen for a bare `plumbline scan` — the same
+  checks, twice, the second time trailed by every remediation in the catalog —
+  and the live output was buried within a second of finishing. This was raised
+  here as defensible-but-not-obviously-right; it was neither. The cost of the
+  fix is the one named at the time: stdout's content now depends on whether
+  stdout is a terminal. That is confined to exactly one condition with four
+  exceptions, and every scripted use — pipe, redirect, `--output`, `--format
+  json`, CI — keeps the document it always had. `--verbose` brings it back,
+  `--quiet` goes further and drops the per-check rows too.
+- **The two vocabularies became one.** The stream said `PASS`/`FAIL`/`N/A` and
+  the report said `OK`/`WARNING`/`SKIPPED`, on the argument that a commentary
+  wants the verdict and a report wants the action. Both halves of that are true
+  and it does not matter: they appear in one session, so an operator who watches
+  `[ FAIL ]` scroll past and greps the report for "FAIL" finds nothing. The word
+  now comes from `statusToken` in both, which is the only arrangement in which
+  they cannot drift. Colour follows in every state but `SKIPPED`, cyan in the
+  stream and dim in the report — a row with no verdict recedes correctly on a
+  dense page and reads as a display failure in a scrolling list.
+
+What this leaves:
 - **The stream shows raw evaluation.** Profile scoping and suppression are
   applied to the slice afterwards, so a check the operator has formally accepted
   streams past as `FAIL` and then appears in the report as `SUPPRESSED`. The

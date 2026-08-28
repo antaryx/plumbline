@@ -2105,3 +2105,44 @@ func normaliseReport(s string) string {
 	}
 	return strings.Join(out, "\n")
 }
+
+// --verbose and --quiet ask for opposite things and the tool must say so rather
+// than picking one. The precedent is `--json --format sarif`.
+func TestVerboseAndQuietContradictEachOther(t *testing.T) {
+	code, _, stderr := run(t, "scan", "--root", hostFixture, "--verbose", "--quiet")
+	if code != cli.ExitUsage {
+		t.Errorf("exit %d, want %d", code, cli.ExitUsage)
+	}
+	if !strings.Contains(stderr, "contradict") {
+		t.Errorf("stderr does not explain the contradiction: %s", stderr)
+	}
+}
+
+// TestARedirectedRunStillCarriesTheWholeReport.
+//
+// The clean terminal must not become a quiet loss of output. Every run whose
+// stdout is not a terminal — a pipe, a redirect, a test buffer, CI — keeps the
+// full document, and this is the regression guard on that: a change that
+// withheld the report too eagerly would empty out every scripted use of the
+// tool at once.
+func TestARedirectedRunStillCarriesTheWholeReport(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	for _, args := range [][]string{
+		{"scan", "--root", hostFixture},
+		{"scan", "--root", hostFixture, "--quiet"},
+		{"scan", "--root", hostFixture, "--verbose"},
+	} {
+		t.Run(strings.Join(args[3:], " "), func(t *testing.T) {
+			code, stdout, stderr := run(t, args...)
+			if code != 0 {
+				t.Fatalf("exit %d\n%s", code, stderr)
+			}
+			for _, want := range []string{"[+] AUTH", "checks evaluated"} {
+				if !strings.Contains(stdout, want) {
+					t.Errorf("stdout has lost %q:\n%s", want, stdout)
+				}
+			}
+		})
+	}
+}

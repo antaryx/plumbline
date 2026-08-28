@@ -20,6 +20,8 @@ func newScanCmd(g *globals, stdout, stderr io.Writer) *cobra.Command {
 		root         string
 		saveBundle   string
 		redact       bool
+		verbose      bool
+		quiet        bool
 		timeout      time.Duration
 		perCollector time.Duration
 		out          outputFlags
@@ -47,6 +49,9 @@ re-evaluated or diffed; the two are not interchangeable.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			gt.bind(cmd)
+			if verbose && quiet {
+				return usageErrorf("--verbose and --quiet contradict each other; pass one of them")
+			}
 			failOn, err := parseFailOn(gt.failOn)
 			if err != nil {
 				return err
@@ -86,7 +91,7 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			// terminal that will not identify itself — and the spinner takes
 			// over on precisely those runs, which is the behaviour that was
 			// there before and is still right for them.
-			stream := streamPresenter(format, stderr, out.noColor)
+			stream := streamPresenter(format, stderr, out.noColor).Quiet(quiet)
 			opts := collectOptions{
 				redact: redact, profile: pf.name, perCollector: perCollector,
 			}
@@ -133,7 +138,15 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			if stream != nil {
 				stream.Phase("Evaluating the catalog")
 			}
-			return renderAndGate(got.bundle, failOn, gt, format, out, sup, prof, stream, stdout, stderr)
+
+			// The detailed report is withheld from a terminal that has just
+			// watched the scan happen. Everywhere else it is written exactly
+			// as before: to a pipe, to a file, to --output, and to anyone who
+			// asked for it with --verbose.
+			detail := reportDestination(verbose, stream, out, stdout)
+			stream.Hint(reportHint(detail, out.output))
+
+			return renderAndGate(got.bundle, failOn, gt, format, out, sup, prof, stream, detail, stdout, stderr)
 		},
 	}
 
@@ -141,6 +154,8 @@ re-evaluated or diffed; the two are not interchangeable.`,
 	f.StringVar(&root, "root", "", "scan root; paths are interpreted beneath it")
 	f.StringVar(&saveBundle, "save-bundle", "", "write the evidence bundle this scan used to PATH (e.g. host.plb); required for later eval/diff")
 	f.BoolVar(&redact, "redact", false, "omit hostname and non-loopback addresses at collection time")
+	f.BoolVarP(&verbose, "verbose", "v", false, "write the detailed report — evidence, remediation, cautions — to stdout as well as streaming the scan")
+	f.BoolVarP(&quiet, "quiet", "q", false, "stream no per-check rows; print only the closing tally")
 	f.DurationVar(&timeout, "timeout", 30*time.Minute, "whole-scan budget")
 	f.DurationVar(&perCollector, "collector-timeout", 2*time.Minute, "budget for one collector that declares none")
 	out.register(cmd)
@@ -192,4 +207,53 @@ type collectorEvents struct{ s *rendertext.Stream }
 
 func (c collectorEvents) CollectorDone(id string, status collect.CollectorStatus, took time.Duration) {
 	c.s.CollectorDone(id, string(status), took)
+}
+
+// reportDestination decides whether the detailed report is written at all.
+//
+// **This is the one place in the CLI where stdout's content depends on what
+// stdout is**, and it is a deliberate exception rather than an oversight. The
+// live stream already put every check on the terminal; following it with the
+// same checks again, grouped differently and trailed by every remediation the
+// catalog holds, buries the thing the operator was watching under several
+// hundred lines. A terminal that has seen the scan does not need the scan
+// again.
+//
+// Four cases keep the report, and between them they cover everything that is
+// not a person watching their own screen:
+//
+//   - --verbose. The operator asked for it in as many words.
+//   - No stream ran. A pipe, a CI log, --format json, PLUMBLINE_NO_PROGRESS:
+//     nothing narrated the scan, so the report is the only account of it and
+//     withholding it would produce a command that emits nothing at all.
+//   - --output was given. The operator named a file to keep, and a file they
+//     asked for is not a terminal they are watching.
+//   - stdout is not a terminal. Redirected or piped, which is somebody
+//     capturing an artifact — `plumbline scan > report.txt` still writes the
+//     full report to the file while the stream plays on the terminal, and that
+//     combination is the best of the two behaviours rather than a compromise.
+func reportDestination(verbose bool, live *rendertext.Stream, out outputFlags, stdout io.Writer) bool {
+	switch {
+	case verbose, live == nil, out.output != "":
+		return true
+	default:
+		return !system.IsTerminal(stdout)
+	}
+}
+
+// reportHint is the stream's closing line: where the detail went.
+//
+// A clean terminal is the point of this and it is also its one hazard — a
+// screen with no detail on it reads as a tool that had nothing to say. Every
+// path therefore ends with a sentence naming where the rest is, and the
+// withheld case names the flag that brings it back.
+func reportHint(wrote bool, output string) string {
+	switch {
+	case wrote && output != "":
+		return "the full report, with evidence and remediation, was written to " + output
+	case wrote:
+		return "the full report, with evidence and remediation, was written to stdout"
+	default:
+		return "run again with --verbose for evidence, remediation and cautions"
+	}
 }

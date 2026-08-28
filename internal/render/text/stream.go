@@ -84,12 +84,21 @@ type Stream struct {
 	// system.TerminalWidth for why this is not a SIGWINCH handler.
 	width func() (int, bool)
 
+	// quiet suppresses the per-row narration and keeps the closing tally. It
+	// is --quiet, and it is a property of the stream rather than a branch at
+	// each call site because the counters have to keep counting either way:
+	// the tally is of what was evaluated, not of what was printed.
+	quiet bool
+
 	// Tallies, for the closing line. Kept here rather than recomputed from the
 	// findings because the stream is a view of what it actually showed: if a
 	// check never reached the stream, it is not in the stream's count, and a
 	// discrepancy with the report is then visible rather than papered over.
 	counts map[finding.Result]int
 	failed []finding.Finding
+
+	// hint is the closing line telling the operator where the detail is.
+	hint string
 }
 
 // NewStream builds a stream writing to w.
@@ -102,6 +111,16 @@ func NewStream(w io.Writer, colour bool, width func() (int, bool)) *Stream {
 	return &Stream{w: w, colour: colour, width: width, counts: map[finding.Result]int{}}
 }
 
+// Quiet suppresses the per-row narration, leaving the closing tally. It returns
+// the stream so a caller can write NewStream(...).Quiet(flag).
+func (s *Stream) Quiet(quiet bool) *Stream {
+	if s == nil {
+		return nil
+	}
+	s.quiet = quiet
+	return s
+}
+
 // Phase announces a section of the scan. It is the only line in the stream
 // that is not a result.
 func (s *Stream) Phase(name string) {
@@ -110,6 +129,9 @@ func (s *Stream) Phase(name string) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.quiet {
+		return
+	}
 	fmt.Fprintf(s.w, "\n%s\n", s.paint(ansiBold, "[*] "+name))
 }
 
@@ -144,7 +166,7 @@ func (s *Stream) CheckDone(f finding.Finding) {
 	if s == nil {
 		return
 	}
-	token, colour := streamToken(f.Result)
+	token, colour := streamToken(f)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -212,10 +234,22 @@ func (s *Stream) Close(sc score.Score) {
 	}
 
 	// The stream said what it saw; the report says what it means. An operator
-	// who watched this go past needs to know the detail is below and not that
-	// this was the whole answer.
-	fmt.Fprintf(s.w, "\n%s\n",
-		s.paint(ansiDim, "    the full report, with evidence and remediation, follows on stdout"))
+	// looking at a screen with no detail on it has to be told where the detail
+	// went, or the clean terminal reads as a tool that found nothing to say.
+	if s.hint != "" {
+		fmt.Fprintf(s.w, "\n%s\n", s.paint(ansiDim, "    "+s.hint))
+	}
+}
+
+// Hint sets the closing line that says where the detail is. It is set by the
+// caller rather than chosen here because only the caller knows whether the
+// report was written to stdout, to a file, or withheld.
+func (s *Stream) Hint(hint string) *Stream {
+	if s == nil {
+		return nil
+	}
+	s.hint = hint
+	return s
 }
 
 // line writes one right-aligned row, in three segments: a fixed head, an
@@ -250,6 +284,9 @@ func (s *Stream) Close(sc score.Score) {
 // middle of the next line and destroys the column, which is the only thing this
 // layout is for.
 func (s *Stream) line(r row) {
+	if s.quiet {
+		return
+	}
 	columns := s.columns()
 
 	fixed := visibleWidth(rowPrefix) + visibleWidth(r.head) + visibleWidth(r.tail) + visibleWidth(rowEllipsis)
@@ -326,31 +363,29 @@ func (s *Stream) paint(seq, text string) string {
 // streamToken is the bracketed word a live result is shown as, and the colour
 // it is drawn in.
 //
-// **These are not the report's tokens and the difference is intentional.** The
-// report says `[ OK ]` and `[ WARNING ]`, because beside a finding with its
-// remediation underneath, the useful word is the one that says what to do. The
-// stream is a running commentary on evaluation, where the useful word is the
-// verdict itself — an operator watching wants to see PASS and FAIL go past, and
-// `N/A` is what a person calls a check that did not apply. Both vocabularies
-// are defensible for their own half; carrying one into the other would make
-// one of the two halves read wrong.
-func streamToken(r finding.Result) (string, string) {
-	switch r {
-	case finding.Pass:
-		return "[ PASS ]", ansiGreen
-	case finding.Fail:
-		return "[ FAIL ]", ansiRed
-	case finding.Unknown:
-		return "[ UNKNOWN ]", ansiYellow
-	case finding.NotApplicable:
-		return "[ N/A ]", ansiYellow
-	case finding.Skipped:
-		return "[ SKIPPED ]", ansiDim
-	default:
-		// A result from a newer catalog still gets a row rather than being
-		// dropped, which is the same rule statusToken follows.
-		return "[ " + string(r) + " ]", ansiDim
+// **The word comes from statusToken, which is the report's.** An earlier
+// version had its own vocabulary — PASS, FAIL, N/A — on the argument that a
+// running commentary wants the verdict while a report wants the action. That
+// was wrong in practice for one reason worth recording: the two appear in the
+// same session, and an operator who watches `[ FAIL ]` scroll past and then
+// greps the report for "FAIL" finds `[ WARNING ]` instead. One word per state,
+// produced in one place, is the only arrangement in which they cannot drift.
+//
+// The colour is the stream's own, and differs from the report in exactly one
+// state. The report dims NOT_APPLICABLE so that rows which carry no verdict do
+// not compete with the three that do — right for a dense grouped page. In a
+// scrolling stream the same rows read as failures of the display rather than as
+// answers, so they get cyan: visibly a category of its own, and visibly not a
+// warning.
+func streamToken(f finding.Finding) (string, string) {
+	return statusToken(f), streamColour(f)
+}
+
+func streamColour(f finding.Finding) string {
+	if f.Suppression == nil && f.Result == finding.NotApplicable {
+		return ansiCyan
 	}
+	return findingColor(f)
 }
 
 // collectorToken is the same for the collection half. The strings are
