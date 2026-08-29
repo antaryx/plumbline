@@ -398,26 +398,10 @@ func TestTheThreeOutputModes(t *testing.T) {
 	}
 }
 
-// TestStandardModeEndsWithinAScreenOfTheStream.
-//
-// The regression this whole change exists for. Whatever follows the last
-// streamed row has to be short enough that the row is still on an ordinary
-// terminal when the scan ends — otherwise the live output is theatre for
-// something nobody sees. Four lines: blank, result, counts, blank, hint.
-func TestStandardModeEndsWithinAScreenOfTheStream(t *testing.T) {
-	var buf bytes.Buffer
-	s := text.NewStream(&buf, false, fixedWidth(90))
-	for _, f := range sampleFindings() {
-		s.CheckDone(f)
-	}
-	s.Hint("Run again with --verbose for detailed evidence and remediation.")
-
-	before := len(strings.Split(buf.String(), "\n"))
-	s.Close(score.Compute(sampleFindings(), 33))
-	after := len(strings.Split(buf.String(), "\n"))
-
-	if tail := after - before; tail > 6 {
-		t.Errorf("the closing block is %d lines; it pushes the stream off a small terminal:\n%s",
-			tail, visible(buf.String()))
-	}
-}
+// The closing block's *length* is asserted end-to-end over a real terminal, in
+// internal/cli/pty_internal_test.go, rather than here. A version of that
+// assertion lived in this file and was worthless: it constructed a Stream, did
+// not call Tally, and concluded that standard mode prints no tally — which is a
+// fact about this type and says nothing about whether the scan command sets the
+// flag. The line that decides it, Tally(verbose), is in scan.go and was never
+// executed.

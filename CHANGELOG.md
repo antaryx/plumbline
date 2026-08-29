@@ -236,6 +236,22 @@ because of this release (VERSIONING §2.4).
   mode's hint is now one sentence — *Run again with --verbose for detailed
   evidence and remediation.*
 
+### Fixed
+- **The presentation layer is now tested where it is decided.** The mode tests
+  constructed a `text.Stream` directly, which proves what the renderer does with
+  a flag and nothing about whether the command sets it — `Tally(verbose)` is in
+  `scan.go` and no test executed it. The same gap covered `streamPresenter`'s
+  four conditions, `reportDestination` and the hint, because none of them is
+  reachable through a `bytes.Buffer`: a buffer is not a character device, so the
+  stream is never built for one.
+
+  `internal/cli/pty_internal_test.go` runs the real command over a real
+  pseudo-terminal — `/dev/ptmx`, both stdout and stderr on the slave, a drain
+  goroutine so a scan larger than the pty buffer cannot deadlock the test — and
+  asserts standard mode's tail against a closed list of the four lines it is
+  allowed. Mutating `Tally(verbose)` to `Tally(true)` leaves the old style of
+  test green and fails this one.
+
 - **`--verbose` on a terminal drops the report's scan phase.** The stream has
   just drawn the same hundred rows; the grouped per-module listing was them a
   second time. The header, fact errors, warnings and suggestions and the

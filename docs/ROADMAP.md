@@ -1149,6 +1149,30 @@ hint after the last streamed row**, and anything that grows with the number of
 findings belongs behind `--verbose`.
 `TestStandardModeEndsWithinAScreenOfTheStream` is that rule as a test.
 
+**The test that was supposed to hold that rule did not.** It constructed a
+`text.Stream`, did not call `Tally`, and asserted the closing block was short —
+which proves the *renderer* honours `tally=false` and says nothing at all about
+whether the scan command sets it. `Tally(verbose)` lives in `scan.go` and was
+never executed by the test. The same blind spot covered every mode decision,
+because they all live in the command: `streamPresenter`'s four conditions,
+`reportDestination`'s terminal test, the hint. **None of them is reachable
+through a `bytes.Buffer`**, because a buffer is not a character device and the
+stream is never built for one — so the entire presentation layer was being
+tested everywhere except where it was decided.
+
+The replacement drives the real cobra command over a real pseudo-terminal
+(`internal/cli/pty_internal_test.go`): `/dev/ptmx`, the three standard ioctls, a
+fixed 100-column window, both stdout and stderr pointed at the slave, and a
+drain goroutine because a pty buffer is smaller than a scan's output and a test
+that read at the end would deadlock rather than fail. Standard mode's tail is
+then asserted against a closed list of four permitted lines rather than a list
+of forbidden strings, because a forbidden list is one somebody has to remember
+to extend.
+
+Two mutations show it works where the old one did not. Changing `Tally(verbose)`
+to `Tally(true)` in `scan.go` leaves the component test green and fails the pty
+test; removing the `s.tally &&` gate in the renderer does the same.
+
 The rest of the settlement:
 
 - **The report is withheld from a terminal that watched the scan.** The stream
