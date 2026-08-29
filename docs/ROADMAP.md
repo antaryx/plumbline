@@ -1437,11 +1437,14 @@ effort and its caution. Eleven or twelve lines each. Thirty-six warnings on this
 host, and `scan --verbose` produced **1,501 lines**, of which the warnings
 section alone was **1,333**.
 
-It is now two lines a finding — 307 and 139:
+It is now a bullet and a hanging block of prose — 337 lines and 170:
 
 ```
-  - PAM does not accept an empty password [AUTH-0004]
-      Details: Remove nullok from every pam_unix.so auth rule, and check for …
+  - [HIGH]    PAM does not accept an empty password [AUTH-0004]
+      Details: Remove nullok from every pam_unix.so auth rule, and check for
+               accounts that were relying on it.
+  - [UNKNOWN] No setuid or setgid executable is writable by gr… [FILESYS-0001]
+      Details: source truncated
 ```
 
 **The argument is not that the detail was wrong; it is that the terminal was
@@ -1457,9 +1460,35 @@ reader something.
 The details line is the remedy, falling back to the subject, falling back for an
 `UNKNOWN` to why it could not be determined — spelled out (`ambiguous system
 state`) rather than left as the machine token, which the JSON keeps matching on.
-It is truncated rather than wrapped, because two lines is the property being
-kept and a remedy that reflowed to four would put this straight back where it
-came from.
+
+**The first cut of this truncated it at the grid, and that was wrong in a way
+worth recording.** The reasoning was that "two lines a finding" was the property
+being defended, so a remedy that reflowed to four would undo the change. It
+defended the wrong thing: the details line is the one sentence in the report
+that tells an operator what to type, and cutting it mid-clause left the half
+restating the problem and dropped the half naming the fix. A concise section
+nobody can act on is not an improvement on a long one nobody reads. It wraps,
+with a hanging indent to the column the value starts in, so a three-line remedy
+is still visibly one value belonging to one finding and the left edge of the
+prose is a straight line down the page. `TestALongRemedyWrapsAndIsNotCutOff`
+reassembles the wrapped lines and compares them against the original, so the
+claim under test is "nothing was lost", not "it wrapped somewhere".
+
+The wrap is to the report's fixed 78 columns and not to the terminal's, which is
+the same deliberate split the live stream documents from the other side: this is
+an artifact somebody diffs against last night's, and a report that reflowed to
+the window would produce a different file on a laptop and in CI.
+
+**Severity is back, as a padded coloured tag ahead of the title** — red for
+CRITICAL and HIGH, yellow for MEDIUM, blue for LOW, magenta for `[UNKNOWN]`,
+and INFO left unpainted because colouring every row is the same as colouring
+none. The tag is padded to the widest one in the section, measured across both
+blocks, so the titles hold a single column: a column that re-aligns itself
+between "Warnings" and "Could not determine" is two columns and the eye running
+down it stops. An `UNKNOWN` is tagged `UNKNOWN` rather than by its severity,
+which is this package's oldest argument compressed into one column — a check
+that could not be evaluated has established no degree of badness, and printing
+`[MEDIUM]` beside it would claim one.
 
 `evidence`, `remediation` and the `maxEvidence` cap were **deleted** rather than
 left unused. A dead printer in a file is a reader's reasonable belief that the
@@ -1472,12 +1501,12 @@ structure rather than by a list of forbidden field names — a list is something
 somebody has to remember to extend when a finding grows a field.
 
 What this leaves:
-- **Severity is no longer on the page.** The order still carries it — entries are
-  sorted most-severe-first — and `--verbose` prints the stream's own `! HIGH`
-  tally on stderr, but a report redirected to a file with `--output` no longer
-  says how bad anything is. A severity tag on the bullet
-  (`- [HIGH] title [ID]`) would restore it inside the two-line budget; it was
-  left out because the two-line form was specified without one.
+- **The entry height is no longer fixed.** Wrapping is the right call and it
+  gives up the one thing truncation bought: a section whose length can be
+  predicted from the number of findings. Thirty-six warnings are eighty-one
+  lines on this host and would be more on one with longer remedies. Nothing
+  depends on it today; it is written down because "two lines a finding" was a
+  property somebody could have built on.
 
 ---
 

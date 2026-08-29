@@ -276,7 +276,7 @@ func TestUnknownGetsTheSameWeightAsFail(t *testing.T) {
 	// mentions unknowns in a footnote.
 	body := sectionOf(t, out, "Warnings and suggestions")
 	for _, want := range []string{
-		"- Every uid resolves [FILESYS-0010]",
+		"- [UNKNOWN] Every uid resolves [FILESYS-0010]",
 		"Details: ambiguous system state",
 	} {
 		if !strings.Contains(body, want) {
@@ -288,7 +288,7 @@ func TestUnknownGetsTheSameWeightAsFail(t *testing.T) {
 	}
 }
 
-// TestAWarningIsTwoLinesAndNothingElse.
+// TestAWarningIsATitleAndAnAction.
 //
 // **The warnings list is an action list, and this is the whole of its
 // contract.** It used to print everything a finding held — severity, reason,
@@ -297,17 +297,18 @@ func TestUnknownGetsTheSameWeightAsFail(t *testing.T) {
 // findings on a real host, and a terminal holding five hundred lines of prose
 // that a reader looking for what to do next scrolls straight past.
 //
-// Two lines: which check, and what to do about it. Everything named in the
-// second loop below is still produced and still carried — by --json, by
+// A title and an action: which check, how bad, and what to do about it.
+// Everything named in the second loop below is still produced and still carried — by --json, by
 // --format sarif, and by docs/checks/<ID>.md — and none of it belongs on a
 // terminal.
-func TestAWarningIsTwoLinesAndNothingElse(t *testing.T) {
+func TestAWarningIsATitleAndAnAction(t *testing.T) {
 	out := render(t, sample(t))
 	body := sectionOf(t, out, "Warnings and suggestions")
 
 	for _, want := range []string{
 		"Warnings (1)",
-		"- Root may not log in over SSH [SSHD-0002]",
+		"- [HIGH]",
+		"Root may not log in over SSH [SSHD-0002]",
 		"      Details: Set PermitRootLogin no and reload sshd.",
 	} {
 		if !strings.Contains(body, want) {
@@ -331,14 +332,24 @@ func TestAWarningIsTwoLinesAndNothingElse(t *testing.T) {
 	}
 }
 
-// TestEveryWarningEntryIsExactlyTwoLines.
+// detailsIndent is the column the value on a Details line starts in, and
+// therefore the hanging indent every wrapped line after the first sits at. It
+// is duplicated from the renderer on purpose: a test that imported the constant
+// would agree with the code by construction and prove nothing about the layout.
+const detailsIndent = 15
+
+// TestAnEntryIsABulletAndItsDetailsBlock.
 //
 // The test above names the fields that must not appear; this one closes the
 // door on any field at all. Whatever a finding grows next, its entry in this
-// section is a bullet and one indented line — asserted by shape rather than by
-// a list of forbidden words, which is a list somebody has to remember to
-// extend.
-func TestEveryWarningEntryIsExactlyTwoLines(t *testing.T) {
+// section is a bullet and one hanging block of prose — asserted by shape rather
+// than by a list of forbidden words, which is a list somebody has to remember
+// to extend.
+//
+// The details block may be more than one line, and that is the point of the
+// hanging indent: a wrapped remedy is still visibly one value belonging to one
+// finding, and anything at any *other* indent is a field that has crept back in.
+func TestAnEntryIsABulletAndItsDetailsBlock(t *testing.T) {
 	body := sectionOf(t, render(t, sample(t)), "Warnings and suggestions")
 
 	entries := 0
@@ -358,20 +369,147 @@ func TestEveryWarningEntryIsExactlyTwoLines(t *testing.T) {
 		if next := lines[i+1]; !strings.HasPrefix(next, "      Details: ") {
 			t.Errorf("the line under %q is not its details line: %q", line, next)
 		}
-		// And the line after that closes the entry: another bullet, a blank, or
-		// the next block's heading. Anything else is a third line.
-		if i+2 < len(lines) {
-			switch third := lines[i+2]; {
-			case third == "",
-				strings.HasPrefix(third, "  - "),
-				strings.HasPrefix(third, "[=] "):
-			default:
-				t.Errorf("the entry %q runs to a third line: %q", line, third)
+
+		// Everything else up to the end of the entry is a continuation of that
+		// one value, at the hanging indent and nowhere else.
+		for j := i + 2; j < len(lines); j++ {
+			l := lines[j]
+			if l == "" || strings.HasPrefix(l, "  - ") || strings.HasPrefix(l, "[=] ") {
+				break
+			}
+			if !strings.HasPrefix(l, strings.Repeat(" ", detailsIndent)) ||
+				strings.HasPrefix(l, strings.Repeat(" ", detailsIndent+1)) {
+				t.Errorf("the entry %q carries a line that is not a details continuation: %q", line, l)
 			}
 		}
 	}
 	if entries != 2 {
 		t.Errorf("found %d entries in the warnings section, want 2 (one FAIL, one UNKNOWN):\n%s", entries, body)
+	}
+}
+
+// TestALongRemedyWrapsAndIsNotCutOff.
+//
+// **The first version of this section truncated the details line at the grid
+// and that made the section useless.** The one sentence in the report telling
+// an operator what to type was cut mid-clause, and the half that survived was
+// the half restating the problem. Nothing here may be lost to the layout.
+//
+// Three claims: the value wraps rather than ending in an ellipsis, every line
+// of it fits the grid, and the whole sentence is recoverable from the page.
+func TestALongRemedyWrapsAndIsNotCutOff(t *testing.T) {
+	const remedy = "Remove nullok and nullok_secure from every pam_unix.so auth rule " +
+		"in /etc/pam.d, then check for a distribution override in " +
+		"/usr/share/pam-configs and regenerate the stack with pam-auth-update."
+
+	in := sample(t)
+	for i := range in.Findings {
+		if in.Findings[i].Result == finding.Fail {
+			in.Findings[i].Remediation = &finding.Remediation{Summary: remedy}
+		}
+	}
+	body := sectionOf(t, render(t, in), "Warnings and suggestions")
+
+	var got []string
+	for _, l := range strings.Split(body, "\n") {
+		switch {
+		case strings.HasPrefix(l, "      Details: "):
+			got = append(got, strings.TrimPrefix(l, "      Details: "))
+		case strings.HasPrefix(l, strings.Repeat(" ", detailsIndent)) && len(got) > 0:
+			got = append(got, strings.TrimSpace(l))
+		default:
+			if len(got) > 0 {
+				goto done
+			}
+		}
+	}
+done:
+	if len(got) < 2 {
+		t.Fatalf("a %d-character remedy did not wrap: %q", len(remedy), got)
+	}
+	if joined := strings.Join(got, " "); joined != remedy {
+		t.Errorf("the remedy did not survive the layout.\n got: %q\nwant: %q", joined, remedy)
+	}
+	if strings.Contains(strings.Join(got, " "), "…") {
+		t.Error("the remedy is still being truncated")
+	}
+	for _, l := range strings.Split(body, "\n") {
+		if n := len([]rune(l)); n > 78 {
+			t.Errorf("a wrapped line is %d columns, over the 78-column grid: %q", n, l)
+		}
+	}
+}
+
+// TestTheSeverityTagIsColouredByImpact.
+//
+// The list is read by running an eye down the left edge, and the tag is what
+// that eye is for. An UNKNOWN is magenta rather than a shade of warning,
+// because it is not a mild failure — it is the absence of a verdict, and it
+// must not sit in the same colour as a check that was evaluated and failed.
+func TestTheSeverityTagIsColouredByImpact(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		mutate func(*finding.Finding)
+		tag    string
+		colour string
+	}{
+		{"critical", func(f *finding.Finding) { f.Severity = finding.Critical }, "[CRITICAL]", "\033[1;38;2;239;68;68m"},
+		{"high", func(f *finding.Finding) { f.Severity = finding.High }, "[HIGH]", "\033[1;38;2;239;68;68m"},
+		{"medium", func(f *finding.Finding) { f.Severity = finding.Medium }, "[MEDIUM]", "\033[1;38;2;245;158;11m"},
+		{"low", func(f *finding.Finding) { f.Severity = finding.Low }, "[LOW]", "\033[38;2;96;165;250m"},
+		{"unknown", func(f *finding.Finding) {
+			f.Result = finding.Unknown
+			f.UnknownReason = finding.ReasonPermission
+		}, "[UNKNOWN]", "\033[1;38;2;168;85;247m"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := sample(t)
+			in.Color = true
+			for i := range in.Findings {
+				if in.Findings[i].CheckID == "SSHD-0002" {
+					c.mutate(&in.Findings[i])
+				}
+			}
+			body := sectionOf(t, render(t, in), "Warnings and suggestions")
+			if want := c.colour + c.tag; !strings.Contains(body, want) {
+				t.Errorf("%s is not painted its own colour:\n%s", c.tag, body)
+			}
+		})
+	}
+}
+
+// TestTheTitleColumnHoldsAcrossBothBlocks.
+//
+// The tag is padded to the widest one in the section rather than to whatever
+// each entry happens to need, so the titles line up. A column that re-aligns
+// itself between "Warnings" and "Could not determine" is two columns, and the
+// eye that was running down it stops.
+func TestTheTitleColumnHoldsAcrossBothBlocks(t *testing.T) {
+	body := sectionOf(t, render(t, sample(t)), "Warnings and suggestions")
+
+	col := -1
+	for _, l := range strings.Split(body, "\n") {
+		if !strings.HasPrefix(l, "  - ") {
+			continue
+		}
+		i := strings.Index(l, "]")
+		if i < 0 {
+			t.Errorf("no severity tag on %q", l)
+			continue
+		}
+		// Past the tag and past the padding: where the title actually begins.
+		rest := l[i+1:]
+		start := i + 1 + len(rest) - len(strings.TrimLeft(rest, " "))
+		if col < 0 {
+			col = start
+			continue
+		}
+		if start != col {
+			t.Errorf("a title starts in column %d where the one above starts in %d: %q", start, col, l)
+		}
+	}
+	if col < 0 {
+		t.Fatalf("no entries in:\n%s", body)
 	}
 }
 

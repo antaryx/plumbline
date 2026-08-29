@@ -123,23 +123,46 @@ acts on is in the **suggestion phase** at the bottom, under
 ```
   Warnings (36)  ·  a check read the value and it does not meet the requirement
 
-  - PAM does not accept an empty password [AUTH-0004]
-      Details: Remove nullok from every pam_unix.so auth rule, and check for …
-  - No file is world-writable [FILESYS-0003]
-      Details: Remove the world-write bit, after establishing which account w…
+  - [HIGH]    PAM does not accept an empty password [AUTH-0004]
+      Details: Remove nullok from every pam_unix.so auth rule, and check for
+               accounts that were relying on it.
+  - [HIGH]    IPv6 router advertisements are refused in the sys… [KERNEL-0026]
+      Details: Write net.ipv6.conf.all.accept_ra = 0 and
+               net.ipv6.conf.default.accept_ra = 0 to a file in /etc/sysctl.d/
+               — but confirm this host does not use SLAAC first.
+
+  Could not determine (27)  ·  these are not passes
+
+  - [UNKNOWN] No setuid or setgid executable is writable by gr… [FILESYS-0001]
+      Details: source truncated
 ```
 
 | Line | Content |
 |---|---|
-| The bullet | The check's title and its ID in brackets. The title is truncated to fit the grid; the ID never is — it is what a suppression file matches on and what `plumbline explain` takes. The bullet is coloured by result. |
-| `Details:` | The remediation summary. Failing that the subject; failing that, for an `UNKNOWN`, why it could not be determined. Truncated rather than wrapped, because two lines is the property being kept. |
+| The tag | The severity, or `[UNKNOWN]` for a check that produced no verdict. Padded to the widest tag in the section so the titles hold one column across both blocks. |
+| The bullet | The check's title and its ID in brackets. The title is truncated to fit the grid; the ID never is — it is what a suppression file matches on and what `plumbline explain` takes. |
+| `Details:` | The remediation summary. Failing that the subject; failing that, for an `UNKNOWN`, why it could not be determined — spelled out (`source truncated`), not the machine token the JSON keeps. **Word-wrapped, never truncated**, with a hanging indent to the column the value starts in: this is the one sentence telling an operator what to type, and a version of this section that cut it at the grid was concise and useless. |
 
-**Nothing else is printed here**, and that is deliberate. Severity, the detail
-sentence, the evidence array with its sources and line numbers, the remediation
-effort and its caution are all produced and all retained — by `--format json`,
+Tag colours, which are what the eye runs down:
+
+| Tag | Colour |
+|---|---|
+| `[CRITICAL]`, `[HIGH]` | red |
+| `[MEDIUM]` | yellow |
+| `[LOW]` | blue |
+| `[UNKNOWN]` | magenta |
+| `[INFO]` | unpainted — colouring every row is the same as colouring none |
+
+`[UNKNOWN]` is deliberately not a shade of warning. A check that could not be
+evaluated is not a mild failure; it is the absence of a verdict, and it must not
+sit in the same colour as one that was evaluated and failed.
+
+**Nothing else is printed here**, and that is deliberate. The detail sentence,
+the evidence array with its sources and line numbers, the remediation effort and
+its caution are all produced and all retained — by `--format json`,
 by `--format sarif`, and by `docs/checks/<ID>.md`, which carries the full
 remediation including its steps and commands. On a real host the same section
-was 1,333 lines before this and is 139 now. A document nobody reads is not a
+was 1,333 lines before this and is 170 now. A document nobody reads is not a
 safety feature however complete it is; the terminal is the one output where
 being exhaustive costs the reader something.
 

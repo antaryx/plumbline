@@ -86,6 +86,11 @@ const (
 	ansiGreen  = "\033[1;38;2;34;197;94m"  // #22C55E
 	ansiYellow = "\033[1;38;2;245;158;11m" // #F59E0B
 	ansiCyan   = "\033[38;2;96;165;250m"   // #60A5FA
+	// Magenta is the UNKNOWN tag's colour and nothing else's. It has to be
+	// visibly not-red and visibly not-yellow, because the whole argument of
+	// this package is that "the scan could not tell" is a third thing and not a
+	// mild failure.
+	ansiMagenta = "\033[1;38;2;168;85;247m" // #A855F7
 )
 
 // Tool identifies the binary that produced the report.
@@ -585,7 +590,18 @@ func (p *printer) warningsAndSuggestions(findings []finding.Finding) {
 		return
 	}
 
+	// An extra blank above the heading. On a terminal `scan --verbose` this
+	// section is the first thing the report prints — the scan phase is
+	// suppressed, because the live stream already drew it — so without this it
+	// lands hard against the stream's closing Result block on the same screen,
+	// and the two read as one paragraph. The section rule below the heading
+	// separates it from what follows; this separates it from what came before,
+	// which in that one mode was written by something else entirely.
+	p.blank()
 	p.section("Warnings and suggestions")
+
+	// One tag column across both blocks. See severityTagWidth.
+	tagWidth := severityTagWidth(fails, unknowns)
 
 	if len(fails) > 0 {
 		sortBySeverityThenID(fails)
@@ -594,11 +610,11 @@ func (p *printer) warningsAndSuggestions(findings []finding.Finding) {
 			p.paint(ansiDim, "  ·  a check read the value and it does not meet the requirement"))
 		p.blank()
 		// Entries run together with no blank between them. That is the point of
-		// two lines each: forty findings are eighty lines an operator can run
-		// their eye down, and a blank line between every pair would make it a
-		// hundred and twenty they have to scroll.
+		// the short form: forty findings are eighty-odd lines an operator can
+		// run their eye down, and a blank line between every pair would make it
+		// a hundred and twenty they have to scroll.
 		for _, f := range fails {
-			p.entry(f)
+			p.entry(f, tagWidth)
 		}
 	}
 
@@ -611,7 +627,7 @@ func (p *printer) warningsAndSuggestions(findings []finding.Finding) {
 		p.line("  " + p.paint(ansiDim, "could not. Treat them as findings until they are resolved."))
 		p.blank()
 		for _, f := range unknowns {
-			p.entry(f)
+			p.entry(f, tagWidth)
 		}
 	}
 }
@@ -691,30 +707,121 @@ func (p *printer) accepted(findings []finding.Finding) {
 // field a suppression file matches on and the one an operator pastes into
 // `plumbline explain`. It is never truncated: the title absorbs the whole
 // shortfall.
-func (p *printer) entry(f finding.Finding) {
+func (p *printer) entry(f finding.Finding, tagWidth int) {
 	id := "[" + f.CheckID + "]"
-	title := truncate(cell(f.Title), reportWidth-4-1-visibleWidth(id))
+	tag := severityTag(f)
+	title := truncate(cell(f.Title), reportWidth-4-tagWidth-1-1-visibleWidth(id))
 
-	// The bullet is coloured by result, so the two blocks in this section stay
-	// distinguishable when they are read together. The title carries the
-	// emphasis and the ID beside it is dimmed out of its way: an operator reads
-	// the sentence, then copies the ID.
+	// The tag is padded by hand rather than by tabwriter, and to a width
+	// measured across the whole section rather than to a constant. Padding to
+	// the longest tag that *exists* keeps the titles in one column without
+	// charging every report the four columns `[CRITICAL]` would cost when
+	// nothing on the host is critical — the same rule, and the same reason, as
+	// statusWidth in the scan phase.
+	//
+	// The bullet is coloured by result so the two blocks in this section stay
+	// distinguishable when read together. The title carries the emphasis; the
+	// ID beside it is dimmed out of its way, because an operator reads the
+	// sentence and then copies the ID.
 	p.line("  " + p.paint(resultColor(f.Result), "-") + " " +
+		p.paint(severityColour(f), pad(tag, tagWidth)) + " " +
 		p.paint(ansiBold, title) + " " + p.paint(ansiDim, id))
 
-	if d := detailsFor(f); d != "" {
-		// Truncated rather than wrapped, because "two lines" is the property
-		// being kept and a remedy that reflowed to four would put this straight
-		// back where it came from. The full text is in --json and in
-		// docs/checks/<ID>.md, which the closing line of the report points at.
-		p.line(spaces(6) + p.paint(ansiDim, detailsLabel) +
-			truncate(cell(d), reportWidth-6-len(detailsLabel)))
+	p.details(detailsFor(f))
+}
+
+// details writes the second half of an entry, wrapped to the grid with a
+// hanging indent.
+//
+// **It wraps rather than truncates, and the first version of this truncated.**
+// The line carries the remediation summary, which is the one sentence in the
+// report telling an operator what to type — cutting it at the grid and leaving
+// an ellipsis produced a list that was concise and useless, because the half a
+// sentence that survived was the half naming the problem rather than the fix.
+//
+// The continuation lines are indented to the column the value starts in rather
+// than to the bullet, so a remedy that runs to three lines still reads as one
+// block hanging off one finding, and the left edge of the prose is a straight
+// line down the page.
+//
+//   - [HIGH] PAM does not accept an empty password [AUTH-0004]
+//     Details: Remove nullok from every pam_unix.so auth rule, and check
+//     for a distribution override in /usr/share/pam-configs.
+//
+// The width is the report's fixed 78 and not the terminal's. That is the same
+// deliberate difference the live stream documents from the other side: this is
+// an artifact somebody diffs against last night's, and a report that reflowed
+// to the window would produce a different file on a laptop and in CI. The live
+// stream is the half that follows the terminal, because it is gone as soon as
+// the screen scrolls.
+func (p *printer) details(text string) {
+	for i, l := range wrap(text, reportWidth-detailsIndent) {
+		if i == 0 {
+			p.line(spaces(detailsIndent-len(detailsLabel)) + p.paint(ansiDim, detailsLabel) + l)
+			continue
+		}
+		p.line(spaces(detailsIndent) + l)
 	}
 }
 
-// detailsLabel is the one label this section prints, and its width is what the
-// details line is truncated against.
-const detailsLabel = "Details: "
+const (
+	// detailsLabel is the one label this section prints.
+	detailsLabel = "Details: "
+	// detailsIndent is the column the value starts in, and therefore the
+	// hanging indent every line after the first is set to.
+	detailsIndent = 6 + len(detailsLabel)
+)
+
+// severityTag is the bracketed word at the head of an entry.
+//
+// **An UNKNOWN is tagged UNKNOWN and not by its severity**, which is the whole
+// of this package's oldest argument compressed into one column. A check that
+// could not be evaluated has no verdict about the host, so printing `[MEDIUM]`
+// beside it would state a degree of badness the scan never established — and
+// would put it in the same column, in the same colour, as a check that was
+// evaluated and failed.
+func severityTag(f finding.Finding) string {
+	if f.Result == finding.Unknown {
+		return "[UNKNOWN]"
+	}
+	return "[" + strings.ToUpper(string(f.Severity)) + "]"
+}
+
+// severityColour guides the eye down the list to what is worth reading first.
+//
+// INFO is left unpainted deliberately. Colouring every row is the same as
+// colouring none, and the tag still carries the word.
+func severityColour(f finding.Finding) string {
+	if f.Result == finding.Unknown {
+		return ansiMagenta
+	}
+	switch f.Severity {
+	case finding.Critical, finding.High:
+		return ansiRed
+	case finding.Medium:
+		return ansiYellow
+	case finding.Low:
+		return ansiCyan
+	default:
+		return ""
+	}
+}
+
+// severityTagWidth is the widest tag in the section, so that every title starts
+// in the same column. Measured across both blocks rather than per block: a
+// column that re-aligns itself between "Warnings" and "Could not determine" is
+// two columns.
+func severityTagWidth(groups ...[]finding.Finding) int {
+	w := 0
+	for _, g := range groups {
+		for _, f := range g {
+			if n := visibleWidth(severityTag(f)); n > w {
+				w = n
+			}
+		}
+	}
+	return w
+}
 
 // detailsFor is the single sentence a finding gets, in the order of what a
 // reader can act on.

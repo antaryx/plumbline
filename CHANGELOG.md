@@ -303,24 +303,38 @@ because of this release (VERSIONING §2.4).
   next scrolls straight past.
 
   ```
-    - PAM does not accept an empty password [AUTH-0004]
-        Details: Remove nullok from every pam_unix.so auth rule, and check for …
-    - No file is world-writable [FILESYS-0003]
-        Details: Remove the world-write bit, after establishing which account w…
+    - [HIGH]    PAM does not accept an empty password [AUTH-0004]
+        Details: Remove nullok from every pam_unix.so auth rule, and check for
+                 accounts that were relying on it.
+    - [UNKNOWN] No setuid or setgid executable is writable by gr… [FILESYS-0001]
+        Details: source truncated
   ```
 
-  The bullet carries the title and the ID; the title is truncated to the grid
-  and the ID never is. `Details:` is the remediation summary, falling back to
-  the subject, and for an `UNKNOWN` to why it could not be determined — spelled
-  out (`ambiguous system state`) rather than left as the machine token the JSON
-  keeps. It is truncated rather than wrapped, because two lines is the property
-  being kept.
+  A padded severity tag, then the title, then the ID. The title is truncated to
+  the grid and the ID never is. The tag is red for `CRITICAL`/`HIGH`, yellow for
+  `MEDIUM`, blue for `LOW`, magenta for `[UNKNOWN]`, and unpainted for `INFO`;
+  it is padded to the widest tag in the section, measured across both blocks, so
+  the titles hold one column. **An `UNKNOWN` is tagged `UNKNOWN` rather than by
+  its severity** — a check that could not be evaluated has established no degree
+  of badness, and `[MEDIUM]` beside it would claim one.
+
+  `Details:` is the remediation summary, falling back to the subject, and for an
+  `UNKNOWN` to why it could not be determined — spelled out (`source truncated`)
+  rather than left as the machine token the JSON keeps. It is **word-wrapped
+  with a hanging indent** to the column the value starts in, never truncated:
+  this is the one sentence in the report telling an operator what to type.
 
   **Nothing was dropped, only moved off the terminal.** `--format json` and
   `--format sarif` carry every field including the whole evidence array, and
   `docs/checks/<ID>.md` carries the full remediation with its steps and
-  commands. On this host `scan --verbose` went from **1,501 lines to 307**, and
-  the warnings section itself from **1,333 to 139**.
+  commands. On this host `scan --verbose` went from **1,501 lines to 337**, and
+  the warnings section itself from **1,333 to 170**.
+
+  An extra blank line now sits above the `[=] Warnings and suggestions` heading.
+  On a terminal `scan --verbose` this section is the first thing the report
+  prints — the scan phase is suppressed because the live stream already drew it
+  — so it landed hard against the stream's closing `[*] Result` block and the
+  two read as one paragraph.
 
   `evidence`, `remediation` and the `maxEvidence` cap were deleted from the text
   renderer rather than left unused, so the next reader of that file is not left
