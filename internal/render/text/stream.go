@@ -63,6 +63,34 @@ const (
 	streamFallbackWidth = 80
 )
 
+// DefaultPace is how long a row's title sits alone on the terminal before its
+// verdict lands beside it.
+//
+// **This is a deliberate delay in a security tool and it deserves a straight
+// explanation rather than a shrug.** The catalog evaluates 109 checks in about
+// 1.3 ms. Printed at that speed the stream is not a stream: it is a wall of
+// text that is already complete before the eye has fixed on anything, and an
+// operator learns nothing from watching it that the closing two lines would not
+// have told them faster. A row-by-row display is only worth having if a row can
+// be read while it is on screen, and that is a property of the display, not of
+// the work.
+//
+// 150 ms is where this settled. Below roughly 80 ms the column of brackets
+// reads as flicker rather than as a sequence; above roughly 250 ms the wait
+// stops feeling like a scan and starts feeling like a progress bar somebody
+// forgot to finish. At 150 ms a hundred and twenty-odd rows — thirteen
+// collectors and a hundred and nine checks on this host — take a little over
+// eighteen seconds, which is the right order of magnitude for something calling
+// itself an audit and short enough to sit through.
+//
+// **It is presentation and it is never mistaken for work.** Nothing is measured
+// through it and nothing waits behind it: the pace is paid by the drawing
+// goroutine, after the engine has already finished and moved on (see emit). It
+// is charged only where a person is watching — a pipe, a redirect, a CI log and
+// --quiet all skip the rows entirely and skip the delay with them — and
+// `--pace 0` removes it for anybody who wants the answer rather than the show.
+const DefaultPace = 150 * time.Millisecond
+
 // Stream draws a scan as it happens: one line per collector and one per check,
 // each with its verdict flush against the right edge of the terminal.
 //
@@ -71,9 +99,15 @@ const (
 // scan and an operator watching wants one column of brackets, not two
 // unrelated displays. The two are called from different concurrency regimes:
 // checks come from one goroutine in deterministic order, collectors from
-// several at once in whatever order they finish. **Every method takes the
-// mutex**, so the interleaving is safe and no line is ever half-written by one
-// goroutine and finished by another.
+// several at once in whatever order they finish. Neither writes anything: both
+// queue, under the mutex, and a single goroutine draws. That is what makes the
+// interleaving safe — no line can be half-written by one goroutine and finished
+// by another, because only one goroutine ever writes.
+//
+// **Nothing on the caller's side ever writes to the terminal.** Every method
+// here queues an event and returns; one goroutine owns the writer and draws
+// them in order, which is what lets a row be paced without the pace landing on
+// whoever produced it. See emit.
 type Stream struct {
 	mu     sync.Mutex
 	w      io.Writer
@@ -98,6 +132,34 @@ type Stream struct {
 	quiet bool
 	tally bool
 
+	// pace is the delay between the two halves of a row. See DefaultPace.
+	pace time.Duration
+
+	// The queue, and the single goroutine that empties it.
+	//
+	// **It is an unbounded slice and not a buffered channel, deliberately.** A
+	// channel blocks its sender once its capacity is reached, and at 150 ms a
+	// row the queue reaches the whole catalog's depth within a millisecond of
+	// evaluation starting — so any capacity small enough to be worth writing
+	// down would hand the delay straight back to the engine, which is the one
+	// thing this structure exists to prevent. A capacity larger than the
+	// catalog is a number somebody has to remember every time a check is added.
+	// Unbounded has neither problem, and the bound that actually matters is
+	// arithmetic rather than a constant: one event per collector, one per
+	// check, both known and both small.
+	//
+	// work wakes the drawing goroutine when something is queued or when it is
+	// told to stop; idle wakes Await when a row has finished being drawn.
+	pending  []event
+	queued   int
+	drawn    int
+	running  bool
+	stopped  bool
+	halt     chan struct{}
+	finished chan struct{}
+	work     *sync.Cond
+	idle     *sync.Cond
+
 	// Tallies, for the closing line. Kept here rather than recomputed from the
 	// findings because the stream is a view of what it actually showed: if a
 	// check never reached the stream, it is not in the stream's count, and a
@@ -116,7 +178,40 @@ type Stream struct {
 // keeps its promise not to touch the OS. A nil width function means
 // streamFallbackWidth.
 func NewStream(w io.Writer, colour bool, width func() (int, bool)) *Stream {
-	return &Stream{w: w, colour: colour, width: width, counts: map[finding.Result]int{}}
+	s := &Stream{
+		w: w, colour: colour, width: width,
+		counts: map[finding.Result]int{},
+		halt:   make(chan struct{}),
+	}
+	s.work = sync.NewCond(&s.mu)
+	s.idle = sync.NewCond(&s.mu)
+	return s
+}
+
+// event is one thing the drawing goroutine has to put on the screen: a section
+// header, or a row.
+//
+// The pace travels with the event rather than being read when the event is
+// drawn, so that the field is written and read under the same lock and a scan
+// cannot appear to change speed halfway down the screen.
+type event struct {
+	phase string
+	row   row
+	pace  time.Duration
+}
+
+// Pace sets the delay between a row's title and its verdict; zero draws as fast
+// as the scan runs. It returns the stream so a caller can chain it, and belongs
+// at construction — an event already queued carries the pace it was queued
+// with.
+func (s *Stream) Pace(d time.Duration) *Stream {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pace = d
+	return s
 }
 
 // Quiet suppresses the per-row narration, leaving the closing block. It returns
@@ -147,16 +242,15 @@ func (s *Stream) Tally(tally bool) *Stream {
 
 // Phase announces a section of the scan. It is the only line in the stream
 // that is not a result.
+//
+// It goes through the queue like everything else, which is the only way it can
+// stay above the rows it introduces: a header written directly would appear
+// while the previous phase was still being drawn.
 func (s *Stream) Phase(name string) {
 	if s == nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.quiet {
-		return
-	}
-	fmt.Fprintf(s.w, "\n%s\n", s.paint(ansiBold, "[*] "+name))
+	s.emit(event{phase: name})
 }
 
 // CollectorDone implements collect.Observer. It is called from the collector
@@ -176,12 +270,10 @@ func (s *Stream) CollectorDone(id string, status string, took time.Duration) {
 		label = fmt.Sprintf(" (%ds)", int(took.Seconds()))
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.line(row{
+	s.emit(event{row: row{
 		head: "Collecting ", middle: id, tail: label,
 		compact: id, token: token, colour: colour,
-	})
+	}})
 }
 
 // CheckDone implements catalog.Observer. It is called from the evaluating
@@ -192,21 +284,158 @@ func (s *Stream) CheckDone(f finding.Finding) {
 	}
 	token, colour := streamToken(f)
 
+	// Counted here rather than in the drawing goroutine, because the closing
+	// block is a tally of what was evaluated and has to be right even when the
+	// rows were never drawn — --quiet, or a stream stopped by a Ctrl-C.
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.counts[f.Result]++
 	if f.Result == finding.Fail {
 		s.failed = append(s.failed, f)
 	}
+	s.mu.Unlock()
+
 	// The title is the elastic part and the ID is not. A narrow terminal
 	// shortens the sentence; it never shortens the identifier, because the ID
 	// is what a suppression file matches on and what an operator types into
 	// `plumbline explain`. A row that has lost its ID has lost the only part
 	// of itself anybody can act on.
-	s.line(row{
+	s.emit(event{row: row{
 		head: "Checking ", middle: f.Title, tail: " (" + f.CheckID + ")",
 		compact: f.CheckID, token: token, colour: colour,
-	})
+	}})
+}
+
+// emit queues one event and returns.
+//
+// **This is the method the whole asynchronous shape exists for.** It is called
+// from the evaluating goroutine a hundred and nine times in about a
+// millisecond, and from thirteen collector goroutines at once while they are
+// doing real I/O. If drawing happened here, the pace would be charged to those
+// callers: the engine would take eighteen seconds instead of 1.3 ms, a
+// collector would sit in a sleep instead of reading the next file, and a
+// timing figure the report prints would be measuring the display. So the cost
+// of a row is an append under a mutex, and the display runs behind.
+//
+// The goroutine is started on the first event rather than in NewStream, so a
+// stream that is constructed and never used — quiet mode, a test — costs
+// nothing and has nothing to shut down.
+func (s *Stream) emit(ev event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.quiet || s.stopped {
+		return
+	}
+	if !s.running {
+		s.running = true
+		s.finished = make(chan struct{})
+		go s.drain()
+	}
+	ev.pace = s.pace
+	s.pending = append(s.pending, ev)
+	s.queued++
+	s.work.Signal()
+}
+
+// drain is the drawing goroutine: the only thing in this package that writes to
+// the stream's terminal, and the only thing that ever waits for the pace.
+func (s *Stream) drain() {
+	defer close(s.finished)
+	for {
+		ev, ok := s.next()
+		if !ok {
+			return
+		}
+		if ev.phase != "" {
+			fmt.Fprintf(s.w, "\n%s\n", s.paint(ansiBold, "[*] "+ev.phase))
+		} else {
+			s.draw(ev.row, ev.pace)
+		}
+
+		s.mu.Lock()
+		s.drawn++
+		s.idle.Broadcast()
+		s.mu.Unlock()
+	}
+}
+
+// next takes the head of the queue, waiting if it is empty. ok is false when
+// the stream has been stopped and there is nothing more to draw.
+func (s *Stream) next() (event, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for len(s.pending) == 0 && !s.stopped {
+		s.work.Wait()
+	}
+	if s.stopped {
+		return event{}, false
+	}
+	ev := s.pending[0]
+	s.pending = s.pending[1:]
+	return ev, true
+}
+
+// Await blocks until every event queued so far has reached the screen.
+//
+// **It is what keeps stderr in one order.** A scan writes two other kinds of
+// line to the same descriptor — `bundle saved to ...` and the suppression
+// notes — and with the drawing on its own goroutine those would otherwise land
+// in the middle of the stream, several rows above where they belong. Calling
+// this immediately before them costs whatever is left of the queue and buys a
+// terminal that reads top to bottom.
+func (s *Stream) Await() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for s.drawn < s.queued && !s.stopped {
+		s.idle.Wait()
+	}
+}
+
+// Stop ends the drawing goroutine, discards whatever is still queued, and
+// returns once it has gone.
+//
+// **It exists for the interrupt.** With a pace the display outlives the work by
+// a long way — a hundred and twenty rows at 150 ms is eighteen seconds during
+// which the scan itself is already over — and a Ctrl-C inside that window has
+// to be felt now rather than at the end of a display nobody is watching any
+// more. The row being drawn finishes its line first, so the terminal is never
+// left holding half of one.
+//
+// It is idempotent, safe on a stream that never started, and safe after Close.
+func (s *Stream) Stop() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	if !s.stopped {
+		s.stopped = true
+		s.pending = nil
+		close(s.halt)
+		s.work.Broadcast()
+		s.idle.Broadcast()
+	}
+	done := s.finished
+	s.mu.Unlock()
+
+	// Outside the lock: the goroutine needs it to finish the line it is on.
+	if done != nil {
+		<-done
+	}
+}
+
+// nap is the pace, cut short by Stop.
+func (s *Stream) nap(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+	case <-s.halt:
+	}
 }
 
 // Close writes the stream's own tally: what it just showed, and what failed.
@@ -220,6 +449,15 @@ func (s *Stream) Close(sc score.Score) {
 	if s == nil {
 		return
 	}
+	// Two steps, and both are needed. Await puts every queued row on the screen
+	// before the closing block, which is the order an operator reads. Stop then
+	// retires the drawing goroutine, so that the writes below are the only
+	// writes: handing one terminal to two goroutines is the single failure this
+	// layout cannot survive, and "the queue is empty" is not the same claim as
+	// "nobody else is writing".
+	s.Await()
+	s.Stop()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -276,8 +514,27 @@ func (s *Stream) Hint(hint string) *Stream {
 	return s
 }
 
-// line writes one right-aligned row, in three segments: a fixed head, an
-// elastic middle that may be shortened, and a fixed tail.
+// draw writes one right-aligned row, in two halves with the pace between them.
+//
+// **The split is the whole effect.** The left half goes out without a newline,
+// so the terminal is left holding `[+] Checking a thing (X-0001)...` with the
+// cursor sitting after it; the verdict then arrives beside it a beat later and
+// reads as an answer to a question, rather than as text that was always there.
+// Printing the assembled line in one call and sleeping afterwards would take
+// exactly as long and show nothing.
+//
+// The layout is computed before the pause, not after, so a window dragged
+// during the delay cannot leave the two halves of one line measured against two
+// different widths. See layout.
+func (s *Stream) draw(r row, pace time.Duration) {
+	left, gap := s.layout(r)
+	fmt.Fprint(s.w, left)
+	s.nap(pace)
+	fmt.Fprintf(s.w, "%s%s\n", spaces(gap), s.paint(r.colour, r.token))
+}
+
+// layout places one row against the terminal, in three segments: a fixed head,
+// an elastic middle that may be shortened, and a fixed tail.
 //
 // The arithmetic is the whole of the alignment and it is four terms:
 //
@@ -307,10 +564,7 @@ func (s *Stream) Hint(hint string) *Stream {
 // Truncation is preferred to wrapping: a wrapped row puts the bracket under the
 // middle of the next line and destroys the column, which is the only thing this
 // layout is for.
-func (s *Stream) line(r row) {
-	if s.quiet {
-		return
-	}
+func (s *Stream) layout(r row) (string, int) {
 	columns := s.columns()
 
 	fixed := visibleWidth(rowPrefix) + visibleWidth(r.head) + visibleWidth(r.tail) + visibleWidth(rowEllipsis)
@@ -332,7 +586,7 @@ func (s *Stream) line(r row) {
 		// beside no verdict at all is a row that has lost its point.
 		gap = 1
 	}
-	fmt.Fprintf(s.w, "%s%s%s\n", left, spaces(gap), s.paint(r.colour, r.token))
+	return left, gap
 }
 
 // row is one line of the stream, in the segments the layout treats differently.

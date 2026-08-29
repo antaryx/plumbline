@@ -137,6 +137,12 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 	// See suppress.Apply.
 	applied := sup.Apply(findings, b.Manifest.Scan.Started)
 	findings = applied.Findings
+
+	// The suppression notes go to the same stderr the stream is being drawn on,
+	// and the stream is now several rows behind the evaluation that produced
+	// them. Await puts the rows on the screen first, so the notes appear below
+	// the checks they are about rather than somewhere in the middle of them.
+	live.Await()
 	reportSuppressions(stderr, applied)
 
 	sc := score.Compute(findings, version.Catalog())

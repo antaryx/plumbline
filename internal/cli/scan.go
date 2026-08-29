@@ -22,6 +22,7 @@ func newScanCmd(g *globals, stdout, stderr io.Writer) *cobra.Command {
 		redact       bool
 		verbose      bool
 		quiet        bool
+		pace         time.Duration
 		timeout      time.Duration
 		perCollector time.Duration
 		out          outputFlags
@@ -97,7 +98,24 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			// report on stdout.
 			stream := streamPresenter(format, stderr, out.noColor).
 				Quiet(quiet).
-				Tally(verbose)
+				Tally(verbose).
+				Pace(pace)
+
+			// **The display outlives the work, and that is what this is for.**
+			// A paced stream runs for a quarter of a minute after the scan
+			// itself is over, and a Ctrl-C inside that window would otherwise
+			// cancel a context nothing is left waiting on while the operator
+			// watches the rest of a scan they already stopped. The deferred
+			// Stop covers the other half — every early return below leaves by
+			// it, so no drawing goroutine outlives the command.
+			if stream != nil {
+				defer stream.Stop()
+				go func() {
+					<-ctx.Done()
+					stream.Stop()
+				}()
+			}
+
 			opts := collectOptions{
 				redact: redact, profile: pf.name, perCollector: perCollector,
 			}
@@ -131,6 +149,11 @@ re-evaluated or diffed; the two are not interchangeable.`,
 				if err := writeBundle(saveBundle, got.bundle); err != nil {
 					return exitError{code: ExitInternal, message: err.Error()}
 				}
+				// The stream and this line share a descriptor, and the stream
+				// is now drawn by a goroutine that is still several rows behind
+				// the collection it is narrating. Without this the note lands
+				// in the middle of the collectors it comes after.
+				stream.Await()
 				fmt.Fprintf(stderr, "bundle saved to %s\n", saveBundle)
 			}
 
@@ -162,6 +185,7 @@ re-evaluated or diffed; the two are not interchangeable.`,
 	f.BoolVar(&redact, "redact", false, "omit hostname and non-loopback addresses at collection time")
 	f.BoolVarP(&verbose, "verbose", "v", false, "add the failure tally and the detailed report — evidence, remediation, cautions")
 	f.BoolVarP(&quiet, "quiet", "q", false, "stream no rows; print only the closing result block")
+	f.DurationVar(&pace, "pace", rendertext.DefaultPace, "hold each streamed row on screen this long before its verdict lands; 0 draws as fast as the scan runs")
 	f.DurationVar(&timeout, "timeout", 30*time.Minute, "whole-scan budget")
 	f.DurationVar(&perCollector, "collector-timeout", 2*time.Minute, "budget for one collector that declares none")
 	out.register(cmd)

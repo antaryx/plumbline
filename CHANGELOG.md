@@ -295,6 +295,55 @@ because of this release (VERSIONING §2.4).
   scrolling list.
 
 ### Added
+- **A paced stream: `--pace`, default `150ms`.** Each streamed row is now drawn
+  in two halves — the title and its ellipsis, a pause, then the verdict landing
+  flush right — instead of arriving complete. The catalog evaluates 109 checks
+  in about 1.3 ms, so an unpaced stream is not a stream: it is a wall of text
+  finished before the eye has fixed on anything, which is exactly what it was.
+  At 150 ms a row, a hundred and twenty-odd rows take a little over eighteen
+  seconds.
+
+  **The delay is charged to the display and never to the engine.** Every method
+  on `Stream` now *queues* an event and returns; one goroutine owns the terminal
+  and does all the waiting. Evaluation still takes 1.3 ms, and the collector
+  goroutines — thirteen of them, doing real I/O — keep reading the host instead
+  of sitting in a sleep. The queue is an unbounded slice rather than a buffered
+  channel because a channel's capacity is a number that would have to exceed the
+  catalog, and any capacity smaller would hand the delay straight back to the
+  producer.
+
+  `--pace 0` removes it. So does everything that draws no rows: a pipe, a
+  redirect, `--format json`, CI, `PLUMBLINE_NO_PROGRESS`, and `--quiet`.
+
+  Three things came with it, because asynchronous drawing breaks three things
+  that synchronous drawing did not:
+
+  - **`Stream.Await`.** `bundle saved to ...` and the suppression notes go to
+    the same stderr, and would otherwise land several rows above where they
+    belong. Both now wait for the queue first.
+  - **`Stream.Stop`, wired to the scan's context.** A Ctrl-C inside an
+    eighteen-second display has to be felt now, not at the end of a display
+    nobody is watching. The first press abandons the queue within milliseconds
+    and finishes the row it was drawing, so no half-line is left on the
+    terminal — and the result block still prints, because the scan's *work* was
+    already done. Only the narration is cut.
+  - **One writer.** `Phase`, `CheckDone` and `CollectorDone` no longer write at
+    all, which makes the concurrent-collector case safe by construction rather
+    than by a mutex held across an `Fprintf`.
+
+- **`TestVerboseKeepsTheStreamAboveTheResultAndTheDetail`.** `--verbose` was
+  reported as having lost the live stream entirely. It had not: the rows are all
+  there, above the `[*] Result` block, above the detailed report. But no test
+  said so — the verbose mode test asserted the tally and the report and nothing
+  at all about the rows, so a regression that dropped them would have stayed
+  green. It now compares the streamed row count against a standard-mode run of
+  the same fixture and pins the order of all four sections.
+
+  What makes the mode *look* broken is real and unchanged: `--verbose` appends a
+  report that is fourteen hundred lines on a real host, so the stream has
+  scrolled far out of the window by the time the command returns. The pace is
+  what puts it in front of the operator while it is happening.
+
 - **A live scan stream (`internal/render/text/stream.go`).** `scan --format
   terminal` now narrates the scan on **stderr** as it happens — one row per
   collector, then one per check, each with its verdict flush against the right

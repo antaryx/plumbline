@@ -8,6 +8,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 	"unsafe"
 )
 
@@ -171,8 +172,24 @@ func terminalRun(t *testing.T, args ...string) (int, string) {
 	unsetCIMarkers(t)
 
 	term := openPTY(t)
-	code := Execute(args, term.slave, term.slave)
+	code := Execute(unpaced(args), term.slave, term.slave)
 	return code, term.output(t)
+}
+
+// unpaced pins the stream's artificial delay off, unless the test is about the
+// delay.
+//
+// scan's default is 150 ms a row (rendertext.DefaultPace), which is what makes
+// the display readable on a terminal and what would make every mode test in
+// this file wait twenty seconds for a property none of them is asserting.
+// TestThePaceFlagSlowsTheStream is the one that pays for it.
+func unpaced(args []string) []string {
+	for _, a := range args {
+		if a == "--pace" || strings.HasPrefix(a, "--pace=") {
+			return args
+		}
+	}
+	return append(append([]string{}, args...), "--pace", "0")
 }
 
 // unsetCIMarkers removes the variables progressAllowed treats as "this is a
@@ -304,7 +321,7 @@ func TestARedirectedRunOnATerminalStillWritesTheWholeReport(t *testing.T) {
 
 	term := openPTY(t)
 	var file bytes.Buffer
-	code := Execute([]string{"scan", "--root", "../../testdata/fixtures/cli-host"}, &file, term.slave)
+	code := Execute([]string{"scan", "--root", "../../testdata/fixtures/cli-host", "--pace", "0"}, &file, term.slave)
 	if code != ExitOK {
 		t.Fatalf("exit %d", code)
 	}
@@ -318,5 +335,83 @@ func TestARedirectedRunOnATerminalStillWritesTheWholeReport(t *testing.T) {
 	}
 	if !strings.Contains(file.String(), "Warnings and suggestions") {
 		t.Error("the redirect lost the detailed report")
+	}
+}
+
+// TestVerboseKeepsTheStreamAboveTheResultAndTheDetail.
+//
+// **This pins the claim the verbose mode test above was not making.** It
+// asserted the tally and the detail and said nothing about the rows, so a
+// regression that dropped the stream from --verbose would have left it green.
+//
+// The mode is also the one that most easily *looks* broken without being
+// broken: --verbose appends the whole report, which is fourteen hundred lines
+// on a real host, so by the time the command returns the stream has scrolled
+// well out of the window. Hence two assertions rather than one — the rows are
+// there, and they are in the right order relative to everything after them.
+func TestVerboseKeepsTheStreamAboveTheResultAndTheDetail(t *testing.T) {
+	_, plain := terminalRun(t, "scan", "--root", "../../testdata/fixtures/cli-host")
+	code, out := terminalRun(t, "scan", "--root", "../../testdata/fixtures/cli-host", "--verbose")
+	if code != ExitOK {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+
+	// Not "some rows", but every row standard mode drew. A stream that lost
+	// half its checks to --verbose is as broken as one that lost all of them.
+	if got, want := strings.Count(out, "[+] Checking "), strings.Count(plain, "[+] Checking "); got != want {
+		t.Errorf("--verbose streamed %d evaluation rows, standard mode streamed %d", got, want)
+	}
+	if got, want := strings.Count(out, "[+] Collecting "), strings.Count(plain, "[+] Collecting "); got != want {
+		t.Errorf("--verbose streamed %d collection rows, standard mode streamed %d", got, want)
+	}
+
+	// Order: the collection rows, then the evaluation rows, then the Result
+	// block, then the detailed report. Each of these is an index into one
+	// string, which is the whole point of putting both descriptors on one
+	// terminal — it is the order a person actually sees.
+	for _, step := range []struct {
+		name  string
+		first string
+		then  string
+	}{
+		{"collection before evaluation", "[+] Collecting ", "[+] Checking "},
+		{"the stream before the result block", "[+] Checking ", "[*] Result"},
+		{"the result block before the detail", "[*] Result", "Warnings and suggestions"},
+	} {
+		if i, j := strings.Index(out, step.first), strings.Index(out, step.then); i < 0 || j < 0 || i > j {
+			t.Errorf("%s: %q at %d, %q at %d", step.name, step.first, i, step.then, j)
+		}
+	}
+}
+
+// TestThePaceFlagSlowsTheStream.
+//
+// The only end-to-end proof that --pace reaches the renderer. Every other test
+// in this file runs with --pace 0, so without this one the flag could be
+// unwired — or wired to a stream that is never built — and nothing would say
+// so.
+//
+// The bound is deliberately loose. A scheduler under `go test -race` is not a
+// stopwatch, and the claim being made is "the rows waited", not "the rows waited
+// for exactly this long": half the nominal time is far above anything an unpaced
+// run could take and far below anything a paced one could miss.
+func TestThePaceFlagSlowsTheStream(t *testing.T) {
+	const pace = 5 * time.Millisecond
+
+	start := time.Now()
+	code, out := terminalRun(t, "scan", "--root", "../../testdata/fixtures/cli-host",
+		"--pace", pace.String())
+	elapsed := time.Since(start)
+	if code != ExitOK {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+
+	rows := strings.Count(out, "[+] ")
+	if rows < 50 {
+		t.Fatalf("only %d rows streamed; the timing below would prove nothing", rows)
+	}
+	if want := time.Duration(rows) * pace / 2; elapsed < want {
+		t.Errorf("%d rows at %s each finished in %s, under the %s floor: --pace is not reaching the stream",
+			rows, pace, elapsed, want)
 	}
 }

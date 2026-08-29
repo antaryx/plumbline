@@ -63,11 +63,10 @@ the same.
 | `--json` | false | Shorthand for `--format json` | **yes** (v0.3) |
 | `--output PATH` | — | Output file; only valid with a single format | **yes** |
 | `--no-color` | false | Also honours `NO_COLOR` and non-TTY stdout | **yes** (v0.3) |
-| `--verbose`, `-v` | false | Add the severity tally and the detailed report (§7) | no |
-| `--quiet`, `-q` | false | Stream nothing; print only the closing result block (§7) | no |
+| `--verbose`, `-v` | false | Add the severity tally and the detailed report (§7) | **yes** |
+| `--quiet`, `-q` | false | Stream nothing; print only the closing result block (§7) | **yes** |
+| `--pace D` | `150ms` | How long a streamed row waits before its verdict lands; `0` draws at full speed (§7) | **yes** |
 | `--output-dir DIR` | — | Directory; required when multiple formats | no |
-| `--quiet` | false | Findings only, no progress | no |
-| `--verbose` | false | Per-check execution detail | no |
 | `--debug` | false | Engine internals to stderr | no |
 
 `--format` takes a single name today, not a comma-separated list. Multiple
@@ -716,6 +715,32 @@ was there before and is still right for a log.
 | Width follows the terminal | Unlike the report's fixed grid. See below. |
 | Tokens are the report's | `[ OK ]`, `[ WARNING ]`, `[ UNKNOWN ]`, `[ SKIPPED ]`, produced by the same function the report uses. An operator who watches `WARNING` scroll past and then greps the report for it must find it. Colours match too, in every state but one: `SKIPPED` is cyan here and dim in the report, because a row carrying no verdict recedes correctly on a dense page and reads as a display failure in a scrolling list. |
 
+#### The pace
+
+**Each row is drawn in two halves with a deliberate pause between them**, and
+that pause is the only thing in this tool that costs time without doing work,
+so it is stated plainly rather than buried.
+
+```
+[+] Checking Root login is disabled over SSH (SSHD-0009)...              ← drawn
+                                                             ...150 ms...
+[+] Checking Root login is disabled over SSH (SSHD-0009)...   [ WARNING ] ← then this
+```
+
+The catalog evaluates 109 checks in about 1.3 ms. Printed at that speed the
+stream is not a stream: it is a wall of text already complete before the eye has
+fixed on anything, which teaches an operator nothing the closing two lines would
+not have told them faster. A row-by-row display is worth having only if a row
+can be read while it is on screen.
+
+| Rule | Detail |
+|---|---|
+| 150 ms a row | Below roughly 80 ms the column of brackets reads as flicker rather than as a sequence; above roughly 250 ms it stops feeling like a scan. At 150 ms a hundred and twenty-odd rows take a little over eighteen seconds. |
+| `--pace 0` removes it | For anybody who wants the answer rather than the show. `--pace 300ms` slows it. |
+| Charged to the display, never to the engine | Every row is **queued**, not drawn, by whoever produced it: one goroutine owns the terminal and does the waiting. Evaluation still takes 1.3 ms, collectors keep reading the host instead of sitting in a sleep, and no duration the report prints is measuring the display. |
+| Paid only where the rows are | A pipe, a redirect, a CI log, `--format json`, `PLUMBLINE_NO_PROGRESS` and `--quiet` all draw no rows, so none of them waits. `plumbline scan --quiet` and `plumbline scan \| cat` run at full speed. |
+| Ctrl-C skips the display, not the answer | The first press abandons what is left of the queue within milliseconds, finishes the row it was drawing so no half-line is left on the terminal, and still prints the result block. A scan whose work is already done reports its result; only the narration is cut. |
+
 #### What the terminal shows
 
 **Three modes, and the standard one exists to leave the stream on the screen.**
@@ -731,6 +756,7 @@ Everything after the last streamed row competes with it for the last page of an
 | Severity tally — the `! HIGH` list | — | yes | — |
 | Detailed report — evidence, remediation, cautions | — | yes | — |
 | Closing hint | `--verbose` | where the report went | — |
+| Pays the `--pace` delay | yes | yes | — |
 
 The **severity tally is one line per failing check** — eleven on a fixture,
 forty on a real host — and it lands after the stream, so in standard mode it

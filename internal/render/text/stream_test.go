@@ -3,6 +3,7 @@ package text_test
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"sync"
@@ -75,6 +76,7 @@ func TestEveryRowIsExactlyTheTerminalWidth(t *testing.T) {
 					s.CheckDone(f)
 				}
 				s.CollectorDone("containers-service", "ok", 0)
+				s.Await()
 
 				for _, row := range streamRows(t, &buf) {
 					if got := width(row); got != columns {
@@ -105,6 +107,7 @@ func TestTheTerminalWidthIsReadPerRow(t *testing.T) {
 	for _, f := range sampleFindings()[:3] {
 		s.CheckDone(f)
 	}
+	s.Await()
 
 	rows := streamRows(t, &buf)
 	for n, row := range rows {
@@ -128,6 +131,7 @@ func TestTheCheckIDSurvivesEveryWidth(t *testing.T) {
 		for _, f := range sampleFindings() {
 			s.CheckDone(f)
 		}
+		s.Await()
 
 		text := buf.String()
 		for _, f := range sampleFindings() {
@@ -152,6 +156,7 @@ func TestANarrowTerminalIsNotWidenedToFitTheLayout(t *testing.T) {
 	for _, f := range sampleFindings() {
 		s.CheckDone(f)
 	}
+	s.Await()
 
 	for _, row := range streamRows(t, &buf) {
 		// The overflow that remains is the compact row itself: a long ID plus
@@ -183,6 +188,7 @@ func TestTheStreamAndTheReportUseOneVocabulary(t *testing.T) {
 		var buf bytes.Buffer
 		s := text.NewStream(&buf, false, fixedWidth(80))
 		s.CheckDone(finding.Finding{CheckID: "T-0001", Title: "t", Result: c.result})
+		s.Await()
 		if !strings.Contains(visible(buf.String()), c.want) {
 			t.Errorf("%s rendered as %q, want %s", c.result, visible(buf.String()), c.want)
 		}
@@ -208,6 +214,7 @@ func TestTheStreamColoursItsStates(t *testing.T) {
 		var buf bytes.Buffer
 		s := text.NewStream(&buf, true, fixedWidth(80))
 		s.CheckDone(finding.Finding{CheckID: "T-0001", Title: "t", Result: c.result})
+		s.Await()
 		if !strings.Contains(buf.String(), c.want) {
 			t.Errorf("%s drawn as %q, want the sequence %q", c.result, buf.String(), c.want)
 		}
@@ -258,9 +265,11 @@ func TestColourOffEmitsNoEscapes(t *testing.T) {
 // TestConcurrentCollectorEventsProduceWholeLines.
 //
 // collect.Runner calls CollectorDone from the collector goroutines and they run
-// at once. Without the mutex two of them interleave inside one Fprintf and the
-// operator gets a row with another row's token in the middle of it — which the
-// race detector would catch on the counters but not on the writer, because a
+// at once. Sixty-four of them here, against a writer only one goroutine is
+// allowed to touch: if a row were ever drawn by its producer rather than queued
+// for the drawing goroutine, two would interleave inside one Fprintf and the
+// operator would get a row with another row's token in the middle of it — which
+// the race detector catches on the counters but not on the writer, because a
 // bytes.Buffer racing is a corrupted line rather than a panic.
 func TestConcurrentCollectorEventsProduceWholeLines(t *testing.T) {
 	var buf bytes.Buffer
@@ -275,6 +284,7 @@ func TestConcurrentCollectorEventsProduceWholeLines(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+	s.Await()
 
 	rows := streamRows(t, &buf)
 	if len(rows) != 64 {
@@ -405,3 +415,162 @@ func TestTheThreeOutputModes(t *testing.T) {
 // fact about this type and says nothing about whether the scan command sets the
 // flag. The line that decides it, Tally(verbose), is in scan.go and was never
 // executed.
+
+// writeLog records each Write separately.
+//
+// It is the only way to see the thing the pace exists for. The assembled text
+// of a paced row and an unpaced one is byte-identical; what differs is that the
+// paced one leaves the terminal holding a title with the cursor after it for a
+// beat, and that is visible in the sequence of writes and nowhere else.
+type writeLog struct {
+	mu sync.Mutex
+	w  []string
+}
+
+func (l *writeLog) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.w = append(l.w, string(p))
+	return len(p), nil
+}
+
+func (l *writeLog) writes() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]string(nil), l.w...)
+}
+
+func (l *writeLog) text() string { return strings.Join(l.writes(), "") }
+
+// TestAPacedRowIsDrawnInTwoHalves.
+//
+// The title goes out on its own, without a newline; the verdict arrives a beat
+// later and completes the line. A single Fprintf followed by a sleep would take
+// exactly as long, produce identical bytes, and show the operator nothing —
+// which is why this asserts on the writes rather than on the text.
+func TestAPacedRowIsDrawnInTwoHalves(t *testing.T) {
+	const pace = 40 * time.Millisecond
+
+	log := &writeLog{}
+	s := text.NewStream(log, false, fixedWidth(80)).Pace(pace)
+
+	start := time.Now()
+	s.CheckDone(finding.Finding{CheckID: "T-0001", Title: "a check", Result: finding.Pass})
+	queued := time.Since(start)
+	s.Await()
+	drawn := time.Since(start)
+
+	if queued > pace/2 {
+		t.Errorf("CheckDone took %s to return against a pace of %s: the delay is being charged to the engine", queued, pace)
+	}
+	if drawn < pace {
+		t.Errorf("the row was finished in %s, faster than its own pace of %s", drawn, pace)
+	}
+
+	writes := log.writes()
+	if len(writes) < 2 {
+		t.Fatalf("the row went out in one write, so nothing was ever left on screen waiting: %q", writes)
+	}
+	first, last := writes[0], writes[len(writes)-1]
+	switch {
+	case strings.Contains(first, "\n"):
+		t.Errorf("the first half ended its line: %q", first)
+	case !strings.HasSuffix(first, "..."):
+		t.Errorf("the first half is not the title and its ellipsis: %q", first)
+	case strings.Contains(visible(first), "[ OK ]"):
+		t.Errorf("the verdict went out with the title, so the pace showed nothing: %q", first)
+	}
+	if !strings.Contains(visible(last), "[ OK ]") || !strings.HasSuffix(last, "\n") {
+		t.Errorf("the second half is not the verdict and its newline: %q", last)
+	}
+}
+
+// TestThePaceIsNotChargedToTheEngine.
+//
+// Fifty rows at a tenth of a second each is five seconds of display. Drawn by
+// whoever produced them, that would be five seconds of evaluation — the catalog
+// does the whole hundred and nine in about 1.3 ms — and, during collection,
+// five seconds of collector goroutines sitting in a sleep instead of reading
+// the host. Queuing has to be free.
+func TestThePaceIsNotChargedToTheEngine(t *testing.T) {
+	const (
+		rows = 50
+		pace = 100 * time.Millisecond
+	)
+
+	s := text.NewStream(io.Discard, false, fixedWidth(80)).Pace(pace)
+	defer s.Stop()
+
+	start := time.Now()
+	for i := range rows {
+		s.CheckDone(finding.Finding{
+			CheckID: fmt.Sprintf("T-%04d", i), Title: "a check", Result: finding.Pass,
+		})
+	}
+	elapsed := time.Since(start)
+
+	// One row's pace is a generous ceiling for fifty appends under a mutex, and
+	// it is below the two that a single synchronous draw would already cost.
+	if elapsed > pace {
+		t.Errorf("%d checks took %s to queue against a pace of %s: the engine is waiting for the display",
+			rows, elapsed, pace)
+	}
+}
+
+// TestStopFinishesTheLineItIsOn.
+//
+// Ctrl-C during a paced stream cuts the wait short, and the row that was
+// half-drawn when it arrived gets its verdict anyway. Abandoning it would leave
+// the operator's shell prompt appended to a plumbline row.
+func TestStopFinishesTheLineItIsOn(t *testing.T) {
+	log := &writeLog{}
+	s := text.NewStream(log, false, fixedWidth(80)).Pace(time.Hour)
+	s.CheckDone(finding.Finding{CheckID: "T-0001", Title: "a check", Result: finding.Pass})
+
+	// Wait for the title to reach the terminal, so that Stop lands in the pause
+	// rather than before the row was picked up at all.
+	deadline := time.Now().Add(5 * time.Second)
+	for len(log.writes()) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the row never reached the writer")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	done := make(chan struct{})
+	go func() { defer close(done); s.Stop() }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop waited out the pace instead of cutting it short")
+	}
+
+	out := log.text()
+	if !strings.HasSuffix(out, "\n") {
+		t.Errorf("Stop left half a row on the terminal: %q", out)
+	}
+	if !strings.Contains(visible(out), "[ OK ]") {
+		t.Errorf("Stop dropped the verdict of the row it was drawing: %q", visible(out))
+	}
+}
+
+// TestTheRendererDefaultsToNoPace.
+//
+// The delay is the CLI's decision, not this package's. A renderer that slept by
+// default would put eighteen seconds into every test that draws a row and into
+// any future caller that never asked to be slowed down; DefaultPace is a
+// constant for the flag to reach for, not a field value.
+func TestTheRendererDefaultsToNoPace(t *testing.T) {
+	s := text.NewStream(io.Discard, false, fixedWidth(80))
+	defer s.Stop()
+
+	start := time.Now()
+	for _, f := range sampleFindings() {
+		s.CheckDone(f)
+	}
+	s.Await()
+
+	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
+		t.Errorf("an unpaced stream took %s to draw %d rows", elapsed, len(sampleFindings()))
+	}
+}

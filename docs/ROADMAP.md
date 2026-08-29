@@ -1101,10 +1101,12 @@ is called once per collector from the collector goroutines, which run at once,
 in completion order, which is not stable between runs. A single shared interface
 would have had to document the weaker of the two contracts everywhere, and a
 caller reading it would not be able to tell which half it was in. `rendertext.Stream`
-implements both and takes its mutex on every method, which is what makes the
-concurrent half safe; the joint between `collect.CollectorStatus` and the
-renderer's plain string is an adapter in `internal/cli`, because the render tree
-may not import the collection tree.
+implements both, and neither observer writes anything: both append to a queue
+under one mutex and a single goroutine draws, which is what makes the concurrent
+half safe by construction rather than by holding a lock across an `Fprintf`. The
+joint between `collect.CollectorStatus` and the renderer's plain string is an
+adapter in `internal/cli`, because the render tree may not import the collection
+tree.
 
 **Evaluation was not made concurrent and should not be.** 109 checks over a
 collected fact set take 1.3 ms. The slow half of a scan is collection, which
@@ -1147,7 +1149,7 @@ live output scrolled off the top before the run finished. The rule that came out
 of it is worth stating as a rule: **standard mode allows itself four lines and a
 hint after the last streamed row**, and anything that grows with the number of
 findings belongs behind `--verbose`.
-`TestStandardModeEndsWithinAScreenOfTheStream` is that rule as a test.
+`TestStandardModeShowsTheStreamAndNothingButASummary` is that rule as a test.
 
 **The test that was supposed to hold that rule did not.** It constructed a
 `text.Stream`, did not call `Tally`, and asserted the closing block was short —
@@ -1195,6 +1197,68 @@ The rest of the settlement:
   stream and dim in the report — a row with no verdict recedes correctly on a
   dense page and reads as a display failure in a scrolling list.
 
+### The pace
+
+The stream was correct and still not a stream. 109 checks in 1.3 ms print as a
+wall of text that is complete before the eye has fixed on anything, so an
+operator watching a bare `plumbline scan` learned nothing the closing two lines
+would not have told them faster — and under `--verbose`, where a fourteen-hundred
+line report follows, the rows were gone from the window before anyone could read
+one. A row-by-row display is worth having only if a row can be read while it is
+on screen, and at full speed none can.
+
+So each row is now drawn in two halves with 150 ms between them: the title and
+its ellipsis, a pause, then the verdict landing flush right. Below roughly 80 ms
+the column of brackets reads as flicker rather than as a sequence; above roughly
+250 ms it stops feeling like a scan. `--pace 0` removes it, and `--pace 300ms`
+slows it down.
+
+**This is the one thing in the tool that costs time without doing work, and it
+is confined so that it cannot be mistaken for work.**
+
+- **It is charged to the display.** Every method on `Stream` queues an event and
+  returns; one goroutine owns the terminal and does all the waiting. Evaluation
+  still takes 1.3 ms and the thirteen collector goroutines keep reading the host
+  instead of sitting in a sleep. Nothing the report prints is measuring the
+  display.
+- **The queue is unbounded and that is not laziness.** A buffered channel blocks
+  its sender at capacity, and at 150 ms a row the queue reaches the catalog's
+  full depth within a millisecond of evaluation starting — so any capacity small
+  enough to write down would hand the delay straight back to the engine, and any
+  capacity larger than the catalog is a constant somebody must remember to raise
+  when a check is added. The real bound is arithmetic: one event per collector,
+  one per check.
+- **It is paid only where the rows are.** A pipe, a redirect, `--format json`,
+  CI, `PLUMBLINE_NO_PROGRESS` and `--quiet` all draw no rows and none of them
+  waits.
+
+Asynchronous drawing broke three things synchronous drawing had not, and each
+needed a piece:
+
+- `Stream.Await`, because `bundle saved to ...` and the suppression notes share
+  stderr with the stream and would otherwise land several rows above where they
+  belong.
+- `Stream.Stop`, wired to the scan's context, because an eighteen-second display
+  outlives the work and a Ctrl-C inside it has to be felt now. The first press
+  abandons the queue within milliseconds — measured at 23 ms on this host —
+  finishes the row it was drawing so no half-line survives, and still prints the
+  result block. **The work was already done; only the narration is cut**, so
+  reporting the real posture and the real exit code is right rather than a leak.
+- `Close` awaiting *and* stopping before it writes, because "the queue is empty"
+  is not the same claim as "no other goroutine is writing to this terminal".
+
+**`--verbose` was reported as having lost the stream. It had not.** The rows are
+all there, above the `[*] Result` block, above the detail; a run measured on this
+host has the same 109 evaluation rows with the flag as without it. But no test
+said so — the verbose mode test asserted the tally and the report and nothing
+about the rows — so the claim could not be answered from the suite, only from a
+terminal. `TestVerboseKeepsTheStreamAboveTheResultAndTheDetail` now compares the
+row count against a standard-mode run and pins the order of all four sections.
+The impression was real and had a real cause: the report that follows is
+fourteen hundred lines, so on any ordinary window the stream is long gone by the
+time the command returns. The pace is what puts it in front of the operator
+while it is happening, which is the fix the report's position could not be.
+
 What this leaves:
 - **The stream shows raw evaluation.** Profile scoping and suppression are
   applied to the slice afterwards, so a check the operator has formally accepted
@@ -1208,6 +1272,14 @@ What this leaves:
   neighbours' rows appear around it. A heartbeat line under the stream would
   cover it and needs the stream and the spinner to share stderr, which is the
   interleaving both currently avoid by never running together.
+- **The pace is uniform, and a collector that already took four seconds waits
+  another 150 ms for its verdict.** The honest version would hold each row for
+  `pace` *minus* what the work actually took, so that real duration and
+  artificial duration do not add. It is a two-line change and was left out
+  because collector rows arrive in a burst — they are queued in completion order
+  and drawn behind whatever is ahead of them, so "how long ago did this finish"
+  is not the same question as "how long has this row been waiting", and the
+  arithmetic wants thinking about rather than guessing at.
 
 ---
 
