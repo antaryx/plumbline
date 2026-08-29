@@ -310,12 +310,13 @@ because of this release (VERSIONING §2.4).
         Details: source truncated
   ```
 
-  A padded severity tag, then the title, then the ID. The title is truncated to
+  A severity tag, one space, the title, then the ID. The title is truncated to
   the grid and the ID never is. The tag is red for `CRITICAL`/`HIGH`, yellow for
   `MEDIUM`, blue for `LOW`, magenta for `[UNKNOWN]`, and unpainted for `INFO`;
-  it is padded to the widest tag in the section, measured across both blocks, so
-  the titles hold one column. **An `UNKNOWN` is tagged `UNKNOWN` rather than by
-  its severity** — a check that could not be evaluated has established no degree
+  the colour is what the eye runs down, so the tag is followed by a single space
+  rather than padded into a column that would cost every line four columns on a
+  host with anything critical on it. **An `UNKNOWN` is tagged `UNKNOWN` rather
+  than by its severity** — a check that could not be evaluated has established no degree
   of badness, and `[MEDIUM]` beside it would claim one.
 
   `Details:` is the remediation summary, falling back to the subject, and for an
@@ -323,6 +324,18 @@ because of this release (VERSIONING §2.4).
   rather than left as the machine token the JSON keeps. It is **word-wrapped
   with a hanging indent** to the column the value starts in, never truncated:
   this is the one sentence in the report telling an operator what to type.
+
+  **The warnings section is wrapped to the terminal, and everything else to the
+  fixed 78-column grid.** The section rules, the scan phase's status column and
+  the dashboard boxes still do not follow the window, because a report has to be
+  byte-identical across two runs of an unchanged host. The warnings prose is
+  read once and never diffed, and 78 columns in a 160-column window folds a
+  sentence that had room to finish. What chooses between the two is
+  `TIOCGWINSZ` **on the destination writer** rather than a flag: the ioctl
+  answers for a terminal and fails for a file, so `plumbline scan > report.txt`
+  produces the same bytes from any window it is run in. The terminal width is
+  clamped to `[40, 120]` — prose at 200 columns is prose the eye loses on the
+  return sweep, and 120 is the ceiling the live stream already uses.
 
   **Nothing was dropped, only moved off the terminal.** `--format json` and
   `--format sarif` carry every field including the whole evidence array, and
@@ -383,6 +396,17 @@ because of this release (VERSIONING §2.4).
   reports `CollectorDone`, only the ones that ran report `CollectorStarted`,
   because a collector announced as started that never runs would sit under a
   stalled display forever.
+
+- **A streamed row is the verb, the title and the verdict**, with no check ID
+  and no trailing ellipsis: `  - Checking Root login is disabled over SSH` and
+  then its bracket. An ID is for copying — into a suppression file, into
+  `plumbline explain` — and nothing can be copied out of a display that scrolls
+  past at a tenth of a second a row, while the report underneath carries the ID
+  on every entry and is still on screen when the scan ends. What the ID cost was
+  the title: it sat in the row's fixed tail, so a narrow terminal squeezed the
+  sentence to make room for an identifier nobody was reading. A collector's
+  elapsed time stays in the tail, because `(41s)` is the answer to the question
+  a person watching a long collector is asking.
 
 - **The stream is grouped by module, and its rows are indented under their
   heading.** The evaluation half was a flat list of a hundred and nine rows;

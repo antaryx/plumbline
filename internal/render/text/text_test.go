@@ -478,38 +478,95 @@ func TestTheSeverityTagIsColouredByImpact(t *testing.T) {
 	}
 }
 
-// TestTheTitleColumnHoldsAcrossBothBlocks.
+// TestOneSpaceFollowsTheSeverityTag.
 //
-// The tag is padded to the widest one in the section rather than to whatever
-// each entry happens to need, so the titles line up. A column that re-aligns
-// itself between "Warnings" and "Could not determine" is two columns, and the
-// eye that was running down it stops.
-func TestTheTitleColumnHoldsAcrossBothBlocks(t *testing.T) {
+// The tag used to be padded to the widest one in the section so every title
+// started in the same column. It cost four columns of every line on a host with
+// anything critical on it, to buy a column of nothing — the tag is coloured,
+// and the colour is what the eye actually runs down.
+//
+// So: exactly one space, and the title starts wherever the tag ends.
+func TestOneSpaceFollowsTheSeverityTag(t *testing.T) {
 	body := sectionOf(t, render(t, sample(t)), "Warnings and suggestions")
 
-	col := -1
+	entries := 0
 	for _, l := range strings.Split(body, "\n") {
 		if !strings.HasPrefix(l, "  - ") {
 			continue
 		}
+		entries++
 		i := strings.Index(l, "]")
 		if i < 0 {
 			t.Errorf("no severity tag on %q", l)
 			continue
 		}
-		// Past the tag and past the padding: where the title actually begins.
 		rest := l[i+1:]
-		start := i + 1 + len(rest) - len(strings.TrimLeft(rest, " "))
-		if col < 0 {
-			col = start
-			continue
-		}
-		if start != col {
-			t.Errorf("a title starts in column %d where the one above starts in %d: %q", start, col, l)
+		if gap := len(rest) - len(strings.TrimLeft(rest, " ")); gap != 1 {
+			t.Errorf("%d spaces after the tag, want 1: %q", gap, l)
 		}
 	}
-	if col < 0 {
+	if entries == 0 {
 		t.Fatalf("no entries in:\n%s", body)
+	}
+}
+
+// TestTheDetailsBlockFollowsTheTerminalAndTheGridFollowsTheFile.
+//
+// **The one measurement in this package that comes from outside, and the whole
+// point of it being one.** A wide terminal wraps the remediation where the
+// window ends rather than at 78; a file gets 78 whatever window the scan was
+// run in, so two nightly runs of an unchanged host still diff to nothing.
+//
+// Width 0 is what system.TerminalWidth returns for anything that is not a
+// terminal, which is how the caller distinguishes the two without a flag.
+func TestTheDetailsBlockFollowsTheTerminalAndTheGridFollowsTheFile(t *testing.T) {
+	const remedy = "Remove nullok and nullok_secure from every pam_unix.so auth rule " +
+		"in /etc/pam.d, then check for a distribution override in " +
+		"/usr/share/pam-configs and regenerate the stack with pam-auth-update."
+
+	widest := func(in rendertext.Input) int {
+		w := 0
+		for _, l := range strings.Split(sectionOf(t, render(t, in), "Warnings and suggestions"), "\n") {
+			if !strings.HasPrefix(l, "      Details: ") &&
+				!strings.HasPrefix(l, strings.Repeat(" ", detailsIndent)) {
+				continue
+			}
+			if n := len([]rune(l)); n > w {
+				w = n
+			}
+		}
+		return w
+	}
+
+	base := sample(t)
+	for i := range base.Findings {
+		if base.Findings[i].Result == finding.Fail {
+			base.Findings[i].Remediation = &finding.Remediation{Summary: remedy}
+		}
+	}
+
+	for _, c := range []struct {
+		name    string
+		width   int
+		atMost  int
+		atLeast int
+	}{
+		{"not a terminal", 0, reportWidth, 60},
+		{"a narrow terminal", 50, 50, 40},
+		{"a wide terminal", 110, 110, 90},
+		{"absurdly wide, capped", 400, 120, 100},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := base
+			in.Width = c.width
+			got := widest(in)
+			if got > c.atMost {
+				t.Errorf("a details line is %d columns against a width of %d; want at most %d", got, c.width, c.atMost)
+			}
+			if got < c.atLeast {
+				t.Errorf("a details line is only %d columns against a width of %d; the text is wrapping short", got, c.width)
+			}
+		})
 	}
 }
 

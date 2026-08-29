@@ -175,8 +175,19 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 			// same terminal this report is going to. A redirect or --output
 			// gets the whole document even though a stream also ran.
 			narrated := live != nil && out.output == "" && system.IsTerminal(w)
+
+			// **The width is measured on the destination, and that is the
+			// whole of the separation between the two layouts.** The warnings
+			// section follows the terminal so a wide window is not wrapped at
+			// 78; a file or a pipe keeps the fixed grid so a nightly diff of an
+			// unchanged host is still empty. No flag decides which — the same
+			// ioctl that answers for a terminal fails for a file, so a redirect
+			// cannot accidentally pick up the operator's window size and
+			// `plumbline scan > report.txt` produces the same bytes from any
+			// terminal it is run in.
+			columns, _ := system.TerminalWidth(w)
 			renderErr = renderTerminal(w, b, sc, findings, factErrors,
-				useColor(w, out.noColor, out.output != ""), prof.Name(), narrated)
+				useColor(w, out.noColor, out.output != ""), prof.Name(), narrated, columns)
 		}
 
 		if cerr := closeOut(); renderErr == nil {
@@ -229,7 +240,7 @@ func renderSARIF(w io.Writer, b bundle.Bundle, sc score.Score, findings []findin
 	})
 }
 
-func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, factErrors []fact.Error, color bool, activeProfile string, narrated bool) error {
+func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, factErrors []fact.Error, color bool, activeProfile string, narrated bool, columns int) error {
 	return rendertext.Render(w, rendertext.Input{
 		Tool: rendertext.Tool{Name: "plumbline", Version: version.Version, Commit: version.Commit},
 		Scan: rendertext.Scan{
@@ -246,6 +257,7 @@ func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []fin
 		Degraded:     len(factErrors) > 0,
 		Color:        color,
 		ScanNarrated: narrated,
+		Width:        columns,
 	})
 }
 

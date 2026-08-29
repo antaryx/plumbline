@@ -51,12 +51,6 @@ const (
 	streamMinWidth = 20
 	streamMaxWidth = 120
 
-	// streamMinTitle is the narrowest a title may be squeezed to before the
-	// row drops to its compact form. Below about this, a truncated sentence is
-	// two letters and an ellipsis — it costs a third of the line and conveys
-	// nothing that the check ID beside it does not convey better.
-	streamMinTitle = 8
-
 	// streamFallbackWidth is used only when the caller offers no width function
 	// at all, which in practice is a test. A real caller that cannot measure
 	// the terminal does not construct a Stream.
@@ -320,7 +314,7 @@ func (s *Stream) CollectorDone(id string, status string, took time.Duration) {
 
 	s.emit(event{row: row{
 		head: "Collecting ", middle: id, tail: label,
-		compact: id, token: token, colour: colour,
+		token: token, colour: colour,
 	}})
 }
 
@@ -342,14 +336,12 @@ func (s *Stream) CheckDone(f finding.Finding) {
 	}
 	s.mu.Unlock()
 
-	// The title is the elastic part and the ID is not. A narrow terminal
-	// shortens the sentence; it never shortens the identifier, because the ID
-	// is what a suppression file matches on and what an operator types into
-	// `plumbline explain`. A row that has lost its ID has lost the only part
-	// of itself anybody can act on.
+	// Title only: no ID, no ellipsis. See row. The ID still decides which
+	// module heading the row lands under, which is the one thing the stream
+	// does with it.
 	s.emit(event{row: row{
-		head: "Checking ", middle: f.Title, tail: " (" + f.CheckID + ")",
-		compact: f.CheckID, token: token, colour: colour,
+		head: "Checking ", middle: f.Title,
+		token: token, colour: colour,
 		module: moduleOf(f.CheckID),
 	}})
 }
@@ -841,7 +833,7 @@ func (s *Stream) Hint(hint string) *Stream {
 // draw writes one right-aligned row, in two halves with the pace between them.
 //
 // **The split is the whole effect.** The left half goes out without a newline,
-// so the terminal is left holding `  - Checking a thing (X-0001)...` with the
+// so the terminal is left holding `  - Checking a thing` with the
 // cursor sitting after it; the verdict then arrives beside it a beat later and
 // reads as an answer to a question, rather than as text that was always there.
 // Printing the assembled line in one call and sleeping afterwards would take
@@ -879,13 +871,13 @@ func (s *Stream) draw(r row, pace time.Duration, open string) {
 // The arithmetic is the whole of the alignment and it is four terms:
 //
 //	columns = clamp(terminal width, streamMinWidth, streamMaxWidth)
-//	fixed   = "  - " + head + tail + "..."
+//	fixed   = "  - " + head + tail
 //	elastic = truncate(middle, columns - fixed - token - 1)
 //	gap     = columns - fixed - elastic - token
 //
-// so that `  - ` + head + elastic + tail + `...` + gap + token is exactly
-// `columns` wide and every `]` lands on the same column for as long as the
-// terminal keeps that width.
+// so that `  - ` + head + elastic + tail + gap + token is exactly `columns`
+// wide and every `]` lands on the same column for as long as the terminal keeps
+// that width.
 //
 // **The gap is computed from visibleWidth, not len.** That is what makes a
 // coloured token occupy the columns it draws rather than the bytes it costs —
@@ -893,11 +885,10 @@ func (s *Stream) draw(r row, pace time.Duration, open string) {
 // reason this lives in this package rather than in a second one with its own
 // idea of how wide green is.
 //
-// **Only the middle shrinks.** The check ID is in the tail, so a narrow
-// terminal shortens the human sentence and never the identifier. The
-// alternative — truncating the assembled string — silently eats the ID first,
-// because the ID is at the end, and produces rows nobody can act on at exactly
-// the moment the operator is squinting at a small window.
+// **Only the middle shrinks.** A collector's elapsed time is in the tail and is
+// never squeezed out: `(41s)` is the answer to the question a person watching a
+// long collector is actually asking, and truncating the assembled string would
+// eat it first because it is at the end.
 //
 // The width is asked once per row — by draw, and shared with any module heading
 // that row opens — so the three segments of one line are always laid out
@@ -906,23 +897,25 @@ func (s *Stream) draw(r row, pace time.Duration, open string) {
 // middle of the next line and destroys the column, which is the only thing this
 // layout is for.
 func (s *Stream) layout(r row, columns int) (string, int) {
-	fixed := visibleWidth(rowIndent) + visibleWidth(r.head) + visibleWidth(r.tail) + visibleWidth(rowEllipsis)
+	fixed := visibleWidth(rowIndent) + visibleWidth(r.head) + visibleWidth(r.tail)
 	room := columns - fixed - visibleWidth(r.token) - 1
-
-	left := rowIndent + r.head + truncate(r.middle, room) + r.tail + rowEllipsis
-	if room < streamMinTitle {
-		// The compact form. It keeps the two things a row exists to carry —
-		// which check, and what it said — and drops the sentence explaining
-		// it, which at this width was three characters of nothing.
-		left = rowIndent + r.compact + rowEllipsis
+	if room < 1 {
+		// A terminal too narrow for even one column of title. One is the floor
+		// rather than zero because truncate treats a non-positive width as "do
+		// not truncate", and a row that silently kept its whole title here
+		// would be the wrap this layout exists to prevent. The row is then one
+		// column over, which the gap clamp below already accepts.
+		room = 1
 	}
+
+	left := rowIndent + r.head + truncate(r.middle, room) + r.tail
 
 	gap := columns - visibleWidth(left) - visibleWidth(r.token)
 	if gap < 1 {
-		// Even the compact form does not fit. The row runs over rather than
-		// being cut into punctuation: an over-long line is still readable and
-		// wraps onto a second line the operator can follow, while `  - CONT…`
-		// beside no verdict at all is a row that has lost its point.
+		// The row runs over rather than being cut into punctuation: an
+		// over-long line is still readable and wraps onto a second line the
+		// operator can follow, while a row cut down to `  - Check…` beside no
+		// verdict at all has lost its point.
 		gap = 1
 	}
 	return left, gap
@@ -930,17 +923,25 @@ func (s *Stream) layout(r row, columns int) (string, int) {
 
 // row is one line of the stream, in the segments the layout treats differently.
 //
-// head and tail are fixed and are never shortened; middle is the elastic human
-// sentence; compact is the whole row's content when the terminal is too narrow
-// for any of that. Splitting it this way is what keeps a check ID on screen at
-// every width — the ID is in the tail, and the tail does not give.
+// head is fixed and is never shortened; middle is the elastic human sentence;
+// tail is a fixed suffix that only the collector rows use, for an elapsed time
+// worth showing.
+//
+// **A check row used to end ` (AUTH-0001)...` and no longer does.** The ID and
+// the ellipsis were three-quarters of the furniture on every line, and the
+// stream is not where an ID is used: it scrolls past at a tenth of a second a
+// row and cannot be copied from, while the report underneath carries the ID on
+// every entry and is still on screen when the scan ends. What the ID cost was
+// the title — it was in the tail, so it never gave, and on a narrow terminal
+// the sentence was squeezed to make room for an identifier nobody was reading.
+// Dropping it gives those columns back to the only part of the row a person
+// watching is actually reading.
 type row struct {
-	head    string
-	middle  string
-	tail    string
-	compact string
-	token   string
-	colour  string
+	head   string
+	middle string
+	tail   string
+	token  string
+	colour string
 
 	// module is the family this row belongs to, or "" for a row that belongs to
 	// none — every collector row, since collectors are not checks. It is
@@ -959,8 +960,7 @@ type row struct {
 // their heading instead, which is both the Lynis shape and the one reading of
 // `[+] ` that survives in either renderer.
 const (
-	rowIndent   = "  - "
-	rowEllipsis = "..."
+	rowIndent = "  - "
 
 	// The two cursor sequences the heartbeat needs, and the only two in this
 	// package. See heartbeat for why there is no cursor-up among them.

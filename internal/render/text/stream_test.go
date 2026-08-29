@@ -122,28 +122,46 @@ func TestTheTerminalWidthIsReadPerRow(t *testing.T) {
 	}
 }
 
-// TestTheCheckIDSurvivesEveryWidth.
+// TestAStreamedRowIsATitleAndAVerdict.
 //
-// The ID is what a suppression file matches on and what `plumbline explain`
-// takes. A layout that truncates the assembled line eats it first, because it
-// is at the end — so a narrow terminal would silently produce rows nobody can
-// act on. The title gives way instead, and below the width where even that is
-// pointless the row drops to the ID alone.
-func TestTheCheckIDSurvivesEveryWidth(t *testing.T) {
+// **The row used to end ` (AUTH-0001)...` and no longer does**, which reverses
+// the contract the test that stood here asserted — that the check ID survived
+// every width, because the ID was in the fixed tail and only the title gave.
+//
+// The reasoning behind that was sound about the ID and wrong about the stream.
+// An ID is for copying: into a suppression file, into `plumbline explain`. The
+// stream scrolls past at a tenth of a second a row and nothing can be copied
+// out of it, while the report underneath carries the ID on every entry and is
+// still on screen when the scan ends. So the ID was costing the title columns
+// on exactly the terminals where the title had none to spare, to carry a field
+// that was already somewhere better.
+//
+// What a streamed row is now: the verb, the title, and the verdict.
+func TestAStreamedRowIsATitleAndAVerdict(t *testing.T) {
 	for _, columns := range []int{20, 24, 30, 40, 45, 60, 80, 120} {
-		var buf bytes.Buffer
-		s := text.NewStream(&buf, false, fixedWidth(columns))
-		for _, f := range sampleFindings() {
-			s.CheckDone(f)
-		}
-		s.Await()
-
-		text := buf.String()
-		for _, f := range sampleFindings() {
-			if !strings.Contains(text, f.CheckID) {
-				t.Errorf("at %d columns, %s is not in its own row:\n%s", columns, f.CheckID, visible(text))
+		t.Run(fmt.Sprintf("%d", columns), func(t *testing.T) {
+			var buf bytes.Buffer
+			s := text.NewStream(&buf, false, fixedWidth(columns))
+			for _, f := range sampleFindings() {
+				s.CheckDone(f)
 			}
-		}
+			s.Await()
+
+			for _, row := range streamRows(t, &buf) {
+				line := visible(row)
+				for _, f := range sampleFindings() {
+					if strings.Contains(line, f.CheckID) {
+						t.Errorf("a streamed row still carries a check ID: %q", line)
+					}
+				}
+				if strings.Contains(line, "...") {
+					t.Errorf("a streamed row still carries the trailing ellipsis: %q", line)
+				}
+				if !strings.HasPrefix(line, "  - Checking ") {
+					t.Errorf("a row is not `  - Checking <title>`: %q", line)
+				}
+			}
+		})
 	}
 }
 
@@ -152,8 +170,8 @@ func TestTheCheckIDSurvivesEveryWidth(t *testing.T) {
 // An earlier version clamped the layout to a 40-column floor, which on a
 // 30-column terminal produced 40-column rows that the terminal then wrapped —
 // destroying the column far more thoroughly than a short row would. The rule
-// is that a row may exceed the terminal only when even the compact form does
-// not fit, and never by much.
+// is that a row may exceed the terminal only when there is no room left for
+// even one column of title, and then by exactly one.
 func TestANarrowTerminalIsNotWidenedToFitTheLayout(t *testing.T) {
 	const columns = 30
 	var buf bytes.Buffer
@@ -164,9 +182,7 @@ func TestANarrowTerminalIsNotWidenedToFitTheLayout(t *testing.T) {
 	s.Await()
 
 	for _, row := range streamRows(t, &buf) {
-		// The overflow that remains is the compact row itself: a long ID plus
-		// a long token cannot be made shorter without losing one of them.
-		if got := width(row); got > columns+8 {
+		if got := width(row); got > columns {
 			t.Errorf("row is %d columns on a %d-column terminal:\n  %q", got, columns, visible(row))
 		}
 	}
@@ -531,13 +547,13 @@ func TestTheTitleIsFlushedBeforeTheStreamSleeps(t *testing.T) {
 	if len(ev) < 2 {
 		t.Fatalf("expected a write and a flush before the verdict, got %+v", ev)
 	}
-	if ev[0].kind != "write" || !strings.HasSuffix(ev[0].text, "...") {
+	if ev[0].kind != "write" || !strings.HasPrefix(ev[0].text, "  - Checking ") {
 		t.Fatalf("the first event is not the title: %+v", ev[0])
 	}
 	if ev[1].kind != "flush" {
 		t.Fatalf("the title was written and not flushed, so nothing was on screen during the pause: %+v", ev)
 	}
-	if !strings.HasSuffix(ev[1].text, "...") {
+	if !strings.HasPrefix(ev[1].text, "  - Checking ") || strings.Contains(ev[1].text, "\n") {
 		t.Errorf("the flush released something other than the title: %q", ev[1].text)
 	}
 
@@ -599,8 +615,8 @@ func TestAPacedRowIsDrawnInTwoHalves(t *testing.T) {
 	switch {
 	case strings.Contains(first, "\n"):
 		t.Errorf("the first half ended its line: %q", first)
-	case !strings.HasSuffix(first, "..."):
-		t.Errorf("the first half is not the title and its ellipsis: %q", first)
+	case !strings.HasPrefix(first, "  - Checking "):
+		t.Errorf("the first half is not the row's title: %q", first)
 	case strings.Contains(visible(first), "[ OK ]"):
 		t.Errorf("the verdict went out with the title, so the pace showed nothing: %q", first)
 	}
@@ -754,16 +770,19 @@ func rowIDs(rows []string) string { return strings.Join(rows, "\n") }
 func TestRowsAreGroupedUnderTheirModule(t *testing.T) {
 	var buf bytes.Buffer
 	s := text.NewStream(&buf, false, fixedWidth(80))
+	// The rows no longer carry their check ID, so each one is identified here
+	// by a distinct title — which is what an operator watching identifies it by
+	// too.
 	for _, id := range []string{"AUTH-0001", "AUTH-0002", "KERNEL-0004", "KERNEL-0007", "SSHD-0009"} {
-		s.CheckDone(finding.Finding{CheckID: id, Title: "a check", Result: finding.Pass})
+		s.CheckDone(finding.Finding{CheckID: id, Title: "the check called " + id, Result: finding.Pass})
 	}
 	s.Await()
 
 	got := sections(t, buf.String())
 	want := []section{
-		{"AUTH", []string{"AUTH-0001", "AUTH-0002"}},
-		{"KERNEL", []string{"KERNEL-0004", "KERNEL-0007"}},
-		{"SSHD", []string{"SSHD-0009"}},
+		{"AUTH", []string{"the check called AUTH-0001", "the check called AUTH-0002"}},
+		{"KERNEL", []string{"the check called KERNEL-0004", "the check called KERNEL-0007"}},
+		{"SSHD", []string{"the check called SSHD-0009"}},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("drew %d module sections, want %d:\n%s", len(got), len(want), visible(buf.String()))
@@ -779,7 +798,7 @@ func TestRowsAreGroupedUnderTheirModule(t *testing.T) {
 		}
 		for j, id := range w.rows {
 			if !strings.Contains(got[i].rows[j], id) {
-				t.Errorf("row %d under %s is %q, want the one for %s", j, w.module, got[i].rows[j], id)
+				t.Errorf("row %d under %s is %q, want %q", j, w.module, got[i].rows[j], id)
 			}
 		}
 	}
@@ -1130,7 +1149,7 @@ func TestTheHeartbeatNeverSplitsARow(t *testing.T) {
 			if open {
 				t.Fatalf("a heartbeat was drawn inside a half-finished row: %q", log.writes())
 			}
-		case strings.HasSuffix(text, "..."):
+		case strings.HasPrefix(text, "  - ") && !strings.HasSuffix(text, "\n"):
 			open = true
 		case strings.HasSuffix(text, "\n"):
 			open = false

@@ -139,8 +139,8 @@ acts on is in the **suggestion phase** at the bottom, under
 
 | Line | Content |
 |---|---|
-| The tag | The severity, or `[UNKNOWN]` for a check that produced no verdict. Padded to the widest tag in the section so the titles hold one column across both blocks. |
-| The bullet | The check's title and its ID in brackets. The title is truncated to fit the grid; the ID never is — it is what a suppression file matches on and what `plumbline explain` takes. |
+| The tag | The severity, or `[UNKNOWN]` for a check that produced no verdict. One space follows it — the colour is what the eye runs down, so a padded column was doing the work twice. |
+| The bullet | The check's title and its ID in brackets. The title is truncated to fit; the ID never is — it is what a suppression file matches on and what `plumbline explain` takes. |
 | `Details:` | The remediation summary. Failing that the subject; failing that, for an `UNKNOWN`, why it could not be determined — spelled out (`source truncated`), not the machine token the JSON keeps. **Word-wrapped, never truncated**, with a hanging indent to the column the value starts in: this is the one sentence telling an operator what to type, and a version of this section that cut it at the grid was concise and useless. |
 
 Tag colours, which are what the eye runs down:
@@ -170,9 +170,32 @@ being exhaustive costs the reader something.
 same two-line form — moving the detail out of the scan phase was a change of
 layout and must never become a change of emphasis.
 
-**The grid is 78 columns and does not follow the terminal.** A report has to be
-byte-identical across two runs of an unchanged host, or a scheduled scan
-produces a diff every night and people stop reading it. Only check titles are
+#### Two widths, and one measurement that chooses between them
+
+**The report's furniture is 78 columns and does not follow the terminal**: the
+section rules, the scan phase's status column, the dashboard boxes. A report has
+to be byte-identical across two runs of an unchanged host, or a scheduled scan
+produces a diff every night and people stop reading it.
+
+**The warnings section does follow the terminal** — the entry headline and the
+wrapped remediation under it. That is prose read once and never diffed, and
+holding it to 78 columns in a 160-column window folds a sentence that had room
+to finish.
+
+What decides is `TIOCGWINSZ` **on the destination writer**, not a flag:
+
+| Destination | Warnings section |
+|---|---|
+| A terminal | the window's width, clamped to [40, 120] |
+| A pipe, a redirect, `--output FILE` | 78 |
+
+The ioctl answers for a terminal and fails for a file, so `plumbline scan > report.txt`
+produces the same bytes from any window it is run in, and no mode flag can be
+set wrongly. The cap at 120 is a judgement: prose set to 200 columns is prose
+the eye loses on the return sweep, and it is the same ceiling the live stream
+uses in `streamMaxWidth`.
+
+Only check titles are Only check titles are
 ever truncated to fit; a check ID, a path or an evidence excerpt is a value an
 operator copies, and one silently shortened to make a column line up is worse
 than a ragged column.
@@ -729,25 +752,33 @@ edge of the terminal.
 
 ```
 [*] Collecting host evidence
-  - Collecting users...                                          [ DONE ]
-  - Collecting fswalk... (41s)                                   [ DONE ]
+  - Collecting users                                             [ DONE ]
+  - Collecting fswalk (41s)                                      [ DONE ]
 
 [*] Evaluating the catalog
 
 [+] Module: AUTH
 ---------------------------------------------------
-  - Checking A password quality module is enforced (AUTH-0001)...  [ OK ]
-  - Checking Password quality parameters require len… (AUTH-0002)... [ WARNING ]
+  - Checking A password quality module is enforced                 [ OK ]
+  - Checking Password quality parameters require length…      [ WARNING ]
 
 [+] Module: SSHD
 ---------------------------------------------------
-  - Checking Root login is disabled over SSH (SSHD-0009)...   [ WARNING ]
+  - Checking Root login is disabled over SSH                  [ WARNING ]
 
 [*] Result  posture 88.3   coverage 100%
     82 passed, 11 failed, 0 unknown, 16 not applicable
 
     Run again with --verbose for detailed evidence and remediation.
 ```
+
+**A streamed row is the verb, the title and the verdict.** No check ID, no
+trailing ellipsis. An ID is for copying — into a suppression file, into
+`plumbline explain` — and nothing can be copied out of a display that scrolls
+past at a tenth of a second a row, while the report underneath carries the ID on
+every entry and is still on screen when the scan ends. What the ID cost was the
+title: it sat in the row's fixed tail, so on a narrow terminal the sentence was
+squeezed to make room for an identifier nobody was reading.
 
 **Three levels, and each marker means one thing.** `[*]` is a phase — the two
 halves of a scan. `[+]` is a module heading, which is what `[+]` already means
@@ -823,9 +854,9 @@ that pause is the only thing in this tool that costs time without doing work,
 so it is stated plainly rather than buried.
 
 ```
-  - Checking Root login is disabled over SSH (SSHD-0009)...              ← drawn
+  - Checking Root login is disabled over SSH                             ← drawn
                                                              ...100 ms...  ← flushed, so it is on screen for this
-  - Checking Root login is disabled over SSH (SSHD-0009)...   [ WARNING ] ← then this
+  - Checking Root login is disabled over SSH                  [ WARNING ] ← then this
 ```
 
 The catalog evaluates 109 checks in about 1.3 ms. Printed at that speed the
@@ -913,12 +944,12 @@ row shares the measurement: a window dragged between a heading and its first row
 cannot leave the two laid out against different widths, for the same reason the
 two halves of one row cannot.
 
-Each row is `  - ` + a fixed head + an elastic middle + a fixed tail + `...`,
-padded so that head through token is exactly the terminal width. **Only the
-middle gives.** The check ID is in the tail, so a narrow window shortens the
-human sentence and never the identifier — the ID is what a suppression file
-matches on. Below the width where a truncated title is two letters and an
-ellipsis, the row drops to `  - AUTH-0001... [ PASS ]`. Widths are clamped to
+Each row is `  - ` + a fixed head + an elastic middle + a fixed tail, padded so
+that head through token is exactly the terminal width. **Only the middle
+gives.** A collector's elapsed time is in the tail and is never squeezed out —
+`(41s)` is the answer to the question a person watching a long collector is
+asking. A window too narrow for even one column of title produces a row exactly
+one column over rather than a wrapped one. Widths are clamped to
 [20, 120]: past 120, flush-right puts the verdict too far from the title for the
 eye to associate them.
 

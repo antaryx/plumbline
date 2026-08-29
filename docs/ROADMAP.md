@@ -1428,6 +1428,33 @@ What this leaves:
   is not the same question as "how long has this row been waiting", and the
   arithmetic wants thinking about rather than guessing at.
 
+### The row loses its ID
+
+A streamed row was `  - Checking <title> (<ID>)...`, and the ID and the ellipsis
+were three-quarters of the furniture on every line. Both are gone: a row is the
+verb, the title and the verdict.
+
+**The argument that put the ID there was sound about the ID and wrong about the
+stream.** It said the ID is what a suppression file matches on and what
+`plumbline explain` takes, so it belongs in the row's fixed tail where a narrow
+terminal cannot squeeze it out. All true — and an ID is for *copying*, while the
+stream scrolls past at a tenth of a second a row and nothing can be copied out of
+it. The report underneath carries the ID on every entry and is still on screen
+when the scan ends. So the ID was costing the title columns on exactly the
+terminals where the title had none to spare, to carry a field that was already
+somewhere better.
+
+`TestTheCheckIDSurvivesEveryWidth` is replaced by
+`TestAStreamedRowIsATitleAndAVerdict`, which asserts the reverse at the same
+eight widths. A collector's elapsed time stays in the tail: `(41s)` is the
+answer to the question a person watching a long collector is actually asking.
+
+The compact form went with it. It existed to keep the ID on screen when the
+title had been squeezed to nothing, and with no ID there is nothing to fall back
+to — a window too narrow for even one column of title now produces a row exactly
+one column over rather than a wrapped one, which is the policy the gap clamp
+already followed.
+
 ### The warnings list
 
 The stream was fixed and the report it hands over to was not. `entry` printed
@@ -1474,18 +1501,30 @@ prose is a straight line down the page. `TestALongRemedyWrapsAndIsNotCutOff`
 reassembles the wrapped lines and compares them against the original, so the
 claim under test is "nothing was lost", not "it wrapped somewhere".
 
-The wrap is to the report's fixed 78 columns and not to the terminal's, which is
-the same deliberate split the live stream documents from the other side: this is
-an artifact somebody diffs against last night's, and a report that reflowed to
-the window would produce a different file on a laptop and in CI.
+**The wrap width follows the terminal, and only for this section.** The first
+cut held it to the fixed 78 columns on the grounds that the report is an
+artifact somebody diffs — which is true of the artifact and false of the
+terminal it was also being drawn on, where 78 columns in a 160-column window
+folds a sentence that had room to finish. Both are now served, and what chooses
+between them is `TIOCGWINSZ` on the *destination writer* rather than a flag: the
+ioctl answers for a terminal and fails for a file, so `plumbline scan >
+report.txt` produces the same bytes from any window it is run in, and no mode
+can be set wrongly. Only the warnings section moves; the section rules, the scan
+phase's status column and the dashboard boxes stay on `reportWidth`, because
+those are the furniture a diff would be full of. The terminal width is clamped
+to [40, 120] — prose at 200 columns is prose the eye loses on the return sweep,
+and 120 is the ceiling `streamMaxWidth` already argues for.
 
 **Severity is back, as a padded coloured tag ahead of the title** — red for
 CRITICAL and HIGH, yellow for MEDIUM, blue for LOW, magenta for `[UNKNOWN]`,
 and INFO left unpainted because colouring every row is the same as colouring
 none. The tag is padded to the widest one in the section, measured across both
-blocks, so the titles hold a single column: a column that re-aligns itself
-between "Warnings" and "Could not determine" is two columns and the eye running
-down it stops. An `UNKNOWN` is tagged `UNKNOWN` rather than by its severity,
+blocks, so the titles held a single column — and that padding was then removed
+again. It cost four columns of every line on a host with anything critical on
+it, to buy a column of nothing: the tag is coloured, and the colour is what the
+eye runs down, so the alignment was doing the work twice and charging for it.
+One space follows the tag. An `UNKNOWN` is tagged `UNKNOWN` rather than by its
+severity,
 which is this package's oldest argument compressed into one column — a check
 that could not be evaluated has established no degree of badness, and printing
 `[MEDIUM]` beside it would claim one.

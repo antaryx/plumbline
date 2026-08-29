@@ -137,6 +137,27 @@ type Input struct {
 	// Color enables ANSI escape sequences. See the package comment.
 	Color bool
 
+	// Width is the terminal's column count, or 0 for the fixed grid.
+	//
+	// **It is the one measurement in this package that comes from outside, and
+	// it reaches exactly one block.** The report's furniture — the section
+	// rules, the scan phase's status column, the dashboard boxes — stays on
+	// reportWidth, because a nightly diff of an unchanged host has to be empty
+	// and a box that followed the window would produce a different artifact on
+	// a laptop and in CI.
+	//
+	// What does follow the window is the warnings section: the entry headline
+	// and the wrapped remediation under it. That is prose an operator reads
+	// once and never diffs, and holding it to 78 columns in a 160-column window
+	// wraps a sentence that had room to finish.
+	//
+	// The caller passes system.TerminalWidth of the *destination writer*, which
+	// is what separates the two cases without a flag or a mode: the ioctl
+	// answers for a terminal and fails for a file or a pipe, so a redirect gets
+	// the fixed grid by the same measurement that widens the terminal. See
+	// displayWidth for the clamp.
+	Width int
+
 	// ScanNarrated says that a live stream has already put every check on the
 	// operator's screen, so the report's own scan phase would be the same
 	// hundred rows a second time, regrouped. It is set only for a terminal
@@ -155,7 +176,7 @@ type Input struct {
 // rather than ranged over from a map, so two reports of an unchanged host are
 // byte-identical and diff to nothing.
 func Render(w io.Writer, in Input) error {
-	p := &printer{w: w, color: in.Color}
+	p := &printer{w: w, color: in.Color, width: displayWidth(in.Width)}
 
 	p.header(in)
 	if !in.ScanNarrated {
@@ -177,7 +198,43 @@ type printer struct {
 	w     io.Writer
 	color bool
 	err   error
+
+	// width is the column count the warnings section lays out against:
+	// the terminal's, clamped, or reportWidth. Nothing else uses it.
+	width int
 }
+
+// displayWidth turns a measured terminal into the width the warnings section is
+// set to.
+//
+//   - 0 means the destination is not a terminal — a file, a pipe, `--output`.
+//     The fixed grid, and the artifact stays diffable.
+//   - Below reportWidth the terminal wins outright: a genuinely narrow window
+//     is the one case where 78 columns wraps in the terminal's own hands, which
+//     is worse than wrapping in ours. The floor is only a guard against
+//     arithmetic on an absurd number.
+//   - Above displayMaxWidth it is capped, and that is a judgement rather than a
+//     limitation. Prose set to 200 columns is prose the eye loses on the return
+//     sweep; the measure that reads well tops out around a hundred characters,
+//     which is the same argument — and the same ceiling — the live stream makes
+//     in streamMaxWidth for its own reasons.
+func displayWidth(measured int) int {
+	switch {
+	case measured <= 0:
+		return reportWidth
+	case measured < displayMinWidth:
+		return displayMinWidth
+	case measured > displayMaxWidth:
+		return displayMaxWidth
+	default:
+		return measured
+	}
+}
+
+const (
+	displayMinWidth = 40
+	displayMaxWidth = 120
+)
 
 func (p *printer) printf(format string, args ...any) {
 	if p.err != nil {
@@ -600,9 +657,6 @@ func (p *printer) warningsAndSuggestions(findings []finding.Finding) {
 	p.blank()
 	p.section("Warnings and suggestions")
 
-	// One tag column across both blocks. See severityTagWidth.
-	tagWidth := severityTagWidth(fails, unknowns)
-
 	if len(fails) > 0 {
 		sortBySeverityThenID(fails)
 		p.blank()
@@ -614,7 +668,7 @@ func (p *printer) warningsAndSuggestions(findings []finding.Finding) {
 		// run their eye down, and a blank line between every pair would make it
 		// a hundred and twenty they have to scroll.
 		for _, f := range fails {
-			p.entry(f, tagWidth)
+			p.entry(f)
 		}
 	}
 
@@ -627,7 +681,7 @@ func (p *printer) warningsAndSuggestions(findings []finding.Finding) {
 		p.line("  " + p.paint(ansiDim, "could not. Treat them as findings until they are resolved."))
 		p.blank()
 		for _, f := range unknowns {
-			p.entry(f, tagWidth)
+			p.entry(f)
 		}
 	}
 }
@@ -707,24 +761,24 @@ func (p *printer) accepted(findings []finding.Finding) {
 // field a suppression file matches on and the one an operator pastes into
 // `plumbline explain`. It is never truncated: the title absorbs the whole
 // shortfall.
-func (p *printer) entry(f finding.Finding, tagWidth int) {
+func (p *printer) entry(f finding.Finding) {
 	id := "[" + f.CheckID + "]"
 	tag := severityTag(f)
-	title := truncate(cell(f.Title), reportWidth-4-tagWidth-1-1-visibleWidth(id))
+	title := truncate(cell(f.Title), p.width-4-visibleWidth(tag)-1-1-visibleWidth(id))
 
-	// The tag is padded by hand rather than by tabwriter, and to a width
-	// measured across the whole section rather than to a constant. Padding to
-	// the longest tag that *exists* keeps the titles in one column without
-	// charging every report the four columns `[CRITICAL]` would cost when
-	// nothing on the host is critical — the same rule, and the same reason, as
-	// statusWidth in the scan phase.
+	// **One space after the tag, not a padded column.** An earlier version
+	// padded every tag to the widest in the section so the titles started in
+	// one column; it cost four columns of every line on a host with anything
+	// critical, and the column it bought was a column of nothing. The tag is
+	// coloured, which is what the eye actually runs down — the alignment was
+	// doing the work twice and charging for it.
 	//
 	// The bullet is coloured by result so the two blocks in this section stay
 	// distinguishable when read together. The title carries the emphasis; the
 	// ID beside it is dimmed out of its way, because an operator reads the
 	// sentence and then copies the ID.
 	p.line("  " + p.paint(resultColor(f.Result), "-") + " " +
-		p.paint(severityColour(f), pad(tag, tagWidth)) + " " +
+		p.paint(severityColour(f), tag) + " " +
 		p.paint(ansiBold, title) + " " + p.paint(ansiDim, id))
 
 	p.details(detailsFor(f))
@@ -748,14 +802,12 @@ func (p *printer) entry(f finding.Finding, tagWidth int) {
 //     Details: Remove nullok from every pam_unix.so auth rule, and check
 //     for a distribution override in /usr/share/pam-configs.
 //
-// The width is the report's fixed 78 and not the terminal's. That is the same
-// deliberate difference the live stream documents from the other side: this is
-// an artifact somebody diffs against last night's, and a report that reflowed
-// to the window would produce a different file on a laptop and in CI. The live
-// stream is the half that follows the terminal, because it is gone as soon as
-// the screen scrolls.
+// The width follows the terminal when there is one and is the fixed grid when
+// there is not — see Input.Width. Holding prose to 78 columns in a 160-column
+// window wraps a sentence that had room to finish, and this is the one part of
+// the report that is read once rather than diffed.
 func (p *printer) details(text string) {
-	for i, l := range wrap(text, reportWidth-detailsIndent) {
+	for i, l := range wrap(text, p.width-detailsIndent) {
 		if i == 0 {
 			p.line(spaces(detailsIndent-len(detailsLabel)) + p.paint(ansiDim, detailsLabel) + l)
 			continue
@@ -805,22 +857,6 @@ func severityColour(f finding.Finding) string {
 	default:
 		return ""
 	}
-}
-
-// severityTagWidth is the widest tag in the section, so that every title starts
-// in the same column. Measured across both blocks rather than per block: a
-// column that re-aligns itself between "Warnings" and "Could not determine" is
-// two columns.
-func severityTagWidth(groups ...[]finding.Finding) int {
-	w := 0
-	for _, g := range groups {
-		for _, f := range g {
-			if n := visibleWidth(severityTag(f)); n > w {
-				w = n
-			}
-		}
-	}
-	return w
 }
 
 // detailsFor is the single sentence a finding gets, in the order of what a

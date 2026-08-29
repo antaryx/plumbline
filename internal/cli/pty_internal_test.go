@@ -503,3 +503,89 @@ func checkIDIn(row string) (string, bool) {
 	}
 	return row[open+1 : closed], true
 }
+
+// TestTheReportFollowsTheTerminalAndAFileKeepsTheGrid.
+//
+// **Two layouts, one measurement, no flag.** The warnings section's prose is
+// wrapped to the terminal so a wide window is not folded at 78 columns; a file
+// or a pipe gets the fixed grid so two nightly runs of an unchanged host still
+// diff to nothing. What separates them is `system.TerminalWidth` of the
+// *destination writer* — the same ioctl answers for a terminal and fails for a
+// file — which is why a redirect cannot pick up the operator's window size by
+// accident.
+//
+// Both halves are asserted in one test because either alone is satisfied by a
+// renderer that ignores the width entirely.
+func TestTheReportFollowsTheTerminalAndAFileKeepsTheGrid(t *testing.T) {
+	const grid = 78
+
+	widest := func(out string) int {
+		w := 0
+		for _, raw := range strings.Split(out, "\n") {
+			line := strings.Trim(strings.ReplaceAll(raw, "\033[2K", ""), "\r")
+			if !strings.HasPrefix(line, "      Details: ") &&
+				!strings.HasPrefix(line, "               ") {
+				continue
+			}
+			if n := len([]rune(stripEscapes(line))); n > w {
+				w = n
+			}
+		}
+		return w
+	}
+
+	t.Run("a terminal", func(t *testing.T) {
+		_, out := terminalRun(t, "scan", "--root", "../../testdata/fixtures/cli-host", "--verbose")
+		got := widest(out)
+		if got <= grid {
+			t.Errorf("the widest details line is %d columns on a %d-column terminal; it is still folded at the %d-column grid",
+				got, ptyColumns, grid)
+		}
+		if got > ptyColumns {
+			t.Errorf("a details line is %d columns on a %d-column terminal", got, ptyColumns)
+		}
+	})
+
+	t.Run("a redirect", func(t *testing.T) {
+		t.Setenv("TERM", "xterm-256color")
+		t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+		unsetCIMarkers(t)
+
+		// stdout to a buffer, stderr to the pty: the stream still plays on the
+		// terminal, and the report still goes somewhere that has no width.
+		term := openPTY(t)
+		var file bytes.Buffer
+		if code := Execute([]string{"scan", "--root", "../../testdata/fixtures/cli-host",
+			"--verbose", "--pace", "0"}, &file, term.slave); code != ExitOK {
+			t.Fatalf("exit %d", code)
+		}
+
+		if got := widest(file.String()); got > grid {
+			t.Errorf("a redirected details line is %d columns; a file keeps the %d-column grid so the artifact stays diffable",
+				got, grid)
+		}
+		if !strings.Contains(file.String(), "Details: ") {
+			t.Fatal("the redirect carries no warnings section, so this proves nothing")
+		}
+	})
+}
+
+// stripEscapes removes SGR sequences so a line can be measured in the columns a
+// terminal would draw rather than in bytes.
+func stripEscapes(s string) string {
+	var b strings.Builder
+	esc := false
+	for _, r := range s {
+		switch {
+		case esc:
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				esc = false
+			}
+		case r == '\033':
+			esc = true
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
