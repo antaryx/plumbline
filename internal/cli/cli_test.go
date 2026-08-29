@@ -2061,12 +2061,12 @@ func TestTheLiveStreamNeverReachesStdout(t *testing.T) {
 			if code != 0 {
 				t.Fatalf("exit %d\n%s", code, stderr)
 			}
-			for _, marker := range []string{"[+] Checking ", "[+] Collecting ", "[*] Result"} {
+			for _, marker := range []string{"  - Checking ", "  - Collecting ", "[+] Module: ", "[*] Result"} {
 				if strings.Contains(stdout, marker) {
 					t.Errorf("stream marker %q is on stdout in %s output", marker, format)
 				}
 			}
-			if strings.Contains(stderr, "[+] Checking ") {
+			if strings.Contains(stderr, "  - Checking ") {
 				t.Error("a stream was drawn on a stderr that is not a terminal")
 			}
 		})

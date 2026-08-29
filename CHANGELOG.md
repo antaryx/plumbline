@@ -295,13 +295,43 @@ because of this release (VERSIONING §2.4).
   scrolling list.
 
 ### Added
-- **A paced stream: `--pace`, default `500ms`.** Each streamed row is now drawn
+- **The stream is grouped by module, and its rows are indented under their
+  heading.** The evaluation half was a flat list of a hundred and nine rows;
+  it is now `[+] Module: AUTH`, a rule, and that module's checks drawn as
+  `  - Checking ... [ OK ]` beneath it. Three markers with one meaning each:
+  `[*]` a phase, `[+]` a module, `  - ` a row.
+
+  **That resolves a collision between the two renderers.** `[+] ` was already
+  the report's module heading — `[+] SSHD  · 19 checks, 2 failing` — *and*
+  every row of the stream, so an operator who saw both in one session saw one
+  marker used for a family of checks and for a single check. Collector rows take
+  the same indent although they open no module: they sit under the collection
+  phase, and a second prefix in the same column would be two vocabularies for
+  one list.
+
+  The heading is written when a row arrives carrying a module that is not the
+  one on screen — deliberately not a lookahead, because the drawing goroutine
+  cannot see what is queued behind the row in its hand and must not open a
+  section a Ctrl-C is about to cancel. A catalog that stopped evaluating a
+  module contiguously would reopen its heading rather than file rows under one
+  several screens above; `TestTheStreamGroupsTheCatalogByModule` fails on the
+  ordering that would cause it.
+
+  A heading shares the single width measurement of the row it introduces, so a
+  window dragged between the two cannot leave them laid out against different
+  terminals. Its rule is 51 columns, clamped to the terminal: a rule that wraps
+  is two rules.
+
+- **A paced stream: `--pace`, default `100ms`.** Each streamed row is now drawn
   in two halves — the title and its ellipsis, a pause, then the verdict landing
   flush right — instead of arriving complete. The catalog evaluates 109 checks
   in about 1.3 ms, so an unpaced stream is not a stream: it is a wall of text
   finished before the eye has fixed on anything, which is exactly what it was.
-  At half a second a row, a hundred and twenty-odd rows take a little over a
-  minute.
+
+  The number has been 150 ms and then 500 ms, and both were asking how long one
+  row needs in a flat list of a hundred and twenty — where the pause is the only
+  structure there is. Grouping supplies the structure, so the pace no longer has
+  to: at 100 ms a hundred and twenty-odd rows come in at about twelve seconds.
 
   **The title is flushed before the pause, not merely written.** A delay between
   two writes shows an operator nothing unless the first one has reached the
@@ -333,8 +363,8 @@ because of this release (VERSIONING §2.4).
   - **`Stream.Await`.** `bundle saved to ...` and the suppression notes go to
     the same stderr, and would otherwise land several rows above where they
     belong. Both now wait for the queue first.
-  - **`Stream.Stop`, wired to the scan's context.** A Ctrl-C inside a
-    minute-long display has to be felt now, not at the end of a display
+  - **`Stream.Stop`, wired to the scan's context.** A Ctrl-C inside a display
+    that outlives the work has to be felt now, not at the end of a display
     nobody is watching. The first press abandons the queue within milliseconds
     and finishes the row it was drawing, so no half-line is left on the
     terminal — and the result block still prints, because the scan's *work* was

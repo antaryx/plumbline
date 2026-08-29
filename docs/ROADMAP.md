@@ -1207,18 +1207,25 @@ line report follows, the rows were gone from the window before anyone could read
 one. A row-by-row display is worth having only if a row can be read while it is
 on screen, and at full speed none can.
 
-So each row is now drawn in two halves with half a second between them: the
-title and its ellipsis, a pause, then the verdict landing flush right. `--pace 0`
-removes it and `--pace 150ms` speeds it up.
+So each row is now drawn in two halves with a pause between them: the title and
+its ellipsis, a pause, then the verdict landing flush right. `--pace 0` removes
+it and `--pace 500ms` slows it down.
 
-**The number was 150 ms first, and changing it is worth recording rather than
-quietly amending.** 150 ms was chosen as the fastest cadence at which a column
-of brackets still reads as a sequence rather than as flicker — the right
-question for whether a row is *legible*, and the wrong one for whether a row is
-*read*. Watched back on a screen recording, the eye tracks the movement down the
-column at that speed without ever landing on a title. Half a second is long
-enough to land on one. It costs a hundred and twenty-odd rows a little over a
-minute, which is a real price and is why `--pace` is a flag.
+**The number has been three numbers, and the two changes are worth recording
+rather than quietly amending.** 150 ms was chosen as the fastest cadence at
+which a column of brackets still reads as a sequence rather than as flicker.
+Watched back on a screen recording, that turned out to answer whether a row is
+*legible* and not whether a row is *read* — the eye tracks the movement down the
+column without landing on a title — so it went to 500 ms, and a scan to a little
+over a minute.
+
+Both numbers were asking how long one row needs **in a flat list of a hundred
+and twenty of them**, and in a flat list the pause is the only structure there
+is. Grouping the rows under module headings supplies the structure instead: the
+eye lands on the heading, and the ten or twenty rows below it read as a block
+rather than as twenty separate events. That bought the time back, and the pace
+is 100 ms — about twelve seconds for a scan, with the hierarchy legible
+throughout.
 
 **This is the one thing in the tool that costs time without doing work, and it
 is confined so that it cannot be mistaken for work.**
@@ -1229,7 +1236,7 @@ is confined so that it cannot be mistaken for work.**
   instead of sitting in a sleep. Nothing the report prints is measuring the
   display.
 - **The queue is unbounded and that is not laziness.** A buffered channel blocks
-  its sender at capacity, and at half a second a row the queue reaches the catalog's
+  its sender at capacity, and at a tenth of a second a row the queue reaches the catalog's
   full depth within a millisecond of evaluation starting — so any capacity small
   enough to write down would hand the delay straight back to the engine, and any
   capacity larger than the catalog is a constant somebody must remember to raise
@@ -1245,7 +1252,7 @@ needed a piece:
 - `Stream.Await`, because `bundle saved to ...` and the suppression notes share
   stderr with the stream and would otherwise land several rows above where they
   belong.
-- `Stream.Stop`, wired to the scan's context, because a minute-long display
+- `Stream.Stop`, wired to the scan's context, because a display that outlives
   outlives the work and a Ctrl-C inside it has to be felt now. The first press
   abandons the queue within milliseconds — measured at 23 ms on this host —
   finishes the row it was drawing so no half-line survives, and still prints the
@@ -1283,6 +1290,50 @@ fourteen hundred lines, so on any ordinary window the stream is long gone by the
 time the command returns. The pace is what puts it in front of the operator
 while it is happening, which is the fix the report's position could not be.
 
+### The grouping
+
+The stream was a flat list of a hundred and twenty-two rows, and the pace was
+carrying the whole burden of making it readable. Grouping the evaluation rows
+under a heading per module — `[+] Module: AUTH`, a rule, then the module's checks
+indented under it — gives the display a hierarchy, which is what `lynis` has and
+what the pace was standing in for.
+
+Three markers, one meaning each: `[*]` a phase, `[+]` a module, `  - ` a row.
+**That also fixed a collision nobody had noticed.** `[+] ` was already the
+report's module heading (`[+] SSHD  · 19 checks, 2 failing`, see `group` in
+`text.go`) *and* every row of the stream, so an operator who had seen both in
+one session had seen one marker mean a family of checks and a single check. The
+rows moved to an indent; `[+] ` now means the same thing in both renderers.
+
+**The current module is a local variable in the drawing goroutine**, and the
+alternative is what makes that worth writing down. The obvious place to notice
+a module change is `CheckDone`, which is called in catalog order — but that is
+the producer, on the wrong side of the queue. It would put display state in the
+struct where `CollectorDone`'s thirteen concurrent callers can reach it, needing
+the mutex to be safe, and it would make the evaluating goroutine decide what the
+screen looks like. In `drain` it needs nothing: one goroutine draws, so "which
+module is on screen" is by construction read and written by one goroutine.
+
+It is not a lookahead, and the failure that follows from that is deliberate.
+A heading is written when a row arrives carrying a module that is not the one
+showing — the only rule available to a queue whose consumer cannot see what is
+behind the row in its hand, and the only one that will not open a section a
+Ctrl-C is about to cancel. A catalog that stopped evaluating a module
+contiguously would therefore reopen its heading. That is the right failure:
+the alternative — remembering every module seen and suppressing the repeat —
+files rows under a heading several screens above them, which is a display that
+lies. `TestAModuleIsReopenedRatherThanMisfiled` pins the honest behaviour and
+`TestTheStreamGroupsTheCatalogByModule` fails on the catalog ordering that would
+trigger it, since nothing else declares that ordering.
+
+The heading shares its row's single width measurement rather than taking its
+own, so a window dragged between a heading and its first row cannot leave the
+two laid out against different terminals — the same argument as the two halves
+of a row. The rule under a heading is 51 columns, clamped to the terminal: wide
+enough to read as a heading, narrower than the rows so it introduces the column
+of brackets instead of competing with it, and never wide enough to wrap, because
+a wrapped rule is two rules with a heading orphaned above them.
+
 What this leaves:
 - **The stream shows raw evaluation.** Profile scoping and suppression are
   applied to the slice afterwards, so a check the operator has formally accepted
@@ -1302,7 +1353,7 @@ What this leaves:
   it and needs the stream and the spinner to share stderr, which is the
   interleaving both currently avoid by never running together.
 - **The pace is uniform, and a collector that already took twenty-five seconds
-  waits another half-second for its verdict.** The honest version would hold each row for
+  waits another tenth of a second for its verdict.** The honest version would hold each row for
   `pace` *minus* what the work actually took, so that real duration and
   artificial duration do not add. It is a two-line change and was left out
   because collector rows arrive in a burst — they are queued in completion order

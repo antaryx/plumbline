@@ -35,7 +35,7 @@ func streamRows(t *testing.T, buf *bytes.Buffer) []string {
 	t.Helper()
 	var out []string
 	for _, l := range strings.Split(buf.String(), "\n") {
-		if strings.HasPrefix(visible(l), "[+] ") {
+		if strings.HasPrefix(visible(l), "  - ") {
 			out = append(out, l)
 		}
 	}
@@ -234,8 +234,11 @@ func TestQuietDropsTheRowsAndKeepsTheTally(t *testing.T) {
 	s.Close(score.Compute(sampleFindings(), 33))
 
 	out := visible(buf.String())
-	if strings.Contains(out, "[+] ") {
+	if strings.Contains(out, "  - ") {
 		t.Errorf("--quiet still narrated:\n%s", out)
+	}
+	if strings.Contains(out, "[+] Module:") {
+		t.Errorf("--quiet still opened a module section:\n%s", out)
 	}
 	if strings.Contains(out, "[*] Evaluating") {
 		t.Errorf("--quiet still announced a phase:\n%s", out)
@@ -388,10 +391,10 @@ func TestTheThreeOutputModes(t *testing.T) {
 			s.Close(score.Compute(sampleFindings(), 33))
 			out := visible(buf.String())
 
-			if got := strings.Contains(out, "[+] Checking "); got != c.wantRows {
+			if got := strings.Contains(out, "  - Checking "); got != c.wantRows {
 				t.Errorf("evaluation rows present = %v, want %v:\n%s", got, c.wantRows, out)
 			}
-			if got := strings.Contains(out, "[+] Collecting "); got != c.wantRows {
+			if got := strings.Contains(out, "  - Collecting "); got != c.wantRows {
 				t.Errorf("collection rows present = %v, want %v:\n%s", got, c.wantRows, out)
 			}
 			if got := strings.Contains(out, "[*] Collecting host evidence"); got != c.wantRows {
@@ -514,6 +517,12 @@ func TestTheTitleIsFlushedBeforeTheStreamSleeps(t *testing.T) {
 	s.Await()
 
 	ev := log.events()
+
+	// This row is the first of its module, so a heading and its flush precede
+	// it. The heading is not what the pace is measured against — see section.
+	for len(ev) > 0 && strings.Contains(visible(ev[0].text), "[+] Module:") {
+		ev = ev[1:]
+	}
 	if len(ev) < 2 {
 		t.Fatalf("expected a write and a flush before the verdict, got %+v", ev)
 	}
@@ -572,6 +581,12 @@ func TestAPacedRowIsDrawnInTwoHalves(t *testing.T) {
 	}
 
 	writes := log.writes()
+
+	// Same reason as above: the heading opening the module goes out first and
+	// is not part of the row.
+	for len(writes) > 0 && strings.Contains(visible(writes[0]), "[+] Module:") {
+		writes = writes[1:]
+	}
 	if len(writes) < 2 {
 		t.Fatalf("the row went out in one write, so nothing was ever left on screen waiting: %q", writes)
 	}
@@ -676,5 +691,203 @@ func TestTheRendererDefaultsToNoPace(t *testing.T) {
 
 	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
 		t.Errorf("an unpaced stream took %s to draw %d rows", elapsed, len(sampleFindings()))
+	}
+}
+
+// section is one module heading and the rows drawn under it.
+type section struct {
+	module string
+	rows   []string
+}
+
+// sections parses the stream back into the shape it draws: a run of headings,
+// each followed by its rule and its rows.
+//
+// It asserts the frame as it goes — a row before any heading, or a heading
+// without its rule under it, is a broken display and there is no point carrying
+// it forward into a comparison of check IDs.
+func sections(t *testing.T, out string) []section {
+	t.Helper()
+
+	var got []section
+	lines := strings.Split(visible(out), "\n")
+	for i, line := range lines {
+		switch {
+		case strings.HasPrefix(line, "[+] Module: "):
+			module := strings.TrimPrefix(line, "[+] Module: ")
+			if i+1 >= len(lines) || strings.Trim(lines[i+1], "-") != "" || lines[i+1] == "" {
+				next := ""
+				if i+1 < len(lines) {
+					next = lines[i+1]
+				}
+				t.Errorf("the heading for %s is not underlined; the line below it is %q", module, next)
+			}
+			got = append(got, section{module: module})
+		case strings.HasPrefix(line, "  - "):
+			if len(got) == 0 {
+				t.Errorf("a row was drawn before any module heading: %q", line)
+				continue
+			}
+			got[len(got)-1].rows = append(got[len(got)-1].rows, line)
+		case strings.HasPrefix(line, "[+] "):
+			t.Errorf("a row is still drawn with the report's module marker: %q", line)
+		}
+	}
+	return got
+}
+
+// contains reports whether every id appears, in order, one per row.
+func rowIDs(rows []string) string { return strings.Join(rows, "\n") }
+
+// TestRowsAreGroupedUnderTheirModule.
+//
+// The display is a hierarchy and not a list: a heading per module, a rule under
+// the heading, and the module's checks indented beneath it. This asserts the
+// whole frame at once — which headings, in what order, and which rows landed
+// under each — because the three are one claim. A heading in the right place
+// with the wrong rows under it is not a partial success.
+func TestRowsAreGroupedUnderTheirModule(t *testing.T) {
+	var buf bytes.Buffer
+	s := text.NewStream(&buf, false, fixedWidth(80))
+	for _, id := range []string{"AUTH-0001", "AUTH-0002", "KERNEL-0004", "KERNEL-0007", "SSHD-0009"} {
+		s.CheckDone(finding.Finding{CheckID: id, Title: "a check", Result: finding.Pass})
+	}
+	s.Await()
+
+	got := sections(t, buf.String())
+	want := []section{
+		{"AUTH", []string{"AUTH-0001", "AUTH-0002"}},
+		{"KERNEL", []string{"KERNEL-0004", "KERNEL-0007"}},
+		{"SSHD", []string{"SSHD-0009"}},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("drew %d module sections, want %d:\n%s", len(got), len(want), visible(buf.String()))
+	}
+	for i, w := range want {
+		if got[i].module != w.module {
+			t.Errorf("section %d is %q, want %q", i, got[i].module, w.module)
+			continue
+		}
+		if len(got[i].rows) != len(w.rows) {
+			t.Errorf("%s holds %d rows, want %d:\n%s", w.module, len(got[i].rows), len(w.rows), rowIDs(got[i].rows))
+			continue
+		}
+		for j, id := range w.rows {
+			if !strings.Contains(got[i].rows[j], id) {
+				t.Errorf("row %d under %s is %q, want the one for %s", j, w.module, got[i].rows[j], id)
+			}
+		}
+	}
+}
+
+// TestAModuleIsReopenedRatherThanMisfiled.
+//
+// The drawing goroutine has no lookahead — it compares the row in its hand
+// against the module already on screen, because it cannot see what is queued
+// behind it and must not print a heading for a module a Ctrl-C is about to
+// cancel. The cost of that is this: an out-of-order catalog would open AUTH
+// twice rather than once.
+//
+// **That is the right failure and it is worth pinning as one.** The alternative
+// — remembering every module already seen and suppressing the second heading —
+// files rows under a heading several screens above them, which is a display
+// that lies. Reopening is visibly odd and points straight at the catalog
+// ordering that caused it.
+func TestAModuleIsReopenedRatherThanMisfiled(t *testing.T) {
+	var buf bytes.Buffer
+	s := text.NewStream(&buf, false, fixedWidth(80))
+	for _, id := range []string{"AUTH-0001", "KERNEL-0004", "AUTH-0002"} {
+		s.CheckDone(finding.Finding{CheckID: id, Title: "a check", Result: finding.Pass})
+	}
+	s.Await()
+
+	got := sections(t, buf.String())
+	if len(got) != 3 {
+		t.Fatalf("drew %d sections, want 3 (AUTH, KERNEL, AUTH):\n%s", len(got), visible(buf.String()))
+	}
+	for i, want := range []string{"AUTH", "KERNEL", "AUTH"} {
+		if got[i].module != want {
+			t.Errorf("section %d is %q, want %q", i, got[i].module, want)
+		}
+	}
+	for i, sec := range got {
+		if len(sec.rows) != 1 {
+			t.Errorf("section %d (%s) holds %d rows, want 1: a row was filed under the wrong heading",
+				i, sec.module, len(sec.rows))
+		}
+	}
+}
+
+// TestCollectorRowsBelongToNoModule.
+//
+// A collector is not a check and has no module, so the collection phase is a
+// flat run of rows under its phase header. The two failures this rules out are
+// a heading with an empty name — which is what a naive "the module changed"
+// test produces on the first collector row — and a collector row silently
+// clearing the module, so that the check after it reprints a heading that is
+// already on screen.
+func TestCollectorRowsBelongToNoModule(t *testing.T) {
+	var buf bytes.Buffer
+	s := text.NewStream(&buf, false, fixedWidth(80))
+	s.Phase("Collecting host evidence")
+	s.CollectorDone("kernel", "ok", 0)
+	s.CollectorDone("sshd", "ok", 0)
+	s.Phase("Evaluating the catalog")
+	s.CheckDone(finding.Finding{CheckID: "AUTH-0001", Title: "a check", Result: finding.Pass})
+	s.CheckDone(finding.Finding{CheckID: "AUTH-0002", Title: "a check", Result: finding.Pass})
+	s.Await()
+
+	out := visible(buf.String())
+	if strings.Contains(out, "[+] Module: \n") || strings.Contains(out, "[+] Module: -") {
+		t.Errorf("a collector opened a module with no name:\n%s", out)
+	}
+	if n := strings.Count(out, "[+] Module: "); n != 1 {
+		t.Errorf("drew %d module headings for two collectors and one module, want 1:\n%s", n, out)
+	}
+
+	// The collector rows are above the first heading, and the check rows below
+	// it. Anything else means the heading was placed by row order rather than
+	// by module.
+	heading := strings.Index(out, "[+] Module: AUTH")
+	switch {
+	case heading < 0:
+		t.Fatalf("no AUTH heading:\n%s", out)
+	case strings.Index(out, "  - Collecting kernel") > heading:
+		t.Errorf("a collector row was drawn inside the AUTH section:\n%s", out)
+	case strings.Index(out, "  - Checking") < heading:
+		t.Errorf("a check row was drawn above its own heading:\n%s", out)
+	}
+}
+
+// TestTheModuleRuleNeverOutgrowsTheTerminal.
+//
+// The rule under a heading is a fixed 51 columns, because one that reached the
+// right margin would compete with the column of brackets it is introducing. A
+// terminal narrower than that gets a shorter rule rather than a wrapped one:
+// a rule that wraps is two rules, and it puts a stray line of dashes between a
+// heading and its first row.
+func TestTheModuleRuleNeverOutgrowsTheTerminal(t *testing.T) {
+	for _, c := range []struct {
+		columns int
+		rule    int
+	}{
+		{120, 51}, {80, 51}, {51, 51}, {40, 40}, {24, 24},
+	} {
+		t.Run(fmt.Sprintf("%d", c.columns), func(t *testing.T) {
+			var buf bytes.Buffer
+			s := text.NewStream(&buf, false, fixedWidth(c.columns))
+			s.CheckDone(finding.Finding{CheckID: "AUTH-0001", Title: "a check", Result: finding.Pass})
+			s.Await()
+
+			for _, line := range strings.Split(visible(buf.String()), "\n") {
+				if strings.HasPrefix(line, "---") {
+					if got := width(line); got != c.rule {
+						t.Errorf("the rule is %d columns on a %d-column terminal, want %d", got, c.columns, c.rule)
+					}
+					return
+				}
+			}
+			t.Errorf("no rule under the heading:\n%s", visible(buf.String()))
+		})
 	}
 }

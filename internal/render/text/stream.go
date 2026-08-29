@@ -75,16 +75,20 @@ const (
 // be read while it is on screen, and that is a property of the display, not of
 // the work.
 //
-// **500 ms is the operator's number, and it is not the one this started at.**
-// The first cut was 150 ms, picked as the fastest cadence at which a column of
-// brackets still reads as a sequence rather than as flicker. Watched back on a
-// screen recording that turned out to be the wrong end of the range to aim at:
-// a row being legible is not the same as a row being *read*, and at 150 ms the
-// eye tracks the movement down the column without ever landing on a title. Half
-// a second is long enough to land on one. It costs a hundred and twenty-odd
-// rows — thirteen collectors and a hundred and nine checks on this host — a
-// little over a minute, which is a real price and is the reason --pace is a
-// flag rather than a constant.
+// **100 ms is the third number this has had, and the two before it were both
+// answers to the wrong question.** 150 ms was picked as the fastest cadence at
+// which a column of brackets still reads as a sequence rather than as flicker;
+// 500 ms as the slowest at which a hundred and twenty rows is still worth
+// sitting through. Both were asking how long one row needs, in a display that
+// was a flat list of a hundred and twenty of them — and a flat list of anything
+// needs the pause, because the pause is the only structure it has.
+//
+// The list is no longer flat. Rows are grouped under module headings (see
+// section), so the display has visual breaks of its own and the pace no longer
+// has to supply them: what the eye lands on is the heading, and the rows below
+// it read as a block rather than as a hundred and nine separate events. That
+// buys back the time — a hundred and twenty-odd rows come in at about twelve
+// seconds and the structure is legible throughout.
 //
 // **It is presentation and it is never mistaken for work.** Nothing is measured
 // through it and nothing waits behind it: the pace is paid by the drawing
@@ -92,7 +96,7 @@ const (
 // is charged only where a person is watching — a pipe, a redirect, a CI log and
 // --quiet all skip the rows entirely and skip the delay with them — and
 // `--pace 0` removes it for anybody who wants the answer rather than the show.
-const DefaultPace = 500 * time.Millisecond
+const DefaultPace = 100 * time.Millisecond
 
 // Stream draws a scan as it happens: one line per collector and one per check,
 // each with its verdict flush against the right edge of the terminal.
@@ -305,6 +309,7 @@ func (s *Stream) CheckDone(f finding.Finding) {
 	s.emit(event{row: row{
 		head: "Checking ", middle: f.Title, tail: " (" + f.CheckID + ")",
 		compact: f.CheckID, token: token, colour: colour,
+		module: moduleOf(f.CheckID),
 	}})
 }
 
@@ -343,16 +348,48 @@ func (s *Stream) emit(ev event) {
 // the stream's terminal, and the only thing that ever waits for the pace.
 func (s *Stream) drain() {
 	defer close(s.finished)
+
+	// **The module the display is currently inside is a local variable, and
+	// that is deliberate rather than incidental.**
+	//
+	// The obvious place to notice a module change is CheckDone — it is called
+	// in catalog order, so the change is visible there — but that is the
+	// producer, and it is the wrong side of the queue in two ways. It would
+	// make the evaluating goroutine decide what the screen looks like, and it
+	// would put a piece of display state in the struct, where CollectorDone's
+	// thirteen concurrent callers can reach it and where it would need the
+	// mutex to be safe. Here it needs nothing: drain is the only goroutine that
+	// draws, so "which module is on screen" is by construction read and written
+	// by one goroutine, cannot be raced, and cannot outlive the display it
+	// describes.
+	//
+	// It is not a lookahead. A heading is printed when a row arrives carrying a
+	// module that is not the one showing, which is the only rule that works for
+	// a queue: the drawing goroutine has no idea what is queued behind the row
+	// in its hand, and a scan interrupted after the last CRON row must not have
+	// printed a FILESYS heading with nothing under it.
+	module := ""
+
 	for {
 		ev, ok := s.next()
 		if !ok {
 			return
 		}
 		if ev.phase != "" {
+			// A phase forgets the module, so that a heading is printed again
+			// under a new phase rather than suppressed as a repeat.
+			module = ""
 			fmt.Fprintf(s.w, "\n%s\n", s.paint(ansiBold, "[*] "+ev.phase))
 			s.show()
 		} else {
-			s.draw(ev.row, ev.pace)
+			// "" never opens a section and never closes one. A collector row
+			// carries no module and must neither print a heading nor make the
+			// next check row reprint the one already showing.
+			open := ""
+			if m := ev.row.module; m != "" && m != module {
+				module, open = m, m
+			}
+			s.draw(ev.row, ev.pace, open)
 		}
 
 		s.mu.Lock()
@@ -360,6 +397,40 @@ func (s *Stream) drain() {
 		s.idle.Broadcast()
 		s.mu.Unlock()
 	}
+}
+
+// section writes the heading a run of rows belongs under.
+//
+// It is not paced. The pace exists so that a row can be read while it is on
+// screen; a heading is not a result, and waiting beside one buys nothing that
+// the last row of the previous module has not already bought.
+//
+// columns is passed in rather than measured here so that a heading and the row
+// it introduces are always laid out against the same terminal — see draw.
+func (s *Stream) section(module string, columns int) {
+	rule := moduleRule
+	if columns < rule {
+		rule = columns
+	}
+	fmt.Fprintf(s.w, "\n%s\n%s\n",
+		s.paint(ansiBold, "[+] Module: "+module),
+		s.paint(ansiDim, strings.Repeat("-", rule)))
+	s.show()
+}
+
+// moduleOf is the family a check belongs to: the part of its ID before the
+// hyphen, so AUTH-0001 is AUTH and CONTAINERS-0007 is CONTAINERS.
+//
+// An ID with no hyphen has no module rather than being its own, because the
+// alternative is a heading per row for anything that ever escapes the catalog's
+// naming convention — a display that fails loudly on a malformed ID, where this
+// one simply does not group it.
+func moduleOf(checkID string) string {
+	module, _, ok := strings.Cut(checkID, "-")
+	if !ok {
+		return ""
+	}
+	return module
 }
 
 // next takes the head of the queue, waiting if it is empty. ok is false when
@@ -557,7 +628,7 @@ func (s *Stream) Hint(hint string) *Stream {
 // draw writes one right-aligned row, in two halves with the pace between them.
 //
 // **The split is the whole effect.** The left half goes out without a newline,
-// so the terminal is left holding `[+] Checking a thing (X-0001)...` with the
+// so the terminal is left holding `  - Checking a thing (X-0001)...` with the
 // cursor sitting after it; the verdict then arrives beside it a beat later and
 // reads as an answer to a question, rather than as text that was always there.
 // Printing the assembled line in one call and sleeping afterwards would take
@@ -569,8 +640,19 @@ func (s *Stream) Hint(hint string) *Stream {
 //
 // The flush between the write and the pause is what makes the split an effect
 // rather than an arrangement of bytes; see show.
-func (s *Stream) draw(r row, pace time.Duration) {
-	left, gap := s.layout(r)
+//
+// open is the module heading to write above this row, or "" for a row that
+// continues the module already showing. It is drawn here rather than in drain
+// so that the terminal is measured **once per row** and the heading, its rule
+// and its first row are all laid out against the same number — the same reason
+// the two halves of one row share a measurement.
+func (s *Stream) draw(r row, pace time.Duration, open string) {
+	columns := s.columns()
+	if open != "" {
+		s.section(open, columns)
+	}
+
+	left, gap := s.layout(r, columns)
 	fmt.Fprint(s.w, left)
 	s.show()
 	s.nap(pace)
@@ -584,11 +666,11 @@ func (s *Stream) draw(r row, pace time.Duration) {
 // The arithmetic is the whole of the alignment and it is four terms:
 //
 //	columns = clamp(terminal width, streamMinWidth, streamMaxWidth)
-//	fixed   = "[+] " + head + tail + "..."
+//	fixed   = "  - " + head + tail + "..."
 //	elastic = truncate(middle, columns - fixed - token - 1)
 //	gap     = columns - fixed - elastic - token
 //
-// so that `[+] ` + head + elastic + tail + `...` + gap + token is exactly
+// so that `  - ` + head + elastic + tail + `...` + gap + token is exactly
 // `columns` wide and every `]` lands on the same column for as long as the
 // terminal keeps that width.
 //
@@ -604,30 +686,29 @@ func (s *Stream) draw(r row, pace time.Duration) {
 // because the ID is at the end, and produces rows nobody can act on at exactly
 // the moment the operator is squinting at a small window.
 //
-// The width is asked once per row, so the three segments of one line are always
-// laid out against the same number even if the window is dragged mid-scan.
+// The width is asked once per row — by draw, and shared with any module heading
+// that row opens — so the three segments of one line are always laid out
+// against the same number even if the window is dragged mid-scan.
 // Truncation is preferred to wrapping: a wrapped row puts the bracket under the
 // middle of the next line and destroys the column, which is the only thing this
 // layout is for.
-func (s *Stream) layout(r row) (string, int) {
-	columns := s.columns()
-
-	fixed := visibleWidth(rowPrefix) + visibleWidth(r.head) + visibleWidth(r.tail) + visibleWidth(rowEllipsis)
+func (s *Stream) layout(r row, columns int) (string, int) {
+	fixed := visibleWidth(rowIndent) + visibleWidth(r.head) + visibleWidth(r.tail) + visibleWidth(rowEllipsis)
 	room := columns - fixed - visibleWidth(r.token) - 1
 
-	left := rowPrefix + r.head + truncate(r.middle, room) + r.tail + rowEllipsis
+	left := rowIndent + r.head + truncate(r.middle, room) + r.tail + rowEllipsis
 	if room < streamMinTitle {
 		// The compact form. It keeps the two things a row exists to carry —
 		// which check, and what it said — and drops the sentence explaining
 		// it, which at this width was three characters of nothing.
-		left = rowPrefix + r.compact + rowEllipsis
+		left = rowIndent + r.compact + rowEllipsis
 	}
 
 	gap := columns - visibleWidth(left) - visibleWidth(r.token)
 	if gap < 1 {
 		// Even the compact form does not fit. The row runs over rather than
 		// being cut into punctuation: an over-long line is still readable and
-		// wraps onto a second line the operator can follow, while `[+] CONT…`
+		// wraps onto a second line the operator can follow, while `  - CONT…`
 		// beside no verdict at all is a row that has lost its point.
 		gap = 1
 	}
@@ -647,11 +728,33 @@ type row struct {
 	compact string
 	token   string
 	colour  string
+
+	// module is the family this row belongs to, or "" for a row that belongs to
+	// none — every collector row, since collectors are not checks. It is
+	// carried on the row rather than resolved when the row is drawn because the
+	// drawing goroutine must not have to know how a check ID is spelled.
+	module string
 }
 
+// The row's furniture, and the module heading's.
+//
+// **`[+] ` used to mean two different things on one screen and now means one.**
+// It is the report's module heading — `[+] SSHD  · 19 checks, 2 failing`, see
+// group in text.go — and it was also every row of the stream, so an operator
+// looking at a terminal that had shown both saw the same marker for "a family
+// of checks" and for "one check". The stream's rows are now indented under
+// their heading instead, which is both the Lynis shape and the one reading of
+// `[+] ` that survives in either renderer.
 const (
-	rowPrefix   = "[+] "
+	rowIndent   = "  - "
 	rowEllipsis = "..."
+
+	// moduleRule is how wide the line under a module heading is drawn, before
+	// the terminal has its say. It is a fixed figure rather than the full width
+	// because a rule that reaches the right margin competes with the column of
+	// brackets it is supposed to be introducing — but it is clamped to the
+	// terminal in section, because a rule that wraps is two rules.
+	moduleRule = 51
 )
 
 // columns is the width this line is laid out against, clamped.

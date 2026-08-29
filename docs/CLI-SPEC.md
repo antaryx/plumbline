@@ -65,7 +65,7 @@ the same.
 | `--no-color` | false | Also honours `NO_COLOR` and non-TTY stdout | **yes** (v0.3) |
 | `--verbose`, `-v` | false | Add the severity tally and the detailed report (§7) | **yes** |
 | `--quiet`, `-q` | false | Stream nothing; print only the closing result block (§7) | **yes** |
-| `--pace D` | `500ms` | How long a streamed row waits before its verdict lands; `0` draws at full speed (§7) | **yes** |
+| `--pace D` | `100ms` | How long a streamed row waits before its verdict lands; `0` draws at full speed (§7) | **yes** |
 | `--output-dir DIR` | — | Directory; required when multiple formats | no |
 | `--debug` | false | Engine internals to stderr | no |
 
@@ -682,18 +682,43 @@ edge of the terminal.
 
 ```
 [*] Collecting host evidence
-[+] Collecting users...                                          [ DONE ]
-[+] Collecting fswalk... (41s)                                   [ DONE ]
+  - Collecting users...                                          [ DONE ]
+  - Collecting fswalk... (41s)                                   [ DONE ]
 
 [*] Evaluating the catalog
-[+] Checking A password quality module is enforced (AUTH-0001)...  [ OK ]
-[+] Checking Root login is disabled over SSH (SSHD-0009)...   [ WARNING ]
+
+[+] Module: AUTH
+---------------------------------------------------
+  - Checking A password quality module is enforced (AUTH-0001)...  [ OK ]
+  - Checking Password quality parameters require len… (AUTH-0002)... [ WARNING ]
+
+[+] Module: SSHD
+---------------------------------------------------
+  - Checking Root login is disabled over SSH (SSHD-0009)...   [ WARNING ]
 
 [*] Result  posture 88.3   coverage 100%
     82 passed, 11 failed, 0 unknown, 16 not applicable
 
     Run again with --verbose for detailed evidence and remediation.
 ```
+
+**Three levels, and each marker means one thing.** `[*]` is a phase — the two
+halves of a scan. `[+]` is a module heading, which is what `[+]` already means
+in the report (`[+] SSHD  · 19 checks, 2 failing`). `  - ` is a row. Before the
+grouping, `[+]` was a module in the report and a row in the stream, so an
+operator who saw both in one session saw one marker for a family of checks and
+for a single check.
+
+Collector rows are indented on the same rule even though they open no module:
+they sit under the `[*] Collecting host evidence` phase, and a second prefix in
+the same column would be two vocabularies for one list.
+
+| Rule | Detail |
+|---|---|
+| A heading per module | Taken from the check ID's prefix — `AUTH-0001` is `AUTH`. An ID with no hyphen has no module and opens no heading. |
+| Written when the module changes | Not on a lookahead. The drawing goroutine compares the row in its hand against the module on screen, because it cannot see what is queued behind it and must not open a section a Ctrl-C is about to cancel. A catalog that stopped evaluating a module contiguously would therefore reopen its heading rather than file rows under one several screens above. |
+| The rule is 51 columns, clamped | Narrower than the row, so it introduces the column of brackets instead of competing with it — and never wider than the terminal, because a rule that wraps is two rules. |
+| The heading is not paced | The pace exists so a row can be read while it is on screen. A heading is not a result. |
 
 **On a terminal, this is the whole of the output.** The detailed report — every
 finding with its evidence, remediation and cautions — is withheld, because the
@@ -722,9 +747,9 @@ that pause is the only thing in this tool that costs time without doing work,
 so it is stated plainly rather than buried.
 
 ```
-[+] Checking Root login is disabled over SSH (SSHD-0009)...              ← drawn
-                                                             ...500 ms...  ← flushed, so it is on screen for this
-[+] Checking Root login is disabled over SSH (SSHD-0009)...   [ WARNING ] ← then this
+  - Checking Root login is disabled over SSH (SSHD-0009)...              ← drawn
+                                                             ...100 ms...  ← flushed, so it is on screen for this
+  - Checking Root login is disabled over SSH (SSHD-0009)...   [ WARNING ] ← then this
 ```
 
 The catalog evaluates 109 checks in about 1.3 ms. Printed at that speed the
@@ -735,7 +760,7 @@ can be read while it is on screen.
 
 | Rule | Detail |
 |---|---|
-| 500 ms a row | Long enough for the eye to land on a title rather than to track the column past it. This was 150 ms first — the fastest cadence at which the brackets still read as a sequence — and half a second is what watching it back argued for instead. A hundred and twenty-odd rows then take a little over a minute. |
+| 100 ms a row | The third number this has had. 150 ms was the fastest cadence at which a column of brackets still reads as a sequence; 500 ms the slowest worth sitting through. Both were asking how long *one row* needs in a flat list of a hundred and twenty — where the pause is the only structure there is. Grouping supplies the structure instead, so the pace no longer has to, and a hundred and twenty-odd rows come in at about twelve seconds. |
 | The title is flushed before the pause | A delay between two writes shows nothing unless the first has reached the screen. `os.Stderr` is an `*os.File` and needs no flush — one `write(2)` per `Write` — but the renderer probes its writer for `Flush() error` and calls it anyway, so the effect cannot be lost by wrapping stderr in a buffered writer for some unrelated reason. `Sync()` is deliberately not called: `*os.File` has it, it means *commit to storage*, and on a character device it returns `EINVAL`. |
 | `--pace 0` removes it | For anybody who wants the answer rather than the show. `--pace 300ms` slows it. |
 | Charged to the display, never to the engine | Every row is **queued**, not drawn, by whoever produced it: one goroutine owns the terminal and does the waiting. Evaluation still takes 1.3 ms, collectors keep reading the host instead of sitting in a sleep, and no duration the report prints is measuring the display. |
@@ -807,12 +832,17 @@ laid out against `TIOCGWINSZ` at the moment each row is written — so a window
 resized mid-scan reflows from the next row on. Nothing already printed moves,
 because nothing can move somebody's scrollback.
 
-Each row is `[+] ` + a fixed head + an elastic middle + a fixed tail + `...`,
+The terminal is measured **once per row**, and a module heading opened by that
+row shares the measurement: a window dragged between a heading and its first row
+cannot leave the two laid out against different widths, for the same reason the
+two halves of one row cannot.
+
+Each row is `  - ` + a fixed head + an elastic middle + a fixed tail + `...`,
 padded so that head through token is exactly the terminal width. **Only the
 middle gives.** The check ID is in the tail, so a narrow window shortens the
 human sentence and never the identifier — the ID is what a suppression file
 matches on. Below the width where a truncated title is two letters and an
-ellipsis, the row drops to `[+] AUTH-0001... [ PASS ]`. Widths are clamped to
+ellipsis, the row drops to `  - AUTH-0001... [ PASS ]`. Widths are clamped to
 [20, 120]: past 120, flush-right puts the verdict too far from the title for the
 eye to associate them.
 

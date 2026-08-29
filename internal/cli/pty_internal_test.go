@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -179,9 +180,10 @@ func terminalRun(t *testing.T, args ...string) (int, string) {
 // unpaced pins the stream's artificial delay off, unless the test is about the
 // delay.
 //
-// scan's default is half a second a row (rendertext.DefaultPace), which is what
-// makes the display readable on a terminal and what would make every mode test
-// in this file wait a minute for a property none of them is asserting.
+// scan's default is a tenth of a second a row (rendertext.DefaultPace), which
+// is what makes the display readable on a terminal and what would make every
+// mode test in this file wait twelve seconds for a property none of them is
+// asserting.
 // TestThePaceFlagSlowsTheStream is the one that pays for it.
 func unpaced(args []string) []string {
 	for _, a := range args {
@@ -240,10 +242,10 @@ func TestStandardModeShowsTheStreamAndNothingButASummary(t *testing.T) {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
 
-	if !strings.Contains(out, "[+] Collecting ") {
+	if !strings.Contains(out, "  - Collecting ") {
 		t.Error("no collection rows: the stream did not run")
 	}
-	if !strings.Contains(out, "[+] Checking ") {
+	if !strings.Contains(out, "  - Checking ") {
 		t.Error("no evaluation rows: the stream did not run")
 	}
 
@@ -294,7 +296,7 @@ func TestQuietModeIsTheResultBlockAlone(t *testing.T) {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
 
-	for _, forbidden := range []string{"[+] Checking ", "[+] Collecting ", "[*] Collecting", "!  HIGH", "Warnings and suggestions"} {
+	for _, forbidden := range []string{"  - Checking ", "  - Collecting ", "[+] Module: ", "[*] Collecting", "!  HIGH", "Warnings and suggestions"} {
 		if strings.Contains(out, forbidden) {
 			t.Errorf("--quiet printed %q:\n%s", forbidden, out)
 		}
@@ -327,7 +329,7 @@ func TestARedirectedRunOnATerminalStillWritesTheWholeReport(t *testing.T) {
 	}
 
 	screen := term.output(t)
-	if !strings.Contains(screen, "[+] Checking ") {
+	if !strings.Contains(screen, "  - Checking ") {
 		t.Error("the stream did not play on the terminal")
 	}
 	if !strings.Contains(file.String(), "[+] AUTH") {
@@ -358,10 +360,10 @@ func TestVerboseKeepsTheStreamAboveTheResultAndTheDetail(t *testing.T) {
 
 	// Not "some rows", but every row standard mode drew. A stream that lost
 	// half its checks to --verbose is as broken as one that lost all of them.
-	if got, want := strings.Count(out, "[+] Checking "), strings.Count(plain, "[+] Checking "); got != want {
+	if got, want := strings.Count(out, "  - Checking "), strings.Count(plain, "  - Checking "); got != want {
 		t.Errorf("--verbose streamed %d evaluation rows, standard mode streamed %d", got, want)
 	}
-	if got, want := strings.Count(out, "[+] Collecting "), strings.Count(plain, "[+] Collecting "); got != want {
+	if got, want := strings.Count(out, "  - Collecting "), strings.Count(plain, "  - Collecting "); got != want {
 		t.Errorf("--verbose streamed %d collection rows, standard mode streamed %d", got, want)
 	}
 
@@ -374,8 +376,8 @@ func TestVerboseKeepsTheStreamAboveTheResultAndTheDetail(t *testing.T) {
 		first string
 		then  string
 	}{
-		{"collection before evaluation", "[+] Collecting ", "[+] Checking "},
-		{"the stream before the result block", "[+] Checking ", "[*] Result"},
+		{"collection before evaluation", "  - Collecting ", "  - Checking "},
+		{"the stream before the result block", "  - Checking ", "[*] Result"},
 		{"the result block before the detail", "[*] Result", "Warnings and suggestions"},
 	} {
 		if i, j := strings.Index(out, step.first), strings.Index(out, step.then); i < 0 || j < 0 || i > j {
@@ -406,7 +408,7 @@ func TestThePaceFlagSlowsTheStream(t *testing.T) {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
 
-	rows := strings.Count(out, "[+] ")
+	rows := strings.Count(out, "  - ")
 	if rows < 50 {
 		t.Fatalf("only %d rows streamed; the timing below would prove nothing", rows)
 	}
@@ -414,4 +416,79 @@ func TestThePaceFlagSlowsTheStream(t *testing.T) {
 		t.Errorf("%d rows at %s each finished in %s, under the %s floor: --pace is not reaching the stream",
 			rows, pace, elapsed, want)
 	}
+}
+
+// TestTheStreamGroupsTheCatalogByModule.
+//
+// The end-to-end shape, on a real terminal, from the real catalog: a heading
+// per module and every check indented under the heading for its own family.
+//
+// **The claim worth testing is the second half.** That headings appear at all
+// is a renderer property already covered in internal/render/text; what only a
+// full run can show is that the heading a row lands under is the row's own
+// module — which depends on the catalog evaluating in an order that keeps a
+// module contiguous. Nothing declares that ordering, so nothing but a scan can
+// check it, and a catalog reordered by an unrelated change would otherwise
+// scatter AUTH checks under three headings with every unit test still green.
+func TestTheStreamGroupsTheCatalogByModule(t *testing.T) {
+	code, out := terminalRun(t, "scan", "--root", "../../testdata/fixtures/cli-host")
+	if code != ExitOK {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+
+	var (
+		module   string
+		seen     []string
+		rows     int
+		reopened []string
+	)
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimRight(line, "\r")
+		switch {
+		case strings.HasPrefix(line, "[+] Module: "):
+			module = strings.TrimSpace(strings.TrimPrefix(line, "[+] Module: "))
+			if slices.Contains(seen, module) {
+				reopened = append(reopened, module)
+			}
+			seen = append(seen, module)
+
+		case strings.HasPrefix(line, "  - Checking "):
+			rows++
+			id, ok := checkIDIn(line)
+			if !ok {
+				continue
+			}
+			want, _, _ := strings.Cut(id, "-")
+			if want != module {
+				t.Errorf("%s is drawn under the %q heading", id, module)
+			}
+		}
+	}
+
+	if rows == 0 {
+		t.Fatal("no evaluation rows: the stream did not run")
+	}
+	if len(seen) < 2 {
+		t.Errorf("the whole catalog streamed under %d heading(s); it has more than one module", len(seen))
+	}
+	// A module opened twice means the catalog stopped evaluating its families
+	// contiguously. The renderer draws that faithfully rather than hiding it
+	// (see TestAModuleIsReopenedRatherThanMisfiled), so the complaint belongs
+	// here.
+	if len(reopened) > 0 {
+		t.Errorf("these modules were opened more than once, so the catalog no longer evaluates them contiguously: %v", reopened)
+	}
+}
+
+// checkIDIn pulls the check ID out of a streamed row, which carries it in
+// parentheses at the end of the title — `  - Checking a thing (AUTH-0001)...`.
+// A row narrow enough to have dropped to its compact form has the ID and
+// nothing else, and is not what this is parsing.
+func checkIDIn(row string) (string, bool) {
+	open := strings.LastIndex(row, "(")
+	closed := strings.LastIndex(row, ")")
+	if open < 0 || closed < open {
+		return "", false
+	}
+	return row[open+1 : closed], true
 }
