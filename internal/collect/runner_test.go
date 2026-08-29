@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -671,13 +672,20 @@ func TestOpaqueReadsAreNotRecordedAsEvidence(t *testing.T) {
 // from the collector goroutines, which run at once, so it locks — a test
 // observer that raced would report a bug in the runner that was its own.
 type recorder struct {
-	mu   sync.Mutex
-	seen map[string]collect.CollectorStatus
-	n    int
+	mu      sync.Mutex
+	seen    map[string]collect.CollectorStatus
+	started []string
+	n       int
 }
 
 func newRecorder() *recorder {
 	return &recorder{seen: map[string]collect.CollectorStatus{}}
+}
+
+func (r *recorder) CollectorStarted(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.started = append(r.started, id)
 }
 
 func (r *recorder) CollectorDone(id string, status collect.CollectorStatus, _ time.Duration) {
@@ -685,6 +693,12 @@ func (r *recorder) CollectorDone(id string, status collect.CollectorStatus, _ ti
 	defer r.mu.Unlock()
 	r.seen[id] = status
 	r.n++
+}
+
+func (r *recorder) begun() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.started...)
 }
 
 // TestEveryCollectorReportsExactlyOnce.
@@ -719,6 +733,44 @@ func TestEveryCollectorReportsExactlyOnce(t *testing.T) {
 	for id, status := range want {
 		if got := rec.seen[id]; got != status {
 			t.Errorf("%s reported %q, want %q", id, got, status)
+		}
+	}
+}
+
+// TestOnlyCollectorsThatBeganWorkingAreReportedAsStarted.
+//
+// CollectorStarted drives the heartbeat — the line that names what a frozen
+// terminal is waiting for — so it has to mean "on the host now" and nothing
+// looser. A collector refused for privilege, or one whose dependency was never
+// registered, never touched the host: reporting it as started would put its
+// name under a stalled display forever, since no CollectorDone will ever come
+// to take it off.
+//
+// The asymmetry with CollectorDone is the contract. Every collector finishes;
+// only the ones that ran, started.
+func TestOnlyCollectorsThatBeganWorkingAreReportedAsStarted(t *testing.T) {
+	r := collect.NewRegistry()
+	r.Register(stub{id: "fine"})
+	r.Register(stub{id: "broken", run: func(context.Context, system.System, *fact.Set) error {
+		return errors.New("no")
+	}})
+	r.Register(stub{id: "privileged", requires: collect.CapRoot})
+	r.Register(stub{id: "orphan", deps: []string{"never-registered"}})
+
+	rec := newRecorder()
+	run(t, collect.Runner{Registry: r, Observer: rec}, sys(t, "sshd-unreadable"))
+
+	started := rec.begun()
+	slices.Sort(started)
+	if want := []string{"broken", "fine"}; !slices.Equal(started, want) {
+		t.Errorf("started = %v, want %v: a collector that never ran was announced as running", started, want)
+	}
+
+	// And nothing is left running: every start is answered by a finish, which
+	// is what lets the heartbeat empty its set and stop drawing.
+	for _, id := range started {
+		if _, ok := rec.seen[id]; !ok {
+			t.Errorf("%s started and never finished", id)
 		}
 	}
 }

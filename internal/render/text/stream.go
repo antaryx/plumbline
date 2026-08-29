@@ -167,6 +167,16 @@ type Stream struct {
 	work     *sync.Cond
 	idle     *sync.Cond
 
+	// inflight is the collectors that are working the host right now, and when
+	// each of them started. It is the heartbeat's subject.
+	//
+	// It is on the struct and under the mutex because — unlike the current
+	// module, which is drain's alone — it is genuinely shared: written by the
+	// thirteen collector goroutines and read by the drawing one. ticked is the
+	// drawing goroutine's wake-up flag, set by the ticker.
+	inflight map[string]time.Time
+	ticked   bool
+
 	// Tallies, for the closing line. Kept here rather than recomputed from the
 	// findings because the stream is a view of what it actually showed: if a
 	// check never reached the stream, it is not in the stream's count, and a
@@ -187,8 +197,9 @@ type Stream struct {
 func NewStream(w io.Writer, colour bool, width func() (int, bool)) *Stream {
 	s := &Stream{
 		w: w, colour: colour, width: width,
-		counts: map[finding.Result]int{},
-		halt:   make(chan struct{}),
+		counts:   map[finding.Result]int{},
+		inflight: map[string]time.Time{},
+		halt:     make(chan struct{}),
 	}
 	s.work = sync.NewCond(&s.mu)
 	s.idle = sync.NewCond(&s.mu)
@@ -260,6 +271,27 @@ func (s *Stream) Phase(name string) {
 	s.emit(event{phase: name})
 }
 
+// CollectorStarted implements collect.Observer. It is called from the collector
+// goroutines, concurrently, as each one begins working the host.
+//
+// **It draws nothing and starts nothing.** All it does is put the collector in
+// the set the heartbeat describes, so that a display which is already running
+// has something to say while it waits. A stream that has drawn nothing yet
+// stays silent rather than opening with a heartbeat for a scan the operator has
+// not been told has begun — the phase header is what says that, and it is
+// queued like everything else.
+func (s *Stream) CollectorStarted(id string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.quiet || s.stopped {
+		return
+	}
+	s.inflight[id] = time.Now()
+}
+
 // CollectorDone implements collect.Observer. It is called from the collector
 // goroutines, concurrently.
 func (s *Stream) CollectorDone(id string, status string, took time.Duration) {
@@ -267,6 +299,15 @@ func (s *Stream) CollectorDone(id string, status string, took time.Duration) {
 		return
 	}
 	token, colour := collectorToken(status)
+
+	// Out of the heartbeat's set before its row is queued, so that a tick
+	// landing between the two cannot name a collector that has finished. When
+	// this empties the set the heartbeat has nothing left to say and stops
+	// drawing itself — and the row queued on the next line erases whatever is
+	// still on screen, so the last thing collection leaves behind is a row.
+	s.mu.Lock()
+	delete(s.inflight, id)
+	s.mu.Unlock()
 
 	// The elapsed time is shown only where it is information. Every collector
 	// on a small host finishes in single-digit milliseconds and a column of
@@ -370,11 +411,32 @@ func (s *Stream) drain() {
 	// printed a FILESYS heading with nothing under it.
 	module := ""
 
+	// live is what the heartbeat has put on the terminal, and it is a local for
+	// the same reason module is: only this goroutine draws, so only this
+	// goroutine can know what is on the last line, and nothing outside needs to
+	// ask. The deferred erase is registered after close(finished) so that it
+	// runs *before* it — a Stop that returns while a heartbeat is still on the
+	// screen hands the closing block a line that is not empty.
+	var live beatline
+	defer func() { s.erase(&live) }()
+	defer s.tick()()
+
 	for {
-		ev, ok := s.next()
-		if !ok {
+		ev, out := s.next()
+		switch out {
+		case halted:
 			return
+		case beat:
+			s.heartbeat(&live)
+			continue
 		}
+
+		// Every path that writes a line starts from column 0 of a clean line.
+		// That is the whole of the cursor discipline: the heartbeat is the only
+		// thing that ever leaves the cursor mid-line, and it is taken back here
+		// before anything else is drawn.
+		s.erase(&live)
+
 		if ev.phase != "" {
 			// A phase forgets the module, so that a heading is printed again
 			// under a new phase rather than suppressed as a repeat.
@@ -433,20 +495,71 @@ func moduleOf(checkID string) string {
 	return module
 }
 
-// next takes the head of the queue, waiting if it is empty. ok is false when
-// the stream has been stopped and there is nothing more to draw.
-func (s *Stream) next() (event, bool) {
+// outcome is what the drawing goroutine was woken for.
+type outcome int
+
+const (
+	drawn  outcome = iota // an event to put on the screen
+	beat                  // nothing queued; refresh the heartbeat
+	halted                // the stream has been stopped
+)
+
+// next takes the head of the queue, waiting if it is empty.
+//
+// **A queued event always beats a pending tick**, and the tick is dropped
+// rather than deferred. The heartbeat exists to cover a gap; if there is
+// something real to draw there is no gap, and a beat honoured first would put a
+// spinner on the screen for one frame and erase it again in the same
+// millisecond.
+func (s *Stream) next() (event, outcome) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for len(s.pending) == 0 && !s.stopped {
+	for {
+		switch {
+		case s.stopped:
+			return event{}, halted
+		case len(s.pending) > 0:
+			ev := s.pending[0]
+			s.pending = s.pending[1:]
+			s.ticked = false
+			return ev, drawn
+		case s.ticked:
+			s.ticked = false
+			return event{}, beat
+		}
 		s.work.Wait()
 	}
-	if s.stopped {
-		return event{}, false
-	}
-	ev := s.pending[0]
-	s.pending = s.pending[1:]
-	return ev, true
+}
+
+// tick wakes the drawing goroutine on a fixed cadence, and returns the function
+// that retires it.
+//
+// **The ticker does not draw and does not hold the writer.** It sets a flag and
+// broadcasts, which is the whole of it — the single-writer rule that makes the
+// rest of this file safe would be worth nothing if the heartbeat were a second
+// goroutine with its own Fprint. What is multiplexed onto stderr is the
+// *decision* to draw a heartbeat, not the drawing.
+//
+// sync.Cond has no timed Wait, which is why this exists at all rather than
+// next() simply waiting with a deadline.
+func (s *Stream) tick() func() {
+	t := time.NewTicker(beatInterval)
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-t.C:
+				s.mu.Lock()
+				s.ticked = true
+				s.mu.Unlock()
+				s.work.Broadcast()
+			case <-done:
+				t.Stop()
+				return
+			}
+		}
+	}()
+	return func() { close(done) }
 }
 
 // Await blocks until every event queued so far has reached the screen.
@@ -533,6 +646,106 @@ func (s *Stream) show() {
 	if f, ok := s.w.(interface{ Flush() error }); ok {
 		_ = f.Flush()
 	}
+}
+
+// beatline is what the heartbeat currently has on the terminal.
+//
+// It lives on drain's stack rather than on the Stream for the same reason the
+// current module does: it describes the screen, only one goroutine draws the
+// screen, and a field would invite a second one to reason about it.
+type beatline struct {
+	showing bool
+	frame   int
+}
+
+// heartbeat draws or refreshes the line that says the scan has not died.
+//
+// **The cursor discipline is one rule: the heartbeat never ends a line.** It
+// writes `\r`, erases the line the cursor is on, and writes its text without a
+// newline — so the cursor finishes where it started, at column 0 of the last
+// line, and the heartbeat occupies the line the *next* row is going to be drawn
+// on. Erasing it is therefore `\r` and an erase again, with nothing to undo and
+// nothing to remember.
+//
+// **There is deliberately no cursor-up.** The obvious alternative — print the
+// heartbeat on its own line with a newline, then `\033[1A` back over it — is
+// wrong on a terminal in three ways this one cannot be: the line wraps if it is
+// wider than the window and one cursor-up then lands in the middle of it; the
+// scroll region moves under the cursor when the heartbeat is drawn on the
+// bottom row, so up is not where the line was; and anything else that writes to
+// stderr in between leaves the cursor pointing at a line that has moved. Never
+// leaving the line removes all three.
+//
+// **It cannot interleave with a row**, and that is structural rather than
+// careful. drain draws it only between events, so the two halves of a paced row
+// — the title, the pause, the verdict — are never separated by one: while draw
+// is sleeping, drain is inside draw and is not here. The right-aligned brackets
+// are laid out by layout against a fresh measurement, from column 0, on a line
+// this function has already cleared.
+//
+// The text is truncated to the terminal because a heartbeat that wrapped would
+// be two screen lines and the erase would only reach the second, leaving half a
+// spinner above every row for the rest of the scan.
+func (s *Stream) heartbeat(b *beatline) {
+	id, took, others := s.outstanding()
+	if id == "" {
+		// Nothing is working: whatever was on the line is now stale.
+		s.erase(b)
+		return
+	}
+
+	line := fmt.Sprintf("[~] Still working: %s (%ds)", id, int(took.Seconds()))
+	if others > 0 {
+		line += fmt.Sprintf(" and %d more", others)
+	}
+	line += " " + beatFrames[b.frame%len(beatFrames)]
+	b.frame++
+
+	fmt.Fprint(s.w, ansiHome+ansiErase+s.paint(ansiDim, truncate(line, s.columns())))
+	b.showing = true
+	s.show()
+}
+
+// erase takes the heartbeat off the terminal, leaving the cursor at column 0 of
+// an empty line — which is where every other line in this file starts.
+//
+// It is a no-op when nothing is showing, so that the common case (a scan whose
+// collectors all finish quickly) writes no escape sequences at all.
+func (s *Stream) erase(b *beatline) {
+	if !b.showing {
+		return
+	}
+	fmt.Fprint(s.w, ansiHome+ansiErase)
+	b.showing = false
+	s.show()
+}
+
+// outstanding is the collector that has been working longest, how long it has
+// been at it, and how many others are still going.
+//
+// **The longest-running one is the answer to the question being asked.** An
+// operator looking at a frozen screen wants to know what it is waiting for, and
+// on this host that is one filesystem walk with a cold page cache while twelve
+// cheap reads have long since finished. Ties break on the id so that two
+// collectors started in the same nanosecond do not make the line flicker
+// between them.
+func (s *Stream) outstanding() (string, time.Duration, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var (
+		id    string
+		since time.Time
+	)
+	for name, started := range s.inflight {
+		if id == "" || started.Before(since) || (started.Equal(since) && name < id) {
+			id, since = name, started
+		}
+	}
+	if id == "" {
+		return "", 0, 0
+	}
+	return id, time.Since(since), len(s.inflight) - 1
 }
 
 // nap is the pace, cut short by Stop.
@@ -749,13 +962,35 @@ const (
 	rowIndent   = "  - "
 	rowEllipsis = "..."
 
+	// The two cursor sequences the heartbeat needs, and the only two in this
+	// package. See heartbeat for why there is no cursor-up among them.
+	//
+	// They are not gated on colour. --no-color and NO_COLOR are statements
+	// about colour, not about whether the terminal is a terminal, and a stream
+	// only exists on one — a pipe or a CI log never builds a Stream at all.
+	ansiHome  = "\r"      // to column 0 of the line the cursor is already on
+	ansiErase = "\033[2K" // clear that line, wherever the cursor sits in it
+
 	// moduleRule is how wide the line under a module heading is drawn, before
 	// the terminal has its say. It is a fixed figure rather than the full width
 	// because a rule that reaches the right margin competes with the column of
 	// brackets it is supposed to be introducing — but it is clamped to the
 	// terminal in section, because a rule that wraps is two rules.
 	moduleRule = 51
+
+	// beatInterval is how often the heartbeat redraws itself while the display
+	// has nothing else to do. It is the spinner's frame rate and the resolution
+	// of its clock, and 125 ms is fast enough that the line is visibly alive
+	// and slow enough that a stalled scan is not spending its time on escape
+	// sequences.
+	beatInterval = 125 * time.Millisecond
 )
+
+// beatFrames is the spinner. ASCII rather than braille: the heartbeat appears
+// on exactly the hosts whose terminals are least worth assuming about, and a
+// row of missing-glyph boxes reads as a worse fault than the pause it is
+// covering.
+var beatFrames = [...]string{"|", "/", "-", "\\"}
 
 // columns is the width this line is laid out against, clamped.
 func (s *Stream) columns() int {

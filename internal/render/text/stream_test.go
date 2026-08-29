@@ -15,14 +15,19 @@ import (
 	"github.com/antaryx/plumbline/internal/score"
 )
 
-var ansi = regexp.MustCompile("\x1b\\[[0-9;]*m")
+// Any CSI sequence, not only the colour ones: the heartbeat writes an
+// erase-line, and a test that measured its bytes would be making exactly the
+// mistake visible exists to prevent.
+var ansi = regexp.MustCompile("\x1b\\[[0-9;]*[A-Za-z]")
 
 // visible is what the terminal actually draws: escape sequences removed and
 // the result measured in runes, not bytes. Every assertion about alignment in
 // this file goes through it, because measuring the bytes is exactly the mistake
 // the layout exists to avoid — `…` is three bytes and one column, and a green
 // token is eleven bytes of nothing.
-func visible(line string) string { return ansi.ReplaceAllString(line, "") }
+func visible(line string) string {
+	return strings.ReplaceAll(ansi.ReplaceAllString(line, ""), "\r", "")
+}
 
 func width(line string) int { return len([]rune(visible(line))) }
 
@@ -889,5 +894,341 @@ func TestTheModuleRuleNeverOutgrowsTheTerminal(t *testing.T) {
 			}
 			t.Errorf("no rule under the heading:\n%s", visible(buf.String()))
 		})
+	}
+}
+
+// sgr is the colour half of the escapes: the sequences that change how a rune
+// is drawn without moving the cursor.
+var sgr = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// screen replays writes the way a terminal would, and returns what would be on
+// it.
+//
+// **The heartbeat is the only thing in this package whose correctness is a
+// claim about the cursor**, and a test that inspected the bytes could not see
+// it: `\r` + erase + a row is, as a string, the heartbeat followed by the row,
+// and reads as corruption. On a terminal it is the row alone. So the assertions
+// that matter go through this.
+//
+// It understands exactly what the renderer emits: `\n` starts a line, `\r`
+// returns to column 0, ESC[2K clears the line the cursor is on, and anything
+// else overwrites from the cursor. ESC[2K leaves the cursor where it was, which
+// here is always column 0 because the renderer always sends `\r` first.
+func screen(raw string) []string {
+	var (
+		lines []string
+		cur   []rune
+		col   int
+	)
+	src := []rune(sgr.ReplaceAllString(raw, ""))
+	for i := 0; i < len(src); i++ {
+		switch {
+		case src[i] == '\n':
+			lines = append(lines, string(cur))
+			cur, col = nil, 0
+		case src[i] == '\r':
+			col = 0
+		case src[i] == '\033' && i+3 < len(src) && string(src[i:i+4]) == "\033[2K":
+			cur = nil
+			i += 3
+		default:
+			for col >= len(cur) {
+				cur = append(cur, ' ')
+			}
+			cur[col] = src[i]
+			col++
+		}
+	}
+	if len(cur) > 0 {
+		lines = append(lines, string(cur))
+	}
+	return lines
+}
+
+// beats returns the heartbeat writes, in order, as the terminal would draw
+// them. A write that only erases is not a beat; it is the erase.
+func (l *writeLog) beats() []string {
+	var out []string
+	for _, w := range l.writes() {
+		if text := visible(w); strings.Contains(text, "Still working") {
+			out = append(out, text)
+		}
+	}
+	return out
+}
+
+// awaitBeat waits for the heartbeat to reach the writer, or fails.
+func awaitBeat(t *testing.T, log *writeLog, want string) string {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, b := range log.beats() {
+			if strings.Contains(b, want) {
+				return b
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("no heartbeat naming %q in:\n%q", want, log.writes())
+	return ""
+}
+
+// TestTheHeartbeatCoversASlowCollector.
+//
+// The freeze this exists for: twelve cheap collectors finish in milliseconds,
+// one filesystem walk takes twenty-four seconds with a cold page cache, and
+// rows are written on completion — so the terminal held still for
+// twenty-four seconds and looked like a tool that had crashed.
+//
+// The heartbeat is the display's answer to having nothing to draw. It names the
+// collector actually responsible, not "working…", because the operator's
+// question is which one.
+func TestTheHeartbeatCoversASlowCollector(t *testing.T) {
+	log := &writeLog{}
+	s := text.NewStream(log, false, fixedWidth(80))
+	defer s.Stop()
+
+	s.CollectorStarted("fswalk")
+	s.Phase("Collecting host evidence")
+
+	beat := awaitBeat(t, log, "fswalk")
+	if !strings.HasPrefix(beat, "[~] Still working: fswalk") {
+		t.Errorf("the heartbeat does not read as one: %q", beat)
+	}
+}
+
+// TestTheHeartbeatNamesTheSlowestCollector.
+//
+// Several collectors can be in flight, and only one of them is the answer. The
+// one that has been running longest is what the screen is waiting for; the
+// others are counted, not listed, because a line that named all of them would
+// be the thing that wraps.
+func TestTheHeartbeatNamesTheSlowestCollector(t *testing.T) {
+	log := &writeLog{}
+	s := text.NewStream(log, false, fixedWidth(80))
+	defer s.Stop()
+
+	s.CollectorStarted("fswalk")
+	time.Sleep(20 * time.Millisecond)
+	s.CollectorStarted("users")
+	s.CollectorStarted("network")
+	s.Phase("Collecting host evidence")
+
+	beat := awaitBeat(t, log, "fswalk")
+	if !strings.Contains(beat, "and 2 more") {
+		t.Errorf("the heartbeat did not count the other collectors: %q", beat)
+	}
+	if strings.Contains(beat, "users") || strings.Contains(beat, "network") {
+		t.Errorf("the heartbeat listed every collector instead of the slowest: %q", beat)
+	}
+}
+
+// TestTheHeartbeatNeverEndsALine.
+//
+// **This is the whole cursor discipline in one assertion.** The heartbeat lives
+// on the line the next row is going to be drawn on, and gets off it with a
+// carriage return and an erase. A newline anywhere in it would leave the line
+// behind on the screen permanently, and every erase after that would be
+// clearing the wrong line — which is the failure mode a cursor-up would have
+// had to work around instead.
+func TestTheHeartbeatNeverEndsALine(t *testing.T) {
+	log := &writeLog{}
+	s := text.NewStream(log, false, fixedWidth(80))
+	defer s.Stop()
+
+	s.CollectorStarted("fswalk")
+	s.Phase("Collecting host evidence")
+	awaitBeat(t, log, "fswalk")
+
+	for _, w := range log.writes() {
+		if strings.Contains(w, "Still working") && strings.Contains(w, "\n") {
+			t.Errorf("a heartbeat ended its line: %q", w)
+		}
+	}
+}
+
+// TestTheHeartbeatIsErasedBeforeTheRowThatFollowsIt.
+//
+// A row has to start at column 0 of a clean line or its right-aligned bracket
+// is aligned against a line that already has a spinner on it. The erase is what
+// guarantees that, and it has to be its own write before the row's — a row
+// drawn over the heartbeat without erasing first leaves the tail of the longer
+// string behind.
+func TestTheHeartbeatIsErasedBeforeTheRowThatFollowsIt(t *testing.T) {
+	log := &writeLog{}
+	s := text.NewStream(log, false, fixedWidth(80))
+
+	s.CollectorStarted("fswalk")
+	s.Phase("Collecting host evidence")
+	awaitBeat(t, log, "fswalk")
+
+	s.CollectorDone("fswalk", "ok", 24*time.Second)
+	s.Await()
+	s.Stop()
+
+	// The last beat, then an erase, then the row: nothing may be drawn between
+	// the heartbeat and the erase that takes it off.
+	writes := log.writes()
+	last := -1
+	for i, w := range writes {
+		if strings.Contains(w, "Still working") {
+			last = i
+		}
+	}
+	if last < 0 || last+1 >= len(writes) {
+		t.Fatalf("no write followed the last heartbeat: %q", writes)
+	}
+	if got := writes[last+1]; visible(got) != "" {
+		t.Errorf("the write after the last heartbeat is not a bare erase: %q", got)
+	}
+
+	// And what the terminal is left holding is a whole row on a clean line —
+	// replayed as a terminal would, not read as bytes.
+	for _, line := range screen(log.text()) {
+		if strings.Contains(line, "[ DONE ]") {
+			if strings.Contains(line, "Still working") {
+				t.Errorf("the row was drawn on top of the heartbeat: %q", line)
+			}
+			if width(line) != 80 {
+				t.Errorf("the row after a heartbeat is %d columns, want 80: %q", width(line), line)
+			}
+			return
+		}
+	}
+	t.Errorf("no collector row on the terminal:\n%q", screen(log.text()))
+}
+
+// TestTheHeartbeatNeverSplitsARow.
+//
+// A paced row is a title, a pause, and a verdict, and the pause is the longest
+// window in the display with the cursor sitting mid-line. A heartbeat drawn
+// into it would erase the title and put the verdict on the end of a spinner.
+//
+// It cannot happen, and the reason is structural rather than careful: the
+// heartbeat is drawn by the same goroutine that draws rows, from the top of its
+// loop, so while a row is in its pause that goroutine is inside draw and not
+// anywhere near a heartbeat. This asserts the property that the structure buys.
+func TestTheHeartbeatNeverSplitsARow(t *testing.T) {
+	log := &writeLog{}
+	s := text.NewStream(log, false, fixedWidth(80)).Pace(500 * time.Millisecond)
+
+	s.CollectorStarted("fswalk")
+	s.Phase("Collecting host evidence")
+	awaitBeat(t, log, "fswalk")
+
+	s.CheckDone(finding.Finding{CheckID: "AUTH-0001", Title: "a check", Result: finding.Pass})
+	s.Await()
+	s.Stop()
+
+	// Walk the writes and fail on a heartbeat that lands between a title and
+	// its verdict.
+	open := false
+	for _, w := range log.writes() {
+		text := visible(w)
+		switch {
+		case strings.Contains(text, "Still working"):
+			if open {
+				t.Fatalf("a heartbeat was drawn inside a half-finished row: %q", log.writes())
+			}
+		case strings.HasSuffix(text, "..."):
+			open = true
+		case strings.HasSuffix(text, "\n"):
+			open = false
+		}
+	}
+}
+
+// TestTheHeartbeatStopsWhenNothingIsRunning.
+//
+// The heartbeat is a statement about the host, not a decoration. When the last
+// collector finishes there is nothing to be waiting for, and a spinner still
+// turning under the evaluation rows would be saying something false about a
+// scan that had moved on.
+func TestTheHeartbeatStopsWhenNothingIsRunning(t *testing.T) {
+	log := &writeLog{}
+	s := text.NewStream(log, false, fixedWidth(80))
+	defer s.Stop()
+
+	s.CollectorStarted("fswalk")
+	s.Phase("Collecting host evidence")
+	awaitBeat(t, log, "fswalk")
+
+	s.CollectorDone("fswalk", "ok", time.Second)
+	s.Await()
+
+	before := len(log.beats())
+	time.Sleep(400 * time.Millisecond) // several beat intervals
+	if after := len(log.beats()); after != before {
+		t.Errorf("%d more heartbeats after the last collector finished", after-before)
+	}
+}
+
+// TestTheHeartbeatNeverOutgrowsTheTerminal.
+//
+// A heartbeat wider than the window wraps onto a second screen line, and the
+// erase only reaches the line the cursor is on — so half a spinner would be
+// left above every row for the rest of the scan. Truncation is the fix, and it
+// is the same truncate the rows use.
+func TestTheHeartbeatNeverOutgrowsTheTerminal(t *testing.T) {
+	for _, columns := range []int{20, 30, 40, 80} {
+		t.Run(fmt.Sprintf("%d", columns), func(t *testing.T) {
+			log := &writeLog{}
+			s := text.NewStream(log, false, fixedWidth(columns))
+			defer s.Stop()
+
+			s.CollectorStarted("containers-service-with-a-very-long-name")
+			s.CollectorStarted("another-one")
+			s.Phase("Collecting host evidence")
+
+			deadline := time.Now().Add(5 * time.Second)
+			for len(log.beats()) == 0 && time.Now().Before(deadline) {
+				time.Sleep(5 * time.Millisecond)
+			}
+			beats := log.beats()
+			if len(beats) == 0 {
+				t.Fatal("no heartbeat")
+			}
+			for _, b := range beats {
+				if got := len([]rune(b)); got > columns {
+					t.Errorf("a heartbeat is %d columns on a %d-column terminal: %q", got, columns, b)
+				}
+			}
+		})
+	}
+}
+
+// TestStopLeavesNoHeartbeatOnTheTerminal.
+//
+// Ctrl-C during a slow collector, and the closing block written straight after.
+// A heartbeat still on the last line would have the result block appended to it
+// — `[~] Still working: fswalk (24s) /[*] Result posture …` — because nothing
+// after this point writes a newline first. Stop takes it off on the way out.
+func TestStopLeavesNoHeartbeatOnTheTerminal(t *testing.T) {
+	log := &writeLog{}
+	s := text.NewStream(log, false, fixedWidth(80))
+
+	s.CollectorStarted("fswalk")
+	s.Phase("Collecting host evidence")
+	awaitBeat(t, log, "fswalk")
+
+	s.Close(score.Compute(nil, 33))
+
+	lines := screen(log.text())
+	for _, line := range lines {
+		if strings.Contains(line, "Still working") {
+			t.Errorf("a heartbeat survived onto the finished terminal: %q\n%q", line, lines)
+		}
+		if strings.Contains(line, "Still working") && strings.Contains(line, "[*] Result") {
+			t.Errorf("the closing block was appended to the heartbeat line: %q", line)
+		}
+	}
+	var found bool
+	for _, line := range lines {
+		if strings.HasPrefix(line, "[*] Result") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no result block on its own line:\n%q", lines)
 	}
 }

@@ -740,6 +740,35 @@ was there before and is still right for a log.
 | Width follows the terminal | Unlike the report's fixed grid. See below. |
 | Tokens are the report's | `[ OK ]`, `[ WARNING ]`, `[ UNKNOWN ]`, `[ SKIPPED ]`, produced by the same function the report uses. An operator who watches `WARNING` scroll past and then greps the report for it must find it. Colours match too, in every state but one: `SKIPPED` is cyan here and dim in the report, because a row carrying no verdict recedes correctly on a dense page and reads as a display failure in a scrolling list. |
 
+#### The heartbeat
+
+**Rows are written on completion, so the slowest collector is silent while it
+runs.** On this host with a cold page cache that meant twenty-four seconds of a
+motionless terminal while `fswalk` walked the filesystem — which reads as a
+crash. While the display has nothing queued and a collector is still working, it
+says so:
+
+```
+  - Collecting memory...                                                [ DONE ]
+[~] Still working: fswalk (17s) /
+```
+
+| Rule | Detail |
+|---|---|
+| `[~]` is its own marker | `[*]` a phase, `[+]` a module, `  - ` a row — all three are permanent record. The heartbeat is overwritten and then erased, and nothing it says survives the scan. |
+| It names the longest-running collector | That is the answer to the question a frozen screen raises. Others still going are counted (`and 2 more`), not listed: a line that named them all is the line that wraps. |
+| It never ends a line | `\r`, erase, text, no newline — so it sits on the line the next row will be drawn on, and coming off is `\r` and an erase again. There is no cursor-up anywhere: stepping back over a newline breaks on a wrapped line, on the bottom row where the scroll region moves, and whenever anything else writes to stderr in between. |
+| It never lands inside a row | The pause between a row's title and its verdict is the longest window with the cursor mid-line, and the display is inside that pause rather than at the top of its loop. A queued row also always beats a pending tick. |
+| It is truncated to the terminal | A heartbeat that wrapped would be two screen lines and the erase reaches only one. |
+| It refreshes every 125 ms | Fast enough to be visibly alive, slow enough that a stalled scan is not spending its time on escape sequences. |
+| It stops when nothing is running | It is a statement about the host, not a decoration. |
+
+Reported by `collect.Observer.CollectorStarted`, called when a collector begins
+working — not when its goroutine is created. One queued behind a dependency or
+behind the expensive slot is not on the host, and naming it would point at the
+wrong collector. Every collector reports `CollectorDone`; only the ones that ran
+report `CollectorStarted`.
+
 #### The pace
 
 **Each row is drawn in two halves with a deliberate pause between them**, and

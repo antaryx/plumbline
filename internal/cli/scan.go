@@ -235,6 +235,8 @@ func streamPresenter(format string, stderr io.Writer, noColor bool) *rendertext.
 // goroutines; the locking that makes that true is the Stream's.
 type collectorEvents struct{ s *rendertext.Stream }
 
+func (c collectorEvents) CollectorStarted(id string) { c.s.CollectorStarted(id) }
+
 func (c collectorEvents) CollectorDone(id string, status collect.CollectorStatus, took time.Duration) {
 	c.s.CollectorDone(id, string(status), took)
 }

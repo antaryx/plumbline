@@ -443,7 +443,11 @@ func TestTheStreamGroupsTheCatalogByModule(t *testing.T) {
 		reopened []string
 	)
 	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimRight(line, "\r")
+		// A slow collector leaves a heartbeat on the line a row is then drawn
+		// over, so a row can arrive behind a carriage return and an erase. On
+		// the terminal the row is alone on the line; here the sequences have to
+		// come off before the line is read.
+		line = strings.Trim(strings.ReplaceAll(line, "\033[2K", ""), "\r")
 		switch {
 		case strings.HasPrefix(line, "[+] Module: "):
 			module = strings.TrimSpace(strings.TrimPrefix(line, "[+] Module: "))

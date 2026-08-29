@@ -62,9 +62,21 @@ type Runner struct {
 	Observer Observer
 }
 
-// Observer is notified as each collector finishes, however it finished.
-// Exactly one call is made per collector in the run.
+// Observer is notified as collectors start and finish.
+//
+// CollectorDone is called exactly once per collector in the run, however it
+// finished. CollectorStarted is called **at most** once, and only for a
+// collector that actually began working — one that was skipped for want of
+// privilege, or abandoned while waiting for a dependency or for the expensive
+// slot, never started and is not reported as having done so.
+//
+// That asymmetry is the point of having the event at all. A display that showed
+// every collector as running the moment its goroutine existed would show twelve
+// at once and name none of them as the one the operator is waiting for; what is
+// wanted is the set that is genuinely on the host right now, which is the same
+// set the duration in CollectorDone is measured over. See runOne.
 type Observer interface {
+	CollectorStarted(id string)
 	CollectorDone(id string, status CollectorStatus, took time.Duration)
 }
 
@@ -94,6 +106,15 @@ const (
 func (r Runner) observe(id string, status CollectorStatus, took time.Duration) {
 	if r.Observer != nil {
 		r.Observer.CollectorDone(id, status, took)
+	}
+}
+
+// observeStart reports that one collector has begun working, if anyone is
+// listening. Called from the collector's own goroutine, concurrently with
+// eleven others.
+func (r Runner) observeStart(id string) {
+	if r.Observer != nil {
+		r.Observer.CollectorStarted(id)
 	}
 }
 
@@ -250,6 +271,13 @@ func (r Runner) runOne(ctx context.Context, c Collector, s system.System, fs *fa
 	}
 
 	started := time.Now()
+
+	// Announced here rather than in the goroutine above, from the same line
+	// that starts the clock. A collector queued behind a dependency or behind
+	// the expensive slot is not working the host, and telling a progress
+	// display otherwise would name the wrong collector as the slow one — the
+	// same reason the duration is measured from here.
+	r.observeStart(c.ID())
 
 	// The collector's own budget wins; the runner's is the fallback for one
 	// that does not declare a preference.

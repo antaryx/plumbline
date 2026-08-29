@@ -295,6 +295,49 @@ because of this release (VERSIONING §2.4).
   scrolling list.
 
 ### Added
+- **A heartbeat under the stream, so a slow collector no longer looks like a
+  crash.** Rows are written on completion, which is what keeps them whole under
+  concurrency — and it meant the slowest collector was silent for as long as it
+  ran. On this host with a cold page cache the terminal held still for **23.9 s**
+  while `fswalk` walked the filesystem. While the display has nothing queued and
+  a collector is still working it now says so:
+
+  ```
+    - Collecting memory...                                                [ DONE ]
+  [~] Still working: fswalk (17s) /
+  ```
+
+  Measured again with it: the longest gap between deliveries on the pty is
+  **0.13 s**, and the replayed screen has no heartbeat left on it anywhere.
+
+  `[~]` is deliberately a fourth marker. `[*]` a phase, `[+]` a module, `  - ` a
+  row — those are permanent record; the heartbeat is overwritten and then erased
+  and nothing it says survives the scan.
+
+  **It is drawn by the drawing goroutine and by nothing else.** A second
+  goroutine with a ticker and its own `Fprint` would have handed two writers one
+  terminal, which is the single failure this layout cannot survive. What is
+  multiplexed onto stderr is the *decision* to draw a heartbeat: a ticker sets a
+  flag and broadcasts, `next` reports a beat when nothing is queued, and `drain`
+  draws it. A queued row always beats a pending tick, and a heartbeat therefore
+  cannot land between the two halves of a paced row.
+
+  **The cursor discipline is one rule: the heartbeat never ends a line.** `\r`,
+  erase the line the cursor is on, text, no newline — so it occupies the line the
+  next row will be drawn on, and getting off it is `\r` and an erase again. No
+  cursor-up: stepping back over a newline breaks on a wrapped line, on the bottom
+  row where the scroll region moves under the cursor, and whenever anything else
+  writes to stderr in between. The text is truncated to the terminal, because a
+  wrapped heartbeat is two screen lines and the erase reaches one.
+
+  `collect.Observer` gained **`CollectorStarted`**, called from the line in
+  `runOne` that starts the clock rather than from the goroutine above it: a
+  collector queued behind a dependency or behind the expensive slot is not
+  working the host. The contract is asymmetric on purpose — every collector
+  reports `CollectorDone`, only the ones that ran report `CollectorStarted`,
+  because a collector announced as started that never runs would sit under a
+  stalled display forever.
+
 - **The stream is grouped by module, and its rows are indented under their
   heading.** The evaluation half was a flat list of a hundred and nine rows;
   it is now `[+] Module: AUTH`, a rule, and that module's checks drawn as

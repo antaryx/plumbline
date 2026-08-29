@@ -1334,6 +1334,84 @@ enough to read as a heading, narrower than the rows so it introduces the column
 of brackets instead of competing with it, and never wide enough to wrap, because
 a wrapped rule is two rules with a heading orphaned above them.
 
+### The heartbeat
+
+Rows are written on completion, which is what keeps them whole under
+concurrency — and it meant the slowest collector was silent for as long as it
+ran. Measured on this host with a cold page cache: eleven collector rows drew at
+pace, then the terminal held still for **23.9 s** while `fswalk` walked the
+filesystem, then `memory` and `fswalk (23s)` arrived and the scan carried on. A
+freeze followed by a burst is the shape a paced stream exists to rule out, and
+it was the one place it still happened. Twenty-four seconds of nothing reads as
+a crash.
+
+The display now says what it is waiting for:
+
+```
+  - Collecting memory...                                                [ DONE ]
+[~] Still working: fswalk (17s) /
+```
+
+Measured again with it: the longest gap between deliveries on the pty is
+**0.13 s**, down from 23.9 s, and the replayed screen has no heartbeat line left
+on it anywhere.
+
+**`[~]` is a fourth marker and not one of the three.** `[*]` a phase, `[+]` a
+module, `  - ` a row: those are the record of what happened, and every one of
+them is permanent. The heartbeat is not a record — it is one line that is
+overwritten and then erased, and nothing it ever said survives the scan. Giving
+it a marker of its own says that on sight.
+
+**It is drawn by the drawing goroutine and by nothing else.** The obvious build
+is a second goroutine with a ticker and its own `Fprint`, and it would have
+handed two writers one terminal — the single failure this layout cannot survive,
+and the reason `Phase`, `CheckDone` and `CollectorDone` queue instead of writing.
+What is multiplexed onto stderr is the *decision* to draw a heartbeat, not the
+drawing: a ticker sets a flag and broadcasts, `next` reports a beat when there
+is nothing queued, and `drain` draws it. `sync.Cond` has no timed `Wait`, which
+is why the ticker exists at all.
+
+Two consequences fall out, and both are properties rather than precautions:
+
+- **A queued row always beats a pending tick.** The heartbeat covers a gap; if
+  there is something real to draw there is no gap. The tick is dropped rather
+  than deferred, so a spinner is never drawn for one frame and erased in the
+  same millisecond.
+- **A heartbeat cannot land inside a row.** A paced row is a title, a pause and
+  a verdict, and the pause is the longest window in the display with the cursor
+  mid-line — but during it `drain` is inside `draw`, not at the top of its loop.
+  The right-aligned brackets are laid out from column 0 of a line the erase has
+  already cleared.
+
+**The cursor discipline is one rule: the heartbeat never ends a line.** It writes
+`\r`, erases the line the cursor is on, and writes its text with no newline, so
+it occupies the line the *next* row will be drawn on and getting off it is `\r`
+and an erase again. There is deliberately no cursor-up. Printing the heartbeat
+on its own line and stepping back over it with `ESC[1A` fails on a terminal three
+ways this cannot: the line wraps if it is wider than the window and one step up
+lands in the middle of it; the scroll region moves under the cursor when the
+heartbeat is on the bottom row, so up is not where the line was; and anything
+else that writes to stderr in between leaves the cursor pointing at a line that
+has moved. Never leaving the line removes all three. The text is truncated to
+the terminal for the same reason — a heartbeat that wrapped would be two screen
+lines and the erase reaches only one, leaving half a spinner above every row for
+the rest of the scan.
+
+`collect.Observer` gained `CollectorStarted`, called from the line in `runOne`
+that starts the clock rather than from the goroutine above it. A collector
+queued behind a dependency or behind the expensive slot is not working the host,
+and announcing it would name the wrong collector as the slow one — the same
+reason the reported duration is measured from there. The contract is
+deliberately asymmetric: every collector finishes, only the ones that ran
+started. A collector refused for privilege that was announced as started would
+sit under a stalled display forever, because no `CollectorDone` is coming for it.
+
+Testing it needed a terminal rather than a buffer. `\r` + erase + a row is, as a
+string, the heartbeat followed by the row, and reads as corruption; on a
+terminal it is the row alone. So the assertions that matter replay the writes
+through a small model of a terminal — `screen` in `stream_test.go` — and check
+what would be on it.
+
 What this leaves:
 - **The stream shows raw evaluation.** Profile scoping and suppression are
   applied to the slice afterwards, so a check the operator has formally accepted
@@ -1341,17 +1419,6 @@ What this leaves:
   suppression set is already loaded by the time the stream is built, so labelling
   them live is cheap; it was left out because the stream is a view of evaluation
   and this would make it a view of the pipeline.
-- **The slowest collector is silent while it runs, and this is now the longest
-  dead stop in the display.** Rows are written on completion, which is what keeps
-  them whole under concurrency, so a slow collector prints nothing until it
-  finishes while its neighbours' rows appear around it. Measured on this host
-  with a cold page cache: eleven collector rows draw at pace, then the terminal
-  holds still for **23.9 s** while `fswalk` walks the filesystem, then `memory`
-  and `fswalk (25s)` arrive and the scan continues. A freeze followed by a
-  resumption is exactly what a paced stream is supposed to rule out, and it is
-  the one place it still happens. A heartbeat line under the stream would cover
-  it and needs the stream and the spinner to share stderr, which is the
-  interleaving both currently avoid by never running together.
 - **The pace is uniform, and a collector that already took twenty-five seconds
   waits another tenth of a second for its verdict.** The honest version would hold each row for
   `pace` *minus* what the work actually took, so that real duration and
