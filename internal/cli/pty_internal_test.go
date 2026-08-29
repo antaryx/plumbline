@@ -179,9 +179,9 @@ func terminalRun(t *testing.T, args ...string) (int, string) {
 // unpaced pins the stream's artificial delay off, unless the test is about the
 // delay.
 //
-// scan's default is 150 ms a row (rendertext.DefaultPace), which is what makes
-// the display readable on a terminal and what would make every mode test in
-// this file wait twenty seconds for a property none of them is asserting.
+// scan's default is half a second a row (rendertext.DefaultPace), which is what
+// makes the display readable on a terminal and what would make every mode test
+// in this file wait a minute for a property none of them is asserting.
 // TestThePaceFlagSlowsTheStream is the one that pays for it.
 func unpaced(args []string) []string {
 	for _, a := range args {

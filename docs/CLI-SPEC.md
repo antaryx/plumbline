@@ -65,7 +65,7 @@ the same.
 | `--no-color` | false | Also honours `NO_COLOR` and non-TTY stdout | **yes** (v0.3) |
 | `--verbose`, `-v` | false | Add the severity tally and the detailed report (§7) | **yes** |
 | `--quiet`, `-q` | false | Stream nothing; print only the closing result block (§7) | **yes** |
-| `--pace D` | `150ms` | How long a streamed row waits before its verdict lands; `0` draws at full speed (§7) | **yes** |
+| `--pace D` | `500ms` | How long a streamed row waits before its verdict lands; `0` draws at full speed (§7) | **yes** |
 | `--output-dir DIR` | — | Directory; required when multiple formats | no |
 | `--debug` | false | Engine internals to stderr | no |
 
@@ -723,7 +723,7 @@ so it is stated plainly rather than buried.
 
 ```
 [+] Checking Root login is disabled over SSH (SSHD-0009)...              ← drawn
-                                                             ...150 ms...
+                                                             ...500 ms...  ← flushed, so it is on screen for this
 [+] Checking Root login is disabled over SSH (SSHD-0009)...   [ WARNING ] ← then this
 ```
 
@@ -735,7 +735,8 @@ can be read while it is on screen.
 
 | Rule | Detail |
 |---|---|
-| 150 ms a row | Below roughly 80 ms the column of brackets reads as flicker rather than as a sequence; above roughly 250 ms it stops feeling like a scan. At 150 ms a hundred and twenty-odd rows take a little over eighteen seconds. |
+| 500 ms a row | Long enough for the eye to land on a title rather than to track the column past it. This was 150 ms first — the fastest cadence at which the brackets still read as a sequence — and half a second is what watching it back argued for instead. A hundred and twenty-odd rows then take a little over a minute. |
+| The title is flushed before the pause | A delay between two writes shows nothing unless the first has reached the screen. `os.Stderr` is an `*os.File` and needs no flush — one `write(2)` per `Write` — but the renderer probes its writer for `Flush() error` and calls it anyway, so the effect cannot be lost by wrapping stderr in a buffered writer for some unrelated reason. `Sync()` is deliberately not called: `*os.File` has it, it means *commit to storage*, and on a character device it returns `EINVAL`. |
 | `--pace 0` removes it | For anybody who wants the answer rather than the show. `--pace 300ms` slows it. |
 | Charged to the display, never to the engine | Every row is **queued**, not drawn, by whoever produced it: one goroutine owns the terminal and does the waiting. Evaluation still takes 1.3 ms, collectors keep reading the host instead of sitting in a sleep, and no duration the report prints is measuring the display. |
 | Paid only where the rows are | A pipe, a redirect, a CI log, `--format json`, `PLUMBLINE_NO_PROGRESS` and `--quiet` all draw no rows, so none of them waits. `plumbline scan --quiet` and `plumbline scan \| cat` run at full speed. |

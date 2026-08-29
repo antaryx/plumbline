@@ -1207,11 +1207,18 @@ line report follows, the rows were gone from the window before anyone could read
 one. A row-by-row display is worth having only if a row can be read while it is
 on screen, and at full speed none can.
 
-So each row is now drawn in two halves with 150 ms between them: the title and
-its ellipsis, a pause, then the verdict landing flush right. Below roughly 80 ms
-the column of brackets reads as flicker rather than as a sequence; above roughly
-250 ms it stops feeling like a scan. `--pace 0` removes it, and `--pace 300ms`
-slows it down.
+So each row is now drawn in two halves with half a second between them: the
+title and its ellipsis, a pause, then the verdict landing flush right. `--pace 0`
+removes it and `--pace 150ms` speeds it up.
+
+**The number was 150 ms first, and changing it is worth recording rather than
+quietly amending.** 150 ms was chosen as the fastest cadence at which a column
+of brackets still reads as a sequence rather than as flicker — the right
+question for whether a row is *legible*, and the wrong one for whether a row is
+*read*. Watched back on a screen recording, the eye tracks the movement down the
+column at that speed without ever landing on a title. Half a second is long
+enough to land on one. It costs a hundred and twenty-odd rows a little over a
+minute, which is a real price and is why `--pace` is a flag.
 
 **This is the one thing in the tool that costs time without doing work, and it
 is confined so that it cannot be mistaken for work.**
@@ -1222,7 +1229,7 @@ is confined so that it cannot be mistaken for work.**
   instead of sitting in a sleep. Nothing the report prints is measuring the
   display.
 - **The queue is unbounded and that is not laziness.** A buffered channel blocks
-  its sender at capacity, and at 150 ms a row the queue reaches the catalog's
+  its sender at capacity, and at half a second a row the queue reaches the catalog's
   full depth within a millisecond of evaluation starting — so any capacity small
   enough to write down would hand the delay straight back to the engine, and any
   capacity larger than the catalog is a constant somebody must remember to raise
@@ -1238,7 +1245,7 @@ needed a piece:
 - `Stream.Await`, because `bundle saved to ...` and the suppression notes share
   stderr with the stream and would otherwise land several rows above where they
   belong.
-- `Stream.Stop`, wired to the scan's context, because an eighteen-second display
+- `Stream.Stop`, wired to the scan's context, because a minute-long display
   outlives the work and a Ctrl-C inside it has to be felt now. The first press
   abandons the queue within milliseconds — measured at 23 ms on this host —
   finishes the row it was drawing so no half-line survives, and still prints the
@@ -1246,6 +1253,23 @@ needed a piece:
   reporting the real posture and the real exit code is right rather than a leak.
 - `Close` awaiting *and* stopping before it writes, because "the queue is empty"
   is not the same claim as "no other goroutine is writing to this terminal".
+
+**A pause between two writes shows nothing unless the first write has reached the
+screen**, and that is a property of the writer rather than of the renderer. It
+was checked rather than assumed: recording the pty with `script(1)` gives one
+delivery per pace, each carrying one row's verdict followed immediately by the
+next row's title — the read boundary falls *inside* a row, which can only happen
+if the two halves left the process at different times. `os.Stderr` is an
+`*os.File`, one `write(2)` per `Write`, with no userspace buffer to hold
+anything. `Stream.show` nevertheless probes the writer for `Flush() error` and
+calls it after each half, because the failure it prevents is silent: a
+`bufio.Writer` wrapped round stderr for some unrelated reason would produce
+byte-identical output on a different schedule, and no test that inspects text
+could see it. `TestTheTitleIsFlushedBeforeTheStreamSleeps` asserts against a
+writer that does buffer. `Sync()` is not called — `*os.File` has it, so a type
+switch listing it would `fsync(2)` the terminal twice a row, a syscall meaning
+*commit to storage* that returns `EINVAL` on a character device and says nothing
+about what is on screen.
 
 **`--verbose` was reported as having lost the stream. It had not.** The rows are
 all there, above the `[*] Result` block, above the detail; a run measured on this
@@ -1266,14 +1290,19 @@ What this leaves:
   suppression set is already loaded by the time the stream is built, so labelling
   them live is cheap; it was left out because the stream is a view of evaluation
   and this would make it a view of the pipeline.
-- **The slowest collector is silent while it runs.** Rows are written on
-  completion, which is what keeps them whole under concurrency. A forty-second
-  filesystem walk therefore prints nothing until it finishes, while its
-  neighbours' rows appear around it. A heartbeat line under the stream would
-  cover it and needs the stream and the spinner to share stderr, which is the
+- **The slowest collector is silent while it runs, and this is now the longest
+  dead stop in the display.** Rows are written on completion, which is what keeps
+  them whole under concurrency, so a slow collector prints nothing until it
+  finishes while its neighbours' rows appear around it. Measured on this host
+  with a cold page cache: eleven collector rows draw at pace, then the terminal
+  holds still for **23.9 s** while `fswalk` walks the filesystem, then `memory`
+  and `fswalk (25s)` arrive and the scan continues. A freeze followed by a
+  resumption is exactly what a paced stream is supposed to rule out, and it is
+  the one place it still happens. A heartbeat line under the stream would cover
+  it and needs the stream and the spinner to share stderr, which is the
   interleaving both currently avoid by never running together.
-- **The pace is uniform, and a collector that already took four seconds waits
-  another 150 ms for its verdict.** The honest version would hold each row for
+- **The pace is uniform, and a collector that already took twenty-five seconds
+  waits another half-second for its verdict.** The honest version would hold each row for
   `pace` *minus* what the work actually took, so that real duration and
   artificial duration do not add. It is a two-line change and was left out
   because collector rows arrive in a burst — they are queued in completion order

@@ -295,13 +295,25 @@ because of this release (VERSIONING §2.4).
   scrolling list.
 
 ### Added
-- **A paced stream: `--pace`, default `150ms`.** Each streamed row is now drawn
+- **A paced stream: `--pace`, default `500ms`.** Each streamed row is now drawn
   in two halves — the title and its ellipsis, a pause, then the verdict landing
   flush right — instead of arriving complete. The catalog evaluates 109 checks
   in about 1.3 ms, so an unpaced stream is not a stream: it is a wall of text
   finished before the eye has fixed on anything, which is exactly what it was.
-  At 150 ms a row, a hundred and twenty-odd rows take a little over eighteen
-  seconds.
+  At half a second a row, a hundred and twenty-odd rows take a little over a
+  minute.
+
+  **The title is flushed before the pause, not merely written.** A delay between
+  two writes shows an operator nothing unless the first one has reached the
+  screen. `os.Stderr` is an `*os.File` — one `write(2)` per `Write`, no
+  userspace buffer — so it already had; recording the pty with `script(1)`
+  confirms one delivery per pace whose boundary falls *inside* a row, carrying
+  one verdict and the next title. `Stream.show` probes the writer for
+  `Flush() error` and calls it after each half anyway, because the regression it
+  prevents is invisible: wrapping stderr in a `bufio.Writer` for any unrelated
+  reason would emit byte-identical output on a different schedule and fail no
+  test that inspects text. `Sync()` is deliberately not called — `*os.File` has
+  it, it means *commit to storage*, and on a terminal it returns `EINVAL`.
 
   **The delay is charged to the display and never to the engine.** Every method
   on `Stream` now *queues* an event and returns; one goroutine owns the terminal
@@ -321,8 +333,8 @@ because of this release (VERSIONING §2.4).
   - **`Stream.Await`.** `bundle saved to ...` and the suppression notes go to
     the same stderr, and would otherwise land several rows above where they
     belong. Both now wait for the queue first.
-  - **`Stream.Stop`, wired to the scan's context.** A Ctrl-C inside an
-    eighteen-second display has to be felt now, not at the end of a display
+  - **`Stream.Stop`, wired to the scan's context.** A Ctrl-C inside a
+    minute-long display has to be felt now, not at the end of a display
     nobody is watching. The first press abandons the queue within milliseconds
     and finishes the row it was drawing, so no half-line is left on the
     terminal — and the result block still prints, because the scan's *work* was

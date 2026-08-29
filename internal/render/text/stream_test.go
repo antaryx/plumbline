@@ -442,6 +442,110 @@ func (l *writeLog) writes() []string {
 
 func (l *writeLog) text() string { return strings.Join(l.writes(), "") }
 
+// bufferedLog is a writer that holds what it is given until it is flushed,
+// recording writes and flushes in one sequence with the moment each happened.
+//
+// **It stands in for the one thing that would break the pace silently.** A
+// buffered writer produces byte-identical output to an unbuffered one; the
+// difference is only ever in when the bytes appear, so nothing that inspects
+// the text can see it. This can: a flush recorded after the title and before
+// the verdict is the property, and its absence is the wall of text.
+type bufferedLog struct {
+	mu    sync.Mutex
+	start time.Time
+	held  []byte
+	ev    []logEvent
+}
+
+type logEvent struct {
+	kind string // "write" or "flush"
+	text string // what the write carried, or what the flush released
+	at   time.Duration
+}
+
+func newBufferedLog() *bufferedLog { return &bufferedLog{start: time.Now()} }
+
+func (l *bufferedLog) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.held = append(l.held, p...)
+	l.ev = append(l.ev, logEvent{kind: "write", text: string(p), at: time.Since(l.start)})
+	return len(p), nil
+}
+
+func (l *bufferedLog) Flush() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.ev = append(l.ev, logEvent{kind: "flush", text: string(l.held), at: time.Since(l.start)})
+	l.held = nil
+	return nil
+}
+
+func (l *bufferedLog) events() []logEvent {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]logEvent(nil), l.ev...)
+}
+
+// TestTheTitleIsFlushedBeforeTheStreamSleeps.
+//
+// The pace is a delay between two writes, and a delay between two writes shows
+// an operator nothing unless the first one has actually reached the screen. On
+// os.Stderr — an *os.File, one write(2) per Write — it has, which is why this
+// could not be caught by the CLI: the effect works there and would keep working
+// until somebody wrapped stderr in a bufio.Writer for an unrelated reason, at
+// which point the stream would go back to arriving in complete rows with no
+// test anywhere going red. So the guarantee is asserted against a writer that
+// does buffer.
+//
+// Three claims, and the middle one is the whole point:
+//
+//   - the title is written before the pause;
+//   - it is *flushed* before the pause, not merely written;
+//   - the flush lands early in the pause rather than at the end of it, which is
+//     what distinguishes a flush placed between the two writes from one placed
+//     after both.
+func TestTheTitleIsFlushedBeforeTheStreamSleeps(t *testing.T) {
+	const pace = 300 * time.Millisecond
+
+	log := newBufferedLog()
+	s := text.NewStream(log, false, fixedWidth(80)).Pace(pace)
+	s.CheckDone(finding.Finding{CheckID: "T-0001", Title: "a check", Result: finding.Pass})
+	s.Await()
+
+	ev := log.events()
+	if len(ev) < 2 {
+		t.Fatalf("expected a write and a flush before the verdict, got %+v", ev)
+	}
+	if ev[0].kind != "write" || !strings.HasSuffix(ev[0].text, "...") {
+		t.Fatalf("the first event is not the title: %+v", ev[0])
+	}
+	if ev[1].kind != "flush" {
+		t.Fatalf("the title was written and not flushed, so nothing was on screen during the pause: %+v", ev)
+	}
+	if !strings.HasSuffix(ev[1].text, "...") {
+		t.Errorf("the flush released something other than the title: %q", ev[1].text)
+	}
+
+	// The flush has to be inside the first half of the pause, not at the end of
+	// it. A renderer that wrote both halves and flushed afterwards would still
+	// produce a flush event — just not one an operator could see anything by.
+	if ev[1].at > pace/2 {
+		t.Errorf("the title was flushed %s into a %s pace: the flush is after the sleep, not before it", ev[1].at, pace)
+	}
+	if strings.Contains(visible(ev[1].text), "[ OK ]") {
+		t.Errorf("the verdict was already on screen when the pause began: %q", visible(ev[1].text))
+	}
+
+	last := ev[len(ev)-1]
+	if last.at < pace {
+		t.Errorf("the row finished in %s against a pace of %s", last.at, pace)
+	}
+	if !strings.Contains(visible(last.text), "[ OK ]") {
+		t.Errorf("the last event is not the verdict: %+v", last)
+	}
+}
+
 // TestAPacedRowIsDrawnInTwoHalves.
 //
 // The title goes out on its own, without a newline; the verdict arrives a beat

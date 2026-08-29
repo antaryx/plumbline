@@ -75,13 +75,16 @@ const (
 // be read while it is on screen, and that is a property of the display, not of
 // the work.
 //
-// 150 ms is where this settled. Below roughly 80 ms the column of brackets
-// reads as flicker rather than as a sequence; above roughly 250 ms the wait
-// stops feeling like a scan and starts feeling like a progress bar somebody
-// forgot to finish. At 150 ms a hundred and twenty-odd rows — thirteen
-// collectors and a hundred and nine checks on this host — take a little over
-// eighteen seconds, which is the right order of magnitude for something calling
-// itself an audit and short enough to sit through.
+// **500 ms is the operator's number, and it is not the one this started at.**
+// The first cut was 150 ms, picked as the fastest cadence at which a column of
+// brackets still reads as a sequence rather than as flicker. Watched back on a
+// screen recording that turned out to be the wrong end of the range to aim at:
+// a row being legible is not the same as a row being *read*, and at 150 ms the
+// eye tracks the movement down the column without ever landing on a title. Half
+// a second is long enough to land on one. It costs a hundred and twenty-odd
+// rows — thirteen collectors and a hundred and nine checks on this host — a
+// little over a minute, which is a real price and is the reason --pace is a
+// flag rather than a constant.
 //
 // **It is presentation and it is never mistaken for work.** Nothing is measured
 // through it and nothing waits behind it: the pace is paid by the drawing
@@ -89,7 +92,7 @@ const (
 // is charged only where a person is watching — a pipe, a redirect, a CI log and
 // --quiet all skip the rows entirely and skip the delay with them — and
 // `--pace 0` removes it for anybody who wants the answer rather than the show.
-const DefaultPace = 150 * time.Millisecond
+const DefaultPace = 500 * time.Millisecond
 
 // Stream draws a scan as it happens: one line per collector and one per check,
 // each with its verdict flush against the right edge of the terminal.
@@ -347,6 +350,7 @@ func (s *Stream) drain() {
 		}
 		if ev.phase != "" {
 			fmt.Fprintf(s.w, "\n%s\n", s.paint(ansiBold, "[*] "+ev.phase))
+			s.show()
 		} else {
 			s.draw(ev.row, ev.pace)
 		}
@@ -422,6 +426,41 @@ func (s *Stream) Stop() {
 	// Outside the lock: the goroutine needs it to finish the line it is on.
 	if done != nil {
 		<-done
+	}
+}
+
+// show pushes what has just been written all the way to the screen.
+//
+// **The pace only works if the title is visible during it, and that is a
+// property of the writer rather than of this code.** A row goes out in two
+// writes with the delay between them, so anything that held the first write in
+// memory until the second arrived would reproduce exactly the wall of text the
+// pace exists to break up: the bytes would be right, the timing would be right,
+// and the terminal would still show nothing until the verdict landed.
+//
+// What is underneath decides whether this call does anything:
+//
+//   - os.Stderr, which is what the CLI hands in, is an *os.File. Its Write is
+//     one write(2) with no userspace buffer between it and the terminal, so the
+//     title is on screen before Fprint returns and there is nothing here to
+//     flush. That is measured rather than assumed — recording the pty with
+//     script(1) gives one delivery per pace, each carrying one row's verdict
+//     followed immediately by the next row's title, so the read boundary falls
+//     *inside* a row, which can only happen if the two halves left the process
+//     at different times.
+//   - A *bufio.Writer, a *tabwriter.Writer, or any wrapper somebody adds later
+//     does hold it, and would break the effect silently — no test would fail,
+//     because the bytes would be identical. One type assertion per half-row
+//     turns that from something a reviewer has to remember into something the
+//     design cannot lose.
+//
+// Sync is deliberately not called. *os.File has it, so a type switch that
+// listed it would fsync(2) the terminal twice a row: a syscall that means
+// "commit this to storage", that returns EINVAL on a character device, and that
+// has nothing to say about whether anything is on screen.
+func (s *Stream) show() {
+	if f, ok := s.w.(interface{ Flush() error }); ok {
+		_ = f.Flush()
 	}
 }
 
@@ -501,6 +540,7 @@ func (s *Stream) Close(sc score.Score) {
 	if s.hint != "" {
 		fmt.Fprintf(s.w, "\n%s\n", s.paint(ansiDim, "    "+s.hint))
 	}
+	s.show()
 }
 
 // Hint sets the closing line that says where the detail is. It is set by the
@@ -526,11 +566,16 @@ func (s *Stream) Hint(hint string) *Stream {
 // The layout is computed before the pause, not after, so a window dragged
 // during the delay cannot leave the two halves of one line measured against two
 // different widths. See layout.
+//
+// The flush between the write and the pause is what makes the split an effect
+// rather than an arrangement of bytes; see show.
 func (s *Stream) draw(r row, pace time.Duration) {
 	left, gap := s.layout(r)
 	fmt.Fprint(s.w, left)
+	s.show()
 	s.nap(pace)
 	fmt.Fprintf(s.w, "%s%s\n", spaces(gap), s.paint(r.colour, r.token))
+	s.show()
 }
 
 // layout places one row against the terminal, in three segments: a fixed head,
