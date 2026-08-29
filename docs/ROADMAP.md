@@ -1428,6 +1428,57 @@ What this leaves:
   is not the same question as "how long has this row been waiting", and the
   arithmetic wants thinking about rather than guessing at.
 
+### The warnings list
+
+The stream was fixed and the report it hands over to was not. `entry` printed
+every field a finding held — severity, unknown reason, subject, detail, up to
+five evidence excerpts with their sources and line numbers, then the remedy, its
+effort and its caution. Eleven or twelve lines each. Thirty-six warnings on this
+host, and `scan --verbose` produced **1,501 lines**, of which the warnings
+section alone was **1,333**.
+
+It is now two lines a finding — 307 and 139:
+
+```
+  - PAM does not accept an empty password [AUTH-0004]
+      Details: Remove nullok from every pam_unix.so auth rule, and check for …
+```
+
+**The argument is not that the detail was wrong; it is that the terminal was
+the wrong place for it.** A reader of a scrolling report is asking one question
+— what do I do next — and every field that is not the answer is between them
+and the next finding. A document nobody reads is not a safety feature however
+complete it is. Everything removed is still produced and still retained: the
+JSON and SARIF renderers carry every field including the whole evidence array,
+and `docs/checks/<ID>.md` carries the full remediation with its steps and its
+commands. The terminal is the one output where being exhaustive costs the
+reader something.
+
+The details line is the remedy, falling back to the subject, falling back for an
+`UNKNOWN` to why it could not be determined — spelled out (`ambiguous system
+state`) rather than left as the machine token, which the JSON keeps matching on.
+It is truncated rather than wrapped, because two lines is the property being
+kept and a remedy that reflowed to four would put this straight back where it
+came from.
+
+`evidence`, `remediation` and the `maxEvidence` cap were **deleted** rather than
+left unused. A dead printer in a file is a reader's reasonable belief that the
+terminal still has a way to show that field.
+
+`UNKNOWN` keeps equal weight, which is this package's oldest argument and the
+one most easily lost to a change like this. It gets the same two lines under its
+own heading, and `TestEveryWarningEntryIsExactlyTwoLines` asserts the shape by
+structure rather than by a list of forbidden field names — a list is something
+somebody has to remember to extend when a finding grows a field.
+
+What this leaves:
+- **Severity is no longer on the page.** The order still carries it — entries are
+  sorted most-severe-first — and `--verbose` prints the stream's own `! HIGH`
+  tally on stderr, but a report redirected to a file with `--output` no longer
+  says how bad anything is. A severity tag on the bullet
+  (`- [HIGH] title [ID]`) would restore it inside the two-line budget; it was
+  left out because the two-line form was specified without one.
+
 ---
 
 ## SERVICES, sandboxing

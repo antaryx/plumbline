@@ -592,6 +592,11 @@ func (p *printer) warningsAndSuggestions(findings []finding.Finding) {
 		p.blank()
 		p.line("  " + p.paint(ansiRed, fmt.Sprintf("Warnings (%d)", len(fails))) +
 			p.paint(ansiDim, "  ·  a check read the value and it does not meet the requirement"))
+		p.blank()
+		// Entries run together with no blank between them. That is the point of
+		// two lines each: forty findings are eighty lines an operator can run
+		// their eye down, and a blank line between every pair would make it a
+		// hundred and twenty they have to scroll.
 		for _, f := range fails {
 			p.entry(f)
 		}
@@ -604,6 +609,7 @@ func (p *printer) warningsAndSuggestions(findings []finding.Finding) {
 		p.blank()
 		p.line("  " + p.paint(ansiDim, "Each one is a question this scan could not answer, with the reason it"))
 		p.line("  " + p.paint(ansiDim, "could not. Treat them as findings until they are resolved."))
+		p.blank()
 		for _, f := range unknowns {
 			p.entry(f)
 		}
@@ -660,51 +666,79 @@ func (p *printer) accepted(findings []finding.Finding) {
 	}
 }
 
-// entry is one finding in full, in the shape Lynis uses for a suggestion: a
-// starred headline carrying the check ID, then labelled detail lines beneath.
+// entry is one finding in the warnings list: two lines, in the shape Lynis
+// uses for a suggestion.
+//
+//   - Root login is permitted over SSH [SSHD-0002]
+//     Details: Set PermitRootLogin no in /etc/ssh/sshd_config
+//
+// **This used to print everything the finding held and that was the wrong
+// instrument.** Severity, reason, subject, detail, up to five evidence
+// excerpts with their sources, then the remedy, its effort and its caution —
+// eleven or twelve lines each, forty findings on a real host, and a terminal
+// with five hundred lines of prose in it. A reader looking for what to do next
+// scrolls past all of it, and a document nobody reads is not a safety feature
+// however complete it is.
+//
+// Two lines is the whole of what a decision needs: which check, and what to do.
+// Everything removed is still carried, and carried better, by the outputs built
+// for it — `--json` and `--format sarif` hold every field including the
+// evidence array, and `docs/checks/<ID>.md` holds the full remediation with its
+// steps and commands. The terminal is the one place where being exhaustive
+// costs the reader something.
 //
 // The check ID is on the headline rather than buried, because it is the one
 // field a suppression file matches on and the one an operator pastes into
-// `docs/checks/<ID>.md`. It is never truncated for the same reason.
+// `plumbline explain`. It is never truncated: the title absorbs the whole
+// shortfall.
 func (p *printer) entry(f finding.Finding) {
-	p.blank()
-
-	// "  * " + title + " " + "[ID]" must fit the grid. The ID is never the
-	// part that gives, so the title absorbs the whole shortfall.
 	id := "[" + f.CheckID + "]"
 	title := truncate(cell(f.Title), reportWidth-4-1-visibleWidth(id))
-	// The title is the heading and carries the emphasis; the ID beside it and
-	// the paths below it are auxiliary and are dimmed out of its way. Before
-	// this the ID was bold and the title was plain, which put the weight on the
-	// one part of the line an operator does not read — they read the sentence,
-	// then copy the ID.
-	p.line("  " + p.paint(resultColor(f.Result), "*") + " " +
+
+	// The bullet is coloured by result, so the two blocks in this section stay
+	// distinguishable when they are read together. The title carries the
+	// emphasis and the ID beside it is dimmed out of its way: an operator reads
+	// the sentence, then copies the ID.
+	p.line("  " + p.paint(resultColor(f.Result), "-") + " " +
 		p.paint(ansiBold, title) + " " + p.paint(ansiDim, id))
 
-	p.field("Severity", p.severityLabel(f))
-	if f.UnknownReason != "" {
-		p.field("Reason", p.paint(ansiYellow, string(f.UnknownReason)))
+	if d := detailsFor(f); d != "" {
+		// Truncated rather than wrapped, because "two lines" is the property
+		// being kept and a remedy that reflowed to four would put this straight
+		// back where it came from. The full text is in --json and in
+		// docs/checks/<ID>.md, which the closing line of the report points at.
+		p.line(spaces(6) + p.paint(ansiDim, detailsLabel) +
+			truncate(cell(d), reportWidth-6-len(detailsLabel)))
 	}
-	p.fieldWrappedIn(ansiDim, "Subject", f.Subject)
-	p.fieldWrapped("Detail", f.Detail)
+}
 
-	if len(f.Evidence) > 0 {
-		for i, e := range f.Evidence[:min(len(f.Evidence), maxEvidence)] {
-			label := "Evidence"
-			if i > 0 {
-				label = ""
-			}
-			p.evidence(label, e)
-		}
-		if extra := len(f.Evidence) - maxEvidence; extra > 0 {
-			p.continuation(p.paint(ansiDim,
-				fmt.Sprintf("… and %d more; --json carries all of it", extra)))
-		}
-	}
+// detailsLabel is the one label this section prints, and its width is what the
+// details line is truncated against.
+const detailsLabel = "Details: "
 
-	if f.Remediation != nil {
-		p.remediation(*f.Remediation)
+// detailsFor is the single sentence a finding gets, in the order of what a
+// reader can act on.
+//
+// The remedy first: it is the answer to "what do I do", written for the check
+// and reviewed with it. The subject second — for a finding with no remediation,
+// the file or unit at fault is the most useful thing that can be said in one
+// line. The reason last and only for an UNKNOWN, because "fact not collected"
+// is not a remedy but it is the difference between a check that failed and a
+// check that never ran.
+//
+// The reason is a machine token (finding.UnknownReason) and is spelled out
+// here rather than in the constant, because the JSON has to keep matching on
+// `fact_not_collected` while a person reads "fact not collected".
+func detailsFor(f finding.Finding) string {
+	switch {
+	case f.Remediation != nil && f.Remediation.Summary != "":
+		return f.Remediation.Summary
+	case f.Subject != "":
+		return f.Subject
+	case f.UnknownReason != "":
+		return strings.ReplaceAll(string(f.UnknownReason), "_", " ")
 	}
+	return ""
 }
 
 // fieldLabel is the width of the label column in an entry. Every labelled line
@@ -779,53 +813,12 @@ func (p *printer) severityLabel(f finding.Finding) string {
 	return label
 }
 
-// maxEvidence caps the excerpts one block prints.
-//
-// The cap is on the *display*, never on the verdict or the count: the line
-// after it states how many were held back and where to get them, so the report
-// never understates the thing it is summarising. A host with four hundred
-// world-writable files produces a finding nobody reads if every one is listed.
-const maxEvidence = 5
-
-func (p *printer) evidence(label string, e finding.Evidence) {
-	where := cell(e.Source)
-	if where == "" {
-		where = "(no source)"
-	}
-	if e.Line > 0 {
-		where += fmt.Sprintf(":%d", e.Line)
-	}
-	if label != "" {
-		p.field(label, p.paint(ansiDim, where))
-	} else {
-		p.continuation(p.paint(ansiDim, where))
-	}
-	for _, l := range wrap(e.Excerpt, fieldWidth) {
-		p.continuation(l)
-	}
-}
-
-func (p *printer) remediation(r finding.Remediation) {
-	p.fieldWrapped("Remedy", r.Summary)
-	if r.Effort != "" {
-		p.field("Effort", r.Effort)
-	}
-	if r.Caution != "" {
-		lines := wrap(r.Caution, fieldWidth)
-		for i, l := range lines {
-			if i == 0 {
-				p.field("Caution", p.paint(ansiYellow, l))
-				continue
-			}
-			p.continuation(p.paint(ansiYellow, l))
-		}
-	}
-	// Steps and commands are deliberately not printed. A block that runs to
-	// forty lines per finding is a block an operator scrolls past, and the
-	// full remediation — every step, every command, every caution — is in the
-	// JSON and in docs/checks/<ID>.md. What belongs here is enough to decide
-	// whether to act now.
-}
+// The evidence and remediation blocks this file used to print are gone rather
+// than disabled. `evidence`, `remediation` and a maxEvidence cap rendered the
+// excerpt list, the effort and the caution into the terminal report; all three
+// are now the JSON renderer's job alone, and leaving dead printers here would
+// have left the next person to read this file believing the terminal still had
+// a way to show them.
 
 func withResult(in []finding.Finding, want finding.Result) []finding.Finding {
 	var out []finding.Finding

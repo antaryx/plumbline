@@ -280,8 +280,15 @@ func TestVerboseModeAddsTheTallyAndTheDetail(t *testing.T) {
 	if !strings.Contains(out, "Warnings and suggestions") {
 		t.Error("--verbose lost the detailed report")
 	}
-	if !strings.Contains(out, "Remedy") {
-		t.Error("--verbose lost the remediation blocks it exists for")
+	if !strings.Contains(out, "Details: ") {
+		t.Error("--verbose lost the details line the warnings list exists for")
+	}
+	// And the warnings list is still the two-line form, not the field dump it
+	// replaced. These are the labels that used to follow every entry.
+	for _, dumped := range []string{"- Evidence ", "- Caution ", "- Effort ", "- Severity "} {
+		if strings.Contains(out, dumped) {
+			t.Errorf("--verbose is dumping %q into the terminal report again", dumped)
+		}
 	}
 	// And it does not repeat the scan phase the stream just drew.
 	if strings.Contains(out, "[+] AUTH") {

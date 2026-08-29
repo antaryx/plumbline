@@ -116,12 +116,36 @@ subject is not on this host; the second means it may well be and the check was
 deliberately not run. Collapsing them would report a declined check where in
 truth there was nothing to check.
 
-The scan phase carries **no** detail, evidence or remediation. All of it is in
-the **suggestion phase** at the bottom, under `[=] Warnings and suggestions`,
-where each finding gets a starred headline carrying its check ID and labelled
-value lines beneath. `FAIL` and `UNKNOWN` appear there under separate headings
-and at equal weight — moving the detail to the bottom is a change of layout and
-must never become a change of emphasis.
+The scan phase carries **no** detail, evidence or remediation. What an operator
+acts on is in the **suggestion phase** at the bottom, under
+`[=] Warnings and suggestions`, and it is **two lines per finding**:
+
+```
+  Warnings (36)  ·  a check read the value and it does not meet the requirement
+
+  - PAM does not accept an empty password [AUTH-0004]
+      Details: Remove nullok from every pam_unix.so auth rule, and check for …
+  - No file is world-writable [FILESYS-0003]
+      Details: Remove the world-write bit, after establishing which account w…
+```
+
+| Line | Content |
+|---|---|
+| The bullet | The check's title and its ID in brackets. The title is truncated to fit the grid; the ID never is — it is what a suppression file matches on and what `plumbline explain` takes. The bullet is coloured by result. |
+| `Details:` | The remediation summary. Failing that the subject; failing that, for an `UNKNOWN`, why it could not be determined. Truncated rather than wrapped, because two lines is the property being kept. |
+
+**Nothing else is printed here**, and that is deliberate. Severity, the detail
+sentence, the evidence array with its sources and line numbers, the remediation
+effort and its caution are all produced and all retained — by `--format json`,
+by `--format sarif`, and by `docs/checks/<ID>.md`, which carries the full
+remediation including its steps and commands. On a real host the same section
+was 1,333 lines before this and is 139 now. A document nobody reads is not a
+safety feature however complete it is; the terminal is the one output where
+being exhaustive costs the reader something.
+
+`FAIL` and `UNKNOWN` appear under separate headings and at equal weight, in the
+same two-line form — moving the detail out of the scan phase was a change of
+layout and must never become a change of emphasis.
 
 **The grid is 78 columns and does not follow the terminal.** A report has to be
 byte-identical across two runs of an unchanged host, or a scheduled scan

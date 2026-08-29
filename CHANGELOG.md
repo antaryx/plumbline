@@ -294,6 +294,38 @@ because of this release (VERSIONING §2.4).
   correctly on a dense grouped page and reads as a display failure in a
   scrolling list.
 
+### Changed
+- **The terminal report's warnings list is two lines per finding.** It printed
+  everything a finding held — severity, unknown reason, subject, detail, up to
+  five evidence excerpts with their sources and line numbers, then the remedy,
+  its effort and its caution. Eleven or twelve lines each, thirty-six warnings
+  on this host, and a terminal holding a report a reader looking for what to do
+  next scrolls straight past.
+
+  ```
+    - PAM does not accept an empty password [AUTH-0004]
+        Details: Remove nullok from every pam_unix.so auth rule, and check for …
+    - No file is world-writable [FILESYS-0003]
+        Details: Remove the world-write bit, after establishing which account w…
+  ```
+
+  The bullet carries the title and the ID; the title is truncated to the grid
+  and the ID never is. `Details:` is the remediation summary, falling back to
+  the subject, and for an `UNKNOWN` to why it could not be determined — spelled
+  out (`ambiguous system state`) rather than left as the machine token the JSON
+  keeps. It is truncated rather than wrapped, because two lines is the property
+  being kept.
+
+  **Nothing was dropped, only moved off the terminal.** `--format json` and
+  `--format sarif` carry every field including the whole evidence array, and
+  `docs/checks/<ID>.md` carries the full remediation with its steps and
+  commands. On this host `scan --verbose` went from **1,501 lines to 307**, and
+  the warnings section itself from **1,333 to 139**.
+
+  `evidence`, `remediation` and the `maxEvidence` cap were deleted from the text
+  renderer rather than left unused, so the next reader of that file is not left
+  believing the terminal still has a way to print them.
+
 ### Added
 - **A heartbeat under the stream, so a slow collector no longer looks like a
   crash.** Rows are written on completion, which is what keeps them whole under

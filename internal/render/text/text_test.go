@@ -267,15 +267,20 @@ func TestUnknownGetsTheSameWeightAsFail(t *testing.T) {
 	if !strings.Contains(out, "Could not determine (1)") {
 		t.Fatal("there is no section for results the scan could not determine")
 	}
-	// The full block, not just a count: reason, detail and evidence.
+
+	// **Same weight means the same entry, not more of one.** The warnings list
+	// is two lines per finding; an UNKNOWN gets those two lines under its own
+	// heading, with its title, its ID, and a reason on the details line. What
+	// this test guards is that it is never demoted to a bare count — the
+	// failure it exists to catch is a report that lists failures loudly and
+	// mentions unknowns in a footnote.
+	body := sectionOf(t, out, "Warnings and suggestions")
 	for _, want := range []string{
-		"FILESYS-0010",
-		"ambiguous_system_state",
-		"nsswitch.conf routes passwd to sss",
-		"passwd: files sss",
+		"- Every uid resolves [FILESYS-0010]",
+		"Details: ambiguous system state",
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("the UNKNOWN block omits %q", want)
+		if !strings.Contains(body, want) {
+			t.Errorf("the UNKNOWN block omits %q:\n%s", want, body)
 		}
 	}
 	if !strings.Contains(out, "not passes") {
@@ -283,23 +288,90 @@ func TestUnknownGetsTheSameWeightAsFail(t *testing.T) {
 	}
 }
 
-func TestFailingFindingsCarryDetailEvidenceAndRemediation(t *testing.T) {
+// TestAWarningIsTwoLinesAndNothingElse.
+//
+// **The warnings list is an action list, and this is the whole of its
+// contract.** It used to print everything a finding held — severity, reason,
+// subject, detail, five evidence excerpts with their sources and line numbers,
+// then the remedy, its effort and its caution. Eleven lines each, forty
+// findings on a real host, and a terminal holding five hundred lines of prose
+// that a reader looking for what to do next scrolls straight past.
+//
+// Two lines: which check, and what to do about it. Everything named in the
+// second loop below is still produced and still carried — by --json, by
+// --format sarif, and by docs/checks/<ID>.md — and none of it belongs on a
+// terminal.
+func TestAWarningIsTwoLinesAndNothingElse(t *testing.T) {
 	out := render(t, sample(t))
+	body := sectionOf(t, out, "Warnings and suggestions")
 
 	for _, want := range []string{
 		"Warnings (1)",
-		"SSHD-0002",
-		"PermitRootLogin is yes.",
-		"/etc/ssh/sshd_config:12", // evidence source and line
-		"PermitRootLogin yes",     // evidence excerpt
-		"Effort",                  // remediation effort
-		"LOW",
-		"Set PermitRootLogin no", // remediation summary
-		"Caution",                // and its caution
+		"- Root may not log in over SSH [SSHD-0002]",
+		"      Details: Set PermitRootLogin no and reload sshd.",
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("the FAIL block omits %q:\n%s", want, out)
+		if !strings.Contains(body, want) {
+			t.Errorf("the warnings block omits %q:\n%s", want, body)
 		}
+	}
+
+	for _, banned := range []struct{ what, text string }{
+		{"an evidence source", "/etc/ssh/sshd_config:12"},
+		{"an evidence excerpt", "PermitRootLogin yes"},
+		{"the detail sentence", "PermitRootLogin is yes."},
+		{"the remediation effort", "Effort"},
+		{"the remediation caution", "Caution"},
+		{"the caution text", "Confirm another account can reach root first."},
+		{"a severity label", "Severity"},
+		{"the machine-readable unknown reason", "ambiguous_system_state"},
+	} {
+		if strings.Contains(body, banned.text) {
+			t.Errorf("the warnings block still prints %s (%q):\n%s", banned.what, banned.text, body)
+		}
+	}
+}
+
+// TestEveryWarningEntryIsExactlyTwoLines.
+//
+// The test above names the fields that must not appear; this one closes the
+// door on any field at all. Whatever a finding grows next, its entry in this
+// section is a bullet and one indented line — asserted by shape rather than by
+// a list of forbidden words, which is a list somebody has to remember to
+// extend.
+func TestEveryWarningEntryIsExactlyTwoLines(t *testing.T) {
+	body := sectionOf(t, render(t, sample(t)), "Warnings and suggestions")
+
+	entries := 0
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if !strings.HasPrefix(line, "  - ") {
+			continue
+		}
+		entries++
+		if !strings.HasSuffix(line, "]") {
+			t.Errorf("an entry headline does not end in its check ID: %q", line)
+		}
+		if i+1 >= len(lines) {
+			t.Errorf("nothing follows the entry %q", line)
+			continue
+		}
+		if next := lines[i+1]; !strings.HasPrefix(next, "      Details: ") {
+			t.Errorf("the line under %q is not its details line: %q", line, next)
+		}
+		// And the line after that closes the entry: another bullet, a blank, or
+		// the next block's heading. Anything else is a third line.
+		if i+2 < len(lines) {
+			switch third := lines[i+2]; {
+			case third == "",
+				strings.HasPrefix(third, "  - "),
+				strings.HasPrefix(third, "[=] "):
+			default:
+				t.Errorf("the entry %q runs to a third line: %q", line, third)
+			}
+		}
+	}
+	if entries != 2 {
+		t.Errorf("found %d entries in the warnings section, want 2 (one FAIL, one UNKNOWN):\n%s", entries, body)
 	}
 }
 
@@ -504,10 +576,9 @@ func TestTheScanPhaseCarriesNoDetail(t *testing.T) {
 		t.Fatal("the report has no [=] section, so there is no scan phase to bound")
 	}
 	for _, leaked := range []string{
-		"PermitRootLogin is yes.",            // a detail
-		"Set PermitRootLogin no",             // a remediation summary
-		"nsswitch.conf routes passwd to sss", // an unknown's detail
-		"Effort",
+		"Set PermitRootLogin no", // a remediation summary
+		"ambiguous system state", // why an unknown could not be determined
+		"Details:",               // the label that carries either of them
 	} {
 		if strings.Contains(head, leaked) {
 			t.Errorf("the scan phase leaked %q; it belongs in the section at the bottom", leaked)
@@ -520,8 +591,15 @@ func TestTheScanPhaseCarriesNoDetail(t *testing.T) {
 
 // bracketColumns returns the visible column each scan-phase line's closing
 // bracket sits in.
+//
+// It stops at the first [=] heading. The warnings list below uses the same
+// `  - ` bullet and also ends in `[ID]`, and measuring those against the status
+// column would be comparing two grids that were never meant to line up.
 func bracketColumns(t *testing.T, out string) []int {
 	t.Helper()
+	if i := strings.Index(out, "[=] "); i >= 0 {
+		out = out[:i]
+	}
 	var cols []int
 	for _, raw := range strings.Split(out, "\n") {
 		line := stripANSI(raw)
@@ -531,6 +609,23 @@ func bracketColumns(t *testing.T, out string) []int {
 		cols = append(cols, len([]rune(line)))
 	}
 	return cols
+}
+
+// sectionOf returns the body of one `[=]` section, up to the next one. Several
+// assertions below are about what a section does *not* contain, and a report
+// has five sections — a plain strings.Contains over the whole thing would find
+// the word in the summary and pass a broken warnings block.
+func sectionOf(t *testing.T, out, title string) string {
+	t.Helper()
+	i := strings.Index(out, "[=] "+title)
+	if i < 0 {
+		t.Fatalf("no %q section in:\n%s", title, out)
+	}
+	body := out[i+4:]
+	if j := strings.Index(body, "\n[=] "); j >= 0 {
+		body = body[:j]
+	}
+	return body
 }
 
 func stripANSI(s string) string {
@@ -716,14 +811,17 @@ func TestSuppressionDoesNotPenalisePosture(t *testing.T) {
 func TestNoEscapeSequenceIsPrintedAsText(t *testing.T) {
 	const escapedESC = `\x1b`
 
-	in := sample(t)
+	// The suppressed fixture rather than the plain one, because the accepted-risks
+	// block is now the only place a *wrapped and painted* value is rendered —
+	// the warnings list is two flat lines and goes nowhere near fieldWrappedIn.
+	// A test that rendered the plain sample would pass by never exercising the
+	// path the bug was on.
+	in := suppressed(t)
 	in.Color = true
 	out := render(t, in)
 
-	// The fixture has to actually exercise the path, or this passes for the
-	// wrong reason.
 	if !strings.Contains(out, "Subject") {
-		t.Fatal("the sample renders no Subject field; this test would prove nothing")
+		t.Fatal("the fixture renders no wrapped painted field; this test would prove nothing")
 	}
 
 	if strings.Contains(out, escapedESC) {
@@ -733,7 +831,7 @@ func TestNoEscapeSequenceIsPrintedAsText(t *testing.T) {
 	}
 
 	// And with colour off, where nothing should be painted at all.
-	plain := render(t, sample(t))
+	plain := render(t, suppressed(t))
 	if strings.Contains(plain, escapedESC) || strings.Contains(plain, "\033") {
 		t.Error("an uncoloured report carries escape sequences")
 	}
