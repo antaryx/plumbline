@@ -162,11 +162,22 @@ func TestOnlyActionableFindingsBecomeResults(t *testing.T) {
 }
 
 // TestFailLevelsFollowSeverity.
+//
+// The conventional three-way mapping, which is what a SARIF consumer's default
+// filters are built around: CRITICAL and HIGH are `error`, MEDIUM is `warning`,
+// LOW and INFO are `note`.
+//
+// **LOW moved from `warning` to `note`, and nothing is lost by it.** A failing
+// LOW is real and is not what a reviewer should be asked to look at first;
+// burying it among the MEDIUMs is how a list stops being triaged at all. The
+// ranking a consumer actually sorts on is `security-severity`, which is emitted
+// numerically on every rule — the level decides which bucket an alert lands in,
+// the number decides where it sits inside one.
 func TestFailLevelsFollowSeverity(t *testing.T) {
 	d, _ := render(t, sample())
 	for _, tc := range []struct{ id, want string }{
-		{"SSHD-0002", "error"},   // CRITICAL
-		{"CRON-0003", "warning"}, // LOW
+		{"SSHD-0002", "error"}, // CRITICAL
+		{"CRON-0003", "note"},  // LOW
 	} {
 		if got := d.Runs[0].Results[resultFor(t, d, tc.id)].Level; got != tc.want {
 			t.Errorf("%s level = %q, want %q", tc.id, got, tc.want)
@@ -424,5 +435,139 @@ func TestAnEmptyRunStillRenders(t *testing.T) {
 	}
 	if bytes.Contains(raw, []byte("null")) {
 		t.Errorf("a null leaked into the document:\n%s", raw)
+	}
+}
+
+// remediationOf reads the remediation property off one result, or nil.
+func remediationOf(t *testing.T, d doc, checkID string) map[string]any {
+	t.Helper()
+	raw, ok := d.Runs[0].Results[resultFor(t, d, checkID)].Properties["plumbline/remediation"]
+	if !ok {
+		return nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		t.Fatalf("%s: remediation is %T, not an object", checkID, raw)
+	}
+	return m
+}
+
+func commandsOf(t *testing.T, m map[string]any) []string {
+	t.Helper()
+	raw, ok := m["commands"].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		out = append(out, v.(string))
+	}
+	return out
+}
+
+// TestTheRemediationPropertyRanksGeneratedOverAdvisory.
+//
+// **A check with no registered generator is not a hole in the output**, which
+// is the question this property exists to answer well. There are two sources
+// and they are ranked: the generated script when this build has a fix, marked
+// "generated" because it names the paths and units *this host* was found to
+// have wrong; the catalog's own commands otherwise, marked "advisory" because
+// they are illustrative — `chmod o-w <path>`, `systemctl edit <unit>`. A
+// consumer that wants only runnable text filters on the field rather than
+// guessing from the shape of the string.
+func TestTheRemediationPropertyRanksGeneratedOverAdvisory(t *testing.T) {
+	in := sample()
+	in.Fixes = map[string][]string{
+		"SSHD-0002": {"sshd -T | grep permitrootlogin", "systemctl reload sshd"},
+	}
+	d, _ := render(t, in)
+
+	gen := remediationOf(t, d, "SSHD-0002")
+	if gen == nil {
+		t.Fatal("the generated fix produced no remediation property")
+	}
+	if gen["source"] != "generated" {
+		t.Errorf("source = %v, want \"generated\"", gen["source"])
+	}
+	if cmds := commandsOf(t, gen); len(cmds) != 2 || cmds[0] != "sshd -T | grep permitrootlogin" {
+		t.Errorf("commands = %v, want the generated ones", cmds)
+	}
+
+	// CRON-0003 has no generator here, so it falls back to the catalog's own
+	// commands rather than losing its remediation entirely.
+	adv := remediationOf(t, d, "CRON-0003")
+	if adv == nil {
+		t.Fatal("a check with no generator lost its remediation altogether")
+	}
+	if adv["source"] != "advisory" {
+		t.Errorf("source = %v, want \"advisory\"", adv["source"])
+	}
+}
+
+// TestAFindingWithNothingToProposeCarriesNoRemediationProperty.
+//
+// Omitted entirely rather than emitted empty. An empty array reads as
+// "plumbline considered this and had nothing", which is a different claim from
+// "this build has no proposal for this check" — and a consumer testing for the
+// key's presence could not tell them apart. Absence is the honest encoding, and
+// it keeps the document smaller on the checks that pass.
+func TestAFindingWithNothingToProposeCarriesNoRemediationProperty(t *testing.T) {
+	in := sample()
+	for i := range in.Findings {
+		in.Findings[i].Remediation = nil
+	}
+	_, raw := render(t, in)
+
+	if strings.Contains(string(raw), "plumbline/remediation") {
+		t.Errorf("the remediation key is emitted with nothing in it:\n%s", raw)
+	}
+}
+
+// TestAPassAndASuppressedFindingProposeNothing.
+//
+// A PASS has nothing to remediate. A suppressed finding is one an operator has
+// already decided about, and proposing a fix for it in a machine-readable
+// document is how an accepted risk gets quietly reopened by a pipeline.
+func TestAPassAndASuppressedFindingProposeNothing(t *testing.T) {
+	in := sample()
+	in.Fixes = map[string][]string{}
+	for _, f := range in.Findings {
+		in.Fixes[f.CheckID] = []string{"echo would fix"}
+	}
+	d, _ := render(t, in)
+
+	for _, r := range d.Runs[0].Results {
+		if _, ok := r.Properties["plumbline/remediation"]; !ok {
+			continue
+		}
+		if r.Properties["plumbline/result"] != string(finding.Fail) {
+			t.Errorf("%s is %v and carries a remediation", r.RuleID, r.Properties["plumbline/result"])
+		}
+		if len(r.Suppressions) > 0 {
+			t.Errorf("%s is suppressed and carries a remediation", r.RuleID)
+		}
+	}
+}
+
+// TestTheProposedFixIsNotASARIFFix.
+//
+// **The schema decides this, not taste.** A SARIF `fix` requires
+// `artifactChanges` with at least one entry: it means "a textual edit a tool
+// can apply to an artifact", and consumers exist that will apply one. What
+// plumbline produces is a shell script — `sysctl -w`, `systemctl edit`, an awk
+// that rewrites /etc/login.defs in place — which is not a textual edit to a
+// named artifact and cannot be expressed as one. Emitting it as a `fix` would
+// be invalid SARIF *and* an invitation to a consumer to apply something it has
+// not understood.
+func TestTheProposedFixIsNotASARIFFix(t *testing.T) {
+	in := sample()
+	in.Fixes = map[string][]string{"SSHD-0002": {"systemctl reload sshd"}}
+	_, raw := render(t, in)
+
+	if strings.Contains(string(raw), `"fixes"`) {
+		t.Errorf("the document emits a SARIF fixes array, which requires artifactChanges:\n%s", raw)
+	}
+	if !strings.Contains(string(raw), "plumbline/remediation") {
+		t.Errorf("the proposal is not in the property bag either:\n%s", raw)
 	}
 }

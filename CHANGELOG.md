@@ -294,6 +294,53 @@ because of this release (VERSIONING §2.4).
   correctly on a dense grouped page and reads as a display failure in a
   scrolling list.
 
+### Added
+- **`--fail-on-critical N` and `--fail-on-high N`: count gates for a pipeline.**
+  `--fail-on` is a *floor* — it fails on the first finding at or above a
+  severity, which is the right gate for a host that is supposed to be clean and
+  the wrong one for a fleet being brought up to standard, where every build
+  fails from the first day and the signal is gone by the second week. A count
+  lets a pipeline hold a line it can meet and tighten it.
+
+  **They share exit 2 with `--fail-on`**, deliberately: to a pipeline all three
+  are the same event, and a fourth code would make every CI configuration that
+  tests for 2 wrong on the day somebody adds one of these flags. Which gate
+  fired, and how many findings it saw, is on stderr.
+
+  `0` is *disabled*, not "fail on any" — a count gate that fired at zero would
+  fail every run including the clean ones. Only failing, **unsuppressed**
+  findings count: an accepted risk has been decided, and a gate that counted it
+  would make the suppression file unable to do the one thing it exists for.
+
+- **SARIF carries the proposed remediation, in the property bag.**
+  `properties["plumbline/remediation"]` holds `source`, `summary` and
+  `commands`. `source` is `generated` when this build has a script generator for
+  the check — those commands name the paths and units *this host* was found to
+  have wrong, so they are exact and runnable — and `advisory` when they are the
+  catalog's own illustrative examples. A consumer that wants only runnable text
+  filters on the field rather than guessing from the shape of the string.
+
+  **Not SARIF's `fixes` array, and the schema decides that rather than taste.**
+  A SARIF `fix` requires `artifactChanges` with at least one entry: it means "a
+  textual edit a tool can apply to an artifact", and consumers exist that will
+  apply one. A shell script is not a textual edit to a named artifact, so
+  emitting it there would be invalid SARIF *and* an invitation to a consumer to
+  apply something it has not understood.
+
+  Nothing is emitted for a PASS or for a suppressed finding — proposing a fix
+  for an accepted risk in a machine-readable document is how one gets quietly
+  reopened by a pipeline.
+
+### Changed
+- **SARIF levels follow the conventional three-way mapping.** `CRITICAL` and
+  `HIGH` are `error`, `MEDIUM` is `warning`, and `LOW` and `INFO` are now `note`
+  rather than `warning`. A failing LOW is real and is not what a reviewer should
+  be asked to look at first; burying it among the MEDIUMs is how a list stops
+  being triaged. Nothing is lost, because `security-severity` is emitted
+  numerically on every rule and is what GitHub actually ranks by — the level
+  decides the bucket, the number decides the position inside it. An `UNKNOWN`
+  stays `warning` (ADR-0018).
+
 ### Fixed
 - **`CONTAINERS-0001` read only `daemon.json` and reported a false FAIL on a
   host doing the right thing.** dockerd takes `--userns-remap` on its command

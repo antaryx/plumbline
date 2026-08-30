@@ -2343,3 +2343,187 @@ func TestWriteScriptNeedsFix(t *testing.T) {
 		t.Error("a script was written despite the usage error")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// --fail-on-critical and --fail-on-high
+// ---------------------------------------------------------------------------
+
+// TestTheCountGatesReturnExitTwo.
+//
+// **They share exit 2 with --fail-on deliberately.** To a pipeline all three
+// are the same event — the findings are unacceptable — and a fourth code would
+// make every CI configuration that tests for 2 wrong on the day somebody adds
+// one of these flags. Which gate fired is in the message on stderr.
+func TestTheCountGatesReturnExitTwo(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	// How many the fixture actually has, so the thresholds below are anchored
+	// to the host rather than to a number somebody guessed.
+	_, stdout, _ := runJSON(t, "scan", "--root", hostFixture)
+	high := countAtSeverity(t, stdout, "HIGH")
+	if high == 0 {
+		t.Fatal("the fixture has no HIGH findings; this test would prove nothing")
+	}
+
+	for _, c := range []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"the threshold is met exactly", []string{"--fail-on-high", fmt.Sprint(high)}, cli.ExitFindings},
+		{"the threshold is exceeded", []string{"--fail-on-high", "1"}, cli.ExitFindings},
+		{"one more than the host has", []string{"--fail-on-high", fmt.Sprint(high + 1)}, cli.ExitOK},
+		// Zero is disabled, not "fail on any". A count gate that fired at zero
+		// findings would fail every run including the clean ones.
+		{"zero is disabled", []string{"--fail-on-high", "0"}, cli.ExitOK},
+		{"unset is disabled", nil, cli.ExitOK},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			code, _, stderr := run(t, append([]string{"scan", "--root", hostFixture}, c.args...)...)
+			if code != c.want {
+				t.Errorf("exit = %d, want %d\n%s", code, c.want, stderr)
+			}
+			if c.want == cli.ExitFindings && !strings.Contains(stderr, "--fail-on-high") {
+				t.Errorf("the message does not name the gate that fired:\n%s", stderr)
+			}
+		})
+	}
+}
+
+// TestTheCountGateNamesWhichOneFired.
+//
+// Three gates land on one exit code, so the message is the only thing that says
+// which. A pipeline that failed on "findings at or above --fail-on" when the
+// operator had set --fail-on-critical would send somebody to the wrong flag.
+func TestTheCountGateNamesWhichOneFired(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	_, stdout, _ := runJSON(t, "scan", "--root", hostFixture)
+	high := countAtSeverity(t, stdout, "HIGH")
+
+	code, _, stderr := run(t, "scan", "--root", hostFixture, "--fail-on-high", "1")
+	if code != cli.ExitFindings {
+		t.Fatalf("exit = %d, want %d", code, cli.ExitFindings)
+	}
+	if !strings.Contains(stderr, fmt.Sprintf("--fail-on-high 1 (%d present)", high)) {
+		t.Errorf("the message does not say how many were found:\n%s", stderr)
+	}
+	if strings.Contains(stderr, "at or above --fail-on\n") {
+		t.Errorf("the message names the wrong flag:\n%s", stderr)
+	}
+}
+
+// TestACriticalGateIgnoresLowerSeverities.
+//
+// The two gates count their own severity and nothing else. A host with forty
+// HIGH findings and no CRITICAL must pass --fail-on-critical, or the flag is
+// just --fail-on with extra steps.
+func TestACriticalGateIgnoresLowerSeverities(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	_, stdout, _ := runJSON(t, "scan", "--root", hostFixture)
+	critical := countAtSeverity(t, stdout, "CRITICAL")
+	high := countAtSeverity(t, stdout, "HIGH")
+	if critical >= high || high == 0 {
+		t.Skipf("this fixture has %d CRITICAL and %d HIGH; the distinction needs more HIGH than CRITICAL", critical, high)
+	}
+
+	code, _, stderr := run(t, "scan", "--root", hostFixture, "--fail-on-critical", fmt.Sprint(high))
+	if code != cli.ExitOK {
+		t.Errorf("exit = %d, want %d: a CRITICAL gate counted the HIGH findings\n%s", code, cli.ExitOK, stderr)
+	}
+}
+
+// TestASuppressedFindingDoesNotCountTowardAGate.
+//
+// An accepted risk has been decided. A gate that counted it would make the
+// suppression file unable to do the one thing it exists for, and would fail a
+// build over a finding the operator had formally signed off.
+func TestASuppressedFindingDoesNotCountTowardAGate(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	_, stdout, _ := runJSON(t, "scan", "--root", hostFixture)
+	high := countAtSeverity(t, stdout, "HIGH")
+	if high == 0 {
+		t.Skip("the fixture has no HIGH findings to suppress")
+	}
+
+	// Fail at exactly the number present, then accept one of them: the count
+	// drops below the gate and the run passes.
+	id := firstFailingAt(t, stdout, "HIGH")
+	path := filepath.Join(t.TempDir(), "suppress.json")
+	rules := fmt.Sprintf(`{"version":"suppress/v1","rules":[{"check_id":%q,"justification":"accepted for this test host; the control is provided elsewhere"}]}`, id)
+	if err := os.WriteFile(path, []byte(rules), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, _, stderr := run(t, "scan", "--root", hostFixture, "--fail-on-high", fmt.Sprint(high)); code != cli.ExitFindings {
+		t.Fatalf("without the suppression: exit = %d, want %d\n%s", code, cli.ExitFindings, stderr)
+	}
+	code, _, stderr := run(t, "scan", "--root", hostFixture, "--fail-on-high", fmt.Sprint(high), "--suppress", path)
+	if code == cli.ExitFindings {
+		t.Errorf("a suppressed finding still counted toward the gate:\n%s", stderr)
+	}
+}
+
+// TestTheGatesWorkOnEvalToo. scan and eval share one funnel; a gate only one of
+// them honoured would mean the exit code depended on which command was typed.
+func TestTheGatesWorkOnEvalToo(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	bundlePath := bundleOf(t, hostFixture)
+	scanCode, _, _ := run(t, "scan", "--root", hostFixture, "--fail-on-high", "1")
+	evalCode, _, _ := run(t, "eval", bundlePath, "--fail-on-high", "1")
+
+	if scanCode != evalCode {
+		t.Errorf("scan exited %d and eval exited %d on the same host", scanCode, evalCode)
+	}
+	if scanCode != cli.ExitFindings {
+		t.Errorf("exit = %d, want %d", scanCode, cli.ExitFindings)
+	}
+}
+
+// countAtSeverity counts the failing, unsuppressed findings at one severity.
+func countAtSeverity(t *testing.T, stdout, severity string) int {
+	t.Helper()
+	var doc struct {
+		Findings []struct {
+			Severity    string          `json:"severity"`
+			Result      string          `json:"result"`
+			Suppression json.RawMessage `json:"suppression,omitempty"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil {
+		t.Fatalf("parse findings: %v", err)
+	}
+	n := 0
+	for _, f := range doc.Findings {
+		if f.Result == "FAIL" && f.Severity == severity && len(f.Suppression) == 0 {
+			n++
+		}
+	}
+	return n
+}
+
+// firstFailingAt is the ID of the first failing check at a severity, in the
+// document's own order, so the choice is deterministic.
+func firstFailingAt(t *testing.T, stdout, severity string) string {
+	t.Helper()
+	var doc struct {
+		Findings []struct {
+			CheckID  string `json:"check_id"`
+			Severity string `json:"severity"`
+			Result   string `json:"result"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil {
+		t.Fatalf("parse findings: %v", err)
+	}
+	for _, f := range doc.Findings {
+		if f.Result == "FAIL" && f.Severity == severity {
+			return f.CheckID
+		}
+	}
+	t.Fatalf("no failing %s finding", severity)
+	return ""
+}

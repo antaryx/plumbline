@@ -28,6 +28,22 @@ type gates struct {
 	minCoverage      float64
 	minCoverageSet   bool
 	strictPrivileges bool
+
+	// failOnCritical and failOnHigh are count gates: fail the run when this
+	// many findings of that severity are present.
+	//
+	// **They are counts where --fail-on is a floor, and the difference is what
+	// makes them worth having.** `--fail-on high` fails a build on the first
+	// HIGH, which is the right gate for a host that is supposed to be clean and
+	// the wrong one for a fleet being brought up to standard — there, every
+	// build fails from the first day and the signal is gone by the second week.
+	// A count lets a pipeline hold a line it can actually meet and tighten it,
+	// which is how a gate survives contact with a backlog.
+	//
+	// Zero is disabled rather than "fail on any", because a count gate that
+	// fired at zero findings would fail every run including the clean ones.
+	failOnCritical int
+	failOnHigh     int
 }
 
 func (gt *gates) register(cmd *cobra.Command) {
@@ -36,6 +52,8 @@ func (gt *gates) register(cmd *cobra.Command) {
 	f.Float64Var(&gt.threshold, "threshold", 0, "exit 3 if posture is below this")
 	f.Float64Var(&gt.minCoverage, "min-coverage", 0, "exit 4 if coverage is below this")
 	f.BoolVar(&gt.strictPrivileges, "strict-privileges", false, "exit 10 if the run lacked privileges a collector needed")
+	f.IntVar(&gt.failOnCritical, "fail-on-critical", 0, "exit 2 if this many CRITICAL findings or more are present; 0 disables")
+	f.IntVar(&gt.failOnHigh, "fail-on-high", 0, "exit 2 if this many HIGH findings or more are present; 0 disables")
 }
 
 // bind records which numeric gates the operator actually set, because 0 is a
@@ -251,7 +269,8 @@ func renderJSON(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding
 // from the first two.
 func renderSARIF(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, degraded bool, activeProfile string) error {
 	return rendersarif.Render(w, rendersarif.Input{
-		Tool: rendersarif.Tool{Name: "plumbline", Version: version.Version, Commit: version.Commit},
+		Fixes: generatedFixes(findings),
+		Tool:  rendersarif.Tool{Name: "plumbline", Version: version.Version, Commit: version.Commit},
 		Scan: rendersarif.Scan{
 			Started:  b.Manifest.Scan.Started,
 			Finished: b.Manifest.Scan.Finished,
@@ -326,6 +345,22 @@ func gateOn(sc score.Score, findings []finding.Finding, factErrors []fact.Error,
 		Failing:  anyFailureAtOrAbove(findings, failOn),
 	}
 
+	// The count gates share exit 2 with --fail-on, deliberately: to a pipeline
+	// they are the same event — "the findings are unacceptable" — and a second
+	// code would make every CI configuration that checks for 2 wrong on the day
+	// somebody adds one of these flags. Which gate fired is in the message.
+	if n := gt.failOnCritical; n > 0 && countSeverity(findings, finding.Critical) >= n {
+		o.Failing = true
+		o.CountGate = fmt.Sprintf("--fail-on-critical %d (%d present)", n, countSeverity(findings, finding.Critical))
+	}
+	if n := gt.failOnHigh; n > 0 && countSeverity(findings, finding.High) >= n {
+		o.Failing = true
+		if o.CountGate != "" {
+			o.CountGate += " and "
+		}
+		o.CountGate += fmt.Sprintf("--fail-on-high %d (%d present)", n, countSeverity(findings, finding.High))
+	}
+
 	if gt.strictPrivileges && lacksPrivilege(factErrors) {
 		o.Privileges = true
 	}
@@ -348,6 +383,8 @@ func explain(o Outcome) string {
 		return "insufficient privileges for one or more collectors, and --strict-privileges was set"
 	case o.Degraded:
 		return "completed degraded: a collector failed, or coverage is below --min-coverage"
+	case o.Failing && o.CountGate != "":
+		return "findings at or above " + o.CountGate
 	case o.Failing:
 		return "findings at or above --fail-on"
 	case o.BelowThreshold:
@@ -428,4 +465,45 @@ func writeScriptTo(path, script string) error {
 		return err
 	}
 	return f.Close()
+}
+
+// countSeverity counts the findings that actually failed at a severity.
+//
+// **Only a FAIL counts, and a suppressed one does not.** A check's severity is
+// what it *would* be worth if it failed, so counting every finding at that
+// severity would count the passes too and fail a clean host on its first run.
+// And an accepted risk has been decided: a gate that counted it would make the
+// suppression file unable to do the one thing it exists for.
+func countSeverity(findings []finding.Finding, want finding.Severity) int {
+	n := 0
+	for _, f := range findings {
+		if f.Result == finding.Fail && f.Suppression == nil && f.Severity == want {
+			n++
+		}
+	}
+	return n
+}
+
+// generatedFixes is the exact shell plumbline would propose, per check.
+//
+// **It is built here rather than in the renderer**, for the reason
+// renderFixPlan is here: internal/render may not import internal/remediate, and
+// the CLI is the composition root that is allowed to know about both.
+//
+// It runs on every `--format sarif` render rather than only under --fix. A
+// SARIF document is written for a machine to ingest, and a pipeline that wanted
+// the proposed commands would otherwise have to run the scan twice — once for
+// the document and once for the script — over a host that may have changed in
+// between. The cost is a plan built from findings already in memory: no
+// collection, no host access, no shell.
+func generatedFixes(findings []finding.Finding) map[string][]string {
+	plan := remediate.Generate(findings, remediate.Options{})
+	if len(plan.Actions) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(plan.Actions))
+	for _, a := range plan.Actions {
+		out[a.CheckID] = a.Commands
+	}
+	return out
 }

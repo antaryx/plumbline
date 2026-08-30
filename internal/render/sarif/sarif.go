@@ -94,6 +94,16 @@ type Input struct {
 	// invocation.executionSuccessful, which is the field SARIF has for exactly
 	// this and which consumers surface as "the run did not complete cleanly".
 	Degraded bool
+
+	// Fixes maps a check ID to the exact shell plumbline would propose for it,
+	// or is absent for a check this build has no generator for.
+	//
+	// **It is passed in rather than computed**, for the reason the text
+	// renderer takes a rendered script rather than a plan: internal/render may
+	// not import internal/remediate — a renderer that knew how a fix was built
+	// is one that would eventually build one — and the CLI is the composition
+	// root that is allowed to know about both.
+	Fixes map[string][]string
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +179,30 @@ type result struct {
 	Properties          *propertyBag      `json:"properties,omitempty"`
 }
 
+// remediation is the proposed fix, in the property bag.
+//
+// **Not SARIF's `fixes` array, and the reason is the schema rather than
+// taste.** A SARIF `fix` object requires `artifactChanges` with at least one
+// entry: it means "a textual edit a tool can apply to an artifact", and
+// consumers exist that will apply one. What plumbline produces is a shell
+// script — `sysctl -w`, `systemctl edit`, an awk that rewrites /etc/login.defs
+// in place — which is not a textual edit to a named artifact and cannot be
+// expressed as one. Emitting it as a `fix` would be invalid SARIF *and* an
+// invitation to a consumer to apply something it has not understood.
+//
+// A property bag is the schema's own answer for tool-specific data, so this is
+// where it goes, under a namespaced key like every other plumbline property.
+type remediation struct {
+	// Source is "generated" when plumbline has a script generator for this
+	// check and "advisory" when the commands are the catalog's own prose
+	// examples. A consumer that wants only runnable commands filters on it.
+	Source string `json:"source"`
+	// Summary is the one-sentence remedy from the catalog.
+	Summary string `json:"summary,omitempty"`
+	// Commands are the exact commands, in order.
+	Commands []string `json:"commands,omitempty"`
+}
+
 type location struct {
 	PhysicalLocation physicalLoc `json:"physicalLocation"`
 }
@@ -198,6 +232,10 @@ type propertyBag struct {
 	Module         string   `json:"plumbline/module,omitempty"`
 	SecuritySev    string   `json:"security-severity,omitempty"`
 	Tags           []string `json:"tags,omitempty"`
+
+	// Remediation is what plumbline would do about this finding. Absent
+	// entirely when there is nothing to say. See remediationFor.
+	Remediation *remediation `json:"plumbline/remediation,omitempty"`
 
 	Counts         *counts  `json:"plumbline/counts,omitempty"`
 	Posture        *float64 `json:"plumbline/posture,omitempty"`
@@ -232,7 +270,7 @@ func Render(w io.Writer, in Input) error {
 	rules, index := rulesFor(emitted)
 	results := make([]result, 0, len(emitted))
 	for _, f := range emitted {
-		results = append(results, resultFor(f, index[f.CheckID], in.Scan))
+		results = append(results, resultFor(f, index[f.CheckID], in.Scan, in.Fixes))
 	}
 
 	doc := document{
@@ -310,10 +348,27 @@ func levelFor(f finding.Finding) string {
 		// informational, which reports a cleaner host than the scan saw.
 		return "warning"
 	case finding.Fail:
+		// The conventional three-way mapping, which is what a SARIF consumer's
+		// default filters are built around. LOW and INFO are `note` rather than
+		// `warning`: a failing LOW is real and is not what a reviewer should be
+		// asked to look at first, and burying it among the MEDIUMs is how a
+		// list stops being triaged at all.
+		//
+		// **Nothing is lost by that**, because security-severity is emitted
+		// numerically on every rule and is what GitHub actually ranks by — the
+		// level decides which bucket an alert lands in, the number decides
+		// where it sits inside one.
 		switch f.Severity {
 		case finding.Critical, finding.High:
 			return "error"
+		case finding.Medium:
+			return "warning"
+		case finding.Low, finding.Info:
+			return "note"
 		default:
+			// A severity this build does not recognise is a warning rather
+			// than a note. An unknown word must not quietly become the
+			// quietest level available.
 			return "warning"
 		}
 	default:
@@ -383,12 +438,13 @@ func rulesFor(in []finding.Finding) ([]ruleDesc, map[string]int) {
 }
 
 // resultFor renders one finding.
-func resultFor(f finding.Finding, ruleIndex int, s Scan) result {
+func resultFor(f finding.Finding, ruleIndex int, s Scan, fixes map[string][]string) result {
 	props := &propertyBag{
 		Result:        string(f.Result),
 		UnknownReason: string(f.UnknownReason),
 		Subject:       clean(f.Subject),
 		Module:        f.Module,
+		Remediation:   remediationFor(f, fixes),
 	}
 
 	out := result{
@@ -542,4 +598,67 @@ func semanticVersion(v string) string {
 // somebody else's UI will render, and the cost of being wrong is theirs.
 func clean(s string) string {
 	return strings.TrimSpace(sanitize.Text(s))
+}
+
+// remediationFor builds the property, or returns nil when there is nothing to
+// put in it.
+//
+// **A check with no registered generator is not a hole in the output.** There
+// are two sources and they are ranked:
+//
+//  1. The generated script, when this build has a fix for the check. It names
+//     the paths and units *this host* was found to have wrong, so it is exact
+//     and runnable, and it is marked "generated".
+//  2. The catalog's own commands otherwise. Every check ships a Remediation
+//     block written and reviewed with it, and its commands are illustrative —
+//     `chmod o-w <path>`, `systemctl edit <unit>` — so they are marked
+//     "advisory" and a consumer that only wants runnable text filters them out
+//     on that field rather than on their shape.
+//
+// When neither exists the property is **omitted entirely** rather than emitted
+// empty. An empty array reads as "plumbline considered this and had nothing",
+// which is a different claim from "this build has no proposal for this check",
+// and a consumer testing for the key's presence would not be able to tell them
+// apart. Absence is the honest encoding of "nothing to say", and it keeps the
+// document smaller on the checks that pass.
+//
+// Nothing is emitted for a finding that did not fail. A PASS has nothing to
+// remediate, and a suppressed finding is one an operator has already decided
+// about — proposing a fix for it in a machine-readable document is how an
+// accepted risk gets quietly reopened by a pipeline.
+func remediationFor(f finding.Finding, fixes map[string][]string) *remediation {
+	if f.Result != finding.Fail || f.Suppression != nil {
+		return nil
+	}
+
+	summary := ""
+	if f.Remediation != nil {
+		summary = clean(f.Remediation.Summary)
+	}
+
+	if cmds, ok := fixes[f.CheckID]; ok && len(cmds) > 0 {
+		return &remediation{Source: "generated", Summary: summary, Commands: cleanAll(cmds)}
+	}
+	if f.Remediation != nil && len(f.Remediation.Commands) > 0 {
+		return &remediation{Source: "advisory", Summary: summary, Commands: cleanAll(f.Remediation.Commands)}
+	}
+	if summary != "" {
+		// A summary and no commands is still worth carrying: it is the
+		// sentence a reviewer reads, and dropping it because there was no
+		// command list would hide the one thing every check has.
+		return &remediation{Source: "advisory", Summary: summary}
+	}
+	return nil
+}
+
+// cleanAll sanitises a command list. The generated commands carry paths read
+// off the host, and a path is the one thing on a Linux host that can contain
+// almost anything — including bytes that would corrupt a JSON consumer's
+// terminal when it prints them back.
+func cleanAll(in []string) []string {
+	out := make([]string, len(in))
+	for i, s := range in {
+		out[i] = clean(s)
+	}
+	return out
 }

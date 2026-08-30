@@ -34,8 +34,17 @@ type Outcome struct {
 	// Degraded: a collector failed, or coverage fell below --min-coverage.
 	// The scanner could not see the host properly.
 	Degraded bool
-	// Failing: findings at or above --fail-on. The host is misconfigured.
+	// Failing: findings at or above --fail-on, or at or above a count gate.
+	// The host is misconfigured.
 	Failing bool
+	// CountGate names the --fail-on-critical or --fail-on-high threshold that
+	// fired, for the message. Empty when the gate that fired was --fail-on.
+	//
+	// It does not change the exit code. All three are the same event to a
+	// pipeline — "the findings are unacceptable" — and a second code would make
+	// every CI configuration that tests for 2 wrong on the day somebody adds
+	// one of these flags. Which gate fired belongs in what a person reads.
+	CountGate string
 	// BelowThreshold: posture below --threshold.
 	BelowThreshold bool
 }

@@ -65,6 +65,8 @@ the same.
 | `--no-color` | false | Also honours `NO_COLOR` and non-TTY stdout | **yes** (v0.3) |
 | `--verbose`, `-v` | false | Add the severity tally and the detailed report (§7) | **yes** |
 | `--quiet`, `-q` | false | Stream nothing; print only the closing result block (§7) | **yes** |
+| `--fail-on-critical N` | `0` | Exit 2 when N or more CRITICAL findings are present; `0` disables | **yes** |
+| `--fail-on-high N` | `0` | Exit 2 when N or more HIGH findings are present; `0` disables | **yes** |
 | `--fix` | false | Print the shell that would repair the failing checks this build can fix. **Executes nothing.** `--format terminal` only | **yes** |
 | `--write-script P` | — | With `--fix`, also write the script to `P`, owner-only and executable (0700) | **yes** |
 | `--pace D` | `100ms` | How long a streamed row waits before its verdict lands; `0` draws at full speed (§7) | **yes** |
@@ -640,7 +642,7 @@ because silently ignoring `fail_on: hgih` is how a gate stops gating.
 |---|---|
 | 0 | Completed; all gates satisfied |
 | 1 | Usage or configuration error — nothing was scanned |
-| 2 | Completed; findings at or above `--fail-on` |
+| 2 | Completed; findings at or above `--fail-on`, `--fail-on-critical` or `--fail-on-high` |
 | 3 | Completed; posture below `--threshold` |
 | 4 | Completed **degraded** — a collector failed, or coverage below `--min-coverage` |
 | 10 | Insufficient privileges with `--strict-privileges` |

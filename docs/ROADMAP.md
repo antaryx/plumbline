@@ -1428,6 +1428,55 @@ What this leaves:
   is not the same question as "how long has this row been waiting", and the
   arithmetic wants thinking about rather than guessing at.
 
+### Pipeline gates, and why SARIF fixes are not SARIF `fixes`
+
+**The exit-code contract already had the code this needed.** `ExitFindings = 2`
+is "completed; findings at or above `--fail-on`", so the count gates land there
+rather than acquiring one of their own: to a pipeline all three are the same
+event, and a fourth code would make every CI configuration that tests for 2
+wrong on the day somebody adds one of these flags. `Outcome.CountGate` carries
+which one fired into the message, which is where a person reads it.
+
+The requested scheme also proposed 1 for fatal errors generally. plumbline's
+ladder is finer and is a documented contract (ARCHITECTURE.md §9): 1 is a usage
+or configuration error where *nothing was scanned*, 10 is a scan that ran and
+was not allowed to look, 70 is the tool being broken. Those are three different
+things to a pipeline — the first is a broken invocation, the second a real
+result about a host, the third a reason to distrust everything printed — and
+collapsing them would lose the distinction the ladder exists for.
+
+A count gate counts only **failing, unsuppressed** findings. Counting every
+finding at a severity would count the passes and fail a clean host on its first
+run; counting a suppressed one would make the suppression file unable to do the
+one thing it exists for.
+
+**SARIF's `fixes` array is the wrong home for what plumbline generates, and the
+schema says so rather than taste.** A `fix` object requires `artifactChanges`
+with at least one entry — it means "a textual edit a tool can apply to an
+artifact", and consumers exist that will apply one. What plumbline produces is a
+shell script: `sysctl -w`, `systemctl edit`, an awk that rewrites
+`/etc/login.defs` in place. That is not a textual edit to a named artifact and
+cannot be expressed as one, so emitting it there would be invalid SARIF *and* an
+invitation to a consumer to apply something it has not understood. The property
+bag is the schema's own answer for tool-specific data.
+
+**A check with no registered generator is not a hole in the output**, which was
+the question worth answering carefully. Two sources, ranked: the generated
+script where one exists, marked `generated` because it names the paths and units
+*this host* was found to have wrong; the catalog's own commands otherwise,
+marked `advisory` because they are illustrative. Where neither exists the
+property is omitted entirely rather than emitted empty — an empty array reads as
+"plumbline considered this and had nothing", which is a different claim from
+"this build has no proposal", and a consumer testing for the key could not tell
+them apart. On the cli-host fixture that is six generated, six advisory, none
+missing.
+
+`LOW` moved from `warning` to `note` in the level mapping. That is the
+conventional three-way split a consumer's default filters are built around, and
+nothing is lost by it: `security-severity` is emitted numerically on every rule
+and is what GitHub actually ranks by. The level decides the bucket; the number
+decides the position inside it.
+
 ### Cron paths, and a false FAIL about Docker
 
 Both halves of this were already checks, and both gaps were in what came after
