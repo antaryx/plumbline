@@ -56,6 +56,16 @@ import (
 // with them.
 const DefaultDropIn = "/etc/sysctl.d/99-plumbline-hardening.conf"
 
+// DefaultUnitDir is where systemd drop-ins are written.
+//
+// **/etc, never /usr.** /usr/lib/systemd/system belongs to the package manager,
+// and a directive written there is reverted by the next upgrade of the package
+// — silently, and at a moment nobody is watching. /etc/systemd/system/<unit>.d/
+// is what `systemctl edit` itself creates, survives upgrades, and is undone by
+// deleting one file, which matters more than usual for a sandboxing directive
+// that may have to be removed at three in the morning.
+const DefaultUnitDir = "/etc/systemd/system"
+
 // Options are the knobs a plan is built with.
 type Options struct {
 	// DropIn is the sysctl configuration file persistent settings are written
@@ -65,6 +75,17 @@ type Options struct {
 	// temporary file and *run* the script it generates — which is the only way
 	// to assert that the shell is idempotent rather than that it looks it.
 	DropIn string
+
+	// UnitDir is where systemd drop-ins are written. Empty means
+	// DefaultUnitDir. A field for the same reason DropIn is one.
+	UnitDir string
+}
+
+func (o Options) unitDir() string {
+	if o.UnitDir == "" {
+		return DefaultUnitDir
+	}
+	return o.UnitDir
 }
 
 func (o Options) dropIn() string {
@@ -143,6 +164,8 @@ type Plan struct {
 	// Actions are the remediations, ordered by check ID so that two runs over
 	// an unchanged host produce the same script and a diff of the two is empty.
 	Actions []Action
+	// UnitDir is where the plan would write systemd drop-ins.
+	UnitDir string
 	// Unfixable are the failing findings no fix in this build covers. They are
 	// carried rather than dropped: a plan that silently listed four of
 	// thirty-six failures would read as "this is all that is wrong".
@@ -181,7 +204,7 @@ func (p Plan) Pairs() map[string]string {
 //   - A suppressed finding is one an operator formally accepted. Undoing that
 //     silently would make the suppression file a record of nothing.
 func Generate(findings []finding.Finding, opts Options) Plan {
-	p := Plan{DropIn: opts.dropIn()}
+	p := Plan{DropIn: opts.dropIn(), UnitDir: opts.unitDir()}
 
 	for _, f := range findings {
 		if f.Result != finding.Fail || f.Suppression != nil {
@@ -303,6 +326,10 @@ func Script(p Plan) string {
 		b.WriteString("\n")
 		b.WriteString(fmt.Sprintf("DROPIN=%s\n", shellQuote(p.DropIn)))
 	}
+	if strings.Contains(body.String(), "plumbline_dropin") {
+		b.WriteString("\n")
+		b.WriteString(fmt.Sprintf("UNITDIR=%s\n", shellQuote(p.UnitDir)))
+	}
 	for _, h := range helpersFor(body.String()) {
 		b.WriteString(h)
 	}
@@ -332,6 +359,7 @@ var helpers = []helper{
 	{call: "plumbline_backup", body: backupFunc},
 	{call: "plumbline_sysctl_set", body: sysctlSetFunc},
 	{call: "plumbline_json_set", body: jsonSetFunc},
+	{call: "plumbline_dropin", body: dropInFunc},
 }
 
 // helpersFor returns the helper definitions a rendered body actually uses.

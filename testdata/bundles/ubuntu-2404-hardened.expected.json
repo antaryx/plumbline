@@ -15,19 +15,19 @@
   "summary": {
     "counts": {
       "pass": 85,
-      "fail": 16,
+      "fail": 17,
       "not_applicable": 8,
       "skipped": 0,
       "unknown": 1,
-      "total": 110
+      "total": 111
     },
     "by_severity": {
       "HIGH": 6,
       "LOW": 6,
-      "MEDIUM": 4
+      "MEDIUM": 5
     },
-    "posture": 86.32478632478633,
-    "coverage": 99.01960784313727
+    "posture": 85.59322033898306,
+    "coverage": 99.02912621359224
   },
   "findings": [
     {
@@ -2082,6 +2082,22 @@
       "unknown_reason": "fact_not_collected",
       "fingerprint": "1e82aea85bff6161331d4bd31be40051",
       "detail": "required fact services.apparmor was not collected"
+    },
+    {
+      "check_id": "SERVICES-0011",
+      "module": "SERVICES",
+      "result": "FAIL",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "fingerprint": "8d1e827db434924d1e9447868336a5ba",
+      "detail": "1 audited service is not sandboxed at the strict tier: systemd-journald.service (ProtectSystem=no, ProtectHome=no). Each can still write somewhere outside /usr — /var, /srv, /opt or an application directory — or can still reach a home directory. Establish what each service legitimately writes before applying this: under strict, an undeclared path fails at the write rather than at the restart, so a service that needs /var or /srv breaks in a way that surfaces as misbehaviour rather than as a failed start. 'systemd-analyze filesystems' and the package's upstream unit are where that answer is. Not held to this standard: cron.service (runs arbitrary operator-supplied jobs inside its own mount namespace, so a read-only filesystem or an inaccessible home directory becomes a restriction on code the packager never saw — the job fails, and fails at the job rather than at the restart). An exemption is a documented reason the setting would break the service, not a finding that was suppressed. This examines ProtectSystem and ProtectHome on a fixed list of units. It says nothing about the other services on this host, nor about the other sandboxing directives on these ones, nor about what a ReadWritePaths= or a BindPaths= has opened up again — which under strict is where the whole of the service's writable surface is declared.",
+      "evidence": [
+        {
+          "source": "/usr/lib/systemd/system/systemd-journald.service",
+          "excerpt": "systemd-journald.service: ProtectSystem not set; the default is no",
+          "sha256": "99389b0e3329dad0828df1600cdd31ec271bcc3403bc014018903c5705ec68ef"
+        }
+      ]
     },
     {
       "check_id": "SSHD-0002",

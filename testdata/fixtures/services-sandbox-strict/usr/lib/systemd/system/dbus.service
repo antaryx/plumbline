@@ -1,5 +1,3 @@
-# Fixture unit with real contents, unlike the placeholders beside it:
-# dbus.service is in fact.SandboxTargets, so SERVICES-0006 reads this file.
 [Unit]
 Description=D-Bus System Message Bus
 
@@ -8,3 +6,4 @@ ExecStart=/usr/bin/dbus-daemon --system --address=systemd: --nofork
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
+RuntimeDirectory=dbus

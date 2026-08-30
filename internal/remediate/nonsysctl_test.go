@@ -323,15 +323,19 @@ func planFor(t *testing.T, findings ...finding.Finding) remediate.Plan {
 
 // runnable strips the steps a unit test must not run.
 //
-// `sysctl` writes to the machine running the tests and `chown` needs root. Both
-// are asserted as text instead; what is left is every step that operates on the
-// temporary tree, which is what these tests are about.
+// `sysctl` writes to the machine running the tests, `chown` needs root, and
+// `systemctl daemon-reload` talks to the real init system — which on a
+// developer's desktop either fails for want of authentication or, worse,
+// succeeds. All three are asserted as text instead; what is left is every step
+// that operates on the temporary tree, which is what these tests are about.
 func runnable(t *testing.T, _ string, plan remediate.Plan) string {
 	t.Helper()
 	var keep []string
 	for _, l := range strings.Split(remediate.Script(plan), "\n") {
 		trimmed := strings.TrimSpace(l)
-		if strings.HasPrefix(trimmed, "sysctl ") || strings.HasPrefix(trimmed, "chown ") {
+		if strings.HasPrefix(trimmed, "sysctl ") ||
+			strings.HasPrefix(trimmed, "chown ") ||
+			strings.HasPrefix(trimmed, "systemctl ") {
 			continue
 		}
 		keep = append(keep, l)
@@ -530,5 +534,203 @@ func TestTheFirewallFixAllowsSSHBeforeItDenies(t *testing.T) {
 	// prompt inside a pipeline hangs rather than fails.
 	if !strings.Contains(script, "ufw --force enable") {
 		t.Errorf("ufw enable would prompt:\n%s", script)
+	}
+}
+
+// TestTheSystemdDropInIsWrittenAndIsIdempotent.
+//
+// **The drop-in goes under /etc, never /usr, and the script is run here to
+// prove it.** /usr/lib/systemd/system belongs to the package manager: a
+// directive written there is reverted by the next upgrade of the package,
+// silently, at a moment nobody is watching. /etc/systemd/system/<unit>.d/ is
+// what `systemctl edit` itself creates and what survives.
+//
+// Idempotency comes from writing the whole file rather than appending to it, so
+// a second run produces the same bytes and there is no accumulated second copy
+// of a directive for systemd to resolve.
+func TestTheSystemdDropInIsWrittenAndIsIdempotent(t *testing.T) {
+	sh := needSh(t)
+
+	dir := t.TempDir()
+	f := failures("SERVICES-0011")[0]
+	f.Evidence = []finding.Evidence{
+		finding.NewEvidence("/usr/lib/systemd/system/dbus.service", 0, "ProtectSystem=yes", ""),
+		finding.NewEvidence("/usr/lib/systemd/system/cron.service", 0, "ProtectSystem=full", ""),
+	}
+
+	plan := remediate.Generate([]finding.Finding{f}, remediate.Options{UnitDir: dir})
+	if len(plan.Actions) != 1 {
+		t.Fatalf("actions = %d, want 1: %+v", len(plan.Actions), plan.Unfixable)
+	}
+
+	script := runnable(t, sh, plan)
+	run := func(pass int) map[string]string {
+		cmd := exec.Command(sh, "-c", script)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("pass %d: %v\n%s\nscript:\n%s", pass, err, out, script)
+		}
+		got := map[string]string{}
+		for _, unit := range []string{"dbus.service", "cron.service"} {
+			p := filepath.Join(dir, unit+".d", "50-plumbline-sandbox.conf")
+			if b, err := os.ReadFile(p); err == nil {
+				got[unit] = string(b)
+			}
+		}
+		return got
+	}
+
+	first := run(1)
+	second := run(2)
+
+	if len(first) != 2 {
+		t.Fatalf("wrote %d drop-in(s), want one per failing unit: %v", len(first), first)
+	}
+	for unit, body := range first {
+		if second[unit] != body {
+			t.Errorf("%s changed on the second run:\n%q\n%q", unit, body, second[unit])
+		}
+		for _, want := range []string{"[Service]", "ProtectSystem=strict", "ProtectHome=yes"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s drop-in omits %q:\n%s", unit, want, body)
+			}
+		}
+		// One directive per line, once. An append-based helper would show up
+		// here as two copies after the second run.
+		if n := strings.Count(second[unit], "ProtectSystem=strict"); n != 1 {
+			t.Errorf("%s has %d copies of ProtectSystem after two runs", unit, n)
+		}
+	}
+}
+
+// TestTheDropInDoesNotRestartTheService.
+//
+// **Restarting dbus.service or systemd-journald.service from a script is a way
+// to take a host down**, and the directives do not take effect until the
+// service restarts anyway — so the operator is told which units need it and
+// chooses the moment. A generated script that restarted them would be applying
+// a change rather than proposing one.
+func TestTheDropInDoesNotRestartTheService(t *testing.T) {
+	f := failures("SERVICES-0011")[0]
+	f.Evidence = []finding.Evidence{
+		finding.NewEvidence("/usr/lib/systemd/system/dbus.service", 0, "ProtectSystem=no", ""),
+	}
+	script := remediate.Script(remediate.Generate([]finding.Finding{f}, remediate.Options{}))
+
+	if !strings.Contains(script, "systemctl daemon-reload") {
+		t.Errorf("the drop-in is written and never loaded:\n%s", script)
+	}
+	for _, line := range strings.Split(script, "\n") {
+		if strings.HasPrefix(line, "systemctl restart") {
+			t.Errorf("the script restarts a service instead of naming it: %q", line)
+		}
+	}
+	if !strings.Contains(script, `echo "plumbline:   systemctl restart dbus.service" >&2`) {
+		t.Errorf("the script does not tell the operator what to restart:\n%s", script)
+	}
+	// /etc, never /usr.
+	if !strings.Contains(script, "UNITDIR=/etc/systemd/system") {
+		t.Errorf("the drop-in is not written under /etc:\n%s", script)
+	}
+	if strings.Contains(script, "/usr/lib/systemd/system") {
+		t.Errorf("the script writes into the package manager's directory:\n%s", script)
+	}
+}
+
+// TestTheSandboxFixesAreOnePerConcern.
+//
+// One drop-in per concern rather than one shared file, so removing the change
+// that broke a daemon is deleting the file that made it and nothing else. The
+// filenames are asserted because they are the operator's only handle on that.
+func TestTheSandboxFixesAreOnePerConcern(t *testing.T) {
+	for _, c := range []struct{ checkID, file, directive string }{
+		{"SERVICES-0006", "50-plumbline-nonewprivileges.conf", "NoNewPrivileges=yes"},
+		{"SERVICES-0007", "50-plumbline-protectsystem.conf", "ProtectSystem=full"},
+		{"SERVICES-0008", "50-plumbline-protecthome.conf", "ProtectHome=yes"},
+		{"SERVICES-0011", "50-plumbline-sandbox.conf", "ProtectSystem=strict"},
+	} {
+		t.Run(c.checkID, func(t *testing.T) {
+			f := failures(c.checkID)[0]
+			f.Evidence = []finding.Evidence{
+				finding.NewEvidence("/usr/lib/systemd/system/dbus.service", 0, "unset", ""),
+			}
+			script := remediate.Script(remediate.Generate([]finding.Finding{f}, remediate.Options{}))
+
+			if !strings.Contains(script, c.file) {
+				t.Errorf("%s does not write %s:\n%s", c.checkID, c.file, script)
+			}
+			if !strings.Contains(script, c.directive) {
+				t.Errorf("%s does not set %s:\n%s", c.checkID, c.directive, script)
+			}
+		})
+	}
+
+	// **SERVICES-0007 proposes `full` and SERVICES-0011 proposes `strict`, and
+	// that is not an inconsistency.** 0007's bar is "cannot rewrite /usr",
+	// which full delivers without the service having to be profiled first;
+	// strict requires every writable path to be declared, and 0011 is the check
+	// that asks for that and carries the investigation with it.
+	seven := failures("SERVICES-0007")[0]
+	seven.Evidence = []finding.Evidence{
+		finding.NewEvidence("/usr/lib/systemd/system/dbus.service", 0, "unset", ""),
+	}
+	if s := remediate.Script(remediate.Generate([]finding.Finding{seven}, remediate.Options{})); strings.Contains(s, "ProtectSystem=strict") {
+		t.Errorf("SERVICES-0007 proposes strict, which needs the service profiled first:\n%s", s)
+	}
+}
+
+// TestTheDropInIsNeverWrittenForAnExemptedUnit.
+//
+// **The bug this exists for shipped in the first draft of the fix and would
+// have written ProtectSystem=strict into cron.service.** The sandbox checks
+// name every unit they have anything to say about in the detail — the ones that
+// failed, the ones that are masked, and the ones *excused*, with the reason —
+// so reading unit names out of that sentence picks up the exemptions. cron is
+// exempt from all four sandbox checks precisely because it runs arbitrary
+// operator-supplied jobs, and a read-only filesystem makes them fail at the job
+// rather than at the restart.
+//
+// The evidence is the structured half: one entry per failed unit, and nothing
+// else. This asserts the fix by handing the finding the real shape — a detail
+// that names the exemption, evidence that does not.
+func TestTheDropInIsNeverWrittenForAnExemptedUnit(t *testing.T) {
+	f := failures("SERVICES-0011")[0]
+	f.Detail = "1 audited service is not sandboxed at the strict tier: " +
+		"systemd-journald.service (ProtectSystem=no, ProtectHome=no). " +
+		"Not held to this standard: cron.service (runs arbitrary operator-supplied jobs " +
+		"inside its own mount namespace, so a read-only filesystem becomes a restriction " +
+		"on code the packager never saw)."
+	f.Evidence = []finding.Evidence{
+		finding.NewEvidence("/usr/lib/systemd/system/systemd-journald.service", 0, "ProtectSystem=no", ""),
+	}
+
+	script := remediate.Script(remediate.Generate([]finding.Finding{f}, remediate.Options{}))
+
+	if !strings.Contains(script, "plumbline_dropin systemd-journald.service") {
+		t.Errorf("the failing unit got no drop-in:\n%s", script)
+	}
+	if strings.Contains(script, "plumbline_dropin cron.service") {
+		t.Errorf("a drop-in was written for the exempted unit:\n%s", script)
+	}
+	if strings.Contains(script, "systemctl restart cron.service") {
+		t.Errorf("the operator is told to restart a unit nothing was written for:\n%s", script)
+	}
+}
+
+// TestAFindingWithNoEvidenceProposesNothing.
+//
+// The consequence of reading units from the evidence: a finding that cites none
+// yields no action and lands in the unfixable list, which is visible — rather
+// than a drop-in for a unit nobody named.
+func TestAFindingWithNoEvidenceProposesNothing(t *testing.T) {
+	f := failures("SERVICES-0011")[0]
+	f.Detail = "1 audited service is not sandboxed at the strict tier: dbus.service."
+
+	plan := remediate.Generate([]finding.Finding{f}, remediate.Options{})
+	if len(plan.Actions) != 0 {
+		t.Errorf("proposed a drop-in from a detail alone: %+v", plan.Actions)
+	}
+	if len(plan.Unfixable) != 1 {
+		t.Errorf("the finding was dropped instead of carried: %+v", plan)
 	}
 }

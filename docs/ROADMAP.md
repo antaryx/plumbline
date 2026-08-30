@@ -1428,6 +1428,64 @@ What this leaves:
   is not the same question as "how long has this row been waiting", and the
   arithmetic wants thinking about rather than guessing at.
 
+### The strict tier, and a drop-in that nearly broke cron
+
+`SERVICES-0011` is the third check on the same three units, and the case for a
+third rather than a stricter bar on the first two is the case for tiering at
+all: `SERVICES-0007` passes at any `ProtectSystem` other than `no`, which is the
+right bar for *its* question — a daemon that cannot rewrite `/usr` cannot
+persist by replacing a binary. `strict` answers a different one. `yes` protects
+`/usr`, `/boot` and `/efi`; `full` adds `/etc`; only `strict` mounts the whole
+hierarchy read-only and requires every writable path to be declared. Raising
+0007's bar would have moved a verdict on every recorded host without anything
+changing on any of them. Two checks let a host see *protected, and not at the
+strongest tier*, which is one finding and the true one.
+
+**The requested check already existed as two.** `SERVICES-0007` is ProtectSystem
+and `SERVICES-0008` is ProtectHome, both since catalog 32, both with an
+exemption mechanism and a caveat. What did not exist was the remediation, and
+that is now four drop-in generators covering the whole sandbox family including
+`SERVICES-0006`.
+
+Two parts of the request were not implemented as written, and both for the same
+reason — the fact does not carry what they ask for, and making it carry that
+would cost more than it buys:
+
+- **"Iterate through all enabled services"** would mean reading every unit
+  *body* on the host, which is precisely what `services.units` exists in order
+  not to do: a bundle would then carry every `ExecStart=` and every
+  `Environment=` on the machine. `fact.SandboxTargets` is a named list of three
+  for that reason, and widening it is a work package with a fixture per
+  addition.
+- **"Ignoring ones running as root"** would leave almost nothing. All three
+  audited units are long-lived root daemons, and confining a root daemon is the
+  entire point — `ProtectSystem=strict` on a root process is what stops it
+  rewriting `/usr`. The fact does not record `User=` either, so it is not
+  observable from what is collected.
+
+**The drop-in generator's first draft wrote `ProtectSystem=strict` into
+cron.service**, which is the one unit all four sandbox checks exempt and exactly
+the breakage the exemption exists to prevent — cron runs arbitrary
+operator-supplied jobs, and a read-only filesystem makes them fail at the job
+rather than at the restart. The cause is worth recording: it read unit names out
+of the finding's *detail*, and the detail names every unit the check has anything
+to say about, including the excused ones and the reason they were excused. It
+reads the evidence now, which these checks emit one entry per *failed* unit and
+nothing else. A finding with no evidence yields no action and lands in the
+unfixable list, which is visible.
+
+`SERVICES-0007` is offered `full` and `SERVICES-0011` `strict`. That is
+deliberate: `full` satisfies 0007 without the service having to be profiled
+first, and `strict` is the tier that requires declaring every writable path,
+which is the investigation 0011 carries.
+
+**`ubuntu-2404-hardened` gained a real finding from this.** It is the one bundle
+in the corpus recorded against the current collectors, so it is the only one
+where the sandbox checks reach a verdict at all — and `systemd-journald.service`
+runs there with neither `ProtectSystem` nor `ProtectHome`. Seventeen FAILs
+instead of sixteen, posture 86.32 to 85.59. The other five bundles carry no
+`services.hardening` fact and answer UNKNOWN.
+
 ### AppArmor, and what the firewall checks already were
 
 `SERVICES-0010` is new; the firewall half of this work package was not.

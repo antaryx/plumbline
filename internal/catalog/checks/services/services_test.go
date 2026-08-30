@@ -20,14 +20,14 @@ const fixtureRoot = "../../../../testdata/fixtures"
 var all = []catalog.Check{
 	checks.Check0001, checks.Check0002, checks.Check0003,
 	checks.Check0004, checks.Check0005, checks.Check0006, checks.Check0007,
-	checks.Check0008,
+	checks.Check0008, checks.Check0011,
 }
 
 // sandbox is the triad built on services.hardening. They share a gate, a
 // fixture corpus, an exemption mechanism and — since partitionUnits — the
 // ordering that decides which units are judged at all. They differ in the
 // directive they read and the exemptions they carry, and in nothing else.
-var sandbox = []catalog.Check{checks.Check0006, checks.Check0007, checks.Check0008}
+var sandbox = []catalog.Check{checks.Check0006, checks.Check0007, checks.Check0008, checks.Check0011}
 
 // enablement is the five checks built on services.units. They share a gate and
 // a fixture corpus; SERVICES-0006 shares neither, because it reads unit bodies
@@ -1171,5 +1171,115 @@ func TestAllThreeSandboxChecksOrderTheirUnitsIdentically(t *testing.T) {
 		if got := evalCheck(t, check, "services-sandbox-dropin-bare"); got.Result != finding.NotApplicable {
 			t.Errorf("%s = %s on a host with nothing to examine: %s", check.ID, got.Result, got.Detail)
 		}
+	}
+}
+
+// TestCheck0011 is the strict tier, and every case here is a level rather than
+// a presence: SERVICES-0007 and SERVICES-0008 already answer "is anything set".
+func TestCheck0011(t *testing.T) {
+	run(t, checks.Check0011, []tc{
+		{
+			// dbus and journald at strict with home restricted; cron exempt.
+			fixture:        "services-sandbox-strict",
+			result:         finding.Pass,
+			detailContains: "at the strict tier",
+		},
+		{
+			// **The case that distinguishes this check from SERVICES-0007.**
+			// This fixture PASSES 0007 — dbus is at `yes`, cron at `full`,
+			// journald at `strict`, so none of them can write /usr — and fails
+			// here, because two of the three can still write /var and /srv.
+			fixture:        "services-sandbox-hardened",
+			result:         finding.Fail,
+			severity:       finding.Medium,
+			detailContains: "not sandboxed at the strict tier",
+		},
+		{
+			// ProtectSystem at every level and no ProtectHome anywhere: strict
+			// on the filesystem is not strict on home.
+			fixture:        "services-sandbox-protect-levels",
+			result:         finding.Fail,
+			severity:       finding.Medium,
+			detailContains: "ProtectHome=no",
+		},
+		{
+			// Nothing set at all on units that *are* installed. It fails here
+			// as it fails the two weaker checks, which is right: a stricter
+			// check must not be quieter.
+			fixture:        "services-sandbox-stock",
+			result:         finding.Fail,
+			severity:       finding.Medium,
+			detailContains: "not sandboxed at the strict tier",
+		},
+		{
+			// The unit files could not be read. A stricter bar must not turn a
+			// refusal into a verdict.
+			fixture:        "services-sandbox-denied",
+			result:         finding.Unknown,
+			reason:         finding.ReasonPermission,
+			detailContains: "could not be read",
+		},
+		{
+			// No unit directory at all: the subject of the sentence is gone,
+			// not satisfied.
+			fixture:        "services-absent",
+			result:         finding.NotApplicable,
+			detailContains: "systemd",
+		},
+	})
+}
+
+// TestCheck0011SaysWhatTheWorkIs.
+//
+// **A stricter check whose remediation is an investigation has to say so in the
+// verdict**, not only in the reference page. ProtectSystem=strict on a daemon
+// nobody has profiled fails at the *write* — which surfaces as the service
+// misbehaving, possibly hours later, rather than as a unit that refuses to
+// start. An operator reading a FAIL on a scrolling terminal may never open the
+// documentation, so the sentence travels with the finding.
+func TestCheck0011SaysWhatTheWorkIs(t *testing.T) {
+	got := evalCheck(t, checks.Check0011, "services-sandbox-hardened")
+	if got.Result != finding.Fail {
+		t.Fatalf("result = %s, want FAIL", got.Result)
+	}
+	for _, want := range []string{
+		"Establish what each service legitimately writes",
+		"fails at the write rather than at the restart",
+		"systemd-analyze filesystems",
+	} {
+		if !strings.Contains(got.Detail, want) {
+			t.Errorf("the detail omits %q:\n%s", want, got.Detail)
+		}
+	}
+	if got.Remediation == nil || !strings.Contains(got.Remediation.Caution, "undeclared path") {
+		t.Error("the remediation carries no caution about undeclared writable paths")
+	}
+}
+
+// TestTheStrictTierNeverPassesWhereSevenFails.
+//
+// The tiering is only coherent if it is monotone: a host that fails the weaker
+// check cannot pass the stronger one. Anything else would let an operator read
+// a PASS on SERVICES-0011 beside a FAIL on SERVICES-0007 and reasonably
+// conclude the catalog is broken.
+func TestTheStrictTierNeverPassesWhereSevenFails(t *testing.T) {
+	for _, fixture := range []string{
+		"services-sandbox-strict",
+		"services-sandbox-hardened",
+		"services-sandbox-protect-levels",
+		"services-sandbox-stock",
+		"services-sandbox-protect-off",
+		"services-sandbox-home-off",
+		"services-sandbox-dropin",
+		"services-sandbox-stock",
+	} {
+		t.Run(fixture, func(t *testing.T) {
+			seven := evalCheck(t, checks.Check0007, fixture)
+			eleven := evalCheck(t, checks.Check0011, fixture)
+			if seven.Result == finding.Fail && eleven.Result == finding.Pass {
+				t.Errorf("SERVICES-0007 fails and SERVICES-0011 passes on the same host:\n 0007: %s\n 0011: %s",
+					seven.Detail, eleven.Detail)
+			}
+		})
 	}
 }

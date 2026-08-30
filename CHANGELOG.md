@@ -295,6 +295,47 @@ because of this release (VERSIONING §2.4).
   scrolling list.
 
 ### Added
+- **`SERVICES-0011`: audited system services are sandboxed at the strict tier.**
+  It sits *above* `SERVICES-0007` and `SERVICES-0008` rather than replacing
+  them, and the tiering is why it is a third check.
+
+  `SERVICES-0007` passes at any `ProtectSystem` other than `no`, which is the
+  right bar for the question it asks — a daemon that cannot rewrite `/usr`
+  cannot persist by replacing a binary, and `yes` delivers that. This asks the
+  next question, and it is a materially different one: `yes` protects `/usr`,
+  `/boot` and `/efi`, `full` adds `/etc`, and only `strict` mounts the **entire**
+  hierarchy read-only and requires every writable path to be declared. A host at
+  `yes` is protected against the attack `SERVICES-0007` describes and can still
+  write `/var`, `/srv` and `/opt`. Raising 0007's bar instead would have turned a
+  passing configuration into a failing one on every recorded host without
+  anything changing on the machine.
+
+  Medium, one below the checks it builds on: a host that fails this and passes
+  those is already protected against the attack they describe.
+
+  **The verdict itself says the remediation is an investigation**, not only the
+  reference page — an operator reading a FAIL on a scrolling terminal may never
+  open the documentation. Under `strict` an undeclared path fails at the *write*,
+  so the service starts cleanly and misbehaves later, which is the worst shape a
+  failure can take. `cron.service` stays exempt, for the reason `SERVICES-0007`
+  and `SERVICES-0008` already exempt it.
+
+- **Remediation for the whole sandbox family — `SERVICES-0006`, `-0007`,
+  `-0008` and `-0011` — as systemd drop-ins.** `/etc/systemd/system/<unit>.d/`,
+  never the shipped unit: a directive written under `/usr/lib/systemd/system` is
+  reverted by the next package upgrade, silently. One file per concern, so
+  removing the change that broke a daemon is deleting the file that made it.
+  Idempotent by writing the whole file rather than appending.
+
+  It writes the drop-in and **does not restart the service**. Restarting
+  `dbus.service` or `systemd-journald.service` from a script is a way to take a
+  host down; the operator is told which units need it and picks the moment.
+
+  `SERVICES-0007` is offered `ProtectSystem=full` and `SERVICES-0011` `strict`,
+  which is not an inconsistency: `full` satisfies 0007 without the service having
+  to be profiled first, and `strict` is the tier that requires the investigation
+  0011 carries.
+
 - **`SERVICES-0010`: AppArmor is enforcing at least one profile.** Catalog 34,
   with a new `services.apparmor` fact and the `apparmor` collector behind it.
 

@@ -1,0 +1,3 @@
+{
+  "description": "The PASS fixture for SERVICES-0011. dbus.service and systemd-journald.service are at ProtectSystem=strict with ProtectHome set — yes on one and read-only on the other, because the check accepts both and the finding has to name which. cron.service is deliberately left at full/read-only: it is exempt from all three sandbox checks, so a fixture where the exempt unit is at the strict tier would prove that the exemption works only by never exercising it."
+}

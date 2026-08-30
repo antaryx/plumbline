@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 34 · 110 checks · 11 modules**
+**Catalog version 34 · 111 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -5118,6 +5118,75 @@ aa-enforce /etc/apparmor.d/*
 
 - [apparmor(7)](https://man7.org/linux/man-pages/man7/apparmor.7.html)
 - [aa-enforce(8)](https://man7.org/linux/man-pages/man8/aa-enforce.8.html)
+
+---
+
+### SERVICES-0011 — Audited system services are sandboxed at the strict tier
+
+| | |
+|---|---|
+| Module | `SERVICES` |
+| Base severity | MEDIUM |
+| Since | catalog 34 |
+| Reads | `services.hardening` |
+| Tags | `services`, `systemd`, `sandbox`, `hardening`, `defence-in-depth` |
+
+systemd's namespace directives come in levels, and the levels
+are not degrees of the same thing.
+
+**ProtectSystem** at `yes` mounts /usr, /boot and /efi read-only; at
+`full` it adds /etc; at `strict` the whole filesystem hierarchy is
+read-only except /dev, /proc and /sys, and anything the daemon genuinely writes
+has to be named in ReadWritePaths=, StateDirectory= or one of its siblings. The
+first two stop a compromised daemon replacing a binary or a configuration file.
+Only the third stops it writing anywhere at all — into /var/spool, into /srv,
+into an application directory under /opt that nobody thought of.
+
+**ProtectHome** at `yes` or `tmpfs` makes /home, /root and
+/run/user empty and inaccessible. At `read-only` the contents are still
+readable, which stops a daemon planting an authorized_keys file and does not
+stop it stealing a private one. This check accepts read-only because it is a
+real restriction and refusing it would push operators toward setting nothing;
+the finding says which level each unit is at, so a reader can tell the two
+apart.
+
+**Declaring the writable paths is the work, and it is the point.** `strict` is not a switch that can be flipped on a daemon nobody has profiled: a service
+that writes a runtime file it never declared fails at the write, which surfaces
+as the daemon misbehaving rather than as a unit that refuses to start. That is
+why this is a separate finding from SERVICES-0007 — the remediation is an
+investigation, not a line.
+
+This examines a fixed list of units. See SERVICES-0007 for why the list is
+named rather than discovered: reading every unit on the host means reading
+every unit *body*, and a bundle would then carry every ExecStart= and every
+Environment= on the machine.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort HIGH
+
+Add ProtectSystem=strict and ProtectHome=yes in a drop-in, after establishing what each service writes.
+
+1. \*\*Find out what the service writes before you restrict it.\*\* 'systemd-analyze filesystems <unit>' and 'systemctl show <unit> -p ReadWritePaths,StateDirectory,LogsDirectory,RuntimeDirectory' say what it already declares; the package's own upstream unit is usually the best statement of what it needs.
+2. Create the drop-in rather than editing the shipped unit: 'systemctl edit <unit>'. A package upgrade replaces /usr/lib/systemd/system/<unit> and leaves /etc/systemd/system/<unit>.d/ alone.
+3. Set ProtectSystem=strict and ProtectHome=yes, then declare every path the service legitimately writes with ReadWritePaths=, or better with StateDirectory= and LogsDirectory=, which create the directory with the right ownership as well as permitting it.
+4. 'systemctl daemon-reload' and then restart the service, and watch it do its actual work rather than only checking that it started. A missing ReadWritePaths= shows up when the daemon first writes, which may be hours later.
+5. 'systemd-analyze security <unit>' scores the result and names what is still open.
+
+```sh
+systemd-analyze security <unit>
+systemctl edit <unit>
+systemctl daemon-reload
+```
+
+> **Caution.** ProtectSystem=strict makes the entire filesystem read-only except what the unit declares, and a service that writes an undeclared path fails at the write rather than at the restart — so the failure appears as the daemon misbehaving, possibly long after the change. Establish what the service needs to write before applying this, and restart it under real load rather than only checking that it comes up. ProtectHome=yes hides /home and /root entirely: anything that reads a user's file, a key or a script from there stops working.
+
+**Controls** — `nist-800-53-r5 CM-7`, `nist-800-53-r5 SC-39`, `nist-800-53-r5 SI-7`
+
+**References**
+
+- [systemd.exec(5) — ProtectSystem](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
+- [systemd-analyze(1) — security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
 
 ---
 

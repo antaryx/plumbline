@@ -18,8 +18,8 @@
       "fail": 13,
       "not_applicable": 53,
       "skipped": 0,
-      "unknown": 7,
-      "total": 110
+      "unknown": 8,
+      "total": 111
     },
     "by_severity": {
       "HIGH": 4,
@@ -27,7 +27,7 @@
       "MEDIUM": 6
     },
     "posture": 78.04878048780488,
-    "coverage": 87.71929824561403
+    "coverage": 86.20689655172413
   },
   "findings": [
     {
@@ -1135,6 +1135,16 @@
       "unknown_reason": "fact_not_collected",
       "fingerprint": "1e82aea85bff6161331d4bd31be40051",
       "detail": "required fact services.apparmor was not collected"
+    },
+    {
+      "check_id": "SERVICES-0011",
+      "module": "SERVICES",
+      "result": "UNKNOWN",
+      "severity": "MEDIUM",
+      "base_severity": "MEDIUM",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "8d1e827db434924d1e9447868336a5ba",
+      "detail": "required fact services.hardening was not collected"
     },
     {
       "check_id": "SSHD-0002",
