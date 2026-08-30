@@ -39,10 +39,13 @@ import (
 // UNKNOWN rather than FAIL, and an UNKNOWN is not an evaluated check.
 // TestTheHostFixtureCanReachAVerdictOnOwnership holds that property in place.
 const (
-	hostFixture    = "../../testdata/fixtures/cli-host"
-	includeFixture = "../../testdata/fixtures/sshd-include"
-	absentFixture  = "../../testdata/fixtures/sshd-absent"
-	failFixture    = "../../testdata/fixtures/sshd-permit-yes"
+	hostFixture = "../../testdata/fixtures/cli-host"
+	// kernelWeakFixture fails the sysctl checks Phase 1 of the remediation
+	// engine can repair; cli-host passes all four.
+	kernelWeakFixture = "../../testdata/fixtures/kernel-weak"
+	includeFixture    = "../../testdata/fixtures/sshd-include"
+	absentFixture     = "../../testdata/fixtures/sshd-absent"
+	failFixture       = "../../testdata/fixtures/sshd-permit-yes"
 )
 
 // run executes a command line the way the process would and returns what the
@@ -2165,5 +2168,118 @@ func TestVerboseDoesNotRepeatTheScanPhase(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "Warnings and suggestions") {
 		t.Error("--verbose lost the detail it exists for")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// --fix, dry run
+// ---------------------------------------------------------------------------
+
+// TestFixPrintsAScriptAndRunsNothing.
+//
+// The block is a proposal. What this pins is that it says so and that it
+// arrives after the report, so an operator reads what is wrong before reading
+// what would be done about it.
+func TestFixPrintsAScriptAndRunsNothing(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	// A fixture with something this build can actually repair. cli-host is
+	// hardened on all four of the kernel parameters Phase 1 covers, so it would
+	// exercise the block's furniture and none of its content.
+	code, stdout, _ := run(t, "scan", "--root", kernelWeakFixture, "--fix")
+	// Any non-usage, non-internal exit: this fixture is a kernel-only tree, so
+	// it both fails checks and reports collection gaps. The gate is not what is
+	// under test.
+	if code == cli.ExitUsage || code == cli.ExitInternal {
+		t.Fatalf("exit %d:\n%s", code, stdout)
+	}
+
+	for _, want := range []string{
+		"[=] Proposed remediation script",
+		"Nothing below has been run.",
+		"#!/bin/sh",
+		"sysctl -w kernel.dmesg_restrict=1",
+		"/etc/sysctl.d/99-plumbline-hardening.conf",
+		"sysctl --system",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("the --fix block omits %q:\n%s", want, stdout)
+		}
+	}
+
+	// After the summary, not before it.
+	if i, j := strings.Index(stdout, "[=] Scan summary"), strings.Index(stdout, "[=] Proposed remediation script"); i < 0 || j < 0 || i > j {
+		t.Errorf("the remediation block is at %d and the summary at %d; it belongs after", j, i)
+	}
+}
+
+// TestWithoutFixThereIsNoScript. The flag is the whole of the feature: a report
+// that mentioned remediation commands without being asked would be one an
+// operator could paste from by accident.
+func TestWithoutFixThereIsNoScript(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	_, stdout, _ := run(t, "scan", "--root", hostFixture)
+	for _, unwanted := range []string{"Proposed remediation script", "#!/bin/sh", "sysctl -w"} {
+		if strings.Contains(stdout, unwanted) {
+			t.Errorf("a plain scan printed %q:\n%s", unwanted, stdout)
+		}
+	}
+}
+
+// TestFixIsRefusedByTheMachineReadableFormats.
+//
+// **stdout is a document under --json and --format sarif**, and appending a
+// shell script to one produces something no parser accepts — out of a flag
+// whose entire purpose is to be reviewed before anything runs. Refused rather
+// than quietly written to stderr: a script an operator asked for and cannot
+// find is worse than one they were told they could not have here.
+func TestFixIsRefusedByTheMachineReadableFormats(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	for _, format := range []string{"json", "sarif"} {
+		t.Run(format, func(t *testing.T) {
+			code, stdout, stderr := run(t, "scan", "--root", hostFixture, "--fix", "--format", format)
+			if code != cli.ExitUsage {
+				t.Errorf("exit %d, want %d (usage)", code, cli.ExitUsage)
+			}
+			if !strings.Contains(stderr, "--fix") {
+				t.Errorf("the error does not name the flag:\n%s", stderr)
+			}
+			if strings.Contains(stdout, "#!/bin/sh") {
+				t.Errorf("a script was written into the %s document:\n%s", format, stdout)
+			}
+		})
+	}
+}
+
+// TestFixProposesNothingForASuppressedFinding.
+//
+// A suppression is an operator saying what they want to happen. An engine that
+// silently undid one would make the suppression file a record of nothing — and
+// this is the case where that matters most, because the undoing would run as
+// root.
+func TestFixProposesNothingForASuppressedFinding(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	// It is proposed without the suppression, which is what makes the absence
+	// below mean something.
+	_, before, _ := run(t, "scan", "--root", kernelWeakFixture, "--fix")
+	if !strings.Contains(before, "sysctl -w kernel.dmesg_restrict=1") {
+		t.Fatal("KERNEL-0004 is not proposed even unsuppressed; this fixture proves nothing")
+	}
+
+	path := filepath.Join(t.TempDir(), "suppress.json")
+	const rules = `{"version":"suppress/v1","rules":[
+		{"check_id":"KERNEL-0004","justification":"accepted: this host's console is physically restricted and dmesg is needed by the support runbook"}
+	]}`
+	if err := os.WriteFile(path, []byte(rules), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stdout, _ := run(t, "scan", "--root", kernelWeakFixture, "--fix", "--suppress", path)
+	if strings.Contains(stdout, "sysctl -w kernel.dmesg_restrict=1") {
+		t.Errorf("a suppressed finding is still being remediated:\n%s",
+			stdout[max(0, strings.Index(stdout, "Proposed remediation")):])
 	}
 }

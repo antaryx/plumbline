@@ -65,6 +65,7 @@ the same.
 | `--no-color` | false | Also honours `NO_COLOR` and non-TTY stdout | **yes** (v0.3) |
 | `--verbose`, `-v` | false | Add the severity tally and the detailed report (§7) | **yes** |
 | `--quiet`, `-q` | false | Stream nothing; print only the closing result block (§7) | **yes** |
+| `--fix` | false | Print the shell that would repair the failing checks this build can fix. **Executes nothing.** `--format terminal` only | **yes** |
 | `--pace D` | `100ms` | How long a streamed row waits before its verdict lands; `0` draws at full speed (§7) | **yes** |
 | `--output-dir DIR` | — | Directory; required when multiple formats | no |
 | `--debug` | false | Engine internals to stderr | no |
@@ -817,6 +818,49 @@ was there before and is still right for a log.
 | Same four conditions as the indicator | `PLUMBLINE_NO_PROGRESS` unset, stderr a character device, `TERM` set and not `dumb`, no CI marker. One list, consulted twice. |
 | Width follows the terminal | Unlike the report's fixed grid. See below. |
 | Tokens are the report's | `[ OK ]`, `[ WARNING ]`, `[ UNKNOWN ]`, `[ SKIPPED ]`, produced by the same function the report uses. An operator who watches `WARNING` scroll past and then greps the report for it must find it. Colours match too, in every state but one: `SKIPPED` is cyan here and dim in the report, because a row carrying no verdict recedes correctly on a dense page and reads as a display failure in a scrolling list. |
+
+#### `--fix`: the proposed remediation script
+
+**It proposes and it runs nothing.** `--fix` appends a
+`[=] Proposed remediation script` block after the report, whose first line is
+"Nothing below has been run." What follows is a shell script an operator can
+read, and paste, and run as root when they have decided to.
+
+```
+[=] Proposed remediation script
+──────────────────────────────────────────────────────────────────────────────
+
+  Nothing below has been run.
+  2 checks covered by this script; review it, then run it as root.
+  34 checks still failing with no automated fix; see the warnings above.
+
+#!/bin/sh
+...
+# KERNEL-0004 — The kernel ring buffer is not readable by unprivileged users
+sysctl -w kernel.dmesg_restrict=1
+plumbline_sysctl_set kernel.dmesg_restrict 1 "$DROPIN"
+
+sysctl --system
+```
+
+| Rule | Detail |
+|---|---|
+| Only a **failing, unsuppressed** check is fixed | An `UNKNOWN` established nothing about the host — writing configuration on the strength of it is acting on a guess, as root. `NOT_APPLICABLE` has nothing to fix. `SKIPPED` was deliberately not run. A **suppressed** finding is an operator saying what they want to happen, and is not even counted as unfixable. |
+| What is *not* covered is said every time | A block listing four fixes and silent about the other thirty-two failures would read as the whole of what is wrong with the host. |
+| Both halves of a sysctl, always | `sysctl -w` is undone by the next reboot; a line in a drop-in does nothing until something applies it. |
+| One file, owned by plumbline | `/etc/sysctl.d/99-plumbline-hardening.conf`. `99-` sorts after every distribution and administrator file, so what plumbline sets is what the host boots with; the name says who wrote it. Editing `/etc/sysctl.conf` or a distribution's file would put the change where an upgrade will revert it. |
+| **Safe to run twice** | The script replaces a key where it already stands, drops duplicates, and appends only a key that is absent. Running it a second time leaves the file byte-identical. |
+| The script is printed unindented | Every other block in the report is laid out to be read; this one is laid out to be *taken*. Two leading spaces would survive the paste and have to be stripped by hand from a file about to be run as root. |
+| `--format terminal` only | stdout is a document under `--json` and `--format sarif`, and appending shell to one produces something no parser accepts. The combination is a usage error rather than a silent redirect to stderr. |
+| `scan` only | `eval` has no `--fix`: a bundle can be a month old and from another host, so proposing changes to *this* machine from it would be proposing them for the wrong one. |
+
+Covered in this phase: `KERNEL-0004`, `KERNEL-0016`, `KERNEL-0026` (both `all`
+and `default`, because neither alone is the effective setting), `KERNEL-0030`.
+
+**Nothing applies a plan, and that is the line rather than a gap.**
+`PROJECT-BRIEF.md` §1.3: generating a script is a review step; a tool that
+rewrites configuration as root from a heuristic, on a machine the operator
+cannot see, will eventually lock someone out of production.
 
 #### The heartbeat
 

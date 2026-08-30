@@ -57,7 +57,7 @@ Carried forward from the source document and not contradicted later in the roadm
 - Not a patch manager. It reports outdated software and installs nothing.
 - Not an exploit framework. Privilege-escalation surface is mapped and explained, never exercised.
 - Not a compliance certification. It produces evidence; humans and auditors produce conclusions.
-- Not a remediation robot. From v2 it generates scripts but does not run them. There is no `--fix` flag, because a tool that rewrites `/etc/ssh/sshd_config` as root from a heuristic, on a machine the operator cannot see, will eventually lock someone out of production.
+- Not a remediation robot. It generates scripts and does not run them. `scan --fix` **prints** the work that would repair the failing checks it knows how to repair, and executes none of it — the block's first line says so. A tool that rewrote `/etc/ssh/sshd_config` as root from a heuristic, on a machine the operator cannot see, will eventually lock someone out of production, and that is the line: generating is review, applying is the thing this project does not do. An earlier revision of this section said there would be no `--fix` flag at all; the flag exists as of the remediation engine's first phase, in its proposal-only form, and the reasoning behind the original sentence is unchanged and still governs what it may ever do.
 
 ---
 

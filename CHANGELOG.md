@@ -397,6 +397,54 @@ because of this release (VERSIONING §2.4).
   because a collector announced as started that never runs would sit under a
   stalled display forever.
 
+- **`scan --fix`: the remediation engine, phase one. It proposes and executes
+  nothing.** `internal/remediate` turns failing findings into the work that
+  would repair them, and `--fix` prints that work as a shell script under a
+  `[=] Proposed remediation script` heading whose first line is
+  "Nothing below has been run."
+
+  Four checks are covered: `KERNEL-0004` (dmesg_restrict), `KERNEL-0016`
+  (tcp_syncookies), `KERNEL-0026` (accept_ra, both `all` and `default`, because
+  neither alone is the effective setting) and `KERNEL-0030`
+  (protected_hardlinks). Each sets the running kernel **and** the drop-in —
+  `sysctl -w` alone is undone by the next reboot, a line in a file alone does
+  nothing until something applies it — writing to
+  `/etc/sysctl.d/99-plumbline-hardening.conf`, a file plumbline owns and that
+  sorts after every distribution and administrator file.
+
+  **What is remediated is a safety property, so it is stated positively.** A
+  finding is fixed only when it FAILED and was **not suppressed**. An UNKNOWN is
+  left alone because the check could not read the parameter and has established
+  nothing — writing configuration on the strength of that is acting on a guess,
+  as root. A suppressed finding is an operator saying what they want to happen,
+  and is not even listed as unfixable. Failures with no fix in this build are
+  counted in the block every time it prints, because a script listing four fixes
+  and silent about the other thirty-two failures would read as the whole of what
+  is wrong with the host.
+
+  **The generated work is idempotent, and that is tested as a property.**
+  `remediate.Merge` replaces the first line setting a key in place, drops later
+  duplicates, appends a key that is absent, and leaves comments, blanks and
+  other keys exactly as they were — so `Merge(Merge(x, p), p) == Merge(x, p)`,
+  asserted at nine starting shapes. In place rather than delete-and-append
+  because sysctl applies last-wins within a file, and moving a key to the end
+  would silently promote it over an override an operator had placed after it.
+  The printed script implements the same rule in awk, and a test **runs that
+  script twice against a temporary file** and compares the result with `Merge`'s
+  — so the two cannot drift on somebody's `/etc/sysctl.d` instead of in CI.
+
+  `--fix` is refused under `--format json` and `--format sarif`: stdout is a
+  document there, and appending shell to it produces something no parser
+  accepts. `eval` has no `--fix`, because a bundle can be a month old and from
+  another host.
+
+  This corrects a sentence in `PROJECT-BRIEF.md` §1.3 that said there would be
+  no `--fix` flag at all. The flag exists in its proposal-only form; the
+  reasoning behind that sentence — a tool that rewrites config as root from a
+  heuristic will eventually lock someone out of production — is unchanged and
+  still governs what it may ever do. **Generating is a review step; applying is
+  the thing this project does not do**, and nothing here applies anything.
+
 - **A streamed row is the verb, the title and the verdict**, with no check ID
   and no trailing ellipsis: `  - Checking Root login is disabled over SSH` and
   then its bracket. An ID is for copying — into a suppression file, into

@@ -1428,6 +1428,115 @@ What this leaves:
   is not the same question as "how long has this row been waiting", and the
   arithmetic wants thinking about rather than guessing at.
 
+### The remediation engine, phase one
+
+`internal/remediate` turns findings into the work that would fix them, and
+`scan --fix` prints that work as a shell script. **Nothing is executed**, and
+the block's first line says so before anything else on it.
+
+This is item 4 of the v2.0.0 plan arriving early — "Bash and Ansible only, from
+the structured remediation already in the catalog… never executed" — and it
+lands against a sentence in `PROJECT-BRIEF.md` §1.3 that said there would be no
+`--fix` flag at all. That sentence has been corrected rather than quietly
+outlived: the flag exists, in its proposal-only form, and the reasoning behind
+the original — a tool that rewrites `/etc/ssh/sshd_config` as root from a
+heuristic will eventually lock someone out of production — is unchanged and
+still governs what it may ever do. **Generating is a review step; applying is
+the thing this project does not do.**
+
+**What is remediated is stated positively, in one place, because the filter is
+the safety property.** A finding is fixed only when it FAILED and was not
+suppressed. Everything else is left alone, and each exclusion is its own
+argument:
+
+- **UNKNOWN is the dangerous one.** The check could not read the parameter, so
+  it has established nothing about the host. Writing configuration on the
+  strength of that is acting on a guess, and the guess is acted on as root.
+- **NOT_APPLICABLE** has nothing to fix; the subject is not on this host.
+- **SKIPPED** was deliberately not run.
+- **A suppressed finding is an operator saying what they want to happen.** An
+  engine that silently undid one would make the suppression file a record of
+  nothing. It is not even listed as unfixable, because an operator reads that
+  list as work still outstanding.
+
+Failures with no fix in this build are carried in the plan and counted in the
+block. A script that listed four fixes and said nothing about the other
+thirty-two failures would read as the whole of what is wrong with the host,
+which is the most damaging thing a security tool can imply.
+
+**Idempotency is the property the engine rests on, and it is a pure function.**
+A host is scanned and remediated repeatedly, and a fix that appended a line each
+time would grow `/etc/sysctl.d/99-plumbline-hardening.conf` until something
+downstream broke on it. `Merge(existing string, pairs map[string]string) string`
+is the rule: the first line setting a key is replaced in place, later duplicates
+are dropped, an absent key is appended, and everything else — comments, blanks,
+keys nobody asked about — is kept exactly as it was. From which
+`Merge(Merge(x, p), p) == Merge(x, p)`, asserted directly at nine starting
+shapes rather than inspected.
+
+**In place rather than delete-and-append**, which was the simpler implementation
+and the wrong one: appending moves a key to the end of the file on the run that
+first corrects it, and sysctl applies last-wins, so a key an operator had
+deliberately placed *before* a later override would silently change meaning.
+
+The script is a second implementation of the same rule, in awk, and that cost is
+paid deliberately: plumbline will apply a plan with `Merge` — pure Go, through
+the seam, no shell — and the printed helper exists so an operator can read what
+that would do and run it by hand on a host plumbline is not installed on. The
+two are held together by a test that **runs the generated script twice against a
+temporary file** and compares the result with `Merge`'s, so a change to either
+that the other did not follow fails the build rather than the host. That test is
+why `Options.DropIn` is a field and not a constant.
+
+awk rather than sed because the rule is not a substitution: first occurrence
+replaced, later ones removed, absent key appended. A sed one-liner does the
+first of those and quietly gets the other two wrong.
+
+**Commands are carried as argv and as text at once.** `Action.Argv` is what a
+later phase would execute through `internal/system`, which takes an argument
+vector and never a command line; `Action.Commands` is the same list quoted for a
+human. They are generated together, so the thing reviewed and the thing run
+cannot be different things.
+
+`--fix` is refused under `--format json` and `--format sarif`. stdout is a
+document there, and appending shell to it produces something no parser accepts —
+out of a flag whose entire purpose is to be reviewed before anything runs.
+Refused rather than quietly written to stderr: a script an operator asked for
+and cannot find is worse than one they were told they could not have here.
+`eval` has no `--fix` at all, because a bundle can be a month old and from
+another host, and proposing changes to *this* machine from it would be proposing
+them for the wrong one.
+
+Four checks are covered: `KERNEL-0004` (dmesg_restrict), `KERNEL-0016`
+(tcp_syncookies), `KERNEL-0026` (accept_ra, both pseudo-interfaces, because
+neither alone is the effective setting) and `KERNEL-0030`
+(protected_hardlinks). Each sets the running kernel *and* the drop-in: `sysctl
+-w` alone is undone by the next reboot, and a line in a file alone does nothing
+until something applies it.
+
+The keys and values are written out in the fix rather than read back from the
+catalog's remediation prose. Every one of those checks already says "Set
+kernel.dmesg_restrict to 1" in English, and parsing it would make the wording of
+a summary — reviewed as prose, changed freely in a patch release — the thing
+that decides what plumbline writes to `/etc/sysctl.d` as root.
+
+What this leaves:
+- **Nothing applies a plan.** That is phase two and it is the phase that crosses
+  the line `PROJECT-BRIEF.md` §1.3 draws, so it is not a step to take without
+  deciding to take it. If it is taken, `Argv` and `Merge` are already the shape
+  it needs: `system.Exec` for the commands, `Merge` in Go for the file, and no
+  shell anywhere in plumbline's own path.
+- **The plan does not read the host's current drop-in.** `fact.Sysctl.Configured`
+  already carries which file sets each probed key and to what, so a plan could
+  say "the file is already right, only the running kernel is wrong" and propose
+  `sysctl --system` alone. It was left out because the printed script has to be
+  idempotent on its own terms — an operator may run it a week later, against a
+  file that has changed — and a script that assumed a scan's snapshot would
+  append a duplicate the moment that assumption expired.
+- **Four checks of thirty-six failing on this host.** The engine is a scaffold;
+  what it covers is small on purpose, and the block says how much it does not
+  cover every time it prints.
+
 ### The row loses its ID
 
 A streamed row was `  - Checking <title> (<ID>)...`, and the ID and the ellipsis
@@ -1746,7 +1855,8 @@ Named and rejected, so they stop resurfacing. The source design listed all of th
 | Web UI | **No.** A server in a security tool is a new attack surface and an ops burden. Generate HTML; let a browser open it. |
 | gRPC API | **No.** Nobody has asked. The JSON schema is the API. |
 | Remote scanning over SSH | **Maybe.** Cheap to add (`collect` remotely, `eval` locally) and it does not compromise the model. Consider it a v3.x minor. |
-| Auto-remediation | **Never.** See `PROJECT-BRIEF.md` §1.3. |
+| Auto-*generation* of remediation | **Shipped, in its first phase.** `scan --fix` prints a script. See *The remediation engine* above. |
+| Auto-*application* of remediation | **Never.** See `PROJECT-BRIEF.md` §1.3. Generating is a review step; applying is the thing this project does not do, and no flag has been added that would. |
 | Hosted plugin registry | **No.** GitHub releases and a signed index file are sufficient and cost nothing to run. |
 | SIEM integrations | **No.** Emit good JSON; integration is their job. |
 

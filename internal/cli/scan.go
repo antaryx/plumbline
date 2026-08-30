@@ -22,6 +22,7 @@ func newScanCmd(g *globals, stdout, stderr io.Writer) *cobra.Command {
 		redact       bool
 		verbose      bool
 		quiet        bool
+		fix          bool
 		pace         time.Duration
 		timeout      time.Duration
 		perCollector time.Duration
@@ -60,6 +61,16 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			format, err := out.resolveFormat(cmd)
 			if err != nil {
 				return err
+			}
+			// **--fix writes shell to stdout, and stdout is a document under
+			// the machine-readable formats.** Appending a script to a JSON or
+			// SARIF file would produce something no parser accepts, out of a
+			// flag whose whole purpose is to be reviewed before anything runs.
+			// Refused rather than silently redirected to stderr: a script an
+			// operator asked for and cannot find is worse than one they were
+			// told they could not have here.
+			if fix && format != FormatTerminal {
+				return usageErrorf("--fix prints a shell script and --format %s prints a document; they cannot share stdout", format)
 			}
 			// Loaded before a single file of the host is touched. A
 			// suppression file with a typo in it is a thirty-millisecond
@@ -175,7 +186,7 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			detail := reportDestination(verbose, stream, out, stdout)
 			stream.Hint(reportHint(detail, out.output, quiet))
 
-			return renderAndGate(got.bundle, failOn, gt, format, out, sup, prof, stream, detail, stdout, stderr)
+			return renderAndGate(got.bundle, failOn, gt, format, out, sup, prof, stream, detail, fix, stdout, stderr)
 		},
 	}
 
@@ -185,6 +196,7 @@ re-evaluated or diffed; the two are not interchangeable.`,
 	f.BoolVar(&redact, "redact", false, "omit hostname and non-loopback addresses at collection time")
 	f.BoolVarP(&verbose, "verbose", "v", false, "add the failure tally and the detailed report — evidence, remediation, cautions")
 	f.BoolVarP(&quiet, "quiet", "q", false, "stream no rows; print only the closing result block")
+	f.BoolVar(&fix, "fix", false, "print the shell script that would repair the failing checks this build can fix; nothing is executed")
 	f.DurationVar(&pace, "pace", rendertext.DefaultPace, "hold each streamed row on screen this long before its verdict lands; 0 draws as fast as the scan runs")
 	f.DurationVar(&timeout, "timeout", 30*time.Minute, "whole-scan budget")
 	f.DurationVar(&perCollector, "collector-timeout", 2*time.Minute, "budget for one collector that declares none")

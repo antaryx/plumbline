@@ -9,6 +9,7 @@ import (
 	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/finding"
 	"github.com/antaryx/plumbline/internal/profile"
+	"github.com/antaryx/plumbline/internal/remediate"
 	renderjson "github.com/antaryx/plumbline/internal/render/json"
 	rendersarif "github.com/antaryx/plumbline/internal/render/sarif"
 	rendertext "github.com/antaryx/plumbline/internal/render/text"
@@ -94,7 +95,10 @@ collected on a production host be analysed somewhere safer.`,
 			// collection phase to narrate and nothing has shown the operator
 			// anything yet, so withholding the document would leave the
 			// command with no output at all.
-			return renderAndGate(b, failOn, gt, format, out, sup, prof, nil, true, stdout, stderr)
+			// No --fix: eval reads a bundle, and a bundle can be a month old
+			// and from another host. Proposing changes to *this* machine from
+			// it would be proposing them for the wrong one.
+			return renderAndGate(b, failOn, gt, format, out, sup, prof, nil, true, false, stdout, stderr)
 		},
 	}
 
@@ -111,7 +115,7 @@ collected on a production host be analysed somewhere safer.`,
 // Rendering is chosen here rather than inside each command for the same
 // reason: a report and its exit code are one answer, and a second call site
 // would be a second place for the two to disagree.
-func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, prof *profile.Profile, live *rendertext.Stream, detail bool, stdout, stderr io.Writer) error {
+func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, prof *profile.Profile, live *rendertext.Stream, detail, fix bool, stdout, stderr io.Writer) error {
 	// The presenter is handed to the catalog rather than to the renderer,
 	// because what it shows is evaluation happening — one line as each check
 	// reaches a verdict — and by the time there is a slice to render, there is
@@ -158,13 +162,19 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 	// a rendering choice: `plumbline scan --fail-on high` has to mean the same
 	// thing on a terminal that withheld the report as in a pipe that did not,
 	// or the flag is worthless in the only place it is used.
-	if detail {
-		w, closeOut, err := writeTo(out.output, stdout)
-		if err != nil {
-			return exitError{code: ExitInternal, message: err.Error()}
-		}
+	// The writer is opened once for both the report and the proposed
+	// remediation, because --fix has to work in standard mode where there is no
+	// report at all — and opening the --output file twice would truncate the
+	// first write with the second. Hoisting it is safe: reportDestination
+	// already returns true whenever --output is set, so the case this widens is
+	// the one where writeTo hands back stdout and a close that does nothing.
+	w, closeOut, err := writeTo(out.output, stdout)
+	if err != nil {
+		return exitError{code: ExitInternal, message: err.Error()}
+	}
 
-		var renderErr error
+	var renderErr error
+	if detail {
 		switch format {
 		case FormatJSON:
 			renderErr = renderJSON(w, b, sc, findings, factErrors, prof.Name())
@@ -189,13 +199,20 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 			renderErr = renderTerminal(w, b, sc, findings, factErrors,
 				useColor(w, out.noColor, out.output != ""), prof.Name(), narrated, columns)
 		}
+	}
 
-		if cerr := closeOut(); renderErr == nil {
-			renderErr = cerr
-		}
-		if renderErr != nil {
-			return exitError{code: ExitInternal, message: renderErr.Error()}
-		}
+	// After the report, so an operator reads what is wrong before reading what
+	// would be done about it — and to the same destination, because a --output
+	// run has already said where its output goes.
+	if renderErr == nil && fix {
+		renderErr = renderFixPlan(w, findings, useColor(w, out.noColor, out.output != ""))
+	}
+
+	if cerr := closeOut(); renderErr == nil {
+		renderErr = cerr
+	}
+	if renderErr != nil {
+		return exitError{code: ExitInternal, message: renderErr.Error()}
 	}
 
 	return gateOn(sc, findings, factErrors, failOn, gt)
@@ -340,4 +357,25 @@ func lacksPrivilege(errs []fact.Error) bool {
 		}
 	}
 	return false
+}
+
+// renderFixPlan writes the proposed-remediation block.
+//
+// **It is the joint between the renderer and the engine**, which is why it is
+// here: internal/render may not import internal/remediate — a renderer that
+// knew how a fix was built is one that would eventually build one — and
+// internal/remediate must not know how a report is laid out. The CLI is the
+// composition root and is already allowed to know about both.
+//
+// Nothing is executed. This phase proposes; applying a plan is a later one, and
+// will go through internal/system with an argv rather than through the shell
+// this prints.
+func renderFixPlan(w io.Writer, findings []finding.Finding, color bool) error {
+	plan := remediate.Generate(findings, remediate.Options{})
+	return rendertext.RenderRemediation(w, rendertext.RemediationInput{
+		Color:     color,
+		Covered:   len(plan.Actions),
+		Uncovered: len(plan.Unfixable),
+		Script:    remediate.Script(plan),
+	})
 }
