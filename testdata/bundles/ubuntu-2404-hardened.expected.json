@@ -1,7 +1,7 @@
 {
   "bundle": "ubuntu-2404-hardened.plb",
   "schema": "findings/v1",
-  "catalog_version": 33,
+  "catalog_version": 34,
   "scan": {
     "started": "2026-08-27T21:29:41.441953502Z",
     "finished": "2026-08-27T21:29:41.803788605Z",
@@ -18,8 +18,8 @@
       "fail": 16,
       "not_applicable": 8,
       "skipped": 0,
-      "unknown": 0,
-      "total": 109
+      "unknown": 1,
+      "total": 110
     },
     "by_severity": {
       "HIGH": 6,
@@ -27,7 +27,7 @@
       "MEDIUM": 4
     },
     "posture": 86.32478632478633,
-    "coverage": 100
+    "coverage": 99.01960784313727
   },
   "findings": [
     {
@@ -2072,6 +2072,16 @@
           "sha256": "99389b0e3329dad0828df1600cdd31ec271bcc3403bc014018903c5705ec68ef"
         }
       ]
+    },
+    {
+      "check_id": "SERVICES-0010",
+      "module": "SERVICES",
+      "result": "UNKNOWN",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "1e82aea85bff6161331d4bd31be40051",
+      "detail": "required fact services.apparmor was not collected"
     },
     {
       "check_id": "SSHD-0002",

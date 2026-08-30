@@ -172,6 +172,7 @@ gets produced.
 | `containers.docker_daemon` | 1 | `collect/collectors/containers` | `State`, `Path`, `Digest`, `Installed`, `DaemonPath`, `Keys[]`, `LogOpts[]`, plus the modelled options |
 | `services.hardening` | 1 | `collect/collectors/services` | Per audited unit: `State`, `Path`, `Digest`, `Fragments[]`, `NoNewPrivileges`, `ProtectSystem`, `ProtectHome`, `Malformed[]` |
 | `containers.docker_service` | 1 | `collect/collectors/containers` | `State`, `Unit`, `Path`, `Digest`, `Fragments[]`, `ExecStart[]` |
+| `services.apparmor` | 1 | `collect/collectors/apparmor` | `State`, `ProfilesState`, `Counts{}`, `Unconfining[]`, `ProfileDirState`, `ProfileFiles`, `Digest` |
 
 Every fact added later is listed here with its version history.
 
@@ -380,6 +381,35 @@ it was written against and wrong on the other, silently.
 
 The fact carries no password hash, no user name and no authentication token:
 these files hold policy, not credentials.
+
+#### `services.apparmor` — what the kernel has loaded, and what is on disk
+
+Two observations in one fact, held apart on purpose.
+
+`State` is the LSM: enabled, disabled, **absent**, denied. Absent and disabled
+are not the same finding — a RHEL host has no AppArmor because it confines
+processes with SELinux, and a Debian host with `apparmor=0` on its command line
+has the machinery and is using none of it. Collapsing them would tell the first
+operator to install a second mandatory-access-control layer beside the one
+already running.
+
+`Counts` is how many loaded profiles are in each mode, and it is the answer to
+the question the module is actually about. **A profile in `complain` mode
+confines nothing**: it logs the violation and permits it, so it can be written
+by observing what a program does. A host with two hundred profiles all in
+complain looks protected to anything counting profiles.
+
+`ProfileDirState` and `ProfileFiles` describe `/etc/apparmor.d`, and are the
+only half a **mounted image** can answer — `/sys` is a live kernel interface, so
+an image has none. The check reports UNKNOWN rather than drawing a verdict from
+the disk half alone.
+
+**The profile names are capped and the counts are not.** A loaded profile is
+named for the binary it confines, so the full list is an inventory of what is
+installed on this host, and a bundle travels. `Unconfining` keeps a bounded
+sample — drawn from the profiles that are *not* enforcing, because those are the
+ones there is anything to do about — and `Counts` carries every total. The same
+trade the filesystem rows and the firewall sources make.
 
 #### `network.firewall` — what filtering is configured, not what is loaded
 

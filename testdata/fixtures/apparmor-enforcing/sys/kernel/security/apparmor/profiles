@@ -1,0 +1,4 @@
+/usr/bin/man (enforce)
+/usr/lib/snapd/snap-confine (enforce)
+/usr/sbin/cups-browsed (complain)
+man_filter (enforce)

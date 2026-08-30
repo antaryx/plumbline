@@ -1428,6 +1428,56 @@ What this leaves:
   is not the same question as "how long has this row been waiting", and the
   arithmetic wants thinking about rather than guessing at.
 
+### AppArmor, and what the firewall checks already were
+
+`SERVICES-0010` is new; the firewall half of this work package was not.
+
+**`NETWORK-0002` already existed, with the semantics that were asked for.**
+"Pass if an active firewall is loaded with a default DROP or REJECT policy on
+incoming traffic, warn if the default INPUT policy is ACCEPT" is
+*The firewall's default inbound policy denies*, shipped at catalog 10, and
+`NETWORK-0001` is *A host-based firewall is configured* beside it. What was
+missing was the remediation action, and that is what was added.
+
+**The collector was asked to run `ufw status`, `nft list ruleset` and
+`iptables -L -n`, and does not.** That is a decision this project already made
+and wrote down: a scan has to work against a mounted image and against a bundle
+collected months ago, and a command run on the scanning host answers for the
+scanning host. The consequence is stated in every check that depends on the
+fact — the module reports what is *configured*, not what is loaded in the kernel
+right now — and the SERVICES module covers the other half by seeing whether the
+unit is enabled. Replacing a file-based collector with exec would trade
+`--root` scanning for a property the two modules already provide between them.
+
+The same reasoning shaped the AppArmor collector, and there it costs nothing:
+`aa-status --json` parses `/sys/kernel/security/apparmor/profiles`, so reading
+the file directly gives the same data without a dependency on apparmor-utils
+being installed. `/sys` is a live kernel interface, so a mounted image has none
+— an image scan establishes what is installed on disk and nothing about what is
+loaded, and `SERVICES-0010` returns UNKNOWN rather than drawing a verdict from
+the half it has.
+
+**Three states, not two.** The check distinguishes AppArmor *absent* from
+AppArmor *disabled*, because a RHEL host has no AppArmor and is not thereby
+misconfigured — it runs SELinux. A check that failed every RPM-family host for
+not running an LSM they deliberately do not use would be noise on exactly the
+distributions this catalog is meant to be useful on.
+
+**`SERVICES-0009` does not exist and the gap is deliberate on the caller's
+side**, not an accident here: the ID was specified as 0010 and check IDs are
+permanent public identifiers — a suppression file matches on them and
+`docs/checks/<ID>.md` is named after them — so second-guessing a number that was
+named would be the wrong kind of initiative.
+
+**Every recorded golden bundle moved by exactly one verdict**, the same one:
+`SERVICES-0010  new check, UNKNOWN`. Those bundles were recorded before the
+collector existed, so they carry no `services.apparmor` fact and the check
+resolves to `fact_not_collected` — the correct reading of a bundle from an older
+build. `ubuntu-2404-hardened` loses its zero-UNKNOWN claim to it; the comment
+now says why and that it clears when the corpus is re-recorded. Nothing else
+moved on any of the six, which is the strongest signal available that the change
+is additive.
+
 ### The remediation engine, phase one
 
 `internal/remediate` turns findings into the work that would fix them, and

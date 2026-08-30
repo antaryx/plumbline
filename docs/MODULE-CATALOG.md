@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 33 · 109 checks · 11 modules**
+**Catalog version 34 · 110 checks · 11 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 
@@ -21,10 +21,10 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | `LOGGING` | 5 | 0 | 0 | 4 | 1 | 0 |
 | `MEMORY` | 4 | 0 | 0 | 3 | 1 | 0 |
 | `NETWORK` | 3 | 0 | 2 | 1 | 0 | 0 |
-| `SERVICES` | 8 | 0 | 4 | 4 | 0 | 0 |
+| `SERVICES` | 9 | 0 | 5 | 4 | 0 | 0 |
 | `SSHD` | 19 | 1 | 7 | 8 | 3 | 0 |
 | `USERS` | 10 | 2 | 4 | 2 | 2 | 0 |
-| **total** | **109** | 7 | 39 | 47 | 16 | 0 |
+| **total** | **110** | 7 | 40 | 47 | 16 | 0 |
 
 Severity is the check's **base** severity, before any context adjustment a finding may carry.
 
@@ -154,6 +154,7 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`SERVICES-0006`](CHECK-REFERENCE.md#services-0006--audited-system-services-set-nonewprivileges) Audited system services set NoNewPrivileges | MEDIUM | `services.hardening` |
 | [`SERVICES-0007`](CHECK-REFERENCE.md#services-0007--audited-system-services-run-with-the-system-directories-read-only) Audited system services run with the system directories read-only | HIGH | `services.hardening` |
 | [`SERVICES-0008`](CHECK-REFERENCE.md#services-0008--audited-system-services-cannot-reach-user-home-directories) Audited system services cannot reach user home directories | HIGH | `services.hardening` |
+| [`SERVICES-0010`](CHECK-REFERENCE.md#services-0010--apparmor-is-enforcing-at-least-one-profile) AppArmor is enforcing at least one profile | HIGH | `services.apparmor` |
 
 ## SSHD
 

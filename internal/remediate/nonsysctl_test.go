@@ -391,3 +391,144 @@ func stat(t *testing.T, path string) os.FileMode {
 	}
 	return fi.Mode()
 }
+
+// TestTheAppArmorFixStartsTheServiceAndEnforces.
+//
+// Two steps for two findings the check reports as one: a host with AppArmor
+// switched off needs the service, a host with every profile in complain needs
+// aa-enforce. Each is a no-op on the host that had only the other problem,
+// which is what lets one action be correct for both.
+func TestTheAppArmorFixStartsTheServiceAndEnforces(t *testing.T) {
+	plan := planFor(t, failures("SERVICES-0010")...)
+	script := remediate.Script(plan)
+
+	for _, want := range []string{
+		"systemctl enable --now apparmor",
+		"aa-enforce /etc/apparmor.d/*",
+		// The kernel command line is the one thing neither command can fix,
+		// and a script that left the host silently unconfined would be worse
+		// than one that says so.
+		"apparmor=0",
+		"/proc/cmdline",
+		"update-grub",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("the AppArmor fix omits %q:\n%s", want, script)
+		}
+	}
+
+	// **It checks the command line and does not edit it.** Rewriting a boot
+	// configuration from a heuristic is how a machine stops booting.
+	for _, forbidden := range []string{"sed -i /etc/default/grub", "update-grub\n"} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("the AppArmor fix edits the boot configuration (%q):\n%s", forbidden, script)
+		}
+	}
+	if !strings.Contains(script, "systemctl enable --now") || strings.Contains(script, "systemctl start apparmor") {
+		t.Errorf("the service is started without being enabled, so it dies at the next reboot:\n%s", script)
+	}
+}
+
+// TestTheFirewallFixDeclinesAHostThatAlreadyHasAManager.
+//
+// **This is the refusal that matters more than the fix.** A host whose firewall
+// is nftables or firewalld already has a ruleset; `ufw enable` beside it
+// produces the two-managers state NETWORK-0003 exists to report, where the one
+// that ran last flushes what the other installed and whoever maintains the
+// loser's file is editing something with no effect. It cannot be made safe with
+// a comment, so the finding goes to Unfixable instead.
+func TestTheFirewallFixDeclinesAHostThatAlreadyHasAManager(t *testing.T) {
+	// **The first case is the one this was wrong about.** A "no firewall
+	// anywhere" finding cites *every* candidate the collector probed, each
+	// saying it does not exist — so a rule that matched /etc/nftables.conf in
+	// the path list declined the one host the ufw fix is unambiguously right
+	// for. Presence has to be read out of the excerpt, not inferred from the
+	// collector having looked.
+	probedEverything := []finding.Evidence{
+		finding.NewEvidence("/etc/nftables.conf", 0, "does not exist", ""),
+		finding.NewEvidence("/etc/iptables/rules.v4", 0, "does not exist", ""),
+		finding.NewEvidence("/etc/ufw/ufw.conf", 0, "does not exist", ""),
+	}
+
+	for _, c := range []struct {
+		name    string
+		cited   []finding.Evidence
+		wantFix bool
+	}{
+		{"nothing cited at all", nil, true},
+		{"every candidate probed and none found", probedEverything, true},
+		{"ufw, switched off", []finding.Evidence{
+			finding.NewEvidence("/etc/ufw/ufw.conf", 0, "ufw configuration, 3 statement(s); ENABLED=no", ""),
+		}, true},
+		{"an nftables ruleset", []finding.Evidence{
+			finding.NewEvidence("/etc/nftables.conf", 0, "nftables configuration, 12 statement(s)", ""),
+		}, false},
+		{"saved iptables rules", []finding.Evidence{
+			finding.NewEvidence("/etc/iptables/rules.v4", 0, "iptables configuration, 40 statement(s)", ""),
+		}, false},
+		{"firewalld", []finding.Evidence{
+			finding.NewEvidence("/etc/firewalld/zones/public.xml", 0, "firewalld configuration, 2 statement(s)", ""),
+		}, false},
+		{
+			// An excerpt shape this build has never seen counts as a firewall
+			// in play. Declining is the harmless direction; proposing ufw
+			// beside a live nftables ruleset is not.
+			name: "an unrecognised excerpt is treated as present",
+			cited: []finding.Evidence{
+				finding.NewEvidence("/etc/nftables.conf", 0, "something new", ""),
+			},
+			wantFix: false,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := failures("NETWORK-0002")[0]
+			f.Evidence = c.cited
+
+			plan := remediate.Generate([]finding.Finding{f}, remediate.Options{})
+			if got := len(plan.Actions) == 1; got != c.wantFix {
+				t.Errorf("proposed a ufw fix = %v, want %v", got, c.wantFix)
+			}
+			if !c.wantFix && len(plan.Unfixable) != 1 {
+				t.Errorf("the declined finding was dropped instead of carried: %+v", plan)
+			}
+		})
+	}
+}
+
+// TestTheFirewallFixAllowsSSHBeforeItDenies.
+//
+// **Order is the whole safety of this action.** `ufw default deny incoming`
+// followed by `ufw enable`, on a host being administered over SSH, ends the
+// session that ran it and locks the operator out — which is precisely the
+// outcome PROJECT-BRIEF.md §1.3 names as the reason this tool does not apply
+// its own scripts. The allow rule has to come first, and the script has to say
+// that the port is a guess.
+func TestTheFirewallFixAllowsSSHBeforeItDenies(t *testing.T) {
+	script := remediate.Script(planFor(t, failures("NETWORK-0002")...))
+
+	allow := strings.Index(script, "ufw allow 22/tcp")
+	deny := strings.Index(script, "ufw default deny incoming")
+	enable := strings.Index(script, "ufw --force enable")
+
+	switch {
+	case allow < 0 || deny < 0 || enable < 0:
+		t.Fatalf("the ufw fix is incomplete:\n%s", script)
+	case allow > deny, deny > enable:
+		t.Errorf("the order locks the operator out: allow at %d, deny at %d, enable at %d\n%s",
+			allow, deny, enable, script)
+	}
+
+	for _, want := range []string{
+		"will disconnect you if you are on SSH",
+		"22/tcp is a guess",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("the script does not warn about the port (%q):\n%s", want, script)
+		}
+	}
+	// --force, because `ufw enable` prompts and a script that blocks on a
+	// prompt inside a pipeline hangs rather than fails.
+	if !strings.Contains(script, "ufw --force enable") {
+		t.Errorf("ufw enable would prompt:\n%s", script)
+	}
+}

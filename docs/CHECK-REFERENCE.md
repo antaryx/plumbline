@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 33 · 109 checks · 11 modules**
+**Catalog version 34 · 110 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -5052,6 +5052,72 @@ systemctl cat systemd-journald.service
 
 - [systemd.exec(5) — ProtectHome](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
 - [systemd-analyze(1) — security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
+
+---
+
+### SERVICES-0010 — AppArmor is enforcing at least one profile
+
+| | |
+|---|---|
+| Module | `SERVICES` |
+| Base severity | HIGH |
+| Since | catalog 34 |
+| Reads | `services.apparmor` |
+| Tags | `services`, `apparmor`, `mac`, `hardening` |
+
+Mandatory access control is the layer that survives the other
+layers being wrong. Unix permissions decide what an account may do; a profile
+decides what a *program* may do, whoever is running it. When a daemon is
+compromised, the permissions of the account it runs as are exactly what the
+attacker inherits — and a profile is the thing that says "this process reads
+its configuration and writes its spool, and nothing else", regardless of what
+the account would otherwise have been allowed.
+
+**A profile in complain mode is not confinement.** complain logs the violation
+and permits it: it exists so that a profile can be written by watching what a
+program actually does. A host with two hundred profiles all in complain looks
+protected to anything that counts profiles, and denies nothing. That is the
+specific failure this check is shaped around, and it is a common state — it is
+what a host that started a profiling exercise and never finished it looks
+like.
+
+**Absence of AppArmor is not a failure.** A RHEL or Fedora host confines
+processes with SELinux and has no AppArmor at all; reporting that as a finding
+would tell an operator to install a second mandatory-access-control layer
+beside the one already running. The check reports NOT_APPLICABLE where neither
+the kernel interface nor a profile directory exists.
+
+**This asks what the kernel has loaded, which a mounted image cannot answer.**
+/sys is a live kernel interface. Scanning an image establishes whether profiles
+are installed on disk and nothing about whether any of them is in force, and
+the check says so rather than drawing a verdict from the half it has.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort MEDIUM
+
+Enable the apparmor service and put the installed profiles into enforce mode.
+
+1. Check what is loaded and in what mode before changing anything: 'aa-status'. A host in complain mode is usually mid-way through writing profiles, and the person doing it will want to know.
+2. Start the service and have it load the installed profiles: 'systemctl enable --now apparmor'.
+3. Put a profile into enforce mode with 'aa-enforce /etc/apparmor.d/<profile>'. Move them one at a time on a host with running workloads: a profile written by observing a program under one workload denies what it did not see.
+4. If AppArmor is disabled at the kernel command line, none of the above takes effect until that is removed: look for 'apparmor=0' or a missing 'security=apparmor' in /etc/default/grub, then 'update-grub' and reboot.
+5. Read the denials after enforcing: 'journalctl -k \| grep apparmor="DENIED"'. A profile that denies something the program needs shows up here and nowhere else.
+
+```sh
+aa-status
+systemctl enable --now apparmor
+aa-enforce /etc/apparmor.d/*
+```
+
+> **Caution.** Enforcing a profile written in complain mode against a workload it never observed will deny that workload. Move profiles to enforce one at a time on a host doing real work, and read the kernel log afterwards — a denial is silent to the program except as a failure it may not report clearly.
+
+**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-39`
+
+**References**
+
+- [apparmor(7)](https://man7.org/linux/man-pages/man7/apparmor.7.html)
+- [aa-enforce(8)](https://man7.org/linux/man-pages/man8/aa-enforce.8.html)
 
 ---
 

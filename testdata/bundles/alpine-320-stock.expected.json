@@ -1,7 +1,7 @@
 {
   "bundle": "alpine-320-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 33,
+  "catalog_version": 34,
   "scan": {
     "started": "2026-08-25T21:31:44.169375564Z",
     "finished": "2026-08-25T21:31:44.201476282Z",
@@ -18,8 +18,8 @@
       "fail": 18,
       "not_applicable": 50,
       "skipped": 0,
-      "unknown": 6,
-      "total": 109
+      "unknown": 7,
+      "total": 110
     },
     "by_severity": {
       "HIGH": 5,
@@ -27,7 +27,7 @@
       "MEDIUM": 7
     },
     "posture": 71.7741935483871,
-    "coverage": 89.83050847457628
+    "coverage": 88.33333333333333
   },
   "findings": [
     {
@@ -1170,6 +1170,16 @@
       "unknown_reason": "fact_not_collected",
       "fingerprint": "273b5e16f34647a63ae48dd666569cdd",
       "detail": "required fact services.hardening was not collected"
+    },
+    {
+      "check_id": "SERVICES-0010",
+      "module": "SERVICES",
+      "result": "UNKNOWN",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "1e82aea85bff6161331d4bd31be40051",
+      "detail": "required fact services.apparmor was not collected"
     },
     {
       "check_id": "SSHD-0002",

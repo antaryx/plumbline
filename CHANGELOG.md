@@ -294,6 +294,56 @@ because of this release (VERSIONING §2.4).
   correctly on a dense grouped page and reads as a display failure in a
   scrolling list.
 
+### Added
+- **`SERVICES-0010`: AppArmor is enforcing at least one profile.** Catalog 34,
+  with a new `services.apparmor` fact and the `apparmor` collector behind it.
+
+  **A profile in `complain` mode is not confinement**, and that is the failure
+  this check is shaped around. complain logs the violation and permits it — it
+  exists so a profile can be written by watching what a program does — so a host
+  with two hundred profiles all in complain looks protected to anything counting
+  profiles and denies nothing. It is a common state: it is what a profiling
+  exercise that was started and never finished looks like.
+
+  **Absence of AppArmor is NOT_APPLICABLE, not a failure.** A RHEL or Fedora
+  host confines processes with SELinux and has no AppArmor at all; reporting
+  that as a finding would tell its operator to install a second
+  mandatory-access-control layer beside the one already running.
+
+  The collector **reads files and runs nothing** —
+  `/sys/module/apparmor/parameters/enabled`,
+  `/sys/kernel/security/apparmor/profiles`, `/etc/apparmor.d` — which is the
+  same rule the network collector states for the same reason: a scan has to work
+  against a mounted image and against a bundle collected months ago, and
+  `aa-status` on the scanning host answers for the scanning host. Everything
+  aa-status reports is read out of securityfs anyway. `/sys` is a live kernel
+  interface, so scanning an image establishes what is *installed* and nothing
+  about what is *loaded*, and the check says so rather than guessing from the
+  half it has.
+
+  Profile names are capped and counts are not: a loaded profile is named for the
+  binary it confines, so the full list is an inventory of the host and a bundle
+  travels.
+
+- **Remediation for `SERVICES-0010`, `NETWORK-0001` and `NETWORK-0002`.**
+  AppArmor gets `systemctl enable --now apparmor` and `aa-enforce
+  /etc/apparmor.d/*`, plus a check of `/proc/cmdline` for `apparmor=0` — which
+  it *reports* rather than fixes, because rewriting a boot configuration from a
+  heuristic is how a machine stops booting.
+
+  The firewall fix proposes ufw with a default-deny inbound policy, and
+  **declines a host that already has nftables, iptables or firewalld**. That
+  refusal matters more than the fix: `ufw enable` beside an existing manager
+  produces the two-managers state `NETWORK-0003` exists to report, where the one
+  that ran last flushes what the other installed. It cannot be made safe with a
+  comment, so the finding goes to the unfixable list instead.
+
+  **`ufw allow 22/tcp` comes before the deny, and the script says the port is a
+  guess.** `ufw default deny incoming` followed by `ufw enable`, on a host being
+  administered over SSH, ends the session that ran it — which is exactly the
+  outcome `PROJECT-BRIEF.md` §1.3 names as the reason this tool does not apply
+  its own scripts.
+
 ### Changed
 - **The terminal report's warnings list is two lines per finding.** It printed
   everything a finding held — severity, unknown reason, subject, detail, up to

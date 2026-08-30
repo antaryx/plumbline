@@ -1,7 +1,7 @@
 {
   "bundle": "fedora-44-stock.plb",
   "schema": "findings/v1",
-  "catalog_version": 33,
+  "catalog_version": 34,
   "scan": {
     "started": "2026-08-25T21:31:49.097645827Z",
     "finished": "2026-08-25T21:31:49.817305111Z",
@@ -18,8 +18,8 @@
       "fail": 27,
       "not_applicable": 38,
       "skipped": 0,
-      "unknown": 7,
-      "total": 109
+      "unknown": 8,
+      "total": 110
     },
     "by_severity": {
       "HIGH": 7,
@@ -27,7 +27,7 @@
       "MEDIUM": 10
     },
     "posture": 65.3061224489796,
-    "coverage": 90.14084507042254
+    "coverage": 88.88888888888889
   },
   "findings": [
     {
@@ -1331,6 +1331,16 @@
       "unknown_reason": "fact_not_collected",
       "fingerprint": "273b5e16f34647a63ae48dd666569cdd",
       "detail": "required fact services.hardening was not collected"
+    },
+    {
+      "check_id": "SERVICES-0010",
+      "module": "SERVICES",
+      "result": "UNKNOWN",
+      "severity": "HIGH",
+      "base_severity": "HIGH",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "1e82aea85bff6161331d4bd31be40051",
+      "detail": "required fact services.apparmor was not collected"
     },
     {
       "check_id": "SSHD-0002",

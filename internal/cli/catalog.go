@@ -17,6 +17,7 @@ import (
 	// Collectors register themselves at init. Importing them here, in the
 	// composition root, is what puts them in the default registry; nothing
 	// deeper in the tree reaches for a collector by name.
+	_ "github.com/antaryx/plumbline/internal/collect/collectors/apparmor"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/auth"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/containers"
 	_ "github.com/antaryx/plumbline/internal/collect/collectors/cron"
@@ -129,6 +130,7 @@ func buildCatalog() *catalog.Catalog {
 		serviceschecks.Check0006,
 		serviceschecks.Check0007,
 		serviceschecks.Check0008,
+		serviceschecks.Check0010,
 		sshdchecks.Check0002,
 		sshdchecks.Check0003,
 		sshdchecks.Check0004,
