@@ -67,8 +67,15 @@ func pathsFrom(f finding.Finding) []string {
 type modeFix struct {
 	checkID string
 	title   string
-	// argv is the command, with the path appended as its last argument.
-	argv []string
+	// argvs are the commands run over each path, in order, each with the path
+	// appended as its last argument.
+	//
+	// A slice rather than one command because ownership and mode are two
+	// syscalls and a host can have either wrong: `chown` alone leaves a
+	// world-writable file owned by root, and `chmod` alone leaves a correctly
+	// moded file owned by somebody else. Both are already-correct no-ops where
+	// only the other was wrong, which is what lets one action cover both.
+	argvs [][]string
 	// enumerate is the command that lists every affected path on the host, for
 	// the note that admits the script's list may be partial.
 	enumerate string
@@ -94,8 +101,14 @@ func (m modeFix) Build(f finding.Finding, _ Options) (Action, bool) {
 	note(&a, fmt.Sprintf("%s below came from this scan's evidence, which is capped.", pathCount(len(paths))))
 	note(&a, "List every one on the host with: "+m.enumerate)
 
+	// Grouped by path rather than by command, so an operator reading the script
+	// sees everything that happens to one file together — and so that deleting
+	// the two lines for a path they do not want to change is deleting two
+	// adjacent lines.
 	for _, p := range paths {
-		command(&a, append(append([]string{}, m.argv...), p)...)
+		for _, argv := range m.argvs {
+			command(&a, append(append([]string{}, argv...), p)...)
+		}
 	}
 	return a, true
 }
@@ -169,37 +182,6 @@ func keepPaths(in []string) []string {
 	return out
 }
 
-// ownerFix restores ownership and mode on one file.
-type ownerFix struct {
-	checkID  string
-	title    string
-	fallback string
-	owner    string
-	mode     string
-}
-
-func (o ownerFix) CheckID() string { return o.checkID }
-
-func (o ownerFix) Build(f finding.Finding, _ Options) (Action, bool) {
-	path := f.Subject
-	if !strings.HasPrefix(path, "/") {
-		if p := keepPaths(pathsFrom(f)); len(p) > 0 {
-			path = p[0]
-		} else {
-			path = o.fallback
-		}
-	}
-	if path == "" {
-		return Action{}, false
-	}
-
-	a := Action{CheckID: o.checkID, Title: titleOf(f, o.title)}
-	note(&a, "Both steps are already-correct no-ops on a host where only one of them was wrong.")
-	command(&a, "chown", o.owner, "--", path)
-	command(&a, "chmod", o.mode, "--", path)
-	return a, true
-}
-
 func init() {
 	register(modeFix{
 		checkID: "FILESYS-0003",
@@ -207,7 +189,7 @@ func init() {
 		// o-w rather than a fixed mode: the owner's and the group's
 		// permissions are not this check's business, and `chmod 644` would
 		// silently take away a group write that something depends on.
-		argv:      []string{"chmod", "o-w", "--"},
+		argvs:     [][]string{{"chmod", "o-w", "--"}},
 		enumerate: "find / -xdev -type f -perm -0002 -ls",
 		caution:   "A file made world-writable is usually two accounts sharing it. Prefer a group over removing the bit outright.",
 	})
@@ -218,19 +200,42 @@ func init() {
 		// world-writable — /tmp, /var/tmp, a spool — is fixed by the sticky
 		// bit, not by taking the permission away, and taking it away is what
 		// breaks the host.
-		argv:      []string{"chmod", "a+t", "--"},
+		argvs:     [][]string{{"chmod", "a+t", "--"}},
 		enumerate: "find / -xdev -type d -perm -0002 ! -perm -1000 -ls",
 		caution:   "The sticky bit is the fix here rather than removing the write permission: these directories are usually shared on purpose.",
 	})
 	register(pamNullokFix{})
-	register(ownerFix{
-		checkID:  "CRON-0001",
-		title:    "The system crontab is owned by root and writable only by root",
-		fallback: "/etc/crontab",
-		owner:    "root:root",
-		// 600 rather than the conventional 644. Nothing but cron reads it, and
-		// the schedule of a root process is reconnaissance — CRON-0005 is the
-		// check that says so.
-		mode: "600",
+	// **Both cron fixes iterate the paths the finding cited**, rather than
+	// acting on one. CRON-0001's subject is /etc/crontab on most hosts and the
+	// evidence is what actually names the files it judged; CRON-0002 is a set
+	// of directories by construction, and a fix that repaired one of five would
+	// leave four ways to schedule a root job.
+	register(modeFix{
+		checkID: "CRON-0001",
+		title:   "The system crontab is owned by root and writable only by root",
+		// 600 rather than the conventional 644, and 0700 for the directories
+		// below. **The checks pass at a looser bar than this deliberately**:
+		// CRON-0001 and CRON-0002 ask whether an unprivileged account can
+		// *write* the schedule, which 644 satisfies. The remediation goes to
+		// the stricter value because it costs nothing — nothing but cron reads
+		// these — and because it closes CRON-0005, which asks whether an
+		// unprivileged account can *read* the schedule of a root process, in
+		// the same command.
+		argvs: [][]string{
+			{"chown", "root:root", "--"},
+			{"chmod", "600", "--"},
+		},
+		enumerate: "ls -l /etc/crontab",
+		caution:   "0600 also closes CRON-0005. Anything that parses /etc/crontab as a non-root user — a monitoring agent, a configuration-management dry run — stops being able to.",
+	})
+	register(modeFix{
+		checkID: "CRON-0002",
+		title:   "The cron drop-in directories are owned by root and writable only by root",
+		argvs: [][]string{
+			{"chown", "root:root", "--"},
+			{"chmod", "700", "--"},
+		},
+		enumerate: "ls -ld /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly",
+		caution:   "Creating a file in any of these schedules arbitrary code as root, which is why the mode matters more here than on an ordinary directory.",
 	})
 }

@@ -294,6 +294,42 @@ because of this release (VERSIONING §2.4).
   correctly on a dense grouped page and reads as a display failure in a
   scrolling list.
 
+### Fixed
+- **`CONTAINERS-0001` read only `daemon.json` and reported a false FAIL on a
+  host doing the right thing.** dockerd takes `--userns-remap` on its command
+  line as well as in the file, and the command line lives in `docker.service` —
+  which this module already reads for `CONTAINERS-0006`, `-0007` and `-0008`. A
+  daemon started with `--userns-remap=default` in a drop-in was reported as
+  running container uid 0 as host root.
+
+  The file is still consulted first, and the unit only when it says nothing: the
+  two cannot disagree on a running host, because dockerd refuses to start when
+  an option is given as a flag *and* in the file at once. The service fact is
+  fetched with `fact.Get` and its presence flag rather than declared in
+  `Requires`, for the reason `AUTH-0005` established — a fallback in `Requires`
+  turns an answerable check into `UNKNOWN(fact_not_collected)` on every bundle
+  recorded before that collector existed.
+
+  The module's standing caveat ("this reads `daemon.json` only") is no longer
+  true of this check and no longer printed by it. A caveat that overstates what
+  was missed misleads as thoroughly as one that understates it.
+
+### Changed
+- **The cron fixes iterate every path the finding cited**, and `CRON-0002` has
+  one at all. Repairing one of five drop-in directories is not repairing the
+  host: creating a file in any of them schedules arbitrary code as root.
+  Ownership and mode both run over each path, because a host can have either
+  wrong and each is a no-op where only the other was.
+
+  The fix sets `0600` on `/etc/crontab` and `0700` on the directories, which is
+  **stricter than the checks require** — they ask whether an unprivileged
+  account can *write* the schedule, and `0644` satisfies that. The stricter
+  value costs nothing (nothing but cron reads these) and closes `CRON-0005`,
+  which asks whether an unprivileged account can *read* the schedule of a root
+  process, in the same command. The script says so, because a change beyond what
+  the finding demanded is one an operator should be told about rather than
+  discover.
+
 ### Added
 - **`USERS-0012`: the default minimum password age is at least one day**, and a
   new `auth.login_defs` fact behind it.

@@ -550,14 +550,23 @@ func TestExplicitlyDisabledIsDistinguishedFromNeverSet(t *testing.T) {
 	}
 }
 
-// TestEveryVerdictCarriesTheReadingCaveat.
+// TestEveryVerdictSaysWhichPlacesItRead.
 //
 // dockerd takes the same options as command-line flags and the stock unit
 // passes some, so an option this module calls absent may be set there instead.
-// A verdict drawn from the file that did not say so would be claiming more than
-// it checked. The NOT_APPLICABLE case is exempt: it is about the absence of
+// A verdict that did not say where it looked would be claiming more than it
+// checked. The NOT_APPLICABLE case is exempt: it is about the absence of
 // dockerd, not about what any file says.
-func TestEveryVerdictCarriesTheReadingCaveat(t *testing.T) {
+//
+// **CONTAINERS-0001 carries a different sentence because it reads a different
+// amount**, and that is the point of asserting the statement rather than the
+// wording. It consults the ExecStart when daemon.json is silent, so the caveat
+// the rest of the module carries — "an option passed on the command line is not
+// visible here" — would be false for it, and a caveat that overstates what was
+// missed misleads as thoroughly as one that understates it.
+func TestEveryVerdictSaysWhichPlacesItRead(t *testing.T) {
+	const fileOnly = "daemon.json only"
+
 	for _, fixture := range []string{
 		"containers-docker-hardened",
 		"containers-docker-permissive",
@@ -569,7 +578,21 @@ func TestEveryVerdictCarriesTheReadingCaveat(t *testing.T) {
 	} {
 		for _, check := range daemonChecks {
 			got := evalCheck(t, check, fixture)
-			if !strings.Contains(got.Detail, "daemon.json only") {
+
+			if check.ID == "CONTAINERS-0001" {
+				// It reads both places, so it must say something about the
+				// command line on every verdict — either that it read it, or
+				// that dockerd will not let the two disagree — and it must
+				// never carry the module's "only the file" caveat.
+				if !strings.Contains(got.Detail, "command line") {
+					t.Errorf("CONTAINERS-0001 over %s says nothing about the command line: %s", fixture, got.Detail)
+				}
+				if strings.Contains(got.Detail, fileOnly) {
+					t.Errorf("CONTAINERS-0001 over %s still claims it read only the file: %s", fixture, got.Detail)
+				}
+				continue
+			}
+			if !strings.Contains(got.Detail, fileOnly) {
 				t.Errorf("%s over %s does not say it read only the file: %s", check.ID, fixture, got.Detail)
 			}
 		}
@@ -1499,5 +1522,53 @@ func TestAnIncompleteCommandLineCannotProduceAPass(t *testing.T) {
 		if strings.Contains(e.Excerpt, "secret123") {
 			t.Errorf("a credential reached an evidence excerpt: %q", e.Excerpt)
 		}
+	}
+}
+
+// TestCheck0001ReadsTheCommandLineToo.
+//
+// **A false FAIL, and the module already had the fact to prevent it.** dockerd
+// takes --userns-remap on its command line as well as in daemon.json, and the
+// command line is in docker.service — which this module reads for
+// CONTAINERS-0006, -0007 and -0008. CONTAINERS-0001 read only the file, so a
+// host started with `--userns-remap=default` in a drop-in was reported as
+// running containers with uid 0 mapped to root, which it is not.
+//
+// The two places cannot disagree on a running host: dockerd refuses to start
+// when an option is given as a flag *and* in the file at once. That is why the
+// file is consulted first and the unit only when it said nothing.
+func TestCheck0001ReadsTheCommandLineToo(t *testing.T) {
+	got := evalCheck(t, checks.Check0001, "containers-docker-userns-flag")
+	if got.Result != finding.Pass {
+		t.Fatalf("result = %s, want PASS: %s", got.Result, got.Detail)
+	}
+	for _, want := range []string{
+		"--userns-remap=default",
+		"/etc/systemd/system/docker.service.d/userns.conf",
+		"cannot disagree on a running host",
+	} {
+		if !strings.Contains(got.Detail, want) {
+			t.Errorf("the detail omits %q:\n%s", want, got.Detail)
+		}
+	}
+}
+
+// TestCheck0001SaysWhichPlacesItRead.
+//
+// The module's standing caveat says the command line was not read, which
+// stopped being true for this check. A caveat that overstates what was missed
+// misleads as thoroughly as one that understates it: an operator reading "an
+// option passed on the command line is not visible here" would go and check
+// something the check has already checked.
+func TestCheck0001SaysWhichPlacesItRead(t *testing.T) {
+	got := evalCheck(t, checks.Check0001, "containers-docker-defaults")
+	if got.Result != finding.Fail {
+		t.Fatalf("result = %s, want FAIL: %s", got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "Both places a daemon option can be set were read") {
+		t.Errorf("the FAIL does not say the command line was read too:\n%s", got.Detail)
+	}
+	if strings.Contains(got.Detail, "is not visible here") {
+		t.Errorf("the FAIL still carries the caveat that the command line was unread:\n%s", got.Detail)
 	}
 }

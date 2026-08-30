@@ -1,0 +1,4 @@
+{
+  "log-driver": "json-file",
+  "no-new-privileges": true
+}

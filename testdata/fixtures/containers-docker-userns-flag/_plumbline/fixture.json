@@ -1,0 +1,1 @@
+{"description": "userns-remap set on the daemon's command line in a docker.service drop-in and absent from daemon.json. CONTAINERS-0001 read only the file and reported this host -- which is doing the right thing -- as unremapped. The two places cannot disagree on a running host: dockerd refuses to start when an option is given as a flag and in the file at once."}

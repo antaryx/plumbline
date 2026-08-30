@@ -2,6 +2,7 @@ package containers
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/antaryx/plumbline/internal/catalog"
 	"github.com/antaryx/plumbline/internal/fact"
@@ -61,15 +62,45 @@ the first place.`,
 				Result:  finding.Pass,
 				Subject: d.Path,
 				Detail: fmt.Sprintf(
-					"userns-remap is set to %q, so container uid 0 is mapped to an unprivileged uid on the host.%s",
-					d.UsernsRemap, flagsCaveat),
+					"userns-remap is set to %q, so container uid 0 is mapped to an unprivileged uid on the host. "+
+						"The daemon's command line cannot contradict this: dockerd refuses to start when an "+
+						"option is given as a flag and in the file at once.",
+					d.UsernsRemap),
 				Evidence: []finding.Evidence{evidence(d, "userns-remap: "+d.UsernsRemap)},
+			}
+		}
+
+		// **daemon.json is silent, so ask the other place the option lives.**
+		// dockerd takes --userns-remap on its command line, and the command
+		// line is in docker.service — which this module already reads for
+		// CONTAINERS-0006, -0007 and -0008. Reading only the file here meant a
+		// daemon started with `--userns-remap=default` in its ExecStart was
+		// reported as unremapped, which is a false FAIL about a host that is
+		// doing the right thing.
+		//
+		// The two cannot disagree on a running host: dockerd refuses to start
+		// when an option is given as a flag *and* in the file, which is why the
+		// file is consulted first and this only runs when it said nothing.
+		if v, where, line, ok := usernsFromUnit(fs); ok {
+			return catalog.Outcome{
+				Result:  finding.Pass,
+				Subject: d.Path,
+				Detail: fmt.Sprintf(
+					"daemon.json does not set userns-remap and the daemon's command line does: --userns-remap=%s, in %s. "+
+						"Container uid 0 is mapped to an unprivileged uid on the host. The two places cannot "+
+						"disagree on a running host — dockerd refuses to start when an option is given as a flag "+
+						"and in the file at once.",
+					v, where),
+				Evidence: []finding.Evidence{
+					evidence(d, "userns-remap not set in this file"),
+					finding.NewEvidence(where, line, "--userns-remap="+v, ""),
+				},
 			}
 		}
 
 		detail := "userns-remap is not set, so container uid 0 is uid 0 on the host and a process that escapes the container is already root."
 		detail += defaultsNote(d)
-		detail += flagsCaveat
+		detail += usernsCaveat(fs)
 
 		// The excerpt distinguishes the two ways of arriving here, because they
 		// send an operator to different places: one edits a line, the other
@@ -114,4 +145,47 @@ the first place.`,
 	References: []finding.Reference{
 		{Title: "dockerd — isolate containers with a user namespace", URL: "https://docs.docker.com/engine/security/userns-remap/"},
 	},
+}
+
+// usernsFromUnit reads --userns-remap off the daemon's command line.
+//
+// **The service fact is optional here rather than required**, and that is a
+// deliberate difference from CONTAINERS-0006, -0007 and -0008, which name it in
+// Requires because they cannot answer without it. This check answers from
+// daemon.json whenever daemon.json speaks, so listing the fact would turn a
+// perfectly answerable check into UNKNOWN(fact_not_collected) on every bundle
+// recorded before the docker.service collector existed. A fact consulted as a
+// fallback is fetched with fact.Get and its presence flag, never declared.
+//
+// An empty value is not a remapping: dockerd treats --userns-remap="" exactly
+// as it treats the key being absent from the file.
+func usernsFromUnit(fs *fact.Set) (value, origin string, line int, ok bool) {
+	u, _, collected := fact.Get[fact.DockerService](fs, fact.DockerServiceID)
+	if !collected {
+		return "", "", 0, false
+	}
+	v, found := u.StringFlag("userns-remap")
+	if !found || strings.TrimSpace(v) == "" {
+		return "", "", 0, false
+	}
+	where, at := flagOrigin(u, "userns-remap")
+	if where == "" {
+		where = "the docker.service command line"
+	}
+	return v, where, at, true
+}
+
+// usernsCaveat is the sentence a FAIL ends with, and it says which places were
+// actually looked in.
+//
+// The module's standing flagsCaveat says the command line was not read, which
+// stopped being true for this check. A caveat that overstates what was missed
+// is as misleading as one that understates it: an operator reading "an option
+// passed on the command line is not visible here" would go and check something
+// this check has already checked.
+func usernsCaveat(fs *fact.Set) string {
+	if _, _, collected := fact.Get[fact.DockerService](fs, fact.DockerServiceID); collected {
+		return " Both places a daemon option can be set were read: /etc/docker/daemon.json and the daemon's command line in docker.service."
+	}
+	return flagsCaveat
 }

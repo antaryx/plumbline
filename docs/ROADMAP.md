@@ -1428,6 +1428,58 @@ What this leaves:
   is not the same question as "how long has this row been waiting", and the
   arithmetic wants thinking about rather than guessing at.
 
+### Cron paths, and a false FAIL about Docker
+
+Both halves of this were already checks, and both gaps were in what came after
+them.
+
+**`CRON-0001` is `/etc/crontab` and `CRON-0002` is the drop-in directories.**
+The remediation acted on one path — the finding's subject — which is adequate
+for the crontab and wrong for the directories, where the finding is a *set* by
+construction and repairing one of five leaves four ways to schedule a root job.
+Both now iterate the evidence, and both run ownership and mode over each path,
+because a host can have either wrong and each is a no-op where only the other
+was.
+
+The fix goes to `0600` and `0700`, **stricter than either check requires**.
+CRON-0001 and CRON-0002 ask whether an unprivileged account can *write* the
+schedule, which `0644` satisfies; the stricter value costs nothing, since
+nothing but cron reads these, and closes CRON-0005 — *can an unprivileged
+account read the schedule of a root process* — in the same command. Tightening
+the **checks** to `0600` was the alternative and would have been wrong: it would
+duplicate CRON-0005 and move a verdict on every host that ships the distribution
+default. A remediation may exceed a finding; a check may not quietly become a
+different check.
+
+**`CONTAINERS-0002` is no-new-privileges**, not userns — so the runtime-remap
+check could not go there. But the concern behind the request was real and the
+module already had the fact to answer it: `CONTAINERS-0001` read `daemon.json`
+and never the `ExecStart`, while the collector's own package comment says *"the
+file is not the running configuration"* and `dockerservice.go` exists precisely
+because "that is where the command line actually lives". A daemon started with
+`--userns-remap=default` in a drop-in was reported as running container uid 0 as
+host root. That is a false FAIL, and it is fixed by reading the second place the
+option can be set rather than by a new check.
+
+`docker info --format '{{.SecurityOptions}}'` would have answered it too, and
+would have cost the thing this project keeps choosing to protect: a scan that
+works against a mounted image and against a bundle recorded months ago. It also
+answers for the *scanning* host, which is the wrong machine whenever `--root` is
+in play.
+
+The file is consulted first and the unit only when it says nothing, which is not
+a preference but a fact about dockerd: it refuses to start when an option is
+given as a flag **and** in the file, so the two cannot disagree on a running
+host. The service fact is optional rather than in `Requires`, for the reason
+`AUTH-0005` established one commit earlier.
+
+The module-wide invariant test moved with it. It asserted that every verdict
+carries "this reads daemon.json only"; that sentence is now false for
+`CONTAINERS-0001`, and a caveat that overstates what was missed misleads as
+thoroughly as one that understates it — an operator would go and check something
+the check has already checked. The invariant is now *every verdict says where it
+looked*, which is what it always meant.
+
 ### login.defs, and a Requires that turned a working check off
 
 `USERS-0012` is new. `AUTH-0005` existed and **documented the gap this closes**:

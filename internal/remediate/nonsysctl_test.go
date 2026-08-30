@@ -928,3 +928,100 @@ func liveSettings(file, key string) int {
 	}
 	return n
 }
+
+// TestTheCronFixesIterateEveryPathTheFindingCited.
+//
+// **Repairing one of five is not repairing the host.** CRON-0002 judges a set
+// of directories by construction, and creating a file in any one of them
+// schedules arbitrary code as root — so a fix that acted on the finding's
+// subject alone would leave four ways in. Both cron fixes iterate the evidence.
+//
+// Ownership and mode are two syscalls and a host can have either wrong, so both
+// run over each path: chown alone leaves a world-writable file owned by root,
+// chmod alone leaves a correctly moded file owned by somebody else.
+func TestTheCronFixesIterateEveryPathTheFindingCited(t *testing.T) {
+	sh := needSh(t)
+
+	dir := t.TempDir()
+	var paths []string
+	for _, name := range []string{"cron.d", "cron.daily", "cron.weekly"} {
+		p := filepath.Join(dir, name)
+		if err := os.Mkdir(p, 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(p, 0o777); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, p)
+	}
+
+	plan := planFor(t, evidenceFinding("CRON-0002", paths...))
+	script := remediate.Script(plan)
+	for _, p := range paths {
+		if !strings.Contains(script, "chmod 700 -- "+p) {
+			t.Errorf("the script does not repair %s:\n%s", p, script)
+		}
+		if !strings.Contains(script, "chown root:root -- "+p) {
+			t.Errorf("the script does not restore ownership on %s:\n%s", p, script)
+		}
+	}
+
+	// The chown needs root and is stripped; the chmod half runs here.
+	runScript(t, sh, dir, runnable(t, sh, plan), 1)
+	runScript(t, sh, dir, runnable(t, sh, plan), 2)
+	for _, p := range paths {
+		if mode := stat(t, p).Perm(); mode != 0o700 {
+			t.Errorf("%s is %04o after two runs, want 0700", p, mode)
+		}
+	}
+}
+
+// TestTheCrontabFixGoesStricterThanTheCheck.
+//
+// CRON-0001 asks whether an unprivileged account can *write* the schedule,
+// which 0644 satisfies. The fix sets 0600 anyway: it costs nothing — nothing
+// but cron reads these — and it closes CRON-0005, which asks whether an
+// unprivileged account can *read* the schedule of a root process, in the same
+// command. The script says so, because a mode stricter than the finding
+// demanded is a change an operator should be told about rather than discover.
+func TestTheCrontabFixGoesStricterThanTheCheck(t *testing.T) {
+	script := remediate.Script(planFor(t, evidenceFinding("CRON-0001", "/etc/crontab")))
+
+	for _, want := range []string{
+		"chown root:root -- /etc/crontab",
+		"chmod 600 -- /etc/crontab",
+		"0600 also closes CRON-0005",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("the script omits %q:\n%s", want, script)
+		}
+	}
+}
+
+// TestNoFixIsProposedForTheContainerChecksThatShareOne.
+//
+// CONTAINERS-0002 is a *different* check — no-new-privileges — and the runtime
+// userns question is answered by CONTAINERS-0001, which is the only container
+// check with a fix. Anything else failing in the module lands in the unfixable
+// list, which is visible, rather than acquiring a script that edits the same
+// key twice.
+func TestNoFixIsProposedForTheContainerChecksThatShareOne(t *testing.T) {
+	plan := remediate.Generate(failures("CONTAINERS-0001", "CONTAINERS-0002"), remediate.Options{})
+
+	if len(plan.Actions) != 1 || plan.Actions[0].CheckID != "CONTAINERS-0001" {
+		t.Fatalf("actions = %+v, want only CONTAINERS-0001", plan.Actions)
+	}
+	if len(plan.Unfixable) != 1 || plan.Unfixable[0].CheckID != "CONTAINERS-0002" {
+		t.Errorf("CONTAINERS-0002 was not carried as unfixable: %+v", plan.Unfixable)
+	}
+	// Calls, not mentions: the helper's own definition names itself.
+	calls := 0
+	for _, line := range strings.Split(remediate.Script(plan), "\n") {
+		if strings.HasPrefix(line, "plumbline_json_set ") {
+			calls++
+		}
+	}
+	if calls != 1 {
+		t.Errorf("daemon.json is edited %d times, want 1", calls)
+	}
+}
