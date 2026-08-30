@@ -1,0 +1,1 @@
+{"description": "PAM present, no /etc/login.defs. AUTH-0005 has no fall-back and says so; USERS-0012 is NOT_APPLICABLE, because a host with no shadow suite configuration has no default to report on."}

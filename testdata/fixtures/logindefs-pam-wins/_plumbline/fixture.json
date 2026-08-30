@@ -1,0 +1,1 @@
+{"description": "pam_unix.so names md5 while /etc/login.defs says SHA512. The PAM argument governs anything authenticating through PAM whatever the file says, so this host fails -- reading login.defs first would report it as passing."}

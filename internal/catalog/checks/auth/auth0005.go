@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/antaryx/plumbline/internal/catalog"
+	"github.com/antaryx/plumbline/internal/catalog/checks/logindefs"
 	"github.com/antaryx/plumbline/internal/fact"
 	"github.com/antaryx/plumbline/internal/finding"
 )
@@ -60,6 +61,14 @@ steals today.`,
 
 	BaseSeverity: finding.High,
 	Tags:         []string{"auth", "pam", "password", "hashing", "credentials"},
+	// **PAM only, and login.defs deliberately not.** Requires is the list of
+	// facts the check cannot work without, and the runner marks a check
+	// UNKNOWN(fact_not_collected) when one of them is missing. login.defs is a
+	// *fallback* consulted only when the PAM line names no algorithm, so
+	// listing it here would turn a check that can answer from the PAM line
+	// alone into one that refuses to — on every bundle recorded before this
+	// collector existed, which is every bundle in the corpus. See
+	// fromLoginDefs, which tells an absent fact from an absent file.
 	Requires:     []fact.ID{fact.PAMID},
 	SinceCatalog: 10,
 
@@ -120,19 +129,13 @@ steals today.`,
 			}
 		}
 
-		// No algorithm argument at all. The effective value then comes from
-		// /etc/login.defs on some distributions and from libcrypt's build on
-		// others, and it has changed between releases. Naming either answer
-		// from here would be a guess.
-		return catalog.Outcome{
-			Result:        finding.Unknown,
-			UnknownReason: finding.ReasonFactMissing,
-			Subject:       "pam_unix.so",
-			Detail: fmt.Sprintf(
-				"pam_unix.so is in the password stack (%s) with no hashing algorithm argument. The effective algorithm then comes from ENCRYPT_METHOD in /etc/login.defs on some distributions and from libcrypt's compiled-in default on others, neither of which this check reads, and both of which have changed between releases. Naming the algorithm explicitly on the PAM line removes the ambiguity as well as the doubt.",
-				offenderFiles(lines)),
-			Evidence: linesEvidence(p, lines),
-		}
+		// No algorithm argument on the PAM line. **The fall-back is
+		// /etc/login.defs**, which is now collected — see encryptMethod. This
+		// used to be an unconditional UNKNOWN saying that neither source was
+		// read, which was true and was a gap: pam_unix.so with no argument is
+		// the *shipped* configuration on Debian and Ubuntu, so the check
+		// declined to answer on a large fraction of the hosts it runs against.
+		return fromLoginDefs(fs, p, lines)
 	},
 
 	Remediation: &finding.Remediation{
@@ -183,4 +186,125 @@ func argsFound(l fact.PAMLine, names []string) string {
 		}
 	}
 	return strings.Join(out, " and ")
+}
+
+// EncryptMethodKey is the login.defs directive that names the hash.
+const EncryptMethodKey = "ENCRYPT_METHOD"
+
+// fromLoginDefs answers the hashing question from /etc/login.defs when the PAM
+// line does not.
+//
+// **This is the second of two sources and never the first.** When pam_unix.so
+// names an algorithm, that argument wins for anything authenticating through
+// PAM whatever login.defs says — so the PAM branch above returns before
+// reaching here. ENCRYPT_METHOD is what useradd, chpasswd and passwd(1) read,
+// and on a Debian or Ubuntu host, where the shipped pam_unix.so line carries no
+// algorithm at all, it is the answer.
+//
+// Three outcomes, and the third is the honest one:
+//
+//   - the key is set to something this build recognises: a verdict, naming the
+//     file it came from rather than the PAM line, because that is where an
+//     operator has to go to change it;
+//   - the key is set to something it does not recognise: UNKNOWN. A hash name
+//     nobody here has heard of must not be read as strong;
+//   - login.defs is absent, unreadable, or has no ENCRYPT_METHOD: UNKNOWN, and
+//     the detail says which of those it was. The effective algorithm is then
+//     libcrypt's compiled-in default, which is a property of the binary rather
+//     than of any file on the host and has changed between releases.
+func fromLoginDefs(fs *fact.Set, p fact.PAM, lines []fact.PAMLine) catalog.Outcome {
+	l, _, collected := fact.Get[fact.LoginDefs](fs, fact.LoginDefsID)
+
+	unresolved := func(why string) catalog.Outcome {
+		return catalog.Outcome{
+			Result:        finding.Unknown,
+			UnknownReason: finding.ReasonFactMissing,
+			Subject:       "pam_unix.so",
+			Detail: fmt.Sprintf(
+				"pam_unix.so is in the password stack (%s) with no hashing algorithm argument, and %s. "+
+					"The effective algorithm is then libcrypt's compiled-in default, which is a property of "+
+					"the binary rather than of any file on this host and has changed between releases. "+
+					"Naming the algorithm explicitly on the PAM line removes the ambiguity as well as the doubt.",
+				offenderFiles(lines), why),
+			Evidence: linesEvidence(p, lines),
+		}
+	}
+
+	switch {
+	case !collected:
+		// **The fact is not in this set at all**, which is not the same claim
+		// as the file being absent from the host. It happens when an older
+		// bundle is re-evaluated by a newer build: the collector that reads
+		// login.defs did not exist when the bundle was recorded, so the host
+		// may well have had one. Saying "this host has no /etc/login.defs"
+		// here would be a statement about a machine nobody looked at.
+		return unresolved("this scan carries no reading of /etc/login.defs — the bundle predates the collector that reads it, so re-collect to resolve this")
+	case l.State == fact.SourceDenied:
+		return unresolved("/etc/login.defs could not be read (permission denied), so its ENCRYPT_METHOD is unknown")
+	case !l.Present():
+		return unresolved("this host has no /etc/login.defs to fall back to")
+	}
+
+	set, ok := l.Effective(EncryptMethodKey)
+	if !ok {
+		return unresolved("/etc/login.defs sets no ENCRYPT_METHOD")
+	}
+
+	method := strings.ToLower(set.Value)
+	ev := append(linesEvidence(p, lines), logindefs.Evidence(l, set))
+
+	switch {
+	case containsFold(StrongHashes, method):
+		return catalog.Outcome{
+			Result:  finding.Pass,
+			Subject: EncryptMethodKey,
+			Detail: fmt.Sprintf(
+				"pam_unix.so names no algorithm, so the hash comes from ENCRYPT_METHOD %s in /etc/login.defs "+
+					"(line %d), which is strong. A stolen /etc/shadow from this host is expensive to attack. "+
+					"Note that this is the shadow suite's setting: it applies to passwords set with passwd, "+
+					"useradd and chpasswd, and a PAM stack that later named a weaker algorithm would override "+
+					"it for anything authenticating through PAM.%s",
+				set.Value, set.Line, logindefs.ShadowedNote(l, EncryptMethodKey)),
+			Evidence: ev,
+		}
+	case containsFold(WeakHashes, method), method == "des", method == "crypt":
+		// Positive: we read the value. Nothing unread can unmake it.
+		return catalog.Outcome{
+			Result:  finding.Fail,
+			Subject: EncryptMethodKey,
+			Detail: fmt.Sprintf(
+				"pam_unix.so names no algorithm, so the hash comes from ENCRYPT_METHOD %s in /etc/login.defs "+
+					"(line %d). A stolen /etc/shadow from this host is worth far more than it needs to be: "+
+					"MD5-crypt is fast enough that a commodity GPU exhausts a rule-driven wordlist in hours, "+
+					"and DES crypt truncates the password to its first eight characters outright. Changing "+
+					"this affects passwords set from now on; USERS-0006 reports what is already in the file.%s",
+				set.Value, set.Line, logindefs.ShadowedNote(l, EncryptMethodKey)),
+			Evidence: ev,
+		}
+	}
+
+	return catalog.Outcome{
+		Result:        finding.Unknown,
+		UnknownReason: finding.ReasonParse,
+		Subject:       EncryptMethodKey,
+		Detail: fmt.Sprintf(
+			"pam_unix.so names no algorithm and /etc/login.defs sets ENCRYPT_METHOD to %q (line %d), which "+
+				"this build does not recognise. It is not read as strong: a hashing method nobody here has "+
+				"heard of may be anything, and reporting a host as protected on the strength of an unknown "+
+				"word is the one answer this check must not give.",
+			set.Value, set.Line),
+		Evidence: ev,
+	}
+}
+
+// containsFold reports whether want holds s, compared case-insensitively.
+// login.defs values are conventionally upper case and PAM arguments lower, and
+// both spellings reach here.
+func containsFold(want []string, s string) bool {
+	for _, w := range want {
+		if strings.EqualFold(w, s) {
+			return true
+		}
+	}
+	return false
 }

@@ -1428,6 +1428,57 @@ What this leaves:
   is not the same question as "how long has this row been waiting", and the
   arithmetic wants thinking about rather than guessing at.
 
+### login.defs, and a Requires that turned a working check off
+
+`USERS-0012` is new. `AUTH-0005` existed and **documented the gap this closes**:
+`pam_unix.so` with no algorithm argument is the shipped configuration on Debian
+and Ubuntu, and the check returned UNKNOWN on all of them, saying in as many
+words that the answer was in `ENCRYPT_METHOD` in `/etc/login.defs`, "neither of
+which this check reads". So the work was the collector, not the check.
+
+`USERS-0012` is the persistence half of `USERS-0010` — the shipped default for
+the *next* account against what the accounts that exist are set to — which is
+the `KERNEL-0004`/`KERNEL-0019` shape the catalog already uses.
+
+**A fallback fact must not be in `Requires`, and finding that out cost a
+regression.** Adding `fact.LoginDefsID` to `AUTH-0005`'s `Requires` turned it
+from PASS to `UNKNOWN(fact_not_collected)` on every bundle in the recorded
+corpus, because the runner marks a check unanswerable when a required fact is
+missing and no bundle predating the collector has one. The check could answer
+perfectly well from the PAM line. `Requires` is the list of facts a check
+*cannot work without*; a fallback is consulted with `fact.Get` and the presence
+flag it returns — which also lets the finding say "this scan carries no reading
+of /etc/login.defs" rather than "this host has no /etc/login.defs", because the
+second is a statement about a machine nobody looked at.
+
+**login.defs takes the first match**, which is the reverse of sysctl.d, PAM
+includes and systemd drop-ins. Two consequences, and both are load-bearing:
+
+- The fact keeps **every** occurrence, not the winning one, so a finding can say
+  that the line an operator edited at the bottom of the file has never been
+  read. That is worse than never having written it and is invisible otherwise.
+- The remediation rewrites the **first** definition in place. Appending — the
+  obvious script, and what the sysctl helper does — would change nothing at all
+  on precisely the hosts that need it, because those are the ones that already
+  have the wrong value higher up. It would run cleanly, report success, and
+  leave an operator believing a host was fixed.
+
+Later definitions are commented rather than deleted, which is the one place this
+differs from the sysctl merge: a duplicate in a plumbline-owned drop-in is noise
+to collapse, and a second `ENCRYPT_METHOD` in a distribution-shipped file is a
+line somebody wrote.
+
+The two check modules share `internal/catalog/checks/logindefs` rather than
+importing each other. AUTH and USERS both cite this file and both describe a
+shadowed definition, and a module-to-module import would have made the USERS
+package unreadable without the AUTH one and put a cycle one edit away — there is
+no other cross-module import in the tree.
+
+`SHA512` and not `YESCRYPT`: yescrypt is the better hash and needs libxcrypt
+4.4. A host without it accepts the setting and then cannot hash a password,
+which surfaces as `passwd(1)` failing for every user at once — the sort of
+failure a generated script must not be the cause of.
+
 ### The strict tier, and a drop-in that nearly broke cron
 
 `SERVICES-0011` is the third check on the same three units, and the case for a

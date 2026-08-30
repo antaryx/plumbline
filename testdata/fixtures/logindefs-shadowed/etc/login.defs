@@ -1,0 +1,5 @@
+ENCRYPT_METHOD SHA512
+PASS_MIN_DAYS 1
+# somebody edited the bottom of the file
+ENCRYPT_METHOD MD5
+PASS_MIN_DAYS 0

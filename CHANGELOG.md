@@ -295,6 +295,52 @@ because of this release (VERSIONING §2.4).
   scrolling list.
 
 ### Added
+- **`USERS-0012`: the default minimum password age is at least one day**, and a
+  new `auth.login_defs` fact behind it.
+
+  It is the **persistence half of `USERS-0010`**, not a second opinion on it.
+  USERS-0010 reads `/etc/shadow` and reports what each existing account has;
+  this reads `/etc/login.defs` and reports what the *next* account will get. A
+  host where every current account has a minimum of one day and `login.defs`
+  says zero passes USERS-0010 and creates its next user with no minimum at all
+  — a common state, because the accounts were fixed by hand and the default
+  never was. The catalog draws the same line at `KERNEL-0004`/`KERNEL-0019`.
+
+  Low: it needs an account whose password is already known to somebody who wants
+  to keep it. **Absent and `0` are reported as different findings** even though
+  they behave identically — one is an omission, the other a decision.
+
+- **`AUTH-0005` now falls back to `ENCRYPT_METHOD`, closing a gap it used to
+  document.** `pam_unix.so` with no algorithm argument is the *shipped*
+  configuration on Debian and Ubuntu, and the check returned UNKNOWN on all of
+  them saying the answer was in `/etc/login.defs`, "neither of which this check
+  reads". It reads it now. The PAM argument still wins where it exists — it
+  governs anything authenticating through PAM whatever the file says — and
+  `login.defs` is what `useradd`, `chpasswd` and `passwd(1)` read.
+
+  An `ENCRYPT_METHOD` this build does not recognise is **UNKNOWN, never strong**.
+
+- **Remediation for both, and it honours the file's own precedence rule.**
+  `shadow(3)` takes the **first** definition of a key and ignores every later
+  one, so the obvious script — append `ENCRYPT_METHOD SHA512` — does nothing at
+  all on the hosts that need it most, because those are exactly the hosts that
+  already have an `ENCRYPT_METHOD MD5` line further up. It would run cleanly,
+  report success, and change nothing. The helper rewrites the **first**
+  definition in place, comments out any later ones with a note saying why, and
+  appends only when the key is absent. Both cases are tested by running the
+  generated script twice against a real file.
+
+  It sets `SHA512` rather than `YESCRYPT`: yescrypt is the better hash and needs
+  libxcrypt 4.4, and a host without it accepts the setting and then cannot hash
+  a password at all — which surfaces as `passwd(1)` failing for every user at
+  once.
+
+  **The script says plainly that existing passwords are unchanged.** The
+  algorithm is chosen when a password is *set*, so a stolen `/etc/shadow` is
+  worth exactly what it was worth before — and the note carries the `chage -d 0`
+  that actually retires the old hashes, with the warning not to do it to service
+  accounts.
+
 - **`SERVICES-0011`: audited system services are sandboxed at the strict tier.**
   It sits *above* `SERVICES-0007` and `SERVICES-0008` rather than replacing
   them, and the tiering is why it is a third check.

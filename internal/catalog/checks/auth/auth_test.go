@@ -372,3 +372,102 @@ func TestAnUnfollowedIncludeInvalidatesOnlyNegativeConclusions(t *testing.T) {
 			got.Result, got.Detail)
 	}
 }
+
+// TestCheck0005FallsBackToLoginDefs.
+//
+// **This closes a gap the check used to document.** pam_unix.so with no
+// algorithm argument is the *shipped* configuration on Debian and Ubuntu, and
+// the check returned UNKNOWN on all of them saying that the effective algorithm
+// came from ENCRYPT_METHOD in /etc/login.defs, "which this check does not
+// read". It reads it now.
+//
+// The ordering is the important half: the PAM argument still wins where it
+// exists, because it governs anything authenticating through PAM whatever
+// login.defs says. login.defs is what useradd, chpasswd and passwd(1) read, and
+// is the answer only when the PAM line is silent.
+func TestCheck0005FallsBackToLoginDefs(t *testing.T) {
+	for _, c := range []struct {
+		fixture        string
+		result         finding.Result
+		reason         finding.UnknownReason
+		detailContains string
+	}{
+		{
+			fixture:        "logindefs-strong",
+			result:         finding.Pass,
+			detailContains: "ENCRYPT_METHOD SHA512 in /etc/login.defs",
+		},
+		{
+			fixture:        "logindefs-weak",
+			result:         finding.Fail,
+			detailContains: "ENCRYPT_METHOD MD5 in /etc/login.defs",
+		},
+		{
+			fixture:        "logindefs-minage-zero",
+			result:         finding.Pass,
+			detailContains: "ENCRYPT_METHOD YESCRYPT",
+		},
+		{
+			// No file to fall back to. The effective algorithm is then
+			// libcrypt's compiled-in default, which is a property of the
+			// binary and not readable from anything on the host.
+			fixture:        "logindefs-absent",
+			result:         finding.Unknown,
+			reason:         finding.ReasonFactMissing,
+			detailContains: "no /etc/login.defs to fall back to",
+		},
+		{
+			fixture:        "logindefs-shadowed",
+			result:         finding.Pass,
+			detailContains: "never read — login.defs takes the first match",
+		},
+	} {
+		t.Run(c.fixture, func(t *testing.T) {
+			got := evalCheck(t, checks.Check0005, c.fixture)
+
+			if got.Result != c.result {
+				t.Errorf("result = %s, want %s\n detail: %s", got.Result, c.result, got.Detail)
+			}
+			if c.reason != "" && got.UnknownReason != c.reason {
+				t.Errorf("unknown reason = %q, want %q", got.UnknownReason, c.reason)
+			}
+			if !strings.Contains(got.Detail, c.detailContains) {
+				t.Errorf("detail does not contain %q:\n%s", c.detailContains, got.Detail)
+			}
+		})
+	}
+}
+
+// TestThePAMArgumentOutranksLoginDefs.
+//
+// The PAM line governs anything authenticating through PAM whatever
+// /etc/login.defs says, so a host with `pam_unix.so md5` and
+// `ENCRYPT_METHOD SHA512` is a failing host — and reading the file first would
+// report it as passing.
+func TestThePAMArgumentOutranksLoginDefs(t *testing.T) {
+	got := evalCheck(t, checks.Check0005, "logindefs-pam-wins")
+	if got.Result != finding.Fail {
+		t.Fatalf("result = %s, want FAIL: %s", got.Result, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "pam_unix.so hashes passwords with md5") {
+		t.Errorf("the finding is drawn from login.defs rather than from the PAM line:\n%s", got.Detail)
+	}
+	if strings.Contains(got.Subject, "ENCRYPT_METHOD") {
+		t.Errorf("subject = %q; the PAM line is what governs here", got.Subject)
+	}
+}
+
+// TestAnUnrecognisedEncryptMethodIsNotReadAsStrong.
+//
+// A hashing method nobody here has heard of may be anything, and reporting a
+// host as protected on the strength of an unknown word is the one answer this
+// check must not give.
+func TestAnUnrecognisedEncryptMethodIsNotReadAsStrong(t *testing.T) {
+	got := evalCheck(t, checks.Check0005, "logindefs-unknown-method")
+	if got.Result != finding.Unknown {
+		t.Errorf("result = %s, want UNKNOWN: %s", got.Result, got.Detail)
+	}
+	if got.UnknownReason != finding.ReasonParse {
+		t.Errorf("reason = %q, want %q", got.UnknownReason, finding.ReasonParse)
+	}
+}

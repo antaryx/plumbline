@@ -1,0 +1,1 @@
+{"description": "pam_unix.so in the password stack with no algorithm argument -- the shipped Debian and Ubuntu shape -- so AUTH-0005 must fall back to /etc/login.defs, which sets ENCRYPT_METHOD SHA512 and PASS_MIN_DAYS 1. The UMASK line carries a trailing comment, which the parser must not read as part of the value."}

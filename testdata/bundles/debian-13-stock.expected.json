@@ -18,8 +18,8 @@
       "fail": 13,
       "not_applicable": 53,
       "skipped": 0,
-      "unknown": 8,
-      "total": 111
+      "unknown": 9,
+      "total": 112
     },
     "by_severity": {
       "HIGH": 4,
@@ -27,7 +27,7 @@
       "MEDIUM": 6
     },
     "posture": 78.04878048780488,
-    "coverage": 86.20689655172413
+    "coverage": 84.7457627118644
   },
   "findings": [
     {
@@ -1428,6 +1428,16 @@
       "base_severity": "LOW",
       "fingerprint": "c48205d3fd9adca2329ffd71eccfc4fe",
       "detail": "No account in /etc/shadow can authenticate with a password — every entry is locked, empty or without a stored hash — so there is no password change interval to govern."
+    },
+    {
+      "check_id": "USERS-0012",
+      "module": "USERS",
+      "result": "UNKNOWN",
+      "severity": "LOW",
+      "base_severity": "LOW",
+      "unknown_reason": "fact_not_collected",
+      "fingerprint": "ebe5db8136f5b627f25a96f113a65dbb",
+      "detail": "required fact auth.login_defs was not collected"
     }
   ]
 }

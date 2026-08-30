@@ -3,7 +3,7 @@
 
 # Module catalog
 
-**Catalog version 34 · 111 checks · 11 modules**
+**Catalog version 34 · 112 checks · 11 modules**
 
 Every module this build carries, and how many checks each contributes. The per-check detail is in [CHECK-REFERENCE.md](CHECK-REFERENCE.md).
 
@@ -23,8 +23,8 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 | `NETWORK` | 3 | 0 | 2 | 1 | 0 | 0 |
 | `SERVICES` | 10 | 0 | 5 | 5 | 0 | 0 |
 | `SSHD` | 19 | 1 | 7 | 8 | 3 | 0 |
-| `USERS` | 10 | 2 | 4 | 2 | 2 | 0 |
-| **total** | **111** | 7 | 40 | 48 | 16 | 0 |
+| `USERS` | 11 | 2 | 4 | 2 | 3 | 0 |
+| **total** | **112** | 7 | 40 | 48 | 17 | 0 |
 
 Severity is the check's **base** severity, before any context adjustment a finding may carry.
 
@@ -195,4 +195,5 @@ Severity is the check's **base** severity, before any context adjustment a findi
 | [`USERS-0008`](CHECK-REFERENCE.md#users-0008--no-gid-or-group-name-is-used-by-more-than-one-entry) No gid or group name is used by more than one entry | MEDIUM | `users.group` |
 | [`USERS-0009`](CHECK-REFERENCE.md#users-0009--passwords-that-can-authenticate-have-a-bounded-maximum-age) Passwords that can authenticate have a bounded maximum age | LOW | `users.passwd`, `users.shadow` |
 | [`USERS-0010`](CHECK-REFERENCE.md#users-0010--passwords-that-can-authenticate-have-a-minimum-age-set) Passwords that can authenticate have a minimum age set | LOW | `users.passwd`, `users.shadow` |
+| [`USERS-0012`](CHECK-REFERENCE.md#users-0012--the-default-minimum-password-age-is-at-least-one-day) The default minimum password age is at least one day | LOW | `auth.login_defs` |
 

@@ -173,6 +173,7 @@ gets produced.
 | `services.hardening` | 1 | `collect/collectors/services` | Per audited unit: `State`, `Path`, `Digest`, `Fragments[]`, `NoNewPrivileges`, `ProtectSystem`, `ProtectHome`, `Malformed[]` |
 | `containers.docker_service` | 1 | `collect/collectors/containers` | `State`, `Unit`, `Path`, `Digest`, `Fragments[]`, `ExecStart[]` |
 | `services.apparmor` | 1 | `collect/collectors/apparmor` | `State`, `ProfilesState`, `Counts{}`, `Unconfining[]`, `ProfileDirState`, `ProfileFiles`, `Digest` |
+| `auth.login_defs` | 1 | `collect/collectors/auth` | `State`, `Path`, `Settings[]`, `Digest` |
 
 Every fact added later is listed here with its version history.
 
@@ -381,6 +382,32 @@ it was written against and wrong on the other, silently.
 
 The fact carries no password hash, no user name and no authentication token:
 these files hold policy, not credentials.
+
+#### `auth.login_defs` — the shadow suite's defaults
+
+Every `KEY value` line of `/etc/login.defs`, in file order, with the line number
+each was found on.
+
+**The first definition of a key wins, which is the reverse of nearly everything
+else this project reads.** sysctl.d, PAM includes and systemd drop-ins all let a
+later file or a later line override an earlier one; `shadow(3)` takes the first
+match and ignores the rest. A fact that kept only the winning value would be
+enough to answer the checks and would leave them unable to say the one thing an
+operator most needs to hear — that the line they edited at the bottom of the
+file has never been read. So every occurrence is kept, and `Effective()` and
+`Shadowed()` are the two halves of that.
+
+The parser follows the grammar rather than being generous with it: `KEY value`
+separated by whitespace, `#` comments stripped including trailing ones, and a
+line written `PASS_MIN_DAYS=1` is **not** a setting — because it is not one that
+`shadow(3)` reads either, and treating it as one would report a host as
+configured when its password minimum is unset.
+
+It is collected by the `auth` collector, which already owns the other two files
+that decide how a password is accepted and stored, and is read by AUTH-0005
+(`ENCRYPT_METHOD`, as a fallback when the PAM line names no algorithm) and
+USERS-0012 (`PASS_MIN_DAYS`). It is recorded before the PAM directory is even
+probed: a host with no `/etc/pam.d` can still have a `login.defs`.
 
 #### `services.apparmor` — what the kernel has loaded, and what is on disk
 

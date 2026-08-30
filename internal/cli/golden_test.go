@@ -230,8 +230,8 @@ var pinned = map[string]pin{
 	// syslog daemon, and a check that declines to judge an absent subject is
 	// the behaviour, not a gap.
 	"ubuntu-2404-stock": {
-		catalog: 34, pass: 44, fail: 22, notApplicable: 37, unknown: 8, skipped: 0,
-		posture: 72.43589743589743, coverage: 89.1891891891892,
+		catalog: 34, pass: 44, fail: 22, notApplicable: 37, unknown: 9, skipped: 0,
+		posture: 72.43589743589743, coverage: 88,
 		why: "the unhardened baseline every other number is measured against",
 	},
 
@@ -239,8 +239,8 @@ var pinned = map[string]pin{
 	// check cares about. One PASS and one NOT_APPLICABLE separate them here,
 	// and which ones is the interesting part of any diff on this pair.
 	"debian-13-stock": {
-		catalog: 34, pass: 37, fail: 13, notApplicable: 53, unknown: 8, skipped: 0,
-		posture: 78.04878048780488, coverage: 86.20689655172413,
+		catalog: 34, pass: 37, fail: 13, notApplicable: 53, unknown: 9, skipped: 0,
+		posture: 78.04878048780488, coverage: 84.7457627118644,
 		why: "Debian's defaults, which are not Ubuntu's",
 	},
 
@@ -248,8 +248,8 @@ var pinned = map[string]pin{
 	// is the bundle that catches a check quietly assuming a Debian-shaped /etc
 	// and reporting a verdict about a file that was never there.
 	"alpine-320-stock": {
-		catalog: 34, pass: 35, fail: 18, notApplicable: 50, unknown: 8, skipped: 0,
-		posture: 71.7741935483871, coverage: 86.88524590163934,
+		catalog: 34, pass: 35, fail: 18, notApplicable: 50, unknown: 9, skipped: 0,
+		posture: 71.7741935483871, coverage: 85.48387096774194,
 		why: "the distribution least like the others, where guessing shows up",
 	},
 
@@ -261,8 +261,8 @@ var pinned = map[string]pin{
 	// binary, not of any file on the host. AUTH-0002 says it does not know.
 	// Every other scanner reports the documented default and calls it a PASS.
 	"fedora-44-stock": {
-		catalog: 34, pass: 37, fail: 27, notApplicable: 38, unknown: 9, skipped: 0,
-		posture: 65.3061224489796, coverage: 87.67123287671232,
+		catalog: 34, pass: 37, fail: 27, notApplicable: 38, unknown: 10, skipped: 0,
+		posture: 65.3061224489796, coverage: 86.48648648648648,
 		why: "the RPM family's leading edge, where authselect owns the PAM stack",
 	},
 
@@ -270,8 +270,8 @@ var pinned = map[string]pin{
 	// point of it. One FAIL and one NOT_APPLICABLE separate the two, and which
 	// ones is the interesting part of any diff on this pair.
 	"rocky-9-stock": {
-		catalog: 34, pass: 39, fail: 24, notApplicable: 39, unknown: 9, skipped: 0,
-		posture: 68.70748299319727, coverage: 87.5,
+		catalog: 34, pass: 39, fail: 24, notApplicable: 39, unknown: 10, skipped: 0,
+		posture: 68.70748299319727, coverage: 86.3013698630137,
 		why: "the enterprise RPM baseline most real audits run against",
 	},
 
@@ -287,11 +287,12 @@ var pinned = map[string]pin{
 	// for — the other five bundles carry no services.hardening fact at all and
 	// answer UNKNOWN.
 	//
-	// **One UNKNOWN, and it is the collector rather than the host.** This bundle
+	// **Two UNKNOWN, and both are the collector rather than the host.** This bundle
 	// carried zero for a long time — every check in the catalog reaching a real
 	// verdict is what it exists to demonstrate — and catalog 34 added
-	// SERVICES-0010, whose fact no recording of this corpus contains because
-	// the AppArmor collector did not exist when they were made. A bundle
+	// SERVICES-0010 and USERS-0012, whose facts no recording of this corpus
+	// contains because neither the AppArmor collector nor the login.defs read
+	// existed when they were made. A bundle
 	// answers with the facts it was recorded with, so the check resolves to
 	// UNKNOWN(fact_not_collected), which is the correct reading of a bundle
 	// from an older build and not a gap in the host.
@@ -332,8 +333,8 @@ var pinned = map[string]pin{
 	// and a run in which any of them became a PASS would be a serious
 	// regression rather than an improvement.
 	"ubuntu-2404-hardened": {
-		catalog: 34, pass: 85, fail: 17, notApplicable: 8, unknown: 1, skipped: 0,
-		posture: 85.59322033898306, coverage: 99.02912621359224,
+		catalog: 34, pass: 85, fail: 17, notApplicable: 8, unknown: 2, skipped: 0,
+		posture: 85.59322033898306, coverage: 98.07692307692307,
 		why: "the only bundle on which every check in the catalog evaluates",
 	},
 }

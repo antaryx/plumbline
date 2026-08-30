@@ -1,0 +1,1 @@
+{"description": "The same PAM shape falling back to ENCRYPT_METHOD MD5 and PASS_MIN_DAYS 0. The FAIL case for both AUTH-0005's login.defs branch and USERS-0012."}

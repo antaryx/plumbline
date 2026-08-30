@@ -3,7 +3,7 @@
 
 # Check reference
 
-**Catalog version 34 · 111 checks · 11 modules**
+**Catalog version 34 · 112 checks · 11 modules**
 
 One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
 
@@ -6790,6 +6790,67 @@ awk -F: '$2 !~ /^[!*]/ && $2 != "" {print $1, $4, $5}' /etc/shadow
 
 - [chage(1)](https://man7.org/linux/man-pages/man1/chage.1.html)
 - [pam\_pwhistory(8)](https://man7.org/linux/man-pages/man8/pam_pwhistory.8.html)
+
+---
+
+### USERS-0012 — The default minimum password age is at least one day
+
+| | |
+|---|---|
+| Module | `USERS` |
+| Base severity | LOW |
+| Since | catalog 34 |
+| Reads | `auth.login_defs` |
+| Tags | `users`, `password-policy`, `login.defs`, `persistence` |
+
+A minimum password age is the setting that makes a password
+history mean anything.
+
+Password history — "you may not reuse your last five passwords" — is enforced
+by pam_pwhistory or pam_unix's remember=. Without a minimum age it costs an
+determined user about thirty seconds to defeat: change the password five times
+in a row, then change it back to the one they started with. The history is
+full, every rule was satisfied at every step, and the password is the one the
+policy was trying to retire.
+
+PASS_MIN_DAYS is what stops that. At 1 the same manoeuvre takes five days and
+stops being something somebody does while their coffee is brewing.
+
+**It is a default for accounts created from now on, not a policy over the ones
+that exist.** useradd reads it when it makes an account; chage writes the value
+into /etc/shadow's fifth field, which is what actually governs an existing
+account and what USERS-0010 reads. Setting this fixes the next user and none of
+the current ones.
+
+**Zero is not "unset".** A host with no PASS_MIN_DAYS line and a host with
+PASS_MIN_DAYS 0 behave identically — the shadow suite's own default is zero —
+but they are different findings to an operator, because one is a decision and
+the other is an omission. The check reports both and names which it saw.
+
+If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+
+**Remediation** — effort LOW
+
+Set PASS\_MIN\_DAYS to 1 in /etc/login.defs, and apply it to the accounts that already exist.
+
+1. Set 'PASS\_MIN\_DAYS 1' in /etc/login.defs. Edit the first occurrence rather than appending: the shadow suite reads the first match and ignores every later one, so a line added at the end of a file that already sets the key has no effect at all.
+2. That is the default for accounts created afterwards. Existing accounts keep whatever is in /etc/shadow's fifth field: 'chage --mindays 1 <user>' sets one, and USERS-0010 is the check that reports them.
+3. A minimum age is only worth setting if a password history is enforced — otherwise it inconveniences users and stops nothing. Check for pam\_pwhistory or remember= on the pam\_unix.so password line.
+4. Consider who is affected. A minimum age applies to the user changing their own password, not to root using 'passwd <user>', so a helpdesk reset still works. A user who mistypes a new password into a system that accepted it, though, cannot change it again until the minimum has passed.
+
+```sh
+grep -n PASS_MIN_DAYS /etc/login.defs
+chage --list <user>
+```
+
+> **Caution.** A minimum password age stops a user changing their password again for that many days, including immediately after a change they regret — a mistyped passphrase they did not notice, or one they have already written down somewhere they should not have. Root can still reset it with 'passwd <user>', which is the escape hatch, and an operator setting this should know that is the only one.
+
+**Controls** — `nist-800-53-r5 IA-5`
+
+**References**
+
+- [login.defs(5)](https://man7.org/linux/man-pages/man5/login.defs.5.html)
+- [chage(1)](https://man7.org/linux/man-pages/man1/chage.1.html)
 
 ---
 

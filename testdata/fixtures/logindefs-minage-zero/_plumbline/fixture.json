@@ -1,0 +1,1 @@
+{"description": "ENCRYPT_METHOD YESCRYPT and no PASS_MIN_DAYS line at all. Absence behaves identically to zero -- the shadow suite's own default -- and is a different finding, because one is an omission and the other a decision."}

@@ -1,0 +1,3 @@
+# hashing
+ENCRYPT_METHOD MD5
+PASS_MIN_DAYS 0

@@ -1,0 +1,1 @@
+{"description": "Both keys defined twice, correctly at the top and wrongly at the bottom. login.defs takes the FIRST match, which is the reverse of most configuration this project reads, so the host passes -- and the findings must name the dead lines, because an operator who edited them believes the setting is applied."}

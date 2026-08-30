@@ -295,6 +295,16 @@ var registry = map[fact.ID]decoder{
 			return f, nil
 		},
 	},
+	fact.LoginDefsID: {
+		version: fact.LoginDefs{}.FactVersion(),
+		decode: func(raw json.RawMessage) (fact.Fact, error) {
+			var f fact.LoginDefs
+			if err := json.Unmarshal(raw, &f); err != nil {
+				return nil, err
+			}
+			return f, nil
+		},
+	},
 	fact.PAMID: {
 		version: fact.PAM{}.FactVersion(),
 		decode: func(raw json.RawMessage) (fact.Fact, error) {

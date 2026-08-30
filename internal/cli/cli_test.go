@@ -1728,7 +1728,7 @@ func TestProfilesListsTheBuiltins(t *testing.T) {
 	if code != cli.ExitOK {
 		t.Fatalf("exit = %d: %s", code, stderr)
 	}
-	for _, want := range []string{"default", "111/111", "cis-l1", "not a certified benchmark"} {
+	for _, want := range []string{"default", "112/112", "cis-l1", "not a certified benchmark"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("profiles omits %q:\n%s", want, stdout)
 		}

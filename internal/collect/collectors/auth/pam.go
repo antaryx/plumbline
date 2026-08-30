@@ -106,7 +106,7 @@ var _ collect.Collector = Collector{}
 
 func (Collector) ID() string { return ID }
 
-func (Collector) Produces() []fact.ID { return []fact.ID{fact.PAMID} }
+func (Collector) Produces() []fact.ID { return []fact.ID{fact.PAMID, fact.LoginDefsID} }
 
 // DependsOn is nil.
 func (Collector) DependsOn() []string { return nil }
@@ -130,6 +130,13 @@ func (Collector) Timeout() time.Duration { return 10 * time.Second }
 // in a way worth recording verbatim, and all four are observations about the
 // host rather than failures of the collector.
 func (Collector) Collect(ctx context.Context, s system.System, fs *fact.Set) error {
+	// **Recorded first, and independently of PAM.** /etc/login.defs is the
+	// shadow suite's file rather than PAM's: a host with no /etc/pam.d at all —
+	// Alpine, a minimal image — can still have one, and every early return
+	// below would otherwise drop it. Nothing in it depends on anything read
+	// after this line.
+	fs.Put(readLoginDefs(s))
+
 	p := fact.PAM{Digests: map[string]string{}}
 
 	// Probe the directory first so that "PAM is not installed" and "we were

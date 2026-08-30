@@ -161,5 +161,6 @@ func buildCatalog() *catalog.Catalog {
 		userschecks.Check0008,
 		userschecks.Check0009,
 		userschecks.Check0010,
+		userschecks.Check0012,
 	)
 }

@@ -360,6 +360,7 @@ var helpers = []helper{
 	{call: "plumbline_sysctl_set", body: sysctlSetFunc},
 	{call: "plumbline_json_set", body: jsonSetFunc},
 	{call: "plumbline_dropin", body: dropInFunc},
+	{call: "plumbline_logindefs_set", body: loginDefsSetFunc},
 }
 
 // helpersFor returns the helper definitions a rendered body actually uses.

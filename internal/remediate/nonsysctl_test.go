@@ -734,3 +734,197 @@ func TestAFindingWithNoEvidenceProposesNothing(t *testing.T) {
 		t.Errorf("the finding was dropped instead of carried: %+v", plan)
 	}
 }
+
+// TestTheLoginDefsFixRewritesTheFirstDefinition.
+//
+// **The rule login.defs follows is the reverse of sysctl.d's, and this is the
+// test that the script honours it.** shadow(3) reads top-to-bottom and takes
+// the *first* definition; every later one is dead. So appending
+// `ENCRYPT_METHOD SHA512` to the end of a file that already says
+// `ENCRYPT_METHOD MD5` higher up changes nothing at all — on exactly the hosts
+// that need it — while the script runs cleanly and reports success. That is the
+// worst outcome available: a host an operator now believes is fixed.
+//
+// The file here is the shape that catches it: the wrong value first, a second
+// definition further down, and a comment that must survive.
+func TestTheLoginDefsFixRewritesTheFirstDefinition(t *testing.T) {
+	sh := needSh(t)
+	if _, err := exec.LookPath("awk"); err != nil {
+		t.Skipf("no awk: %v", err)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "login.defs")
+	const before = "# /etc/login.defs - shadow suite configuration\n" +
+		"\n" +
+		"ENCRYPT_METHOD MD5\n" +
+		"PASS_MAX_DAYS\t99999\n" +
+		"PASS_MIN_DAYS\t0\n" +
+		"UMASK\t\t022\n" +
+		"# somebody set this again at the bottom and it was never read\n" +
+		"ENCRYPT_METHOD MD5\n"
+	write(t, path, before)
+
+	script := loginDefsScript(t, path)
+	first := runScriptOn(t, sh, dir, script, path, 1)
+	second := runScriptOn(t, sh, dir, script, path, 2)
+
+	if first != second {
+		t.Errorf("running twice changed the file again:\n%s\n---\n%s", first, second)
+	}
+
+	lines := strings.Split(first, "\n")
+
+	// The first definition is rewritten in place — in place, so it keeps its
+	// position ahead of anything below it.
+	if got := lines[2]; got != "ENCRYPT_METHOD SHA512" {
+		t.Errorf("the first definition was not rewritten in place: line 3 is %q\n%s", got, first)
+	}
+	if got := lines[4]; got != "PASS_MIN_DAYS 1" {
+		t.Errorf("PASS_MIN_DAYS was not rewritten in place: line 5 is %q\n%s", got, first)
+	}
+
+	// Exactly one live definition of each key. Two would mean the append path
+	// ran, which is the bug this test exists for.
+	for _, key := range []string{"ENCRYPT_METHOD", "PASS_MIN_DAYS"} {
+		if n := liveSettings(first, key); n != 1 {
+			t.Errorf("%s has %d live definition(s) after two runs, want 1:\n%s", key, n, first)
+		}
+	}
+
+	// The dead line is commented with a reason rather than deleted: it is a
+	// line somebody wrote, and the next reader has to be able to find out what
+	// happened to it.
+	if !strings.Contains(first, "# disabled by plumbline: login.defs takes the first match") {
+		t.Errorf("the shadowed definition was removed without a trace:\n%s", first)
+	}
+	if !strings.Contains(first, "#ENCRYPT_METHOD MD5") {
+		t.Errorf("the shadowed line's original text was not preserved:\n%s", first)
+	}
+
+	// Everything else survives untouched.
+	for _, want := range []string{
+		"# /etc/login.defs - shadow suite configuration",
+		"PASS_MAX_DAYS\t99999",
+		"UMASK\t\t022",
+	} {
+		if !strings.Contains(first, want) {
+			t.Errorf("the edit lost %q:\n%s", want, first)
+		}
+	}
+
+	// And the original is recoverable.
+	if bak := read(t, path+".bak"); bak != before {
+		t.Errorf("the backup is not the original:\n%s", bak)
+	}
+}
+
+// TestTheLoginDefsFixAppendsWhenTheKeyIsAbsent.
+//
+// The other half of the rule: a file with no definition of the key gets one at
+// the end, which is where the first (and only) match then is.
+func TestTheLoginDefsFixAppendsWhenTheKeyIsAbsent(t *testing.T) {
+	sh := needSh(t)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "login.defs")
+	write(t, path, "# nothing much here\nUMASK\t022\n")
+
+	script := loginDefsScript(t, path)
+	first := runScriptOn(t, sh, dir, script, path, 1)
+	second := runScriptOn(t, sh, dir, script, path, 2)
+
+	if first != second {
+		t.Errorf("a second run appended again:\n%s\n---\n%s", first, second)
+	}
+	for _, want := range []string{"ENCRYPT_METHOD SHA512", "PASS_MIN_DAYS 1", "UMASK\t022"} {
+		if !strings.Contains(first, want) {
+			t.Errorf("the result is missing %q:\n%s", want, first)
+		}
+	}
+	for _, key := range []string{"ENCRYPT_METHOD", "PASS_MIN_DAYS"} {
+		if n := liveSettings(second, key); n != 1 {
+			t.Errorf("%s appears %d times after two runs:\n%s", key, n, second)
+		}
+	}
+}
+
+// TestTheHashFixSaysThatExistingPasswordsAreUnchanged.
+//
+// **The setting decides how a password is hashed when it is set**, so every
+// account already in /etc/shadow keeps whatever it was hashed with until its
+// password is next changed. A script that changed ENCRYPT_METHOD and said
+// nothing would leave an operator believing a stolen /etc/shadow had just
+// become expensive to attack, when it is worth exactly what it was worth
+// before.
+func TestTheHashFixSaysThatExistingPasswordsAreUnchanged(t *testing.T) {
+	script := remediate.Script(remediate.Generate(failures("AUTH-0005"), remediate.Options{}))
+
+	for _, want := range []string{
+		"changes nothing about the passwords already in /etc/shadow",
+		"chage -d 0 <user>",
+		"Do not do that to service accounts",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("the script does not warn that existing hashes survive (%q):\n%s", want, script)
+		}
+	}
+
+	// SHA512 rather than yescrypt: yescrypt needs libxcrypt 4.4, and a host
+	// without it accepts the setting and then cannot hash a password at all.
+	if !strings.Contains(script, "plumbline_logindefs_set ENCRYPT_METHOD SHA512") {
+		t.Errorf("the fix does not set SHA512:\n%s", script)
+	}
+	if strings.Contains(script, "plumbline_logindefs_set ENCRYPT_METHOD YESCRYPT") {
+		t.Errorf("the fix sets yescrypt, which a host with an older libxcrypt cannot hash with:\n%s", script)
+	}
+}
+
+// loginDefsScript is the AUTH-0005 and USERS-0012 script, pointed at a
+// temporary file.
+//
+// The path is substituted rather than made an Option: unlike the sysctl drop-in
+// and the systemd unit directory, /etc/login.defs is not a file plumbline
+// chooses — it is the shadow suite's, at the one path shadow(3) reads.
+func loginDefsScript(t *testing.T, path string) string {
+	t.Helper()
+	plan := remediate.Generate(failures("AUTH-0005", "USERS-0012"), remediate.Options{})
+	if len(plan.Actions) != 2 {
+		t.Fatalf("actions = %d, want 2: %+v", len(plan.Actions), plan.Unfixable)
+	}
+	return strings.ReplaceAll(remediate.Script(plan), "/etc/login.defs", path)
+}
+
+// runScriptOn runs a script and returns the contents of one file afterwards.
+func runScriptOn(t *testing.T, sh, dir, script, path string, pass int) string {
+	t.Helper()
+	cmd := exec.Command(sh, "-c", script)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("pass %d: %v\n%s\nscript:\n%s", pass, err, out, script)
+	}
+	return read(t, path)
+}
+
+// liveSettings counts the lines that actually set a key: not comments, and
+// spelled the way login.defs spells them.
+func liveSettings(file, key string) int {
+	n := 0
+	for _, l := range strings.Split(file, "\n") {
+		t := strings.TrimLeft(l, " \t")
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		k, _, found := strings.Cut(t, " ")
+		if !found {
+			k, _, found = strings.Cut(t, "\t")
+			if !found {
+				continue
+			}
+		}
+		if k == key {
+			n++
+		}
+	}
+	return n
+}
