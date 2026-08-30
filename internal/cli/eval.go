@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -117,7 +118,11 @@ collected on a production host be analysed somewhere safer.`,
 			// No --fix: eval reads a bundle, and a bundle can be a month old
 			// and from another host. Proposing changes to *this* machine from
 			// it would be proposing them for the wrong one.
-			return renderAndGate(b, failOn, gt, format, out, sup, prof, nil, true, fixOptions{}, stdout, stderr)
+			// pace 0: eval has no --pace flag, because it has no stream to
+			// pace. Pacing its report from a constant would be a delay with no
+			// off switch, on the one command whose whole point is to
+			// re-evaluate an archive as fast as it can be read.
+			return renderAndGate(b, failOn, gt, format, out, sup, prof, nil, true, fixOptions{}, 0, stdout, stderr)
 		},
 	}
 
@@ -142,7 +147,7 @@ type fixOptions struct {
 	path string
 }
 
-func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, prof *profile.Profile, live *rendertext.Stream, detail bool, fix fixOptions, stdout, stderr io.Writer) error {
+func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, prof *profile.Profile, live *rendertext.Stream, detail bool, fix fixOptions, pace time.Duration, stdout, stderr io.Writer) error {
 	// The presenter is handed to the catalog rather than to the renderer,
 	// because what it shows is evaluation happening — one line as each check
 	// reaches a verdict — and by the time there is a slice to render, there is
@@ -200,6 +205,21 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 		return exitError{code: ExitInternal, message: err.Error()}
 	}
 
+	// **The width is measured on the destination, and that is the whole of the
+	// separation between the two layouts.** The warnings section follows the
+	// terminal so a wide window is not wrapped at 78; a file or a pipe keeps the
+	// fixed grid so a nightly diff of an unchanged host is still empty. No flag
+	// decides which — the same ioctl that answers for a terminal fails for a
+	// file, so a redirect cannot accidentally pick up the operator's window size
+	// and `plumbline scan > report.txt` produces the same bytes from any
+	// terminal it is run in.
+	//
+	// It is also the terminal test the report's pacing turns on, which is why it
+	// is measured here rather than inside the branch below: --fix prints its
+	// block in standard mode, where no report is rendered at all, and the
+	// proposed script has to be paced on the same evidence the report is.
+	columns, _ := system.TerminalWidth(w)
+
 	var renderErr error
 	if detail {
 		switch format {
@@ -213,18 +233,8 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 			// gets the whole document even though a stream also ran.
 			narrated := live != nil && out.output == "" && system.IsTerminal(w)
 
-			// **The width is measured on the destination, and that is the
-			// whole of the separation between the two layouts.** The warnings
-			// section follows the terminal so a wide window is not wrapped at
-			// 78; a file or a pipe keeps the fixed grid so a nightly diff of an
-			// unchanged host is still empty. No flag decides which — the same
-			// ioctl that answers for a terminal fails for a file, so a redirect
-			// cannot accidentally pick up the operator's window size and
-			// `plumbline scan > report.txt` produces the same bytes from any
-			// terminal it is run in.
-			columns, _ := system.TerminalWidth(w)
 			renderErr = renderTerminal(w, b, sc, findings, factErrors,
-				useColor(w, out.noColor, out.output != ""), prof.Name(), narrated, columns)
+				useColor(w, out.noColor, out.output != ""), prof.Name(), narrated, columns, pace)
 		}
 	}
 
@@ -232,7 +242,7 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 	// would be done about it — and to the same destination, because a --output
 	// run has already said where its output goes.
 	if renderErr == nil && fix.enabled {
-		renderErr = renderFixPlan(w, findings, useColor(w, out.noColor, out.output != ""), fix.path, stderr)
+		renderErr = renderFixPlan(w, findings, useColor(w, out.noColor, out.output != ""), fix.path, columns, pace, stderr)
 	}
 
 	if cerr := closeOut(); renderErr == nil {
@@ -285,7 +295,7 @@ func renderSARIF(w io.Writer, b bundle.Bundle, sc score.Score, findings []findin
 	})
 }
 
-func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, factErrors []fact.Error, color bool, activeProfile string, narrated bool, columns int) error {
+func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []finding.Finding, factErrors []fact.Error, color bool, activeProfile string, narrated bool, columns int, pace time.Duration) error {
 	return rendertext.Render(w, rendertext.Input{
 		Tool: rendertext.Tool{Name: "plumbline", Version: version.Version, Commit: version.Commit},
 		Scan: rendertext.Scan{
@@ -303,6 +313,7 @@ func renderTerminal(w io.Writer, b bundle.Bundle, sc score.Score, findings []fin
 		Color:        color,
 		ScanNarrated: narrated,
 		Width:        columns,
+		Pace:         pace,
 	})
 }
 
@@ -416,7 +427,7 @@ func lacksPrivilege(errs []fact.Error) bool {
 // Nothing is executed. This phase proposes; applying a plan is a later one, and
 // will go through internal/system with an argv rather than through the shell
 // this prints.
-func renderFixPlan(w io.Writer, findings []finding.Finding, color bool, scriptPath string, stderr io.Writer) error {
+func renderFixPlan(w io.Writer, findings []finding.Finding, color bool, scriptPath string, columns int, pace time.Duration, stderr io.Writer) error {
 	plan := remediate.Generate(findings, remediate.Options{})
 	script := remediate.Script(plan)
 
@@ -426,6 +437,8 @@ func renderFixPlan(w io.Writer, findings []finding.Finding, color bool, scriptPa
 		Uncovered: len(plan.Unfixable),
 		Script:    script,
 		SavedTo:   scriptPath,
+		Width:     columns,
+		Pace:      pace,
 	}); err != nil {
 		return err
 	}

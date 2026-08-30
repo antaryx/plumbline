@@ -158,6 +158,18 @@ type Input struct {
 	// displayWidth for the clamp.
 	Width int
 
+	// Pace is the live stream's per-row delay, reused as this report's pacing
+	// dial. Zero — which is what every caller that does not set it gets —
+	// writes the report as fast as it can be formatted.
+	//
+	// It is the stream's number rather than one of this package's own because
+	// the two displays are read as one: the report follows the rows on the same
+	// screen a second after the last of them, and a report that ignored a pace
+	// the operator had deliberately slowed or switched off would be the tool
+	// disagreeing with itself. See pacer for what the number is spent on, and
+	// for why Width has to be the measured terminal and not the clamp.
+	Pace time.Duration
+
 	// ScanNarrated says that a live stream has already put every check on the
 	// operator's screen, so the report's own scan phase would be the same
 	// hundred rows a second time, regrouped. It is set only for a terminal
@@ -176,7 +188,12 @@ type Input struct {
 // rather than ranged over from a map, so two reports of an unchanged host are
 // byte-identical and diff to nothing.
 func Render(w io.Writer, in Input) error {
-	p := &printer{w: w, color: in.Color, width: displayWidth(in.Width)}
+	p := &printer{
+		w:     w,
+		color: in.Color,
+		width: displayWidth(in.Width),
+		pace:  newPacer(in.Width, in.Pace),
+	}
 
 	p.header(in)
 	if !in.ScanNarrated {
@@ -202,6 +219,11 @@ type printer struct {
 	// width is the column count the warnings section lays out against:
 	// the terminal's, clamped, or reportWidth. Nothing else uses it.
 	width int
+
+	// pace is how long the report waits at a section heading and between
+	// entries. The zero pacer waits nowhere, and is what a file, a pipe and
+	// `--pace 0` all get.
+	pace pacer
 }
 
 // displayWidth turns a measured terminal into the width the warnings section is
@@ -250,13 +272,13 @@ func (p *printer) blank()        { p.printf("\n") }
 // after every check line so the report appears as it is produced rather than
 // arriving all at once when the process exits.
 //
-// This is not an animation and there is no sleep anywhere in this package. A
-// deliberate delay would be a lie about how long the work took, and on a host
-// with 79 checks it would turn a 2 ms scan into a 2 s one for the sake of
-// looking busy. What it does is remove *buffering* as a reason for the report
-// to arrive in one lump: os.Stdout is already unbuffered, so in the real CLI
-// every line is a write syscall the moment it is formatted, and this hook
-// makes that true as well for a caller that wraps the writer.
+// **It is also what makes a pause mean anything.** A delay is only visible if
+// the text before it has reached the glass, and a buffered writer holds it:
+// sleep first and flush later and the report still arrives in one lump, having
+// taken ten seconds to do it. Every pause therefore flushes and *then* sleeps,
+// never the other way round — see pause. os.Stdout is unbuffered, so in the
+// real CLI each line is already a write syscall the moment it is formatted;
+// this hook makes that true as well for a caller that wraps the writer.
 type flusher interface{ Flush() error }
 
 func (p *printer) flush() {
@@ -266,6 +288,101 @@ func (p *printer) flush() {
 	if f, ok := p.w.(flusher); ok {
 		p.err = f.Flush()
 	}
+}
+
+// pacer is the report's artificial delay: the one thing in this package that is
+// presentation rather than content.
+//
+// **A deliberate pause in a security tool deserves the same straight answer
+// DefaultPace gives for the stream's.** The document is formatted in well under
+// a millisecond, and printed at that speed it does not arrive so much as
+// already be there — forty findings, a dashboard and a summary landing between
+// two blinks, and the operator's first act is to scroll back up hunting for
+// where it started. The delay turns a dump into a sequence: a breath before
+// each section heading, so the eye registers that a new block has begun, and a
+// beat after each entry, so a list of forty reads as forty things rather than
+// as one paragraph.
+//
+// Three properties are what keep it from being a lie.
+//
+// **It changes no bytes.** Every pause falls between two writes and never
+// inside one, so a paced report and an unpaced one are byte-identical and a
+// nightly diff is untouched by any of this. TestPacingChangesNoBytes is the
+// gate on it.
+//
+// **It is never mistaken for work.** The elapsed time in the header is the
+// scan's own — Scan.Started to Scan.Finished, both recorded before this package
+// is entered — so nothing spent here is ever reported back as time the host
+// took to examine.
+//
+// **It is off unless somebody is watching.** The zero pacer is what a caller
+// that sets nothing gets, what a file or a pipe gets (Input.Width is 0 for
+// anything that is not a terminal), and what `--pace 0` gets. A redirect is
+// still a dump, instantly, which is the only behaviour a script can accept.
+type pacer struct {
+	// section is the breath before a top-level heading.
+	section time.Duration
+	// entry is the beat after one finding in a list.
+	entry time.Duration
+	// line is the beat after one line of the generated script.
+	line time.Duration
+}
+
+// The three delays are multiples of the stream's pace rather than constants of
+// their own, and that is what respecting the pace setting means beyond the zero
+// case: one dial moves the whole display. `--pace 250ms` slows the report to
+// match the rows it follows, and `--pace 5ms` — which is what the pty tests run
+// at — leaves the report as quick as the stream, so nothing in the suite pays
+// seconds for a property it is not asserting.
+//
+// They are written in tenths of a pace so the ratios survive a change to
+// DefaultPace: a section heading is six rows' worth of pause, an entry
+// eight-tenths of one, a script line two-tenths. At the default 100 ms that is
+// 600 ms, 80 ms and 20 ms.
+const (
+	sectionTenths = 60
+	entryTenths   = 8
+	lineTenths    = 2
+	paceTenths    = 10
+)
+
+// newPacer returns the delays for a destination, or the zero pacer when this
+// report is not being watched by anybody.
+//
+// **width is the measured terminal, not displayWidth's clamp**, and the two
+// answer opposite questions here. The clamp turns 0 into the fixed grid, which
+// is precisely the case that must not be paced; handing it the clamped value
+// would put a six-hundred-millisecond pause in front of every section of every
+// report redirected to a file.
+func newPacer(width int, pace time.Duration) pacer {
+	if width <= 0 || pace <= 0 {
+		return pacer{}
+	}
+	return pacer{
+		section: pace * sectionTenths / paceTenths,
+		entry:   pace * entryTenths / paceTenths,
+		line:    pace * lineTenths / paceTenths,
+	}
+}
+
+// sleep is the delay itself, indirected so that an internal test can assert the
+// schedule — how many pauses, of which length, in what order — without waiting
+// out a single one of them. Nothing but a test ever replaces it.
+var sleep = time.Sleep
+
+// pause flushes what has been written, then waits.
+//
+// **A pause after a failed write does nothing**, and that is not a
+// micro-optimisation. p.err means the descriptor has gone — a closed pipe, a
+// full disk — and every remaining write is a no-op, so honouring the schedule
+// would leave the process sitting there sleeping ten seconds through a report
+// nobody can receive.
+func (p *printer) pause(d time.Duration) {
+	if p.err != nil || d <= 0 {
+		return
+	}
+	p.flush()
+	sleep(d)
 }
 
 // paint wraps s in an escape sequence, or returns it untouched when colour is
@@ -306,6 +423,11 @@ var rule = strings.Repeat("─", reportWidth)
 // from them, which is the distinction Lynis draws and the reason the two
 // markers exist rather than one.
 func (p *printer) section(title string) {
+	// Before the blank line, not after the heading. The pause has to land on a
+	// screen that still ends with the previous block; taken after the title it
+	// would leave a heading hanging over nothing, which reads as the tool
+	// having stalled rather than as a break between two sections.
+	p.pause(p.pace.section)
 	p.blank()
 	p.line(p.paint(ansiBold, "[=] "+title))
 	p.line(p.paint(ansiDim, rule))
@@ -733,6 +855,11 @@ func (p *printer) accepted(findings []finding.Finding) {
 			p.field("Expires", s.ExpiresAt)
 		}
 		p.field("Fingerprint", p.paint(ansiDim, f.Fingerprint))
+		// Paced like a warning, because it is the same kind of list. An
+		// accepted risk that arrived instantly while the findings above it
+		// waterfalled would read as an appendix, and the whole argument of this
+		// block is that a suppression is a finding somebody decided about.
+		p.pause(p.pace.entry)
 	}
 }
 
@@ -782,6 +909,12 @@ func (p *printer) entry(f finding.Finding) {
 		p.paint(ansiBold, title) + " " + p.paint(ansiDim, id))
 
 	p.details(detailsFor(f))
+
+	// The beat that makes the list a waterfall instead of a block. It is taken
+	// after the entry rather than between its two lines: a title and its remedy
+	// are one thing to read, and a pause inside that pair would split a
+	// sentence the reader is halfway through.
+	p.pause(p.pace.entry)
 }
 
 // details writes the second half of an entry, wrapped to the grid with a

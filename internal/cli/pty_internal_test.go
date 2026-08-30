@@ -589,3 +589,89 @@ func stripEscapes(s string) string {
 	}
 	return b.String()
 }
+
+// TestTheReportIsPacedOnATerminal.
+//
+// The end-to-end proof that --pace reaches the *report*, which is a different
+// wire from the one TestThePaceFlagSlowsTheStream covers: the pace travels from
+// the flag through renderAndGate into rendertext.Input.Pace, and the terminal
+// test it is gated on is a TIOCGWINSZ taken on stdout rather than the stream's
+// on stderr. Either could be unwired without the other noticing, and the
+// schedule tests in internal/render/text cannot see this half at all — they
+// construct an Input directly, which is the one thing this file exists to stop
+// being the only coverage.
+//
+// **The live stream is switched off for the measurement**, which is what makes
+// this affordable. PLUMBLINE_NO_PROGRESS leaves stream nil, so the hundred and
+// twelve rows are neither drawn nor paced and the only artificial delay left in
+// the run is the report's own. The report is still rendered in full, because
+// nothing narrated it.
+//
+// The floor is read off the document that was produced rather than hardcoded,
+// so it stays correct as sections and findings are added, and it is halved for
+// the reason the stream's is: a scheduler under `go test -race` is not a
+// stopwatch, and the claim is "the report waited", not "it waited for exactly
+// this long".
+func TestTheReportIsPacedOnATerminal(t *testing.T) {
+	const pace = 20 * time.Millisecond
+
+	paced, out := unstreamedRun(t, pace.String())
+	sections, entries := pacedPoints(out)
+	if sections < 2 || entries < 5 {
+		t.Fatalf("%d sections and %d entries in the report; the timing below would prove nothing:\n%s",
+			sections, entries, out)
+	}
+
+	want := (time.Duration(sections)*pace*6 + time.Duration(entries)*pace*8/10) / 2
+	if paced < want {
+		t.Errorf("a report of %d sections and %d entries at --pace %s finished in %s, under the %s floor: the pace is not reaching the report",
+			sections, entries, pace, paced, want)
+	}
+
+	// And the off switch, on the same document. Without this the test above
+	// would pass just as well against a report that paced itself regardless of
+	// what the operator asked for.
+	instant, _ := unstreamedRun(t, "0")
+	if instant >= want {
+		t.Errorf("--pace 0 took %s, at or over the %s floor: the delays are not being switched off", instant, want)
+	}
+}
+
+// unstreamedRun renders a full report to a terminal with no live stream in
+// front of it, and returns how long the whole command took.
+func unstreamedRun(t *testing.T, pace string) (time.Duration, string) {
+	t.Helper()
+
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+	t.Setenv("PLUMBLINE_NO_PROGRESS", "1")
+	unsetCIMarkers(t)
+
+	term := openPTY(t)
+	start := time.Now()
+	code := Execute([]string{"scan", "--root", "../../testdata/fixtures/cli-host",
+		"--verbose", "--pace", pace}, term.slave, term.slave)
+	elapsed := time.Since(start)
+
+	out := term.output(t)
+	if code != ExitOK {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	return elapsed, out
+}
+
+// pacedPoints counts the two things the report pauses at: a section heading at
+// column 0, and an entry headline in the warnings, unknown or accepted blocks.
+// A scan-phase row wears the same bullet and is deliberately not paced, which
+// is why the severity tag is part of the match.
+func pacedPoints(out string) (sections, entries int) {
+	for _, l := range strings.Split(out, "\n") {
+		switch {
+		case strings.HasPrefix(l, "[=] "):
+			sections++
+		case strings.HasPrefix(l, "  - ["), strings.HasPrefix(l, "  * "):
+			entries++
+		}
+	}
+	return sections, entries
+}

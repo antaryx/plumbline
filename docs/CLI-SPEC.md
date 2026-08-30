@@ -69,7 +69,7 @@ the same.
 | `--fail-on-high N` | `0` | Exit 2 when N or more HIGH findings are present; `0` disables | **yes** |
 | `--fix` | false | Print the shell that would repair the failing checks this build can fix. **Executes nothing.** `--format terminal` only | **yes** |
 | `--write-script P` | — | With `--fix`, also write the script to `P`, owner-only and executable (0700) | **yes** |
-| `--pace D` | `100ms` | How long a streamed row waits before its verdict lands; `0` draws at full speed (§7) | **yes** |
+| `--pace D` | `100ms` | How long a streamed row waits before its verdict lands, and the dial the report that follows is paced on; `0` draws everything at full speed (§7) | **yes** |
 | `--output-dir DIR` | — | Directory; required when multiple formats | no |
 | `--debug` | false | Engine internals to stderr | no |
 
@@ -937,6 +937,38 @@ can be read while it is on screen.
 | Paid only where the rows are | A pipe, a redirect, a CI log, `--format json`, `PLUMBLINE_NO_PROGRESS` and `--quiet` all draw no rows, so none of them waits. `plumbline scan --quiet` and `plumbline scan \| cat` run at full speed. |
 | Ctrl-C skips the display, not the answer | The first press abandons what is left of the queue within milliseconds, finishes the row it was drawing so no half-line is left on the terminal, and still prints the result block. A scan whose work is already done reports its result; only the narration is cut. |
 
+#### The report is paced too
+
+The stream is not the only thing an operator watches. The report that follows it
+is formatted in well under a millisecond, so at full speed forty findings, a
+dashboard and a summary land between two blinks and the reader's first act is to
+scroll back up hunting for where it started. It is paced on the same dial.
+
+| Point | Delay | Why |
+|---|---|---|
+| Before a section heading — `[=] Warnings and suggestions`, `[=] Scan summary`, `[=] Proposed remediation script` | `6 ×` the pace, **600 ms** | A breath, so the eye registers that a new block has begun. Taken *before* the blank line that opens the section rather than after the title, so it lands on a screen that still ends with the previous block: a heading left hanging over nothing reads as a stall rather than a break. |
+| After a findings entry — the two lines of a warning, an unknown, or an accepted risk | `0.8 ×` the pace, **80 ms** | A beat, so a list of forty reads as forty things rather than as one paragraph. Taken after the pair and never between its two lines: a title and its remedy are one thing to read. |
+| After a line of the `--fix` script | `0.2 ×` the pace, **20 ms** | The script assembles a command at a time, which is what shows it was generated from this host's findings rather than pasted in whole. The smallest of the three, because it is the block most likely to run to a hundred lines. |
+
+Everything else prints at once. The **scan phase is deliberately not paced**:
+`plumbline eval` renders it in full, and pacing a hundred and twelve rows would
+put eleven seconds in front of a command whose whole purpose is to re-read an
+archive quickly — and would do it a second time on a `scan --verbose` whose live
+stream has already drawn the same rows.
+
+| Rule | Detail |
+|---|---|
+| Multiples of `--pace`, not constants of their own | One dial moves the whole display, which is what respecting the pace setting has to mean beyond the zero case. `--pace 250ms` slows the report to match the rows it follows; `--pace 0` switches every delay off, report included. |
+| Only on a terminal | The gate is `TIOCGWINSZ` on **the report's own destination**, which answers no for a file, a pipe or `--output`. `plumbline scan --verbose > report.txt` dumps instantly and `plumbline scan --verbose \| grep WARNING` does not appear to hang. It is the same measurement that sets the warnings section's wrap width, taken once, so the two cannot disagree. |
+| It changes no bytes | Every pause falls between two writes and never inside one, so a paced report and an unpaced one are byte-identical and a nightly diff is untouched by any of it. |
+| Never mistaken for work | The `elapsed` in the header is the scan's own — start to finish, both recorded before the renderer is entered. Nothing spent here is ever reported back as time the host took to examine. |
+| A closed pipe ends it | `--verbose \| head` fails on the first write; every write after that is a no-op, so the schedule stops with them rather than sleeping ten seconds into a descriptor that has gone away. |
+| `eval` is never paced | It has no `--pace` flag, because it has no stream to pace, and an unswitchable delay on the offline re-evaluation path would be indefensible. |
+
+Measured on the `cli-host` fixture at the default pace: `--verbose` adds **2.2 s**
+(two sections, twelve entries) and `--verbose --fix` adds **4.9 s** (three
+sections, twelve entries, a 106-line script).
+
 #### What the terminal shows
 
 **Three modes, and the standard one exists to leave the stream on the screen.**
@@ -952,7 +984,7 @@ Everything after the last streamed row competes with it for the last page of an
 | Severity tally — the `! HIGH` list | — | yes | — |
 | Detailed report — evidence, remediation, cautions | — | yes | — |
 | Closing hint | `--verbose` | where the report went | — |
-| Pays the `--pace` delay | yes | yes | — |
+| Pays the `--pace` delay | rows | rows and report | — |
 
 The **severity tally is one line per failing check** — eleven on a fixture,
 forty on a real host — and it lands after the stream, so in standard mode it

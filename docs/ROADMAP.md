@@ -1428,6 +1428,86 @@ What this leaves:
   is not the same question as "how long has this row been waiting", and the
   arithmetic wants thinking about rather than guessing at.
 
+### The report's pace
+
+The stream drew itself a row at a time and the report it hands over to still
+landed in one lump. Watched end to end that is the flaw: twelve seconds of
+deliberate, legible narration, and then forty findings, a dashboard and a
+summary arriving between two blinks, after which the first thing an operator
+does is scroll back up hunting for where the report began. The document is
+formatted in well under a millisecond, and at that speed it does not arrive so
+much as simply already be there.
+
+Three delays, at the three points where the eye needs one:
+
+| Point | Ratio | At the default `--pace 100ms` |
+|---|---|---|
+| Before a section heading | `6 ×` | 600 ms |
+| After a findings entry | `0.8 ×` | 80 ms |
+| After a line of the `--fix` script | `0.2 ×` | 20 ms |
+
+**They are multiples of `--pace` rather than constants of their own**, which is
+what respecting that setting has to mean beyond the zero case: one dial moves the
+whole display, `--pace 250ms` slows the report to match the rows it follows, and
+the pty suite's `--pace 5ms` leaves the report as quick as the stream so no test
+pays seconds for a property it is not asserting. On the `cli-host` fixture the
+default costs 2.2 s for `--verbose` and 4.9 s for `--verbose --fix`.
+
+The placement of each is a decision, not an implementation detail. The section
+breath is taken **before** the blank line that opens the section rather than
+after the title, so the pause lands on a screen that still ends with the previous
+block — a heading left hanging over nothing reads as the tool having stalled. The
+entry beat is taken **after** both lines, never between them: a title and its
+remedy are one thing to read, and a pause inside that pair splits a sentence the
+reader is halfway through. The script's is the smallest of the three because it
+is the block most likely to run to a hundred lines, and because what it is for is
+showing that the script *assembled* — a command at a time, out of this host's
+findings — rather than being pasted in whole.
+
+**The scan phase is deliberately left instant**, and that is the one place the
+consistent-looking choice is wrong. `eval` renders it in full: pacing a hundred
+and twelve rows would put eleven seconds in front of a command whose entire
+purpose is to re-read an archive quickly, and on a `scan --verbose` it would
+redraw at walking speed the same rows the live stream has just finished drawing.
+
+This is the second thing in the tool that costs time without doing work, and it
+is confined by the same three arguments the stream's pace is:
+
+- **It changes no bytes.** Every pause falls between two writes and never inside
+  one, so a paced report and a piped one are byte-identical and the nightly diff
+  is untouched. `TestPacingChangesNoBytes` is the gate.
+- **It is never counted as work.** The `elapsed` in the header is the scan's own,
+  `Scan.Started` to `Scan.Finished`, both recorded before the renderer is
+  entered.
+- **It is paid only where somebody is watching.** The gate is `TIOCGWINSZ` on the
+  report's *own destination* — the same measurement that already chose between
+  the terminal's width and the fixed 78-column grid, taken once so the two cannot
+  disagree. A file, a pipe and `--output` all dump instantly, so
+  `scan --verbose > report.txt` is unchanged and `scan --verbose | grep WARNING`
+  does not appear to hang. `eval` is never paced at all: no stream, therefore no
+  `--pace` flag, therefore nowhere to put an off switch.
+
+A fourth argument is new to this one. **A closed pipe ends the schedule.**
+`--verbose | head` fails on the first write, after which every write is a no-op;
+a pause that kept being honoured would leave the process asleep for ten seconds
+producing a report with nowhere to go. `pause` returns early on `p.err` for that
+reason and `TestAFailedWriteStopsThePauses` holds it there.
+
+**The schedule is tested as data rather than as elapsed time**, which is why the
+whole renderer suite still runs in milliseconds. A timing test of ten seconds of
+sleeping is slow *and* flaky — any bound loose enough to be reliable under
+`go test -race` is too loose to catch a delay applied at the wrong point — so the
+package's single `sleep` indirection is swapped for a recorder, and the tests
+assert how many pauses of which length fell where. The counts are read off the
+document that was produced (`[=] ` at column 0, `  - [` and `  * ` bullets), so
+they stay correct as sections and findings are added. One end-to-end test does
+pay real time, because the schedule tests construct an `Input` directly and
+therefore cannot see the wiring: `TestTheReportIsPacedOnATerminal` runs the real
+command over a pty with `PLUMBLINE_NO_PROGRESS` set, which leaves the stream
+unbuilt so the only artificial delay in the run is the report's own.
+
+---
+
 ### Pipeline gates, and why SARIF fixes are not SARIF `fixes`
 
 **The exit-code contract already had the code this needed.** `ExitFindings = 2`

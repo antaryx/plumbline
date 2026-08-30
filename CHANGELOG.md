@@ -214,6 +214,42 @@ because of this release (VERSIONING §2.4).
   inode, the way the unit collector already does for drop-in directories.
 
 ### Changed
+- **The report is paced now, not just the stream.** The live scan drew itself a
+  row at a time and then the document it produced landed in one lump: forty
+  findings, a dashboard and a summary between two blinks, after which the first
+  thing an operator did was scroll back up to find where it started. Three
+  delays, all multiples of `--pace` so one dial moves the whole display:
+
+  | Point | At the default `--pace 100ms` |
+  |---|---|
+  | Before a section heading (`[=] Warnings and suggestions`, `[=] Scan summary`, `[=] Proposed remediation script`) | 600 ms |
+  | After a findings entry — a warning, an unknown, an accepted risk | 80 ms |
+  | After a line of the `--fix` script | 20 ms |
+
+  On the `cli-host` fixture that is 2.2 s for `--verbose` and 4.9 s for
+  `--verbose --fix`. `--pace 0` removes all of it, as it already did for the
+  rows.
+
+  **Nothing that is not being watched waits.** The gate is `TIOCGWINSZ` on the
+  report's own destination, so a file, a pipe and `--output` all dump instantly
+  — `scan --verbose > report.txt` is unchanged, and `scan --verbose | grep`
+  does not appear to hang. It is the same measurement that already chose
+  between the terminal's width and the fixed 78-column grid, taken once so the
+  two cannot disagree. `eval` is never paced: it has no stream, therefore no
+  `--pace` flag, therefore nowhere to put an off switch.
+
+  The scan phase is deliberately left instant. Pacing its rows would add eleven
+  seconds to `eval`, and would redraw at walking speed the same hundred and
+  twelve rows a `scan --verbose` has just watched stream past.
+
+  Three properties keep this from being a lie, and each has a test:
+  **it changes no bytes** (every pause is between two writes, so a paced report
+  and a piped one are byte-identical and a nightly diff is untouched);
+  **it is never counted as work** (the header's `elapsed` is the scan's own,
+  recorded before the renderer is entered); and **a closed pipe ends it**
+  (`--verbose | head` stops the schedule with the writes rather than sleeping
+  ten seconds into a descriptor that has gone).
+
 - **Standard mode is now strictly the stream plus four lines.** The severity
   tally — one `! HIGH` line per failing check — moved behind `--verbose`. It was
   eleven lines on a fixture and forty on a real host, it landed after the last

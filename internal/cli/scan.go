@@ -195,7 +195,7 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			stream.Hint(reportHint(detail, out.output, quiet))
 
 			return renderAndGate(got.bundle, failOn, gt, format, out, sup, prof, stream, detail,
-				fixOptions{enabled: fix, path: writeScript}, stdout, stderr)
+				fixOptions{enabled: fix, path: writeScript}, pace, stdout, stderr)
 		},
 	}
 
@@ -207,7 +207,7 @@ re-evaluated or diffed; the two are not interchangeable.`,
 	f.BoolVarP(&quiet, "quiet", "q", false, "stream no rows; print only the closing result block")
 	f.BoolVar(&fix, "fix", false, "print the shell script that would repair the failing checks this build can fix; nothing is executed")
 	f.StringVar(&writeScript, "write-script", "", "with --fix, also write the generated script to PATH, owner-only and executable (0700)")
-	f.DurationVar(&pace, "pace", rendertext.DefaultPace, "hold each streamed row on screen this long before its verdict lands; 0 draws as fast as the scan runs")
+	f.DurationVar(&pace, "pace", rendertext.DefaultPace, "hold each streamed row on screen this long before its verdict lands, and pace the report that follows it; 0 draws everything as fast as it is produced")
 	f.DurationVar(&timeout, "timeout", 30*time.Minute, "whole-scan budget")
 	f.DurationVar(&perCollector, "collector-timeout", 2*time.Minute, "budget for one collector that declares none")
 	out.register(cmd)
