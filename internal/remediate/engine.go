@@ -1,11 +1,19 @@
 // Package remediate turns findings into the work that would fix them.
 //
-// **It proposes and it does not act.** Nothing in this package touches the
-// host: it reads findings, produces a Plan describing what would be changed,
-// and renders that plan as a shell script a person can read before anything
-// happens. Execution is a later phase and will go through internal/system like
-// everything else — argv, no shell — which is why an Action carries its
-// commands as argv as well as as text. See Action.Argv.
+// **It proposes and it does not act, and that is settled rather than pending.**
+// Nothing in this package touches the host: it reads findings, produces a Plan
+// describing what would be changed, and renders that plan as a shell script a
+// person can read before anything happens. plumbline is a script generator and
+// will not grow an apply path — a scanner that rewrites configuration as root,
+// on a machine the operator cannot see, will eventually lock somebody out of
+// production (PROJECT-BRIEF.md §1.3).
+//
+// An earlier revision of this file carried an Action.Argv alongside the text,
+// on the argument that a later phase would execute it through internal/system.
+// There is no later phase, so the field was a promise this project has
+// disclaimed, and it is gone. The quoting it justified is not: every command
+// built from parts still goes through command(), which quotes each argument
+// rather than pasting a path into a string.
 //
 // Three rules shape what is here.
 //
@@ -68,29 +76,28 @@ func (o Options) dropIn() string {
 
 // Action is one check's remediation: what would be run, and what would be
 // written.
-//
-// **Commands and Argv are two renderings of one list and are generated
-// together.** Argv is what a later phase executes through internal/system,
-// which takes an argv slice and never a command line; Commands is the same
-// thing quoted for a human to read in the proposed script. They cannot drift
-// because the second is derived from the first — see command.
 type Action struct {
 	// CheckID is the finding this fixes.
 	CheckID string
 	// Title is the check's title, so the script says what it is doing in the
 	// words the report used.
 	Title string
-	// Commands are the shell-quoted commands, in order, for display.
+	// Notes are comment lines written above the commands.
+	//
+	// **They are where a fix admits what it does not cover.** A finding's
+	// evidence is capped, so a script built from it can be a partial list of a
+	// larger problem — and a partial list that does not say so reads as a
+	// complete one. See pathsFrom.
+	Notes []string
+	// Commands are the shell commands, in order.
 	Commands []string
-	// Argv is the same commands as argument vectors, for execution.
-	Argv [][]string
 	// SysctlPairs are the parameters this action persists to the drop-in file,
 	// keyed by dotted sysctl name.
 	//
-	// They are held apart from Commands because writing them is not a command:
-	// a later phase merges them into the file in Go (see Merge) rather than
-	// shelling out to sed, and the script only renders that merge as shell for
-	// an operator who would rather run it by hand.
+	// They are held apart from Commands because writing them is not one
+	// command: the script's helper reads the file, decides between replacing a
+	// line and appending one, and writes it back. See Merge, which is the same
+	// rule in Go and the authority the helper is checked against.
 	SysctlPairs map[string]string
 }
 
@@ -198,26 +205,31 @@ func Generate(findings []finding.Finding, opts Options) Plan {
 	return p
 }
 
-// command builds one command in both of its forms at once, which is the only
-// arrangement in which the text an operator reads and the argv a later phase
-// executes cannot disagree about what was proposed.
+// command appends one command, built from its parts and quoted.
+//
+// **Every command assembled from host data goes through here.** A path from a
+// finding is a string this process read off the machine being audited, and a
+// script that pasted one into a command line unquoted would be a shell
+// injection with a root prompt at the end of it — from a file name, which is
+// the one thing on a Linux host that can contain almost anything.
 func command(a *Action, argv ...string) {
-	a.Argv = append(a.Argv, argv)
-	a.Commands = append(a.Commands, shellJoin(argv))
+	out := make([]string, len(argv))
+	for i, s := range argv {
+		out[i] = shellQuote(s)
+	}
+	a.Commands = append(a.Commands, strings.Join(out, " "))
 }
 
-// shellJoin renders an argv as a command line, quoting what a shell would
-// otherwise interpret.
-//
-// It exists for display only. Nothing in this project parses it back, and a
-// later phase executes Action.Argv — so this cannot become the quoting bug that
-// a round trip through a shell would eventually be.
-func shellJoin(argv []string) string {
-	out := make([]string, len(argv))
-	for i, a := range argv {
-		out[i] = shellQuote(a)
-	}
-	return strings.Join(out, " ")
+// literal appends a line of shell as written. It is for the fixed scaffolding a
+// fix needs around its commands — a helper call, a comment — and never for
+// anything carrying a value read off the host.
+func literal(a *Action, line string) {
+	a.Commands = append(a.Commands, line)
+}
+
+// note appends a comment line above an action's commands.
+func note(a *Action, text string) {
+	a.Notes = append(a.Notes, text)
 }
 
 // shellQuote wraps a word in single quotes unless it is plainly safe without
@@ -258,31 +270,44 @@ func shellQuote(s string) string {
 // The script is idempotent, which the helper it defines is the whole reason
 // for. See sysctlSetFunc.
 func Script(p Plan) string {
-	var b strings.Builder
+	// The body is rendered first so the preamble can carry only the helpers it
+	// turns out to need. A script that defined a JSON merge for a host with no
+	// Docker on it would be three-quarters scaffolding an operator has to read
+	// past to find the two lines that matter.
+	var body strings.Builder
+	for _, a := range p.Actions {
+		body.WriteString("\n# " + a.CheckID + " — " + a.Title + "\n")
+		for _, n := range a.Notes {
+			body.WriteString("#   " + n + "\n")
+		}
+		for _, c := range a.Commands {
+			body.WriteString(c + "\n")
+		}
+		for _, k := range sortedKeys(a.SysctlPairs) {
+			body.WriteString(fmt.Sprintf("plumbline_sysctl_set %s %s \"$DROPIN\"\n",
+				shellQuote(k), shellQuote(a.SysctlPairs[k])))
+		}
+	}
 
+	var b strings.Builder
 	b.WriteString("#!/bin/sh\n")
 	b.WriteString("# Proposed by plumbline. Nothing here has been run.\n")
 	b.WriteString("#\n")
 	b.WriteString("# Review it, then run it as root. It is safe to run twice: every step\n")
-	b.WriteString("# either sets a value that is already set or replaces it in place.\n")
+	b.WriteString("# either leaves a value that is already correct alone or replaces it\n")
+	b.WriteString("# in place, and every file it edits is backed up once before the first\n")
+	b.WriteString("# change.\n")
 	b.WriteString("set -eu\n")
 
 	if len(p.Pairs()) > 0 {
 		b.WriteString("\n")
 		b.WriteString(fmt.Sprintf("DROPIN=%s\n", shellQuote(p.DropIn)))
-		b.WriteString(sysctlSetFunc)
+	}
+	for _, h := range helpersFor(body.String()) {
+		b.WriteString(h)
 	}
 
-	for _, a := range p.Actions {
-		b.WriteString("\n# " + a.CheckID + " — " + a.Title + "\n")
-		for _, c := range a.Commands {
-			b.WriteString(c + "\n")
-		}
-		for _, k := range sortedKeys(a.SysctlPairs) {
-			b.WriteString(fmt.Sprintf("plumbline_sysctl_set %s %s \"$DROPIN\"\n",
-				shellQuote(k), shellQuote(a.SysctlPairs[k])))
-		}
-	}
+	b.WriteString(body.String())
 
 	if len(p.Pairs()) > 0 {
 		b.WriteString("\n# Re-apply every configuration file, so the running kernel and the\n")
@@ -291,6 +316,55 @@ func Script(p Plan) string {
 	}
 
 	return b.String()
+}
+
+// helper is one shell function the generated script may need, and the call that
+// says it is needed.
+type helper struct {
+	call string
+	body string
+}
+
+// helpers are declared in dependency order: plumbline_json_set calls
+// plumbline_backup, so a script that needs the first needs the second even
+// where nothing calls it directly.
+var helpers = []helper{
+	{call: "plumbline_backup", body: backupFunc},
+	{call: "plumbline_sysctl_set", body: sysctlSetFunc},
+	{call: "plumbline_json_set", body: jsonSetFunc},
+}
+
+// helpersFor returns the helper definitions a rendered body actually uses.
+//
+// Matching on the call rather than on which fixes are in the plan keeps this
+// from becoming a second registry that has to be updated whenever a fix starts
+// using a helper it did not before — the kind of list that is wrong for one
+// release and nobody notices, because the symptom is a script that fails on the
+// operator's host with "command not found".
+func helpersFor(body string) []string {
+	// plumbline_json_set's own body calls plumbline_backup, so scan the
+	// definitions too and let the dependency pull its prerequisite in.
+	want := map[string]bool{}
+	scan := body
+	for changed := true; changed; {
+		changed = false
+		for _, h := range helpers {
+			if want[h.call] || !strings.Contains(scan, h.call) {
+				continue
+			}
+			want[h.call] = true
+			scan += h.body
+			changed = true
+		}
+	}
+
+	var out []string
+	for _, h := range helpers {
+		if want[h.call] {
+			out = append(out, h.body)
+		}
+	}
+	return out
 }
 
 func sortedKeys(m map[string]string) []string {

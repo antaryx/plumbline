@@ -137,29 +137,35 @@ func TestTheScriptSetsBothTheRunningKernelAndTheFile(t *testing.T) {
 	}
 }
 
-// TestTheCommandsAndTheArgvAreTheSameProposal.
+// TestAPathFromTheHostIsQuotedIntoTheScript.
 //
-// The script is what a person reviews; Argv is what a later phase will execute
-// through internal/system, which takes an argument vector and never a command
-// line. If the two could disagree, the thing reviewed and the thing run would
-// be different things — so they are generated together, and this asserts it
-// rather than trusting it.
-func TestTheCommandsAndTheArgvAreTheSameProposal(t *testing.T) {
-	plan := remediate.Generate(failures("KERNEL-0026"), remediate.Options{})
-	if len(plan.Actions) != 1 {
-		t.Fatalf("actions = %d, want 1", len(plan.Actions))
-	}
-	a := plan.Actions[0]
+// **A path is a string this process read off the machine being audited**, and a
+// script that pasted one into a command line unquoted would be a shell
+// injection with a root prompt at the end of it — out of a file name, which is
+// the one thing on a Linux host that can contain very nearly anything.
+//
+// The finding here is hostile in the way a real one can be: a world-writable
+// file whose name closes the argument and starts a second command.
+func TestAPathFromTheHostIsQuotedIntoTheScript(t *testing.T) {
+	const hostile = "/srv/shared/'; rm -rf /tmp/pwned; echo '"
 
-	if len(a.Commands) != len(a.Argv) {
-		t.Fatalf("%d command(s) and %d argv", len(a.Commands), len(a.Argv))
+	f := failures("FILESYS-0003")[0]
+	f.Evidence = []finding.Evidence{finding.NewEvidence(hostile, 0, "world-writable", "")}
+
+	script := remediate.Script(remediate.Generate([]finding.Finding{f}, remediate.Options{}))
+
+	// The expectation is built rather than written out, so the test is not
+	// itself an exercise in nested shell quoting.
+	want := "chmod o-w -- '" + strings.ReplaceAll(hostile, "'", `'\''`) + "'"
+	if !strings.Contains(script, want) {
+		t.Errorf("the path is not safely quoted.\nwant a line containing: %s\ngot:\n%s", want, script)
 	}
-	for i, argv := range a.Argv {
-		if got, want := a.Commands[i], strings.Join(argv, " "); got != want {
-			t.Errorf("command %d reads %q and would execute %q", i, got, want)
-		}
-		if argv[0] != "sysctl" {
-			t.Errorf("argv %d does not start with the program: %v", i, argv)
+
+	// And the injected command never appears as something a shell would run:
+	// every occurrence is inside the quoted operand.
+	for _, line := range strings.Split(script, "\n") {
+		if strings.Contains(line, "rm -rf") && !strings.HasPrefix(line, "chmod o-w -- '") {
+			t.Errorf("a line would execute the injected command: %q", line)
 		}
 	}
 }
@@ -199,7 +205,17 @@ func TestTheDropInIsPlumblinesOwnFile(t *testing.T) {
 
 // TestFixableNamesWhatThisBuildCanRepair.
 func TestFixableNamesWhatThisBuildCanRepair(t *testing.T) {
-	for _, id := range []string{"KERNEL-0004", "KERNEL-0016", "KERNEL-0026", "KERNEL-0030"} {
+	for _, id := range []string{
+		"AUTH-0004",
+		"CONTAINERS-0001",
+		"CRON-0001",
+		"FILESYS-0003",
+		"FILESYS-0004",
+		"KERNEL-0004",
+		"KERNEL-0016",
+		"KERNEL-0026",
+		"KERNEL-0030",
+	} {
 		if !remediate.Fixable(id) {
 			t.Errorf("%s has no fix", id)
 		}

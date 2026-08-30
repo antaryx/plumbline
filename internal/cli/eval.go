@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/spf13/cobra"
@@ -98,7 +99,7 @@ collected on a production host be analysed somewhere safer.`,
 			// No --fix: eval reads a bundle, and a bundle can be a month old
 			// and from another host. Proposing changes to *this* machine from
 			// it would be proposing them for the wrong one.
-			return renderAndGate(b, failOn, gt, format, out, sup, prof, nil, true, false, stdout, stderr)
+			return renderAndGate(b, failOn, gt, format, out, sup, prof, nil, true, fixOptions{}, stdout, stderr)
 		},
 	}
 
@@ -115,7 +116,15 @@ collected on a production host be analysed somewhere safer.`,
 // Rendering is chosen here rather than inside each command for the same
 // reason: a report and its exit code are one answer, and a second call site
 // would be a second place for the two to disagree.
-func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, prof *profile.Profile, live *rendertext.Stream, detail, fix bool, stdout, stderr io.Writer) error {
+// fixOptions is what --fix and --write-script asked for.
+type fixOptions struct {
+	// enabled is --fix: print the proposed script.
+	enabled bool
+	// path is --write-script: also write it there. Empty means print only.
+	path string
+}
+
+func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out outputFlags, sup *suppress.Set, prof *profile.Profile, live *rendertext.Stream, detail bool, fix fixOptions, stdout, stderr io.Writer) error {
 	// The presenter is handed to the catalog rather than to the renderer,
 	// because what it shows is evaluation happening — one line as each check
 	// reaches a verdict — and by the time there is a slice to render, there is
@@ -204,8 +213,8 @@ func renderAndGate(b bundle.Bundle, failOn int, gt gates, format string, out out
 	// After the report, so an operator reads what is wrong before reading what
 	// would be done about it — and to the same destination, because a --output
 	// run has already said where its output goes.
-	if renderErr == nil && fix {
-		renderErr = renderFixPlan(w, findings, useColor(w, out.noColor, out.output != ""))
+	if renderErr == nil && fix.enabled {
+		renderErr = renderFixPlan(w, findings, useColor(w, out.noColor, out.output != ""), fix.path, stderr)
 	}
 
 	if cerr := closeOut(); renderErr == nil {
@@ -370,12 +379,53 @@ func lacksPrivilege(errs []fact.Error) bool {
 // Nothing is executed. This phase proposes; applying a plan is a later one, and
 // will go through internal/system with an argv rather than through the shell
 // this prints.
-func renderFixPlan(w io.Writer, findings []finding.Finding, color bool) error {
+func renderFixPlan(w io.Writer, findings []finding.Finding, color bool, scriptPath string, stderr io.Writer) error {
 	plan := remediate.Generate(findings, remediate.Options{})
-	return rendertext.RenderRemediation(w, rendertext.RemediationInput{
+	script := remediate.Script(plan)
+
+	if err := rendertext.RenderRemediation(w, rendertext.RemediationInput{
 		Color:     color,
 		Covered:   len(plan.Actions),
 		Uncovered: len(plan.Unfixable),
-		Script:    remediate.Script(plan),
-	})
+		Script:    script,
+		SavedTo:   scriptPath,
+	}); err != nil {
+		return err
+	}
+	if scriptPath == "" {
+		return nil
+	}
+
+	// **Written after the block is printed, so a failure to write cannot cost
+	// the operator the script.** The proposal is already on their screen by the
+	// time this runs; if the path is wrong or the disk is full they can still
+	// read, copy and act on what the scan produced.
+	if err := writeScriptTo(scriptPath, script); err != nil {
+		return err
+	}
+
+	// stderr, and after everything the stream drew, for the reason `bundle
+	// saved to` goes there: it is a note about this run rather than part of the
+	// document, and a `--format terminal` report redirected to a file should
+	// not end with a line about where a different file went.
+	fmt.Fprintf(stderr, "[+] Remediation script saved to %s\n", scriptPath)
+	return nil
+}
+
+// writeScriptTo writes the generated script, owner-only and executable.
+//
+// The mode is the seam's (system.ScriptMode, 0700) rather than a number
+// repeated here: a script that says exactly how to change this host's security
+// posture is not a file to leave group-writable on a shared machine, where it
+// could be edited in the window between the review and the run.
+func writeScriptTo(path, script string) error {
+	f, err := system.CreateScript(path)
+	if err != nil {
+		return err
+	}
+	if _, err := io.WriteString(f, script); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }

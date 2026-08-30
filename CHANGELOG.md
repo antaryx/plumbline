@@ -403,10 +403,35 @@ because of this release (VERSIONING §2.4).
   `[=] Proposed remediation script` heading whose first line is
   "Nothing below has been run."
 
-  Four checks are covered: `KERNEL-0004` (dmesg_restrict), `KERNEL-0016`
-  (tcp_syncookies), `KERNEL-0026` (accept_ra, both `all` and `default`, because
-  neither alone is the effective setting) and `KERNEL-0030`
-  (protected_hardlinks). Each sets the running kernel **and** the drop-in —
+  Nine checks are covered. Four are sysctl: `KERNEL-0004` (dmesg_restrict),
+  `KERNEL-0016` (tcp_syncookies), `KERNEL-0026` (accept_ra, both `all` and
+  `default`, because neither alone is the effective setting) and `KERNEL-0030`
+  (protected_hardlinks). Five are not:
+
+  | Check | What the script does |
+  |---|---|
+  | `AUTH-0004` | Strips `nullok`/`nullok_secure` from the `pam_unix.so` rules the finding named — and from nothing else, because the same argument on `pam_ldap` is a different decision about a different credential store |
+  | `FILESYS-0003` | `chmod o-w` on the world-writable **files** cited |
+  | `FILESYS-0004` | `chmod a+t` on the world-writable **directories** cited |
+  | `CRON-0001` | `chown root:root` and `chmod 600` on the crontab the finding names |
+  | `CONTAINERS-0001` | Merges `"userns-remap": "default"` into the daemon configuration with python, refusing a file that is not valid JSON |
+
+  **Paths come from the finding, never from a constant.** `/etc/pam.d/common-password`
+  is the Debian family's and RHEL keeps the same rules in `system-auth`;
+  `daemon.json` is not always `/etc/docker/daemon.json`, because a daemon started
+  with `--config-file` reads another. **And a path is a string read off the
+  machine being audited**, so every command is assembled with each argument
+  quoted — pasting a file name into a command line unquoted is a shell injection
+  with a root prompt at the end of it.
+
+  **Every file the script edits is copied to `FILE.bak` once, and an existing
+  backup is never overwritten**: on a second run that would replace the original
+  with the already-edited version and destroy the only record of what the host
+  looked like. **Every path fix says what it does not cover**, because a
+  finding's evidence is capped and five `chmod`s standing for four hundred files
+  read as the whole job otherwise.
+
+  The sysctl fixes set the running kernel **and** the drop-in —
   `sysctl -w` alone is undone by the next reboot, a line in a file alone does
   nothing until something applies it — writing to
   `/etc/sysctl.d/99-plumbline-hardening.conf`, a file plumbline owns and that
@@ -433,6 +458,15 @@ because of this release (VERSIONING §2.4).
   script twice against a temporary file** and compares the result with `Merge`'s
   — so the two cannot drift on somebody's `/etc/sysctl.d` instead of in CI.
 
+  `--fix --write-script PATH` also writes the script to a file, **owner-only and
+  executable (0700)**. The difference from a bundle's mode is the execute bit
+  rather than the secrecy: this is the exact list of commands that would change
+  a host's security posture, and a group-writable copy on a shared machine is an
+  invitation to edit it between the review and the run. It is written *after* the
+  block is printed, so a bad path cannot cost the operator the script they can
+  already see, and `--write-script` without `--fix` is a usage error rather than
+  a silent no-op.
+
   `--fix` is refused under `--format json` and `--format sarif`: stdout is a
   document there, and appending shell to it produces something no parser
   accepts. `eval` has no `--fix`, because a bundle can be a month old and from
@@ -443,7 +477,10 @@ because of this release (VERSIONING §2.4).
   reasoning behind that sentence — a tool that rewrites config as root from a
   heuristic will eventually lock someone out of production — is unchanged and
   still governs what it may ever do. **Generating is a review step; applying is
-  the thing this project does not do**, and nothing here applies anything.
+  the thing this project does not do**, and there is no phase planned that
+  would. `Action.Argv`, which existed only so a later execution phase would have
+  an argv to hand `system.Exec`, was removed for that reason: a field held for a
+  phase the project has disclaimed is a promise.
 
 - **A streamed row is the verb, the title and the verdict**, with no check ID
   and no trailing ellipsis: `  - Checking Root login is disabled over SSH` and

@@ -2283,3 +2283,63 @@ func TestFixProposesNothingForASuppressedFinding(t *testing.T) {
 			stdout[max(0, strings.Index(stdout, "Proposed remediation")):])
 	}
 }
+
+// TestWriteScriptSavesTheScriptOwnerOnly.
+//
+// **0700 and the execute bit.** A remediation script is the exact list of
+// commands that would change this host's security posture, written by a tool
+// the operator trusts. A group-readable copy on a shared machine is an
+// invitation to edit it in the window between the review and the run, which is
+// the one moment nobody is looking at it.
+func TestWriteScriptSavesTheScriptOwnerOnly(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	path := filepath.Join(t.TempDir(), "fix.sh")
+	_, stdout, stderr := run(t, "scan", "--root", kernelWeakFixture, "--fix", "--write-script", path)
+
+	if !strings.Contains(stderr, "[+] Remediation script saved to "+path) {
+		t.Errorf("no confirmation on stderr:\n%s", stderr)
+	}
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("the script was not written: %v", err)
+	}
+	if got := fi.Mode().Perm(); got != 0o700 {
+		t.Errorf("mode is %04o, want 0700", got)
+	}
+
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(saved), "#!/bin/sh\n") {
+		t.Errorf("the file does not start with a shebang:\n%s", saved)
+	}
+	// What was written is what was shown. An operator reviews the block and
+	// then runs the file, and the two being different is the failure that
+	// would make the review worthless.
+	for _, line := range strings.Split(strings.TrimRight(string(saved), "\n"), "\n") {
+		if !strings.Contains(stdout, line) {
+			t.Errorf("the saved script has a line the printed block does not: %q", line)
+		}
+	}
+}
+
+// TestWriteScriptNeedsFix. A flag that silently did nothing would leave an
+// operator waiting for a file that was never going to appear.
+func TestWriteScriptNeedsFix(t *testing.T) {
+	t.Setenv("PLUMBLINE_NO_NOTICES", "1")
+
+	path := filepath.Join(t.TempDir(), "fix.sh")
+	code, _, stderr := run(t, "scan", "--root", kernelWeakFixture, "--write-script", path)
+	if code != cli.ExitUsage {
+		t.Errorf("exit %d, want %d (usage)", code, cli.ExitUsage)
+	}
+	if !strings.Contains(stderr, "--write-script") {
+		t.Errorf("the error does not name the flag:\n%s", stderr)
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Error("a script was written despite the usage error")
+	}
+}

@@ -23,6 +23,7 @@ func newScanCmd(g *globals, stdout, stderr io.Writer) *cobra.Command {
 		verbose      bool
 		quiet        bool
 		fix          bool
+		writeScript  string
 		pace         time.Duration
 		timeout      time.Duration
 		perCollector time.Duration
@@ -69,6 +70,13 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			// Refused rather than silently redirected to stderr: a script an
 			// operator asked for and cannot find is worse than one they were
 			// told they could not have here.
+			// --write-script without --fix is a flag that would silently do
+			// nothing. Refused rather than implied: an operator who typed one
+			// and not the other has a expectation about a file appearing, and
+			// the cheapest place to correct it is before the scan runs.
+			if writeScript != "" && !fix {
+				return usageErrorf("--write-script needs --fix; it writes the script --fix generates")
+			}
 			if fix && format != FormatTerminal {
 				return usageErrorf("--fix prints a shell script and --format %s prints a document; they cannot share stdout", format)
 			}
@@ -186,7 +194,8 @@ re-evaluated or diffed; the two are not interchangeable.`,
 			detail := reportDestination(verbose, stream, out, stdout)
 			stream.Hint(reportHint(detail, out.output, quiet))
 
-			return renderAndGate(got.bundle, failOn, gt, format, out, sup, prof, stream, detail, fix, stdout, stderr)
+			return renderAndGate(got.bundle, failOn, gt, format, out, sup, prof, stream, detail,
+				fixOptions{enabled: fix, path: writeScript}, stdout, stderr)
 		},
 	}
 
@@ -197,6 +206,7 @@ re-evaluated or diffed; the two are not interchangeable.`,
 	f.BoolVarP(&verbose, "verbose", "v", false, "add the failure tally and the detailed report — evidence, remediation, cautions")
 	f.BoolVarP(&quiet, "quiet", "q", false, "stream no rows; print only the closing result block")
 	f.BoolVar(&fix, "fix", false, "print the shell script that would repair the failing checks this build can fix; nothing is executed")
+	f.StringVar(&writeScript, "write-script", "", "with --fix, also write the generated script to PATH, owner-only and executable (0700)")
 	f.DurationVar(&pace, "pace", rendertext.DefaultPace, "hold each streamed row on screen this long before its verdict lands; 0 draws as fast as the scan runs")
 	f.DurationVar(&timeout, "timeout", 30*time.Minute, "whole-scan budget")
 	f.DurationVar(&perCollector, "collector-timeout", 2*time.Minute, "budget for one collector that declares none")

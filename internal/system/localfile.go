@@ -45,6 +45,36 @@ func CreateBundle(path string) (*os.File, error) {
 	return f, nil
 }
 
+// ScriptMode is the permission a generated remediation script is created with.
+//
+// **0700, and the difference from BundleMode is the execute bit rather than the
+// secrecy.** A remediation script is a list of the exact commands that would
+// change this host's security posture, written by a tool an operator trusts. On
+// a shared machine a world-writable or group-writable copy is an invitation to
+// edit it between the review and the run, which is the one window where nobody
+// is looking at it — so owner-only, and executable because the operator asked
+// for a script rather than a document.
+const ScriptMode fs.FileMode = 0o700
+
+// CreateScript creates or truncates path for writing an executable script,
+// owner-only.
+//
+// The mode is applied explicitly after opening for the reason CreateBundle
+// does: O_CREATE sets permissions only on a file that did not already exist, so
+// overwriting yesterday's group-readable script would otherwise leave it that
+// way.
+func CreateScript(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, ScriptMode)
+	if err != nil {
+		return nil, fmt.Errorf("creating script %s: %w", path, err)
+	}
+	if err := f.Chmod(ScriptMode); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("securing script %s: %w", path, err)
+	}
+	return f, nil
+}
+
 // OpenLocal opens a file the operator named, for reading.
 func OpenLocal(path string) (*os.File, error) {
 	f, err := os.OpenFile(path, os.O_RDONLY, 0)

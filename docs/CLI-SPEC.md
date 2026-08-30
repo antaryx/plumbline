@@ -66,6 +66,7 @@ the same.
 | `--verbose`, `-v` | false | Add the severity tally and the detailed report (§7) | **yes** |
 | `--quiet`, `-q` | false | Stream nothing; print only the closing result block (§7) | **yes** |
 | `--fix` | false | Print the shell that would repair the failing checks this build can fix. **Executes nothing.** `--format terminal` only | **yes** |
+| `--write-script P` | — | With `--fix`, also write the script to `P`, owner-only and executable (0700) | **yes** |
 | `--pace D` | `100ms` | How long a streamed row waits before its verdict lands; `0` draws at full speed (§7) | **yes** |
 | `--output-dir DIR` | — | Directory; required when multiple formats | no |
 | `--debug` | false | Engine internals to stderr | no |
@@ -854,8 +855,24 @@ sysctl --system
 | `--format terminal` only | stdout is a document under `--json` and `--format sarif`, and appending shell to one produces something no parser accepts. The combination is a usage error rather than a silent redirect to stderr. |
 | `scan` only | `eval` has no `--fix`: a bundle can be a month old and from another host, so proposing changes to *this* machine from it would be proposing them for the wrong one. |
 
-Covered in this phase: `KERNEL-0004`, `KERNEL-0016`, `KERNEL-0026` (both `all`
-and `default`, because neither alone is the effective setting), `KERNEL-0030`.
+| Every edited file is backed up **once** | `FILE.bak`, and an existing backup is never overwritten — on a second run that would replace the original with the already-edited version. `cp -p`, so it is a restorable original rather than a root-owned approximation of one. |
+| Paths come from the finding | Never from a constant. `/etc/pam.d/common-password` is the Debian family's; RHEL keeps the same rules in `system-auth`. `daemon.json` is not always `/etc/docker/daemon.json` — a daemon started with `--config-file` reads another. |
+| Host paths are shell-quoted | A file name is the one thing on a Linux host that can contain very nearly anything, and an unquoted one in a command line is a shell injection with a root prompt at the end of it. |
+
+Covered:
+
+| Check | What the script does |
+|---|---|
+| `AUTH-0004` | Strips `nullok`/`nullok_secure` from the `pam_unix.so` rules the finding named. The address is deliberate: the same argument on `pam_ldap` is a different decision about a different credential store. |
+| `CONTAINERS-0001` | Merges `"userns-remap": "default"` into the daemon configuration **with python**, refusing a file that is not valid JSON or is not an object. `daemon.json` is JSON the daemon will not start on if it is malformed, so a `sed` that got a comma wrong takes Docker down at the next restart. The script embeds nothing from the host's copy — it holds registry mirrors and proxy URLs, which is why the collector records key names and never values. |
+| `CRON-0001` | `chown root:root` and `chmod 600` on the crontab the finding names. |
+| `FILESYS-0003` | `chmod o-w` on the world-writable **files** cited. Not a fixed mode: the owner's and group's permissions are not this check's business. |
+| `FILESYS-0004` | `chmod a+t` on the world-writable **directories** cited. The sticky bit is the fix rather than removing the write permission — these directories are usually shared on purpose, and taking it away is what breaks the host. |
+| `KERNEL-0004`, `KERNEL-0016`, `KERNEL-0026`, `KERNEL-0030` | `sysctl -w` and a line in the drop-in. `KERNEL-0026` sets both `all` and `default`, because neither alone is the effective setting. |
+
+**Every path fix says what it does not cover.** A finding's evidence is capped,
+so five `chmod`s can stand for four hundred files; each action carries the count
+it worked from and the `find` command that enumerates the rest.
 
 **Nothing applies a plan, and that is the line rather than a gap.**
 `PROJECT-BRIEF.md` §1.3: generating a script is a review step; a tool that

@@ -22,6 +22,10 @@ type RemediationInput struct {
 	Uncovered int
 	// Script is the shell to display, verbatim.
 	Script string
+	// SavedTo is where the script was also written, or "" for print-only. It
+	// is stated inside the block as well as on stderr, because the two go to
+	// different places and an operator redirecting one loses the other.
+	SavedTo string
 }
 
 // RenderRemediation writes the proposed-remediation block.
@@ -55,6 +59,10 @@ func RenderRemediation(w io.Writer, in RemediationInput) error {
 		// which is the most damaging thing a security tool can imply.
 		p.line("  " + p.paint(ansiYellow, fmt.Sprintf(
 			"%s still failing with no automated fix; see the warnings above.", checkCount(in.Uncovered))))
+	}
+
+	if in.SavedTo != "" {
+		p.line("  " + p.paint(ansiDim, "Saved to "+in.SavedTo+" (0700)."))
 	}
 
 	p.blank()

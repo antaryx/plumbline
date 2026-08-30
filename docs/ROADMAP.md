@@ -1520,12 +1520,108 @@ kernel.dmesg_restrict to 1" in English, and parsing it would make the wording of
 a summary — reviewed as prose, changed freely in a patch release — the thing
 that decides what plumbline writes to `/etc/sysctl.d` as root.
 
+**Nothing applies a plan, and there is no phase that will.** plumbline is a
+script generator: it produces reviewable, idempotent shell for an operator to
+run, and does not execute root modifications inside the scanner process. That is
+settled rather than deferred, which is why `Action.Argv` — a field that existed
+only so a later execution phase would have an argv to hand to `system.Exec` — was
+removed rather than kept. A field held for a phase the project has disclaimed is
+a promise, and the quoting it was carrying is not lost: every command assembled
+from host data still goes through `command()`, which quotes each argument.
+
+### Beyond sysctl
+
+Five more fixes, and they are not all one shape:
+
+| Check | What the script does |
+|---|---|
+| `AUTH-0004` | Strips `nullok`/`nullok_secure` from the `pam_unix.so` rules **the finding named**, each file backed up first |
+| `FILESYS-0003` | `chmod o-w` on the world-writable **files** cited |
+| `FILESYS-0004` | `chmod a+t` on the world-writable **directories** cited |
+| `CRON-0001` | `chown root:root` and `chmod 600` on the crontab the finding names |
+| `CONTAINERS-0001` | Merges `"userns-remap": "default"` into the daemon configuration, in python, backed up first |
+
+**`FILESYS-0004` is here because the request named `FILESYS-0003` and described
+`FILESYS-0004`.** `chmod +t` was asked for; `FILESYS-0003` is *No file is
+world-writable* and the sticky bit does nothing on a file. Rather than pick one
+reading, both are implemented with the command that is right for each — and the
+pairing is asserted, because getting them the wrong way round produces either a
+script that does nothing or an outage: removing the write permission from
+`/tmp` breaks the host, and that is precisely what the sticky bit exists to
+avoid having to do.
+
+**Paths come from the finding, never from a constant.** `/etc/pam.d/common-password`
+is the Debian family's; RHEL keeps the same rules in `/etc/pam.d/system-auth`,
+and a service that has diverged from the shared stack has diverged exactly
+there. `AUTH-0004` reports every file it found the argument in, and the fix
+edits those. The same holds for the crontab and for `daemon.json`, which is not
+always `/etc/docker/daemon.json` — a daemon started with `--config-file` uses
+another, and writing the default would produce a file the running daemon never
+reads.
+
+**A path is a string read off the machine being audited.** Pasting one into a
+command line unquoted is a shell injection with a root prompt at the end of it,
+out of a file name — the one thing on a Linux host that can contain very nearly
+anything. `command()` quotes every argument, and
+`TestAPathFromTheHostIsQuotedIntoTheScript` feeds it a world-writable file whose
+name closes the argument and starts a second command.
+
+**The backup is taken once and never overwritten.** `cp file file.bak` on a
+second run would replace the backup with the already-edited file and destroy the
+only copy of what the host looked like before plumbline touched it. The guard
+makes the backup a record of the original rather than of the previous run, and
+keeps the step idempotent with everything else. `-p` keeps mode, ownership and
+timestamps, so it is a restorable original rather than a root-owned 0644
+approximation.
+
+**`daemon.json` is parsed, not edited.** It is JSON the daemon refuses to start
+on if it is malformed, so a substitution that got a comma wrong takes Docker down
+at the next restart — which on many hosts is every workload on the machine. The
+helper parses, sets one key, writes it back with sorted keys, and *refuses* on a
+file that is not valid JSON or is not an object. A run that finds the key already
+correct rewrites nothing at all, so a second run does not even change the mtime.
+python3 rather than jq because it is present on every distribution that ships
+Docker and jq frequently is not; a host with neither gets an instruction, not a
+sed expression aimed at JSON.
+
+**The script embeds nothing from the host's `daemon.json`.** The collector
+records that file's top-level key names and never their values, because it holds
+registry mirrors, proxy URLs and storage paths and a bundle travels (ADR-0015) —
+and a generated script that pasted the contents in would put exactly what the
+bundle refuses to carry into a file an operator might attach to a ticket. The
+helper reads the file on the host at the moment it runs.
+
+**Every path fix says what it does not cover.** A finding's evidence is capped,
+so a script built from it can be five `chmod`s standing for four hundred files.
+A partial list that does not say so reads as a complete one, so each action
+carries the count it is working from and the `find` command that enumerates the
+rest.
+
+**Helpers are emitted only where they are called**, matched on the call rather
+than on which fixes are in the plan — a second registry to keep in step would be
+wrong for one release and nobody would notice, because the symptom is a script
+that fails on the operator's host with "command not found". The scan is
+transitive, so a Docker-only script pulls in `plumbline_backup` because
+`plumbline_json_set` calls it.
+
+### `--write-script`
+
+`--fix --write-script PATH` also writes the script to a file, at
+`system.ScriptMode` — **0700**. The difference from `BundleMode` is the execute
+bit rather than the secrecy: this is the exact list of commands that would change
+a host's security posture, and a group-writable copy on a shared machine is an
+invitation to edit it in the window between the review and the run, which is the
+one moment nobody is looking at it. The mode is applied after opening, because
+`O_CREATE` sets permissions only on a file that did not already exist.
+
+It is written *after* the block is printed, so a bad path or a full disk cannot
+cost the operator the script they can already see. The confirmation goes to
+stderr, for the reason `bundle saved to` does: it is a note about this run rather
+than part of the document, and a report redirected to a file should not end with
+a line about where a different file went. `--write-script` without `--fix` is a
+usage error rather than a silent no-op.
+
 What this leaves:
-- **Nothing applies a plan.** That is phase two and it is the phase that crosses
-  the line `PROJECT-BRIEF.md` §1.3 draws, so it is not a step to take without
-  deciding to take it. If it is taken, `Argv` and `Merge` are already the shape
-  it needs: `system.Exec` for the commands, `Merge` in Go for the file, and no
-  shell anywhere in plumbline's own path.
 - **The plan does not read the host's current drop-in.** `fact.Sysctl.Configured`
   already carries which file sets each probed key and to what, so a plan could
   say "the file is already right, only the running kernel is wrong" and propose
@@ -1533,9 +1629,12 @@ What this leaves:
   idempotent on its own terms — an operator may run it a week later, against a
   file that has changed — and a script that assumed a scan's snapshot would
   append a duplicate the moment that assumption expired.
-- **Four checks of thirty-six failing on this host.** The engine is a scaffold;
-  what it covers is small on purpose, and the block says how much it does not
-  cover every time it prints.
+- **Six checks of thirty-six failing on this host.** What the engine covers is
+  still small, and the block says how much it does not cover every time it
+  prints.
+- **`chown root:root` is asserted as text and not run in tests.** It needs root,
+  and the suite runs unprivileged by design. The mode half of `CRON-0001` is
+  executed; the ownership half is checked by reading the generated line.
 
 ### The row loses its ID
 
