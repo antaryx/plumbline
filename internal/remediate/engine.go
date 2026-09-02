@@ -307,8 +307,8 @@ func Script(p Plan) string {
 			body.WriteString(c + "\n")
 		}
 		for _, k := range sortedKeys(a.SysctlPairs) {
-			body.WriteString(fmt.Sprintf("plumbline_sysctl_set %s %s \"$DROPIN\"\n",
-				shellQuote(k), shellQuote(a.SysctlPairs[k])))
+			fmt.Fprintf(&body, "plumbline_sysctl_set %s %s \"$DROPIN\"\n",
+				shellQuote(k), shellQuote(a.SysctlPairs[k]))
 		}
 	}
 
@@ -324,11 +324,11 @@ func Script(p Plan) string {
 
 	if len(p.Pairs()) > 0 {
 		b.WriteString("\n")
-		b.WriteString(fmt.Sprintf("DROPIN=%s\n", shellQuote(p.DropIn)))
+		fmt.Fprintf(&b, "DROPIN=%s\n", shellQuote(p.DropIn))
 	}
 	if strings.Contains(body.String(), "plumbline_dropin") {
 		b.WriteString("\n")
-		b.WriteString(fmt.Sprintf("UNITDIR=%s\n", shellQuote(p.UnitDir)))
+		fmt.Fprintf(&b, "UNITDIR=%s\n", shellQuote(p.UnitDir))
 	}
 	for _, h := range helpersFor(body.String()) {
 		b.WriteString(h)

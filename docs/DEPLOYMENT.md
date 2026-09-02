@@ -38,7 +38,7 @@ published matrix today.
 
 | Release | Target |
 |---|---|
-| v1.0.0, v2.0.0 | `linux/amd64`, `linux/arm64` |
+| v1.0.0, v2.0.x | `linux/amd64`, `linux/arm64` |
 | later | `linux/armv7` if CI hardware appears |
 | later | `darwin/amd64`, `darwin/arm64` with macOS support |
 
@@ -111,7 +111,10 @@ and it is there.
 What `.github/workflows/release.yml` runs today:
 
 ```
-tag v2.0.0 (signed)
+tag v2.0.1 (signed)
+   │
+   ├─ gate: golangci-lint          ─┐  both must pass, or nothing
+   ├─ gate: make verify + go test -race ┘  is built, signed or published
    │
    ├─ checkout · setup-go · install syft · install cosign
    ├─ make verify        (seam · purity · fixtures · generated docs · full suite)
@@ -199,7 +202,7 @@ docker run --rm \
   -v /:/host:ro \
   -v "$PWD/out:/out" \
   --pid=host \
-  ghcr.io/antaryx/plumbline:2.0.0 \
+  ghcr.io/antaryx/plumbline:2.0.1 \
   collect --root /host -o /out/host.plb
 ```
 
@@ -289,7 +292,7 @@ flag below exists in this build.
 ```yaml
 - name: Install Plumbline
   run: |
-    VERSION=2.0.0
+    VERSION=2.0.1
     BASE=https://github.com/antaryx/plumbline/releases/download/v$VERSION
     curl -fsSLO $BASE/plumbline_${VERSION}_linux_amd64.tar.gz
     curl -fsSLO $BASE/checksums.txt

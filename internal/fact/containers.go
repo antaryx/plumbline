@@ -466,7 +466,7 @@ func (s DockerService) boolFlag(name string) (on, set bool) {
 				on, set = true, true
 			case strings.HasPrefix(tok, eq):
 				v := strings.TrimPrefix(tok, eq)
-				on = !(v == "false" || v == "0" || v == "f" || v == "no" || v == "off")
+				on = v != "false" && v != "0" && v != "f" && v != "no" && v != "off"
 				set = true
 			}
 		}

@@ -90,7 +90,7 @@ func buildELF(t *testing.T, spec elfSpec) []byte {
 		for _, o := range offs {
 			var e [elfSymsize]byte
 			le.PutUint32(e[0:], o)
-			e[4] = byte(elf.ST_INFO(elf.STB_GLOBAL, elf.STT_FUNC))
+			e[4] = elf.ST_INFO(elf.STB_GLOBAL, elf.STT_FUNC)
 			le.PutUint16(e[6:], uint16(elf.SHN_UNDEF))
 			b.Write(e[:])
 		}

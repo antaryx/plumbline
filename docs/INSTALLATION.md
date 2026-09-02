@@ -6,7 +6,7 @@ Every release carries `.deb`, `.rpm` and `.tar.gz` for `linux/amd64` and
 `linux/arm64`, each with an SPDX SBOM, plus a cosign-signed checksum file.
 
 ```bash
-VERSION=2.0.0
+VERSION=2.0.1
 BASE=https://github.com/antaryx/plumbline/releases/download/v$VERSION
 
 curl -fsSLO $BASE/plumbline_${VERSION}_linux_amd64.tar.gz

@@ -26,7 +26,7 @@ sentence in a README. It is generated from the built artifact, so it lists the
 three that are linked in:
 
 ```bash
-jq -r '.packages[].name' plumbline_2.0.0_linux_amd64.tar.gz.sbom.spdx.json
+jq -r '.packages[].name' plumbline_2.0.1_linux_amd64.tar.gz.sbom.spdx.json
 go version -m "$(command -v plumbline)"     # the same answer, no download
 ```
 
@@ -78,7 +78,7 @@ and compare:
 
 ```bash
 git clone https://github.com/antaryx/plumbline && cd plumbline
-git checkout v2.0.0
+git checkout v2.0.1
 make build
 sha256sum dist/plumbline
 ```

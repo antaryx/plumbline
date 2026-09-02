@@ -11,7 +11,59 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
-Documentation only. No change to the tool, the catalog or the schema.
+Nothing yet.
+
+## [2.0.1] — 2026-09-02
+
+CI and lint only. No change to any verdict, the catalog, the schema or the
+generated documentation. Bundles and findings from 2.0.0 are unaffected.
+
+### Fixed
+
+- **The release pipeline now gates on CI.** `release.yml` gained `lint` and
+  `test` jobs and the publishing job carries `needs: [lint, test]`. `ci.yml`
+  also runs on a tag, but a job in another workflow cannot be a `needs:`
+  dependency, so the two ran in parallel and a red CI did not stop a publish.
+  v2.0.0 went out with golangci-lint failing. It could not now.
+- **Fifteen golangci-lint findings cleared**, all of them introduced by the
+  feature work between v1.0.0 and v2.0.0 and none by the release commit. The
+  branch was never pushed, so CI had not run on any of those 45 commits until
+  the tag.
+  - `errorlint`: `err == io.EOF` becomes `errors.Is`, which survives wrapping.
+  - `gosec` G115, twice: the dynamic-section flag test now masks the raw
+    `uint64` against the constant instead of narrowing an attacker-controlled
+    word into `int` or `uint32`.
+  - `staticcheck` QF1012, three times in the script generator: `fmt.Fprintf`
+    into the builder rather than `WriteString(fmt.Sprintf(...))`.
+  - `staticcheck` S1011, S1039, QF1001, QF1002 and `unconvert`: a slice append,
+    a `Sprintf` with nothing to format, De Morgan on the Docker boolean parser,
+    a tagged switch, and a redundant conversion in a test.
+
+### Unchanged, deliberately
+
+- **The two `nilerr` findings are suppressed, not fixed.** Both are the
+  cancellation branch of a Docker collector, which records the abandonment in
+  the fact it emits and returns nil. That is what every collector in the tree
+  does, it is what the doc comment on each promises, and it is asserted by
+  tests named for an abandoned collector still recording what it saw. Returning
+  `ctx.Err()` would send the runner down its timeout branch, which discards the
+  collector's facts, so the specific message would be replaced by a generic
+  one. `//nolint:nilerr` with that reasoning at the call site.
+- **The two `gosec` G101 findings are suppressed.** The trigger is a struct
+  field named `passClause`, which matches gosec's credential-name pattern. Its
+  value is the sentence the report prints when a MEMORY check passes.
+
+### Changed
+
+- **Version strings moved to 2.0.1** in `internal/version`, and in the install
+  and download examples in `README.md`, `QUICKSTART.md`, `INSTALLATION.md`,
+  `CI-INTEGRATION.md`, `DEPLOYMENT.md` and `SUPPLY-CHAIN.md`. The measured
+  figures in `PERFORMANCE.md` still say v2.0.0, because that is the build they
+  were taken on.
+
+## [2.0.0] — 2026-09-02
+
+First public open-source release. Documentation and remediation.
 
 ### Changed
 
@@ -66,11 +118,7 @@ Documentation only. No change to the tool, the catalog or the schema.
 - **`PROJECT-BRIEF.md` §8 no longer forbids the flag the tool ships.** The
   non-negotiable is no auto-apply, not no `--fix`.
 
-## [2.0.0] — 2026-08-31
-
-First public open-source release.
-
-### Changed
+### Also in 2.0.0
 
 - **Licence unchanged: Apache-2.0.** A draft of this release relicensed the
   project to MIT and it was reverted before the tag was cut. Apache section 3

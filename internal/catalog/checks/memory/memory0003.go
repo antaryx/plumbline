@@ -45,7 +45,11 @@ binary before treating a failure as a defect.`,
 	SinceCatalog: 15,
 
 	Eval: func(fs *fact.Set) catalog.Outcome {
-		return evaluate(fs, property{
+		// G101 fires on the `passClause` field name, which matches gosec's
+		// credential-name pattern. The value is the sentence the report
+		// prints when this check passes. There is no credential here, and
+		// no check in this catalog carries one.
+		return evaluate(fs, property{ //nolint:gosec // false positive: passClause is report prose, not a credential
 			decide: func(b fact.ELFBinary) verdict {
 				// A stripped image has no symbol table to be absent from.
 				// Reading that as "no canary" would report a hardened binary

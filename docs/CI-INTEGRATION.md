@@ -20,7 +20,7 @@ Run as root, or accept that a large part of the host reports `UNKNOWN`.
 ```yaml
 - name: Install plumbline
   run: |
-    VERSION=2.0.0
+    VERSION=2.0.1
     BASE=https://github.com/antaryx/plumbline/releases/download/v$VERSION
     curl -fsSLO $BASE/plumbline_${VERSION}_linux_amd64.tar.gz
     curl -fsSLO $BASE/checksums.txt

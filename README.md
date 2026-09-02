@@ -42,7 +42,7 @@
 
 ---
 
-> **Status: `v2.0.0`.** `findings/v1`, flag names, exit codes and check IDs are
+> **Status: `v2.0.1`.** `findings/v1`, flag names, exit codes and check IDs are
 > contracts (see [`docs/VERSIONING.md`](docs/VERSIONING.md)). Everything in Go
 > stays `internal/` and may change without notice
 > ([ADR-0007](docs/adr/0007-json-schema-is-the-api.md)). Known gaps are recorded
@@ -151,7 +151,7 @@ Every release carries `.deb`, `.rpm` and `.tar.gz` for `linux/amd64` and
 `linux/arm64`, each with an SPDX SBOM, plus a signed checksum file.
 
 ```bash
-VERSION=2.0.0
+VERSION=2.0.1
 BASE=https://github.com/antaryx/plumbline/releases/download/v$VERSION
 
 curl -fsSLO $BASE/plumbline_${VERSION}_linux_amd64.tar.gz

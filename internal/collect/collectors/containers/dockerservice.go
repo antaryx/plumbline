@@ -94,7 +94,10 @@ func (ServiceCollector) Collect(ctx context.Context, s system.System, fs *fact.S
 		u.State = fact.UnitError
 		u.Msg = "the scan was abandoned before the unit was read"
 		fs.Put(u)
-		return nil
+		// Not swallowed: see the matching note in docker.go. The cancellation
+		// travels as UnitError with its reason, which is what the abandoned-
+		// collector test asserts.
+		return nil //nolint:nilerr // the cancellation is recorded as a fact state, not dropped
 	}
 
 	// The assembly — which of the four roots wins, which drop-ins systemd

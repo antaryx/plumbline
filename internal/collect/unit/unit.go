@@ -214,9 +214,7 @@ func Assemble(s system.System, req Request) Unit {
 	// unit file that replaces the one below it entirely. Recording it is what
 	// makes Complete() false, so a caller drawing a conclusion from an absence
 	// says it could not see everything rather than asserting the absence.
-	for _, r := range refused {
-		u.Fragments = append(u.Fragments, r)
-	}
+	u.Fragments = append(u.Fragments, refused...)
 	if !found {
 		// No unit file anywhere. Drop-ins alone start nothing — systemd will
 		// not assemble a unit that has no unit file — so there is nothing

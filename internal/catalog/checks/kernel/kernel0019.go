@@ -90,7 +90,7 @@ This reads the files. KERNEL-0004 asks what the running kernel does.`,
 
 		reason := "so any local user can run dmesg"
 		if set.Value != "0" {
-			reason = fmt.Sprintf("which is not one of the documented values 0 or 1, so what the kernel does with it depends on the build")
+			reason = "which is not one of the documented values 0 or 1, so what the kernel does with it depends on the build"
 		}
 		return catalog.Outcome{
 			Result:  finding.Fail,

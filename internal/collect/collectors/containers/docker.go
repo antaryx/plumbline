@@ -129,7 +129,12 @@ func (Collector) Collect(ctx context.Context, s system.System, fs *fact.Set) err
 		d.State = fact.DockerConfigError
 		d.Msg = "the scan was abandoned before the configuration was read"
 		fs.Put(d)
-		return nil
+		// Not swallowed: the cancellation is recorded in the fact above, and a
+		// check reading DockerConfigError reports UNKNOWN with that message.
+		// Returning ctx.Err() would send the runner down its timeout branch,
+		// which discards the collector's facts, so the message would be lost
+		// and replaced with a generic one. Every other collector does the same.
+		return nil //nolint:nilerr // the cancellation is recorded as a fact state, not dropped
 	}
 
 	readConfig(s, &d)

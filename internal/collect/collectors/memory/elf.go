@@ -343,14 +343,14 @@ func readBinding(f *elf.File) (dynamic, bindNow bool) {
 	}
 	if v, err := f.DynValue(elf.DT_FLAGS); err == nil {
 		for _, raw := range v {
-			if elf.DynFlag(raw)&elf.DF_BIND_NOW != 0 {
+			if raw&uint64(elf.DF_BIND_NOW) != 0 {
 				return true, true
 			}
 		}
 	}
 	if v, err := f.DynValue(elf.DT_FLAGS_1); err == nil {
 		for _, raw := range v {
-			if elf.DynFlag1(raw)&elf.DF_1_NOW != 0 {
+			if raw&uint64(elf.DF_1_NOW) != 0 {
 				return true, true
 			}
 		}

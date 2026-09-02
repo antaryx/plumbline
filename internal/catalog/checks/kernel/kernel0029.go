@@ -75,10 +75,10 @@ decision, and nothing on the host records that anyone chose it.`,
 			detail := fmt.Sprintf("%s, so after the next reboot it is whatever the kernel defaults to. Upstream defaults to 0, which is correct — but a default is not a decision, and a debugging drop-in, a crash-reporting package or a sysctl -w in a start-up script can set it to 1 without anything here recording that 0 was ever intended.", notConfigured(sc, suidDumpableKey))
 			if r, ok := sc.Run(suidDumpableKey); ok && r.State == fact.SysctlObserved {
 				if v, isInt := r.Int(); isInt {
-					switch {
-					case v == 0:
+					switch v {
+					case 0:
 						detail += " The running kernel has it at 0, so this host is safe now on a default nobody wrote down."
-					case v == 1:
+					case 1:
 						detail += " The running kernel has it at 1, which is the dangerous value and is live right now: any local user can crash a setuid binary and read privileged memory out of the dump."
 					default:
 						detail += fmt.Sprintf(" The running kernel has it at %d.", v)
