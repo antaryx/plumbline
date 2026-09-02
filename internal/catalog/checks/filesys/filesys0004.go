@@ -22,7 +22,7 @@ the whole of this check.
 In a world-writable directory without the sticky bit, any account can remove
 any other account's file and put its own there under the same name. The victim
 opens the path they have always opened and reads content somebody else wrote.
-Nothing about the file's own mode prevents it — the file was not modified, it
+Nothing about the file's own mode prevents it. The file was not modified. It
 was replaced.
 
 The sticky bit closes exactly this. On a directory it means "only the file's
@@ -38,7 +38,7 @@ existed.
 
 FILESYS-0005 asks a different question about the same directories: whether they
 should be world-writable at all. A directory can pass this check and fail that
-one — a sticky world-writable /usr/bin is still catastrophic.`,
+one, a sticky world-writable /usr/bin is still catastrophic.`,
 
 	BaseSeverity: finding.Medium,
 	Tags:         []string{"filesys", "permissions", "sticky-bit", "integrity"},
@@ -81,7 +81,7 @@ one — a sticky world-writable /usr/bin is still catastrophic.`,
 		Summary: "Set the sticky bit, or replace the world-write permission with a group.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Ask first whether the directory needs to be world-writable. A shared drop point between two services wants a group — 'chgrp shared <dir>' and 'chmod 2770 <dir>' — not world write. That removes the problem rather than containing it.",
+			"Ask first whether the directory needs to be world-writable. A shared drop point between two services wants a group, 'chgrp shared <dir>' and 'chmod 2770 <dir>', not world write. That removes the problem rather than containing it.",
 			"Where it genuinely is a shared workspace: 'chmod +t <dir>'. The mode becomes 1777 and the directory behaves like /tmp.",
 			"Check what is already in it. Without the sticky bit, files there may already have been replaced, and their modification times will look ordinary because the replacement is a new file rather than an edit.",
 			"Watch for the pattern that creates these: 'mkdir -m 777' in an install script or a Dockerfile. Fixing the directory without fixing the script means it returns at the next deployment.",
@@ -91,7 +91,7 @@ one — a sticky world-writable /usr/bin is still catastrophic.`,
 			"chmod +t <dir>",
 			"ls -ld /tmp",
 		},
-		Caution: "The sticky bit stops one account deleting another's files, which is occasionally what a workflow was relying on — a cleanup job running as a service account will start failing on files it does not own. Check what removes files from the directory before setting it.",
+		Caution: "The sticky bit stops one account deleting another's files, which is occasionally what a workflow was relying on, a cleanup job running as a service account will start failing on files it does not own. Check what removes files from the directory before setting it.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -100,6 +100,6 @@ one — a sticky world-writable /usr/bin is still catastrophic.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "chmod(1) — the restricted deletion flag", URL: "https://man7.org/linux/man-pages/man1/chmod.1.html"},
+		{Title: "chmod(1), the restricted deletion flag", URL: "https://man7.org/linux/man-pages/man1/chmod.1.html"},
 	},
 }

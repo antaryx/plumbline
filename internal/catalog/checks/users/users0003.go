@@ -19,8 +19,8 @@ var Check0003 = catalog.Check{
 	Module: "USERS",
 	Title:  "No account has an empty password",
 	Description: `An empty password field in /etc/shadow means the account
-authenticates with no password at all. Wherever the PAM stack consults shadow —
-console login, su, and any service configured to use it — pressing return is
+authenticates with no password at all. Wherever the PAM stack consults shadow,
+console login, su, and any service configured to use it, pressing return is
 sufficient.
 
 This is not a theoretical state. It is produced by 'passwd -d', by automated
@@ -87,7 +87,7 @@ matches, which is the opposite.`,
 		Steps: []string{
 			"Decide which the account should be. An account that a person uses needs a password; an account that only owns files or runs a daemon needs a lock.",
 			"To lock it so no password can ever match: 'passwd -l <name>'. This is the right answer for a service account.",
-			"To set a password: 'passwd <name>'. Do not leave it until later — the state you are fixing is what 'later' looks like.",
+			"To set a password: 'passwd <name>'. Do not leave it until later, the state you are fixing is what 'later' looks like.",
 			"Verify: 'passwd -S <name>' reports 'L' for locked, 'P' for a usable password, and 'NP' for no password.",
 			"Check whether the account was used while it was open: 'lastlog -u <name>' and 'last <name>'.",
 		},

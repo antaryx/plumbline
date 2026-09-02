@@ -40,9 +40,9 @@ cron package rather than anything readable on the host: Debian's cron and
 Red Hat's cronie make different choices, and both document the behaviour as
 site-dependent.
 
-The direction is what matters. An allow list fails closed — an account created
+The direction is what matters. An allow list fails closed, an account created
 tomorrow is not on it, so it cannot schedule anything until somebody decides it
-should. A deny list fails open — the same account is permitted by omission, and
+should. A deny list fails open, the same account is permitted by omission, and
 nothing about creating it draws attention to the fact. Every service account a
 package installs, every user a directory service introduces, and every account
 an attacker adds is admitted by a deny list without a single edit to it.
@@ -52,8 +52,8 @@ persistence mechanism. A job survives reboots, runs without a session, and
 looks exactly like the legitimate jobs beside it.
 
 This check does not read either file, so it reports which mechanism is in force
-rather than who is on the list. An empty cron.allow — the strictest possible
-configuration, permitting nobody but root — is indistinguishable here from a
+rather than who is on the list. An empty cron.allow, the strictest possible
+configuration, permitting nobody but root, is indistinguishable here from a
 populated one.`,
 
 	BaseSeverity: finding.Medium,
@@ -143,9 +143,9 @@ populated one.`,
 		Summary: "Create /etc/cron.allow listing the accounts that may schedule jobs, and remove /etc/cron.deny.",
 		Effort:  "MEDIUM",
 		Steps: []string{
-			"Find out who currently schedules anything before restricting it. Per-user crontabs live in the spool — '/var/spool/cron/crontabs' on Debian-family systems, '/var/spool/cron' on Red Hat-family ones — and 'ls' there names every account with a crontab.",
+			"Find out who currently schedules anything before restricting it. Per-user crontabs live in the spool, '/var/spool/cron/crontabs' on Debian-family systems, '/var/spool/cron' on Red Hat-family ones, and 'ls' there names every account with a crontab.",
 			"Create the allow list with those accounts, one per line: 'printf 'root\\n' > /etc/cron.allow', then add each account you confirmed in the previous step.",
-			"Secure the file itself: 'chown root:root /etc/cron.allow' and 'chmod 600 /etc/cron.allow'. CRON-0004 checks this — a writable allow list is an allow list any user can add themselves to.",
+			"Secure the file itself: 'chown root:root /etc/cron.allow' and 'chmod 600 /etc/cron.allow'. CRON-0004 checks this, a writable allow list is an allow list any user can add themselves to.",
 			"Remove /etc/cron.deny once cron.allow is in place. Leaving it is not dangerous, but it is inert, and an inert access-control file is one somebody will eventually edit believing it works.",
 			"Verify from an unprivileged account that is not on the list: 'crontab -l' should be refused with 'You (user) are not allowed to use this program'.",
 		},
@@ -153,7 +153,7 @@ populated one.`,
 			"ls -l /etc/cron.allow /etc/cron.deny",
 			"ls /var/spool/cron/crontabs /var/spool/cron 2>/dev/null",
 		},
-		Caution: "An allow list that omits an account which currently has a crontab does not delete that crontab — the existing job keeps running — but the account can no longer list or edit it, which turns a scheduled job into one nobody can see or change. Enumerate the spool before writing the file, not afterwards.",
+		Caution: "An allow list that omits an account which currently has a crontab does not delete that crontab, the existing job keeps running, but the account can no longer list or edit it, which turns a scheduled job into one nobody can see or change. Enumerate the spool before writing the file, not afterwards.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -163,6 +163,6 @@ populated one.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "crontab(1) — cron.allow and cron.deny", URL: "https://man7.org/linux/man-pages/man1/crontab.1.html"},
+		{Title: "crontab(1), cron.allow and cron.deny", URL: "https://man7.org/linux/man-pages/man1/crontab.1.html"},
 	},
 }

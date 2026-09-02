@@ -19,24 +19,24 @@ var Check0022 = catalog.Check{
 	Description: `perf_event_open is a system call that asks the kernel to
 instrument the hardware: cycle counters, cache misses, branch mispredictions,
 and the addresses being executed while it counts. It exists for profiling and it
-is very good at it, which is the problem — the same measurements that show a
+is very good at it, which is the problem, the same measurements that show a
 developer where their program spends its time show an attacker what another
 process is doing, at instruction granularity.
 
 kernel.perf_event_paranoid decides how much of that an unprivileged process may
 ask for:
 
-  - -1 — everything, including raw tracepoints and kernel measurements.
-  -  0 — no raw tracepoint access; CPU events still allowed.
-  -  1 — no CPU event access for unprivileged users.
-  -  2 — no kernel profiling. The upstream default since Linux 4.6.
-  -  3 — no unprivileged perf at all. A Debian and Ubuntu patch, not upstream.
+  - -1, everything, including raw tracepoints and kernel measurements.
+  -  0, no raw tracepoint access; CPU events still allowed.
+  -  1, no CPU event access for unprivileged users.
+  -  2, no kernel profiling. The upstream default since Linux 4.6.
+  -  3, no unprivileged perf at all. A Debian and Ubuntu patch, not upstream.
 
 **Below 2 the call is a side-channel primitive and a KASLR oracle.** Kernel
 measurements return addresses from the kernel's own execution, which is a direct
 read of the layout randomisation is meant to hide; and the counter resolution is
 fine enough to have carried practical cache-timing attacks against
-cryptographic code in another process. Neither needs a bug — this is the
+cryptographic code in another process. Neither needs a bug, this is the
 interface working as documented.
 
 2 is the bar because it is upstream's own default and because 3 does not exist
@@ -151,7 +151,7 @@ boot.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — perf_event_paranoid", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#perf-event-paranoid"},
+		{Title: "Linux kernel, perf_event_paranoid", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#perf-event-paranoid"},
 		{Title: "perf_event_open(2)", URL: "https://man7.org/linux/man-pages/man2/perf_event_open.2.html"},
 	},
 }

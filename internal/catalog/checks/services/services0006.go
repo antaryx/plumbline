@@ -16,8 +16,8 @@ var Check0006 = catalog.Check{
 	Title:  "Audited system services set NoNewPrivileges",
 
 	Description: `NoNewPrivileges=yes sets the kernel's no_new_privs bit on a
-unit's processes. Once set it cannot be cleared — not by the process, not by
-any child it forks, not by exec — and while it is set the kernel refuses to
+unit's processes. Once set it cannot be cleared, not by the process, not by
+any child it forks, not by exec, and while it is set the kernel refuses to
 grant privileges the process did not already have: a setuid binary runs as the
 calling user, file capabilities are ignored, and an SELinux or AppArmor
 transition that would raise privilege is denied.
@@ -30,7 +30,7 @@ hold", and it costs nothing at runtime.
 
 **It is not free for every service, and two of the units below are exactly
 that case.** A daemon that relies on a setuid helper breaks outright when the
-bit is set — the helper simply runs without its privileges — so those units are
+bit is set, the helper simply runs without its privileges, so those units are
 exempt and named as such in every verdict:
 
   - **cron.service** runs user cron jobs in its own process tree, and
@@ -45,7 +45,7 @@ An exemption is not a suppression. A suppression is an operator accepting a
 finding on their host; an exemption is this catalog saying the remediation
 would break the service, which is a property of the software and true
 everywhere it runs. The distinction matters because only one of them should be
-invisible to the next operator, and it is not this one — the units are listed
+invisible to the next operator, and it is not this one. The units are listed
 in the verdict with the reason, whether the check passes or fails.
 
 Two things follow, and both are enforced rather than left to the reader's
@@ -64,11 +64,11 @@ most plausible way to arrive at it by accident.
 
 This check reads a fixed, small list of long-lived root daemons rather than
 every unit on the host. Reading every unit would mean reading every unit body,
-which is what this module exists in order not to do — a bundle would then carry
+which is what this module exists in order not to do. A bundle would then carry
 every ExecStart and every Environment= on the machine.
 
 **A unit that is not installed is skipped without comment**, which is
-different again from being exempt — one is a host that does not run the
+different again from being exempt, one is a host that does not run the
 software, the other a host that runs it and should not harden it. cron.service is absent
 on a host that uses cronie under another name, and dbus.service on a container
 image with no message bus; neither is a finding. If none of the audited units
@@ -76,7 +76,7 @@ is installed the check is NOT_APPLICABLE, because there is nothing to have an
 opinion about.
 
 Silence is a failure here, and deliberately so. The default is off, so a unit
-that never mentions NoNewPrivileges is running without it — the same posture as
+that never mentions NoNewPrivileges is running without it, the same posture as
 one that sets it to no. The two are told apart in the finding anyway, because
 they are different acts: an operator who wrote NoNewPrivileges=no had a reason,
 and that reason is the first thing to establish before changing it.`,
@@ -155,13 +155,13 @@ and that reason is the first thing to establish before changing it.`,
 		Summary: "Add NoNewPrivileges=yes to a drop-in for each service, after establishing that it uses no setuid helper.",
 		Effort:  "MEDIUM",
 		Steps: []string{
-			"Establish what the service needs before changing it. NoNewPrivileges neuters setuid binaries and file capabilities for everything the unit starts, so a daemon that shells out to a setuid helper stops working the moment it is set — and it fails at the helper rather than at startup, so the breakage may not appear until something rare happens.",
-			"Two of the units this check audits are exactly that case and are exempt from it: dbus.service, whose dbus-daemon-launch-helper is setuid root, and cron.service, whose jobs frequently call sudo. They appear in the verdict with the reason rather than as findings. If you have established that neither applies on your host — no setuid helper, no cron job that escalates — setting the bit on them is a real improvement, and this check will credit it.",
+			"Establish what the service needs before changing it. NoNewPrivileges neuters setuid binaries and file capabilities for everything the unit starts, so a daemon that shells out to a setuid helper stops working the moment it is set, and it fails at the helper rather than at startup, so the breakage may not appear until something rare happens.",
+			"Two of the units this check audits are exactly that case and are exempt from it: dbus.service, whose dbus-daemon-launch-helper is setuid root, and cron.service, whose jobs frequently call sudo. They appear in the verdict with the reason rather than as findings. If you have established that neither applies on your host, no setuid helper, no cron job that escalates, setting the bit on them is a real improvement, and this check will credit it.",
 			"Where the service is self-contained, add the setting as a drop-in rather than editing the vendor unit, so a package upgrade does not undo it: systemctl edit <unit>, then a [Service] section containing NoNewPrivileges=yes.",
 			"Reload and restart: systemctl daemon-reload, then systemctl restart <unit>.",
 			"Confirm the assembled unit rather than the file you edited: systemctl show -p NoNewPrivileges <unit> reports what systemd actually loaded, drop-ins and precedence included.",
 			"Exercise the service afterwards, including the paths that are rare. A setuid helper that is called once a day will not fail during the restart.",
-			"If a service genuinely requires a setuid helper, treat that as the finding and record the exception. The alternative is often to give the unit the one capability it needs — AmbientCapabilities= — and set NoNewPrivileges anyway, which is a smaller grant than every setuid binary on the host.",
+			"If a service genuinely requires a setuid helper, treat that as the finding and record the exception. The alternative is often to give the unit the one capability it needs, AmbientCapabilities=, and set NoNewPrivileges anyway, which is a smaller grant than every setuid binary on the host.",
 		},
 		Commands: []string{
 			"systemctl show -p NoNewPrivileges -p ProtectSystem -p ProtectHome cron.service systemd-journald.service dbus.service",
@@ -178,9 +178,9 @@ and that reason is the first thing to establish before changing it.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "systemd.exec(5) — NoNewPrivileges", URL: "https://man7.org/linux/man-pages/man5/systemd.exec.5.html"},
-		{Title: "Linux kernel — no_new_privs", URL: "https://docs.kernel.org/userspace-api/no_new_privs.html"},
-		{Title: "systemd-analyze(1) — security", URL: "https://man7.org/linux/man-pages/man1/systemd-analyze.1.html"},
+		{Title: "systemd.exec(5). NoNewPrivileges", URL: "https://man7.org/linux/man-pages/man5/systemd.exec.5.html"},
+		{Title: "Linux kernel, no_new_privs", URL: "https://docs.kernel.org/userspace-api/no_new_privs.html"},
+		{Title: "systemd-analyze(1), security", URL: "https://man7.org/linux/man-pages/man1/systemd-analyze.1.html"},
 	},
 }
 

@@ -20,12 +20,12 @@ is not an access-control file. A writable /etc/cron.allow lets any user append
 their own name and schedule jobs; a writable /etc/cron.deny lets them delete
 the line that was keeping them out. Either way the restriction CRON-0003
 reports as being in force is not in force, and nothing about the configuration
-looks wrong — the mechanism is present, correctly named, and doing nothing.
+looks wrong. The mechanism is present, correctly named, and doing nothing.
 
 This is the reason CRON-0003 and this check are separate. The first asks which
 mechanism governs cron access; this one asks whether that mechanism is beyond
 the reach of the people it restricts. A host can pass one and fail the other,
-and the combination — an allow list that anyone may edit — is worse than having
+and the combination, an allow list that anyone may edit, is worse than having
 no allow list at all, because it produces a report saying access is restricted.
 
 Both files are also world-readable by default on most distributions, which is
@@ -102,7 +102,7 @@ is the whole of the finding here.`,
 			"Read the file first: 'cat /etc/cron.allow /etc/cron.deny 2>/dev/null'. If an unprivileged account could write it, check every name against who is supposed to be there.",
 			"Restore ownership and mode: 'chown root:root /etc/cron.allow' and 'chmod 600 /etc/cron.allow'; the same for /etc/cron.deny if it exists.",
 			"Cross-check against the spool. A name added to cron.allow is only useful to an attacker alongside a crontab, so list '/var/spool/cron/crontabs' or '/var/spool/cron' and confirm every entry belongs to somebody who should have one.",
-			"Consider removing /etc/cron.deny entirely if /etc/cron.allow exists — cron ignores it, and an ignored file with wrong permissions is a finding nobody can act on usefully.",
+			"Consider removing /etc/cron.deny entirely if /etc/cron.allow exists, cron ignores it, and an ignored file with wrong permissions is a finding nobody can act on usefully.",
 		},
 		Commands: []string{
 			"stat -c '%n %a %U:%G' /etc/cron.allow /etc/cron.deny",

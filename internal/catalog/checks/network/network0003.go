@@ -19,8 +19,8 @@ than on anything anybody wrote down.
 
 The mechanism is the same in every combination. ufw and firewalld are
 *managers*: each owns the ruleset, and each begins by flushing what is there
-and installing its own. A saved ruleset — /etc/nftables.conf, an iptables-save
-file — is loaded verbatim by its own unit. Whichever runs last wins outright,
+and installing its own. A saved ruleset, /etc/nftables.conf, an iptables-save
+file, is loaded verbatim by its own unit. Whichever runs last wins outright,
 and the others' rules are simply not present in the kernel afterwards.
 
 **The danger is not that the host ends up unprotected.** It usually does not;
@@ -29,7 +29,7 @@ file. They add an allow rule to nftables.conf, reload it, watch the service
 report success, and the rule is gone at the next boot when ufw flushes the
 table. Or they remove an allow rule believing they have closed a port that
 firewalld is still opening. Every subsequent change is made against a model of
-the host that is wrong, and nothing about the tooling says so — each tool
+the host that is wrong, and nothing about the tooling says so, each tool
 reports its own view correctly.
 
 This is the same shape as the trap CRON-0003 names: a configuration file that
@@ -84,8 +84,8 @@ rules.v6 are the IPv4 and IPv6 halves of one ruleset and are loaded together.`,
 		Steps: []string{
 			"Find out which one is actually in effect before deciding anything. 'nft list ruleset' shows what is in the kernel now; compare it against each configuration file. The one that matches is the winner, and it is often not the one the team believes in.",
 			"Choose by what the distribution manages: ufw on Ubuntu and Debian, firewalld on RHEL and Fedora, plain nftables where configuration management owns the ruleset and no interactive tool should be touching it.",
-			"Migrate the losing configuration's rules into the winner before removing anything, working from the file rather than from the kernel — the loser's rules are not loaded, so they will not appear in 'nft list ruleset'.",
-			"Disable and mask the losing unit: 'systemctl disable --now iptables.service' then 'systemctl mask' it. Masking matters here for the reason it matters in SERVICES-0001 — a package upgrade re-runs its preset and a merely disabled unit can come back enabled.",
+			"Migrate the losing configuration's rules into the winner before removing anything, working from the file rather than from the kernel, the loser's rules are not loaded, so they will not appear in 'nft list ruleset'.",
+			"Disable and mask the losing unit: 'systemctl disable --now iptables.service' then 'systemctl mask' it. Masking matters here for the reason it matters in SERVICES-0001, a package upgrade re-runs its preset and a merely disabled unit can come back enabled.",
 			"Remove or rename the losing configuration file. Leaving it is not dangerous, but an inert firewall configuration is one somebody will eventually edit believing it works, which is the whole failure this check is about.",
 			"Verify from another host afterwards: 'nmap -Pn <host>' from somewhere else confirms the surviving ruleset actually does what the removed one was believed to be doing.",
 		},
@@ -94,7 +94,7 @@ rules.v6 are the IPv4 and IPv6 halves of one ruleset and are loaded together.`,
 			"systemctl is-enabled ufw firewalld nftables iptables",
 			"ufw status verbose",
 		},
-		Caution: "Removing the configuration that turns out to be the one in effect opens every port it was closing, and the change is invisible until something is scanned. Establish which is loaded — compare 'nft list ruleset' against each file — before disabling either.",
+		Caution: "Removing the configuration that turns out to be the one in effect opens every port it was closing, and the change is invisible until something is scanned. Establish which is loaded, compare 'nft list ruleset' against each file, before disabling either.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -103,7 +103,7 @@ rules.v6 are the IPv4 and IPv6 halves of one ruleset and are loaded together.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "nftables — replacing iptables", URL: "https://wiki.nftables.org/wiki-nftables/index.php/Main_Page"},
+		{Title: "nftables, replacing iptables", URL: "https://wiki.nftables.org/wiki-nftables/index.php/Main_Page"},
 	},
 }
 

@@ -21,7 +21,7 @@ default gateway is. It is how IPv6 stateless autoconfiguration is designed to
 work, and it is the whole attack.
 
 Anyone who can put a frame on the segment can send one. There is no race to win
-and no cache to poison — a host that accepts RAs installs the attacker as its
+and no cache to poison, a host that accepts RAs installs the attacker as its
 default gateway because that is what the protocol says to do. Two things make
 it worse than the IPv4 equivalent:
 
@@ -37,7 +37,7 @@ host forwards, and 2 accepts even when it does. **1 is the default**, so a host
 that has never been configured accepts them.
 
 Both keys are checked. conf.default is the template every interface created
-after boot inherits — a container veth, a VPN tunnel, a hot-plugged NIC — and
+after boot inherits, a container veth, a VPN tunnel, a hot-plugged NIC, and
 nothing else reaches them.
 
 This check is for a host that gets its addresses statically or by DHCPv6. On a
@@ -87,7 +87,7 @@ This is a check about files. Nothing reads the running value yet.`,
 	},
 
 	Remediation: &finding.Remediation{
-		Summary: "Write net.ipv6.conf.all.accept_ra = 0 and net.ipv6.conf.default.accept_ra = 0 to a file in /etc/sysctl.d/ — but confirm this host does not use SLAAC first.",
+		Summary: "Write net.ipv6.conf.all.accept_ra = 0 and net.ipv6.conf.default.accept_ra = 0 to a file in /etc/sysctl.d/, but confirm this host does not use SLAAC first.",
 		Effort:  "MEDIUM",
 		Steps: []string{
 			"Find out how this host gets its IPv6 address before changing anything. `ip -6 addr show` marking an address `dynamic mngtmpaddr` means it came from a router advertisement, and refusing RAs will remove it along with the default route. An address from DHCPv6 or from a static configuration is unaffected.",
@@ -103,7 +103,7 @@ This is a check about files. Nothing reads the running value yet.`,
 			"sysctl -a 2>/dev/null | grep accept_ra",
 			"grep -rn accept_ra /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null",
 		},
-		Caution: "On a host that autoconfigures over IPv6 this removes its address, its default route and any DNS server learned from the advertisement — IPv6 connectivity stops. That is the trade, not a mistake. Verify the addressing method before applying it, and be aware that a cloud provider's network may hand out IPv6 by RA even where IPv4 comes from DHCP.",
+		Caution: "On a host that autoconfigures over IPv6 this removes its address, its default route and any DNS server learned from the advertisement. IPv6 connectivity stops. That is the trade, not a mistake. Verify the addressing method before applying it, and be aware that a cloud provider's network may hand out IPv6 by RA even where IPv4 comes from DHCP.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -113,9 +113,9 @@ This is a check about files. Nothing reads the running value yet.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — ip-sysctl accept_ra", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
-		{Title: "RFC 6104 — Rogue IPv6 Router Advertisement Problem Statement", URL: "https://www.rfc-editor.org/rfc/rfc6104"},
-		{Title: "RFC 6105 — IPv6 Router Advertisement Guard", URL: "https://www.rfc-editor.org/rfc/rfc6105"},
+		{Title: "Linux kernel, ip-sysctl accept_ra", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
+		{Title: "RFC 6104. Rogue IPv6 Router Advertisement Problem Statement", URL: "https://www.rfc-editor.org/rfc/rfc6104"},
+		{Title: "RFC 6105. IPv6 Router Advertisement Guard", URL: "https://www.rfc-editor.org/rfc/rfc6105"},
 	},
 }
 

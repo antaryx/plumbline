@@ -38,8 +38,8 @@ current and none of them is a misreading of the others.
 Plumbline reports the setting at LOW severity against the CIS threshold,
 because that is the number most audits are run against, and states the conflict
 in the finding rather than resolving it. An organisation following NIST's
-position should suppress this check deliberately — which is a decision with a
-record — rather than have the tool make it for them silently.
+position should suppress this check deliberately, which is a decision with a
+record, rather than have the tool make it for them silently.
 
 Only accounts that can actually authenticate are considered. A locked or
 password-less account has no lifetime to bound, and the dozen such accounts

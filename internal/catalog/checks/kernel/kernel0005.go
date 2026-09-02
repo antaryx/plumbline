@@ -15,13 +15,13 @@ var Check0005 = catalog.Check{
 	Title:  "Setuid programs do not write core dumps",
 	Description: `A core dump is a copy of a process's memory written to disk. When
 a setuid program dumps core, that memory belongs to the privileged identity the
-program assumed — it can hold password hashes, private keys, decrypted secrets
-and the contents of files the invoking user cannot read — and the dump lands
+program assumed, it can hold password hashes, private keys, decrypted secrets
+and the contents of files the invoking user cannot read, and the dump lands
 somewhere the invoking user often can.
 
 fs.suid_dumpable takes three values. 0 means setuid programs never dump, which
 is the safe setting. 1 means they dump like any other program, and is a
-straightforward way to read privileged memory. 2 — "suidsafe" — means they dump
+straightforward way to read privileged memory. 2, "suidsafe", means they dump
 but only root may read the result.
 
 0 and 2 both pass. 2 is what systemd-coredump needs to capture a setuid crash at
@@ -89,6 +89,6 @@ picked up by backups and is readable by anything that reaches root.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "proc(5) — /proc/sys/fs/suid_dumpable", URL: "https://man7.org/linux/man-pages/man5/proc.5.html"},
+		{Title: "proc(5), /proc/sys/fs/suid_dumpable", URL: "https://man7.org/linux/man-pages/man5/proc.5.html"},
 	},
 }

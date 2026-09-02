@@ -24,14 +24,14 @@ what makes it a liability the rest of the time.
 
 kernel.sysrq is a bitmask, and the functions it can enable are not equivalent:
 
-  - 2   — change the console log level, which can silence kernel logging
-  - 4   — keyboard control, including turning off raw mode
-  - 8   — debugging dumps: registers, memory, every task's stack
-  - 16  — sync all filesystems
-  - 32  — remount everything read-only
-  - 64  — signal processes, including SIGKILL to every task
-  - 128 — reboot or power off immediately
-  - 256 — renice all real-time tasks
+  - 2  , change the console log level, which can silence kernel logging
+  - 4  , keyboard control, including turning off raw mode
+  - 8  , debugging dumps: registers, memory, every task's stack
+  - 16 , sync all filesystems
+  - 32 , remount everything read-only
+  - 64 , signal processes, including SIGKILL to every task
+  - 128, reboot or power off immediately
+  - 256, renice all real-time tasks
 
 0 disables the lot; 1 enables the lot. **The dangerous half is not the reboot.**
 It is 8, which dumps kernel memory and task state to the console and defeats
@@ -42,7 +42,7 @@ attacker at the console kill the audit daemon before doing anything else.
 **This needs console access, which is why it is rated below the leak checks
 beside it.** But "console" includes a serial console on a management network, a
 hypervisor's virtual console, an IPMI or iDRAC session and a cloud provider's
-web terminal — none of which is the locked room the phrase suggests, and
+web terminal, none of which is the locked room the phrase suggests, and
 several of which are reachable by anyone who has the management credentials
 rather than the host's.
 
@@ -134,7 +134,7 @@ chosen to keep the emergency sync; a host with 1 has not.`,
 		Steps: []string{
 			"Check what already sets it: grep -rn 'kernel.sysrq' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. systemd ships a default in /usr/lib/sysctl.d/50-default.conf, so a drop-in in /etc/sysctl.d is what overrides it.",
 			"Create or extend a drop-in containing kernel.sysrq = 0.",
-			"Decide first whether anyone actually uses it. On a physical machine with an operations team that recovers wedged hosts from a console, the sync and remount-read-only functions are genuinely valuable and the honest answer may be 16 or 48 rather than 0 — a narrow mask, chosen and written down, which this check reports at Low rather than as a plain failure.",
+			"Decide first whether anyone actually uses it. On a physical machine with an operations team that recovers wedged hosts from a console, the sync and remount-read-only functions are genuinely valuable and the honest answer may be 16 or 48 rather than 0, a narrow mask, chosen and written down, which this check reports at Low rather than as a plain failure.",
 			"Never leave the debugging dumps enabled. Bit 8 prints registers, memory and every task's stack to the console, which defeats address-space randomisation for anyone who can read it.",
 			"Apply without rebooting: sysctl --system, then confirm with sysctl kernel.sysrq.",
 			"Remember the kernel command line can set it too: sysrq_always_enabled in the bootloader configuration overrides this and is not visible to a check that reads sysctl files.",
@@ -144,7 +144,7 @@ chosen to keep the emergency sync; a host with 1 has not.`,
 			"grep -rn 'kernel.sysrq' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null",
 			"systemd-analyze cat-config sysctl.d",
 		},
-		Caution: "Disabling SysRq removes the last resort for recovering a machine whose userspace is gone. Where that matters — physical hosts with console access and an operations team who use it — a narrow mask is a better answer than 0, and better than leaving the default in place.",
+		Caution: "Disabling SysRq removes the last resort for recovering a machine whose userspace is gone. Where that matters, physical hosts with console access and an operations team who use it, a narrow mask is a better answer than 0, and better than leaving the default in place.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -154,7 +154,7 @@ chosen to keep the emergency sync; a host with 1 has not.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — Magic SysRq key", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysrq.html"},
+		{Title: "Linux kernel. Magic SysRq key", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysrq.html"},
 		{Title: "sysctl.d(5)", URL: "https://man7.org/linux/man-pages/man5/sysctl.d.5.html"},
 	},
 }

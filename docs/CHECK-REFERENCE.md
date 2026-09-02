@@ -5,7 +5,7 @@
 
 **Catalog version 34 · 112 checks · 11 modules**
 
-One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. This is `plumbline explain CHECK-ID` for the whole catalog at once — the command is the same material and needs no network, no bundle and no privileges.
+One entry per check: what it tests, which facts it reads, how to fix what it finds, and what it maps to. `plumbline explain CHECK-ID` prints the same material one check at a time, with no network, no bundle and no privileges.
 
 Plumbline reports evidence, not compliance conclusions. A control mapping names an identifier that a check is *relevant to*; it is not a claim of compliance with it, and no control text is reproduced here (see [COMPLIANCE-DATA-POLICY.md](COMPLIANCE-DATA-POLICY.md)).
 
@@ -13,7 +13,7 @@ Plumbline reports evidence, not compliance conclusions. A control mapping names 
 
 ## AUTH
 
-### AUTH-0001 — A password quality module is enforced
+### AUTH-0001: A password quality module is enforced
 
 | | |
 |---|---|
@@ -31,7 +31,7 @@ document describing fourteen-character minimums can coexist indefinitely with a
 host that enforces none of it.
 
 The module has to be **enforcing**, and that is the half most often wrong. PAM's
-'optional' control means the result is ignored entirely — the module runs, it
+'optional' control means the result is ignored entirely, the module runs, it
 computes that the password is unacceptable, and PAM proceeds to set it anyway.
 A stack with 'password optional pam_pwquality.so' reads to a human exactly like
 one that works, and produces no output distinguishing itself from one. Only
@@ -40,17 +40,17 @@ bad, actually refuse the password.
 
 This check reports whether the rule is written with an enforcing control. It
 does not simulate the stack around it, so a 'sufficient' rule placed above the
-quality module — which would short-circuit before reaching it — is not detected
+quality module, which would short-circuit before reaching it, is not detected
 here; see the check's specification for the full list of what it cannot see.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Add pam\_pwquality.so to the password stack with an enforcing control.
 
 1. Install the module if it is missing: 'apt install libpam-pwquality' or 'dnf install libpwquality'. On Red Hat it is normally present already.
-2. Do not hand-edit the shared stack on a system that generates it. Red Hat's system-auth is managed by authselect — 'authselect enable-feature with-pwquality' — and a hand edit is overwritten at the next authselect apply, silently, possibly months later. Debian's common-password is managed by pam-auth-update.
+2. Do not hand-edit the shared stack on a system that generates it. Red Hat's system-auth is managed by authselect, 'authselect enable-feature with-pwquality', and a hand edit is overwritten at the next authselect apply, silently, possibly months later. Debian's common-password is managed by pam-auth-update.
 3. Where you do edit it directly, place the rule \*before\* pam\_unix.so in the password stack, with control 'requisite': 'password requisite pam\_pwquality.so retry=3'. After pam\_unix.so it never runs, because pam\_unix has already set the password.
 4. Set the parameters in /etc/security/pwquality.conf rather than as module arguments. The file is the same on every host you manage, survives a stack regeneration, and is what AUTH-0002 reads.
 5. Test before logging out, from a second session: 'passwd' as an unprivileged test account and offer a one-character password. It must be refused. A rule that is present and not enforcing accepts it, which is precisely the failure this check is about.
@@ -63,16 +63,16 @@ passwd testuser
 
 > **Caution.** Editing a PAM stack wrongly can lock every account out of the host, including root, and the failure appears at the next authentication rather than when the file is saved. Keep a root session open while you work, test with a second login before closing it, and on a host you cannot physically reach take a copy of the file first.
 
-**Controls** — `nist-800-53-r5 IA-5`, `nist-800-53-r5 IA-5(1)`
+**Controls.** `nist-800-53-r5 IA-5`, `nist-800-53-r5 IA-5(1)`
 
 **References**
 
 - [pam\_pwquality(8)](https://man7.org/linux/man-pages/man8/pam_pwquality.8.html)
-- [pam.conf(5) — control flags](https://man7.org/linux/man-pages/man5/pam.conf.5.html)
+- [pam.conf(5), control flags](https://man7.org/linux/man-pages/man5/pam.conf.5.html)
 
 ---
 
-### AUTH-0002 — Password quality parameters require length and character variety
+### AUTH-0002: Password quality parameters require length and character variety
 
 | | |
 |---|---|
@@ -89,14 +89,14 @@ defaults, and a host can have the module correctly installed, correctly
 enforcing, and still accept an eight-character password.
 
 Two properties are checked. **Length** is the one that matters most, because it
-is the only parameter an offline cracking attack cares about — character
+is the only parameter an offline cracking attack cares about, character
 variety adds a few bits and each additional character multiplies the search
 space. **Variety** is checked as a secondary constraint because length alone
 permits a fourteen-character password that is a single dictionary word repeated.
 
 pwquality expresses variety two ways and they are easy to confuse. 'minclass'
 names how many of the four character classes must appear. The four credit
-settings — dcredit, ucredit, lcredit, ocredit — are *credits* by default: a
+settings, dcredit, ucredit, lcredit, ocredit, are *credits* by default: a
 positive value means characters of that class count extra toward minlen, which
 is a discount rather than a requirement. Only a **negative** value means "at
 least this many of this class". A configuration setting 'dcredit = 1' has
@@ -110,14 +110,14 @@ compile-time property that has changed between releases, is not readable from
 the filesystem, and guessing the strict value would be as much a guess as
 guessing the weak one.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set minlen and a character-variety requirement explicitly in /etc/security/pwquality.conf.
 
 1. Set them in /etc/security/pwquality.conf rather than as module arguments. The file survives a stack regeneration by authselect or pam-auth-update, is identical across every host you manage, and is where the next person will look.
-2. Set the length: 'minlen = 14'. This is the parameter that matters to an offline cracking attack — every additional character multiplies the search space, while character variety adds a few bits once.
+2. Set the length: 'minlen = 14'. This is the parameter that matters to an offline cracking attack, every additional character multiplies the search space, while character variety adds a few bits once.
 3. Require variety with minclass rather than with credits: 'minclass = 4'. It says plainly that all four character classes must appear.
 4. If you use the credit settings instead, make them \*\*negative\*\*: 'dcredit = -1' requires at least one digit. A positive value is a discount toward minlen, not a requirement, and 'dcredit = 1' has demanded nothing while appearing to demand a digit.
 5. Consider 'dictcheck = 1' and 'maxrepeat = 3' as well. Length without them permits a fourteen-character password that is one dictionary word repeated, which is what an attacker's wordlist rules generate first.
@@ -129,18 +129,18 @@ grep -E 'pam_pwquality|pam_cracklib' /etc/pam.d/*
 pwscore <<< 'somecandidatepassword'
 ```
 
-> **Caution.** Raising the minimum does not affect existing passwords — it applies at the next change — so a host can pass this check and still be full of eight-character passwords set last year. Pair the change with a forced rotation only if the accounts are ones people actually use; forcing it on service accounts breaks whatever holds their credential.
+> **Caution.** Raising the minimum does not affect existing passwords, it applies at the next change, so a host can pass this check and still be full of eight-character passwords set last year. Pair the change with a forced rotation only if the accounts are ones people actually use; forcing it on service accounts breaks whatever holds their credential.
 
-**Controls** — `nist-800-53-r5 IA-5`, `nist-800-53-r5 IA-5(1)`
+**Controls.** `nist-800-53-r5 IA-5`, `nist-800-53-r5 IA-5(1)`
 
 **References**
 
 - [pwquality.conf(5)](https://man7.org/linux/man-pages/man5/pwquality.conf.5.html)
-- [NIST SP 800-63B §5.1.1 — memorized secrets](https://pages.nist.gov/800-63-3/sp800-63b.html)
+- [NIST SP 800-63B §5.1.1, memorized secrets](https://pages.nist.gov/800-63-3/sp800-63b.html)
 
 ---
 
-### AUTH-0003 — Repeated authentication failures lock the account
+### AUTH-0003: Repeated authentication failures lock the account
 
 | | |
 |---|---|
@@ -151,7 +151,7 @@ pwscore <<< 'somecandidatepassword'
 | Tags | `auth`, `pam`, `brute-force`, `lockout` |
 
 Without a lockout module, a password is only as strong as the
-rate at which it can be guessed — and locally, or through a service that does
+rate at which it can be guessed, and locally, or through a service that does
 not rate-limit for itself, that rate is bounded by the hardware rather than by
 policy. Password quality and lockout are two halves of one control: quality
 sets the size of the search space, lockout sets how much of it an attacker may
@@ -170,14 +170,14 @@ in **account** to refuse an already-locked user. This check reports whether a
 counter is configured; the thresholds are reported in the detail where they can
 be read, from either the module arguments or /etc/security/faillock.conf.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Add pam\_faillock.so to the auth and account stacks and set the threshold in /etc/security/faillock.conf.
 
 1. Use the distribution's mechanism rather than editing the shared stack by hand. Red Hat: 'authselect enable-feature with-faillock'. Debian and Ubuntu: 'pam-auth-update' offers it, and the change survives a package update.
-2. Where you edit directly, faillock needs three rules and the order is the whole of it: 'auth required pam\_faillock.so preauth' before pam\_unix.so, 'auth [default=die] pam\_faillock.so authfail' immediately after it, and 'account required pam\_faillock.so' in the account stack. Only the preauth line is not enough — nothing then records the failure.
+2. Where you edit directly, faillock needs three rules and the order is the whole of it: 'auth required pam\_faillock.so preauth' before pam\_unix.so, 'auth [default=die] pam\_faillock.so authfail' immediately after it, and 'account required pam\_faillock.so' in the account stack. Only the preauth line is not enough, nothing then records the failure.
 3. Set the thresholds in /etc/security/faillock.conf, not as module arguments: 'deny = 5', 'unlock\_time = 900', 'fail\_interval = 900'. The file is read by every faillock rule and survives a stack regeneration.
 4. Decide deliberately whether root is included. 'even\_deny\_root' locks root out too, which is correct on a host with console access and a way to boot single-user, and is a self-inflicted outage on a cloud instance with neither.
 5. Prefer a finite unlock\_time to a permanent lock. A permanent lock converts a guessing attempt into a denial of service: anyone who knows a username can lock it out on purpose, repeatedly, and the recovery needs an administrator every time.
@@ -191,7 +191,7 @@ faillock --user someuser
 
 > **Caution.** A lockout policy with no unlock\_time turns a brute-force attempt into a denial of service that anybody can trigger against any account whose name they know. Setting even\_deny\_root on a host with no console and no single-user boot can lock you out permanently. Keep a root session open, test with a throwaway account, and know how you would reach the machine if the test went wrong.
 
-**Controls** — `nist-800-53-r5 AC-7`, `nist-800-53-r5 IA-5`
+**Controls.** `nist-800-53-r5 AC-7`, `nist-800-53-r5 IA-5`
 
 **References**
 
@@ -200,7 +200,7 @@ faillock --user someuser
 
 ---
 
-### AUTH-0004 — PAM does not accept an empty password
+### AUTH-0004: PAM does not accept an empty password
 
 | | |
 |---|---|
@@ -212,14 +212,14 @@ faillock --user someuser
 
 pam_unix.so's 'nullok' argument means: if the account's
 password field in /etc/shadow is empty, authenticate anyway. Without it, an
-empty field is a refusal — the account simply cannot log in with a password.
+empty field is a refusal, the account simply cannot log in with a password.
 With it, the empty field becomes a valid credential that anybody can supply.
 
 The two halves of this have to be read together, and each is harmless-looking
 alone. USERS-0003 reports accounts whose password field is empty. This check
 reports whether PAM would accept one. Neither is a login on its own; together
 they are an unauthenticated shell, and they are usually introduced by different
-people at different times — an installer that ships nullok in the default
+people at different times, an installer that ships nullok in the default
 stack, and an account created by a script that never set a password.
 
 It is worth checking even where no account currently has an empty field. The
@@ -228,14 +228,14 @@ password is immediately usable by anyone who knows its name, with nothing to
 notice at the moment it happens.
 
 **This is about empty passwords, not about reversible storage.** Nothing in PAM
-stores a password reversibly — pam_unix hashes with crypt(3) and the algorithm
+stores a password reversibly, pam_unix hashes with crypt(3) and the algorithm
 is AUTH-0005's question. The two are sometimes conflated because Windows
 policy names a "store passwords using reversible encryption" setting; the Linux
 equivalent of that risk is a weak hash, not this.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Remove nullok from every pam\_unix.so auth rule, and check for accounts that were relying on it.
 
@@ -253,7 +253,7 @@ authselect current
 
 > **Caution.** Removing nullok immediately stops every empty-password account from authenticating. On an appliance or an embedded image that is how the console account is meant to work, so enumerate them before making the change, and keep a session open in case one of them was yours.
 
-**Controls** — `nist-800-53-r5 IA-5`, `nist-800-53-r5 AC-2`
+**Controls.** `nist-800-53-r5 IA-5`, `nist-800-53-r5 AC-2`
 
 **References**
 
@@ -261,7 +261,7 @@ authselect current
 
 ---
 
-### AUTH-0005 — Passwords are hashed with a strong algorithm
+### AUTH-0005: Passwords are hashed with a strong algorithm
 
 | | |
 |---|---|
@@ -286,7 +286,7 @@ well as cycles, which is what defeats the GPU rather than merely inconveniencing
 it.
 
 DES crypt is worse than slow-versus-fast. It uses the **first eight characters
-of the password and discards the rest** — so a twenty-character passphrase on
+of the password and discards the rest**, so a twenty-character passphrase on
 such a host is an eight-character password, AUTH-0002's length requirement is
 decoration, and the account is brute-forceable regardless of what the user
 chose.
@@ -297,16 +297,16 @@ and USERS-0006 reports what is actually in /etc/shadow. Both are needed: the
 policy is what governs the next password, and the file is what an attacker
 steals today.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Set yescrypt or sha512 on the pam\_unix.so password rule, then rotate the passwords that were hashed the old way.
 
 1. Choose the algorithm the distribution's libcrypt supports. yescrypt on Debian 11+, Ubuntu 22.04+ and Fedora; sha512 everywhere else. Setting yescrypt on a host whose libcrypt does not implement it makes password changes fail, and the failure appears at the next 'passwd' rather than when the file is saved.
 2. Change it through the distribution's mechanism: 'authselect' on Red Hat, 'pam-auth-update' on Debian. A hand edit to a generated stack is overwritten at the next regeneration, silently.
 3. Set ENCRYPT\_METHOD in /etc/login.defs to match. useradd and chpasswd read that file rather than the PAM stack, so leaving them disagreeing means an account's hash depends on which tool created it.
-4. Rotate the existing passwords. The algorithm applies when a password is set and not before, so every hash written under the old one stays exactly as weak as it was — this step is the one that actually changes what a stolen /etc/shadow is worth.
+4. Rotate the existing passwords. The algorithm applies when a password is set and not before, so every hash written under the old one stays exactly as weak as it was, this step is the one that actually changes what a stolen /etc/shadow is worth.
 5. Confirm the change took effect by looking at a hash you just set: the field's prefix names the algorithm ('$y$' yescrypt, '$6$' SHA-512, '$1$' MD5, no prefix at all DES).
 
 ```sh
@@ -317,16 +317,16 @@ awk -F: '{print $1, substr($2,1,4)}' /etc/shadow
 
 > **Caution.** Setting an algorithm the host's libcrypt does not support makes every password change fail, and the failure appears the next time somebody runs passwd rather than when you save the file. Verify by changing a throwaway account's password immediately after the edit, while you still have a root session open.
 
-**Controls** — `nist-800-53-r5 IA-5(1)`, `nist-800-53-r5 SC-13`
+**Controls.** `nist-800-53-r5 IA-5(1)`, `nist-800-53-r5 SC-13`
 
 **References**
 
-- [crypt(5) — hashing methods](https://man7.org/linux/man-pages/man5/crypt.5.html)
+- [crypt(5), hashing methods](https://man7.org/linux/man-pages/man5/crypt.5.html)
 - [pam\_unix(8)](https://man7.org/linux/man-pages/man8/pam_unix.8.html)
 
 ---
 
-### AUTH-0006 — Recent passwords cannot be reused
+### AUTH-0006: Recent passwords cannot be reused
 
 | | |
 |---|---|
@@ -338,7 +338,7 @@ awk -F: '{print $1, substr($2,1,4)}' /etc/shadow
 
 Password history exists to make expiry mean something. Where a
 host requires a change every ninety days and remembers nothing, the ordinary
-response is to change the password to the same one — or to cycle two — and the
+response is to change the password to the same one, or to cycle two, and the
 expiry policy becomes a recurring inconvenience that produces no security at
 all. Worse, it produces the predictable variants an attacker's rule engine
 generates first: the same word with an incrementing digit is the single most
@@ -352,10 +352,10 @@ already has.
 
 **This check is LOW severity on purpose, and the reason is a genuine
 disagreement rather than a hedge.** CIS and DISA require remembering at least
-five. NIST SP 800-63B recommends against routine expiry altogether — arguing
+five. NIST SP 800-63B recommends against routine expiry altogether, arguing
 that forced rotation drives users toward predictable transformations and that
 passwords should be changed on evidence of compromise rather than on a
-calendar — and history is a control that mainly exists to prop up rotation. On
+calendar, and history is a control that mainly exists to prop up rotation. On
 a host that does not expire passwords, history is close to redundant. The
 finding is reported so the decision is visible, at a severity that says it is
 not the thing to fix first.
@@ -363,17 +363,17 @@ not the thing to fix first.
 USERS-0009 reports whether passwords expire at all, and carries the other half
 of the same disagreement.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Add pam\_pwhistory.so with remember=5 to the password stack, above pam\_unix.so.
 
-1. Decide whether you want this control at all before adding it. It exists to support routine password expiry; if this host does not expire passwords — which is what NIST SP 800-63B recommends — then history adds little, and suppressing the finding with that reasoning recorded is a legitimate answer.
+1. Decide whether you want this control at all before adding it. It exists to support routine password expiry; if this host does not expire passwords, which is what NIST SP 800-63B recommends, then history adds little, and suppressing the finding with that reasoning recorded is a legitimate answer.
 2. Where you do want it, add it through the distribution's mechanism: 'authselect' on Red Hat, 'pam-auth-update' on Debian, so the change survives a stack regeneration.
 3. Editing directly, the rule goes \*above\* pam\_unix.so in the password stack: 'password required pam\_pwhistory.so remember=5 use\_authtok'. Below pam\_unix.so it never runs, because the password has already been set.
-4. Alternatively add 'remember=5' to the existing pam\_unix.so password rule, which keeps the history itself. Do one or the other rather than both — two modules keeping overlapping history is confusing to reason about and gains nothing.
-5. Know where the history lives: /etc/security/opasswd. It holds previous password \*hashes\* and needs the same protection as /etc/shadow — mode 0600, owned by root. A world-readable opasswd hands an attacker every password the user has ever had, which is a larger prize than the current one.
+4. Alternatively add 'remember=5' to the existing pam\_unix.so password rule, which keeps the history itself. Do one or the other rather than both, two modules keeping overlapping history is confusing to reason about and gains nothing.
+5. Know where the history lives: /etc/security/opasswd. It holds previous password \*hashes\* and needs the same protection as /etc/shadow, mode 0600, owned by root. A world-readable opasswd hands an attacker every password the user has ever had, which is a larger prize than the current one.
 6. Test with a throwaway account: change its password, then try to change it back. The second attempt must be refused.
 
 ```sh
@@ -382,20 +382,20 @@ ls -l /etc/security/opasswd
 authselect current
 ```
 
-> **Caution.** /etc/security/opasswd holds previous password hashes and is created by the module the first time a password changes. If it ends up world-readable, this control has handed an attacker every password each user has had rather than only the current one — check its mode after enabling it, not before.
+> **Caution.** /etc/security/opasswd holds previous password hashes and is created by the module the first time a password changes. If it ends up world-readable, this control has handed an attacker every password each user has had rather than only the current one, check its mode after enabling it, not before.
 
-**Controls** — `nist-800-53-r5 IA-5(1)`
+**Controls.** `nist-800-53-r5 IA-5(1)`
 
 **References**
 
 - [pam\_pwhistory(8)](https://man7.org/linux/man-pages/man8/pam_pwhistory.8.html)
-- [NIST SP 800-63B §5.1.1.2 — against routine expiry](https://pages.nist.gov/800-63-3/sp800-63b.html)
+- [NIST SP 800-63B §5.1.1.2, against routine expiry](https://pages.nist.gov/800-63-3/sp800-63b.html)
 
 ---
 
 ## CONTAINERS
 
-### CONTAINERS-0001 — The Docker daemon remaps container users to unprivileged host uids
+### CONTAINERS-0001: The Docker daemon remaps container users to unprivileged host uids
 
 | | |
 |---|---|
@@ -415,7 +415,7 @@ onto an unprivileged host uid instead. The isolation still matters, but a
 process that gets past it lands as nobody rather than as root, which is the
 difference between an escape and a compromise.
 
-It is off by default, so a host with no daemon.json fails this check —
+It is off by default, so a host with no daemon.json fails this check,
 correctly, because the default is what such a host is running.
 
 The trade is real and is why this is not universally enabled: remapping breaks
@@ -424,9 +424,9 @@ containers that need to share uids with the host, and it is awkward with
 compensating controls are the ones that stop a process reaching the boundary in
 the first place.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort HIGH
+**Remediation.** Effort: HIGH
 
 Enable userns-remap in the Docker daemon configuration.
 
@@ -443,15 +443,15 @@ systemctl restart docker
 
 > **Caution.** Enabling remapping moves the daemon's data root to a uid-scoped directory: running containers must be recreated and volumes written by a previous root may become unreadable. Do this on a host you can afford to disrupt, and take a backup of /var/lib/docker first.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-39`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-39`
 
 **References**
 
-- [dockerd — isolate containers with a user namespace](https://docs.docker.com/engine/security/userns-remap/)
+- [dockerd, isolate containers with a user namespace](https://docs.docker.com/engine/security/userns-remap/)
 
 ---
 
-### CONTAINERS-0002 — The Docker daemon applies no-new-privileges to containers by default
+### CONTAINERS-0002: The Docker daemon applies no-new-privileges to containers by default
 
 | | |
 |---|---|
@@ -468,8 +468,8 @@ capabilities stop being granted.
 
 Inside a container that closes a specific and well-used path. An attacker with
 code execution as an unprivileged container user looks for a setuid binary in
-the image — and images routinely carry ping, mount, su and sudo without anybody
-having thought about it — then uses it to become root in the container, which is
+the image, and images routinely carry ping, mount, su and sudo without anybody
+having thought about it, then uses it to become root in the container, which is
 the position from which a namespace escape is worth attempting. With the flag
 set, the setuid bit does nothing and the attacker stays where they landed.
 
@@ -477,14 +477,14 @@ The daemon-wide setting is what makes this reliable. Per-container
 --security-opt=no-new-privileges works and depends on whoever wrote the run
 command remembering it, which over a fleet means it is sometimes set.
 
-It defaults to off, so a host with no daemon.json fails this check — correctly,
+It defaults to off, so a host with no daemon.json fails this check, correctly,
 because the default is what such a host is running. It is also cheap: unlike
 user-namespace remapping, turning it on breaks only workloads that were
 deliberately escalating privileges inside a container.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Enable no-new-privileges in the Docker daemon configuration.
 
@@ -499,17 +499,17 @@ docker info --format '{{.SecurityOptions}}'
 docker run --rm alpine sh -c 'grep NoNewPrivs /proc/self/status'
 ```
 
-> **Caution.** Restarting the daemon stops every running container unless live-restore is enabled. Schedule it, and check first for entrypoints that rely on sudo or a setuid helper — those will fail after the change rather than at restart.
+> **Caution.** Restarting the daemon stops every running container unless live-restore is enabled. Schedule it, and check first for entrypoints that rely on sudo or a setuid helper, those will fail after the change rather than at restart.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-7`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-7`
 
 **References**
 
-- [no\_new\_privs — Linux kernel documentation](https://docs.kernel.org/userspace-api/no_new_privs.html)
+- [no\_new\_privs. Linux kernel documentation](https://docs.kernel.org/userspace-api/no_new_privs.html)
 
 ---
 
-### CONTAINERS-0003 — The Docker daemon restricts traffic between containers on the default bridge
+### CONTAINERS-0003: The Docker daemon restricts traffic between containers on the default bridge
 
 | | |
 |---|---|
@@ -529,9 +529,9 @@ others. A database that publishes no port to the host is still on the bridge,
 and a web container running attacker code is on the same bridge, so the
 database's port is one connection away. Setting icc to false replaces the
 blanket ACCEPT with DROP, after which containers reach each other only through
-links or published ports — connections somebody had to ask for.
+links or published ports, connections somebody had to ask for.
 
-The default is true, so a host with no daemon.json fails this check —
+The default is true, so a host with no daemon.json fails this check,
 correctly, because the default is what such a host is running.
 
 **This governs the default bridge and nothing else.** Containers on a
@@ -542,9 +542,9 @@ host whose workloads all run under Compose this setting changes very little.
 It still matters for containers started with a plain docker run, which is most
 ad-hoc and many CI ones, and it costs nothing to set.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set icc to false in the Docker daemon configuration.
 
@@ -552,7 +552,7 @@ Set icc to false in the Docker daemon configuration.
 2. Find containers on the default bridge that talk to each other: docker network inspect bridge lists them, and anything relying on that path will stop working.
 3. Create or edit /etc/docker/daemon.json and set "icc": false.
 4. Restart the daemon: systemctl restart docker.
-5. Give the containers that do need to talk a user-defined network instead — docker network create, then --network on each — which is the supported way to scope container-to-container traffic and is unaffected by icc.
+5. Give the containers that do need to talk a user-defined network instead, docker network create, then --network on each, which is the supported way to scope container-to-container traffic and is unaffected by icc.
 6. Verify: docker network inspect bridge should report com.docker.network.bridge.enable\_icc as false.
 
 ```sh
@@ -562,15 +562,15 @@ systemctl restart docker
 
 > **Caution.** Containers on the default bridge that reach each other directly will lose that path immediately. Restarting the daemon also stops every running container unless live-restore is enabled. Move dependent workloads onto a user-defined network before making the change, not after.
 
-**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 AC-4`
+**Controls.** `nist-800-53-r5 SC-7`, `nist-800-53-r5 AC-4`
 
 **References**
 
-- [Docker — container communication on the default bridge](https://docs.docker.com/engine/network/drivers/bridge/)
+- [Docker, container communication on the default bridge](https://docs.docker.com/engine/network/drivers/bridge/)
 
 ---
 
-### CONTAINERS-0004 — The Docker daemon keeps containers running across its own restart
+### CONTAINERS-0004: The Docker daemon keeps containers running across its own restart
 
 | | |
 |---|---|
@@ -594,7 +594,7 @@ security update sits unapplied until a maintenance window that keeps slipping.
 The exposure is not the downtime; it is the months of running a known-vulnerable
 daemon because the alternative was an outage nobody would authorise.
 
-It defaults to off, so a host with no daemon.json fails this check —
+It defaults to off, so a host with no daemon.json fails this check,
 correctly, because the default is what such a host is running.
 
 Two limits worth knowing before enabling it. It does not cover a change to the
@@ -602,15 +602,15 @@ daemon's own configuration that containers inherit, so some restarts still
 require recreating them. And it is incompatible with live Swarm mode, which
 manages container lifecycle itself.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Enable live-restore in the Docker daemon configuration.
 
 1. Check first whether this host runs Swarm mode: live-restore is incompatible with it, and a Swarm node should be drained and updated rather than kept running through a daemon restart.
 2. Create or edit /etc/docker/daemon.json and set "live-restore": true.
-3. Restart the daemon once to apply it. That restart is still an outage — the setting protects subsequent ones, not the one that enables it.
+3. Restart the daemon once to apply it. That restart is still an outage, the setting protects subsequent ones, not the one that enables it.
 4. Verify: docker info should report Live Restore Enabled: true.
 5. Test it before relying on it: start a container, systemctl restart docker, and confirm the container is still running and still reachable.
 
@@ -621,15 +621,15 @@ systemctl restart docker
 
 > **Caution.** The restart that enables this setting will itself stop every running container; schedule it. Do not enable it on a Swarm node, where it is unsupported and the orchestrator expects to manage container lifecycle across daemon restarts itself.
 
-**Controls** — `nist-800-53-r5 CP-10`, `nist-800-53-r5 SI-2`
+**Controls.** `nist-800-53-r5 CP-10`, `nist-800-53-r5 SI-2`
 
 **References**
 
-- [Docker — keep containers alive during daemon downtime](https://docs.docker.com/engine/daemon/live-restore/)
+- [Docker, keep containers alive during daemon downtime](https://docs.docker.com/engine/daemon/live-restore/)
 
 ---
 
-### CONTAINERS-0005 — The Docker daemon does not run with experimental features enabled
+### CONTAINERS-0005: The Docker daemon does not run with experimental features enabled
 
 | | |
 |---|---|
@@ -653,24 +653,24 @@ grows without the operator's threat model growing with it.
 
 There is a second, quieter cost. An experimental feature can be withdrawn in a
 minor release, so a host that came to depend on one is a host whose next Docker
-upgrade breaks it — and a daemon that cannot be upgraded is the problem
+upgrade breaks it, and a daemon that cannot be upgraded is the problem
 CONTAINERS-0004 describes, arrived at from the other direction.
 
 Unlike the rest of this module, the daemon's default here is the safe value:
 experimental is off unless somebody turned it on. A host with no daemon.json
 therefore passes, and a failure means a deliberate act rather than an
-oversight. That is also why this is rated below the other checks — the operator
+oversight. That is also why this is rated below the other checks, the operator
 who set it may have had a reason, and the finding is a question rather than an
 accusation.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Turn off experimental mode unless a specific feature requires it.
 
 1. Find out what the flag was turned on for before turning it off: experimental mode is rarely enabled by accident, and something on this host may depend on a feature it unlocks.
-2. If nothing depends on it, edit /etc/docker/daemon.json and set "experimental": false, or remove the key — the default is off either way.
+2. If nothing depends on it, edit /etc/docker/daemon.json and set "experimental": false, or remove the key, the default is off either way.
 3. If a workload does depend on an experimental feature, treat that as the finding: plan the move to a supported equivalent, because the feature can be withdrawn in any release.
 4. Restart the daemon: systemctl restart docker.
 5. Verify: docker version should no longer report the server as experimental.
@@ -682,15 +682,15 @@ docker info --format '{{.ExperimentalBuild}}'
 
 > **Caution.** Anything using an experimental daemon feature stops working the moment the flag is cleared. Establish what depends on it first. Restarting the daemon also stops every running container unless live-restore is enabled.
 
-**Controls** — `nist-800-53-r5 CM-7`, `nist-800-53-r5 SA-22`
+**Controls.** `nist-800-53-r5 CM-7`, `nist-800-53-r5 SA-22`
 
 **References**
 
-- [Docker — daemon configuration file reference](https://docs.docker.com/reference/cli/dockerd/)
+- [Docker, daemon configuration file reference](https://docs.docker.com/reference/cli/dockerd/)
 
 ---
 
-### CONTAINERS-0006 — The Docker daemon is not started with an unauthenticated TCP socket
+### CONTAINERS-0006: The Docker daemon is not started with an unauthenticated TCP socket
 
 | | |
 |---|---|
@@ -728,8 +728,8 @@ something an operator added, almost always through a drop-in:
 
 That is what "how do I connect Docker from another machine" answers with, and
 what remote-build, CI-runner and IDE-integration guides ask for. This check
-reads the effective ExecStart — the vendor unit with every drop-in folded onto
-it, in systemd's own precedence order — and reports a tcp:// binding that is
+reads the effective ExecStart, the vendor unit with every drop-in folded onto
+it, in systemd's own precedence order, and reports a tcp:// binding that is
 not protected by client-certificate verification.
 
 **--tls is not enough and --tlsverify is.** The first encrypts the connection
@@ -744,18 +744,18 @@ A binding to loopback is rated below one to a routable address, and it is still
 a finding. tcp://127.0.0.1:2375 is unreachable from the network and reachable
 by every local user on the host, by every container started with
 --network=host, and by anything that can be talked into making an HTTP request
-on the host's behalf — which is the standard second half of a server-side
+on the host's behalf, which is the standard second half of a server-side
 request forgery.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Stop the daemon listening on TCP, or require client certificates on the socket that must stay.
 
 1. Find out what connects to it before removing it: a CI runner, a remote docker context, an IDE, or an orchestrator may depend on the port, and each of them needs a route to the daemon afterwards.
 2. See exactly what systemd is running, drop-ins and all: systemctl cat docker.service, and systemctl show -p ExecStart docker.service for the assembled line.
-3. If nothing needs remote access, remove the -H tcp:// argument from the ExecStart in the drop-in that added it — systemctl edit docker will open it — leaving -H fd:// on its own.
+3. If nothing needs remote access, remove the -H tcp:// argument from the ExecStart in the drop-in that added it, systemctl edit docker will open it, leaving -H fd:// on its own.
 4. If remote access is genuinely needed, do not simply add --tls: it encrypts without authenticating and leaves the port open to anyone who can reach it. Generate a CA and a server certificate, start the daemon with --tlsverify --tlscacert --tlscert --tlskey, and issue each client its own signed certificate.
 5. Prefer a route that needs no open port at all where one exists: docker context create --docker host=ssh://user@host carries the API over SSH and authenticates with the keys already deployed.
 6. Reload and restart: systemctl daemon-reload, then systemctl restart docker.
@@ -770,16 +770,16 @@ ss -lntp | grep -E ':(2375|2376)'
 
 > **Caution.** Removing the binding disconnects every remote client immediately, and restarting the daemon stops every running container unless live-restore is enabled. A firewall in front of the port is a mitigation and not a fix: the API is still unauthenticated to anything inside the perimeter, including every container on the host.
 
-**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 IA-2`, `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`
+**Controls.** `nist-800-53-r5 AC-3`, `nist-800-53-r5 IA-2`, `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`
 
 **References**
 
-- [Docker — protect the Docker daemon socket](https://docs.docker.com/engine/security/protect-access/)
-- [Docker — dockerd command line reference](https://docs.docker.com/reference/cli/dockerd/)
+- [Docker, protect the Docker daemon socket](https://docs.docker.com/engine/security/protect-access/)
+- [Docker, dockerd command line reference](https://docs.docker.com/reference/cli/dockerd/)
 
 ---
 
-### CONTAINERS-0007 — The Docker daemon configuration does not bind an unauthenticated TCP socket
+### CONTAINERS-0007: The Docker daemon configuration does not bind an unauthenticated TCP socket
 
 | | |
 |---|---|
@@ -807,7 +807,7 @@ mining cryptocurrency within hours.
 
 **The two never both apply on a running host.** dockerd refuses to start when
 an option is given as a flag and in the configuration file at once, and hosts
-is the option it refuses over most often — adding it to daemon.json on a stock
+is the option it refuses over most often, adding it to daemon.json on a stock
 installation is the well-known way to make Docker stop starting, because the
 unit already passes -H fd://. So on any host whose daemon is running, at most
 one of these two files decides the sockets, and the pair of checks covers both
@@ -829,9 +829,9 @@ options, so dockerd accepts them from different places.
 A binding to loopback is rated below one to a routable address, and it is still
 a finding, for the reasons CONTAINERS-0006 gives.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Remove the tcp:// entry from the hosts array, or require client certificates on the socket that must stay.
 
@@ -839,7 +839,7 @@ Remove the tcp:// entry from the hosts array, or require client certificates on 
 2. Edit /etc/docker/daemon.json and delete the tcp:// entry from hosts, leaving the unix socket. Removing the key entirely is also correct and hands the decision back to the systemd unit.
 3. If remote access is genuinely needed, do not simply set "tls": true: it encrypts without authenticating and leaves the port open to anyone who can reach it. Generate a CA and a server certificate, set "tlsverify": true with tlscacert, tlscert and tlskey, and issue each client its own signed certificate.
 4. Prefer a route that needs no open port at all where one exists: docker context create --docker host=ssh://user@host carries the API over SSH and authenticates with the keys already deployed.
-5. Restart the daemon: systemctl restart docker. If it refuses to start with a message about hosts being specified both as a flag and in the configuration file, the systemd unit is passing -H as well — decide which of the two files owns the sockets and remove it from the other.
+5. Restart the daemon: systemctl restart docker. If it refuses to start with a message about hosts being specified both as a flag and in the configuration file, the systemd unit is passing -H as well, decide which of the two files owns the sockets and remove it from the other.
 6. Verify from another machine that the old port is closed, not merely firewalled off from where you happened to test.
 7. Treat any host that was exposed as suspect rather than fixed: an unauthenticated daemon is compromised in hours, so audit docker ps -a, the image list and the host's crontabs before considering the incident closed.
 
@@ -851,16 +851,16 @@ systemctl restart docker
 
 > **Caution.** Removing the binding disconnects every remote client immediately, and restarting the daemon stops every running container unless live-restore is enabled. A firewall in front of the port is a mitigation and not a fix: the API is still unauthenticated to anything inside the perimeter, including every container on the host.
 
-**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 IA-2`, `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`
+**Controls.** `nist-800-53-r5 AC-3`, `nist-800-53-r5 IA-2`, `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`
 
 **References**
 
-- [Docker — protect the Docker daemon socket](https://docs.docker.com/engine/security/protect-access/)
-- [Docker — daemon configuration file reference](https://docs.docker.com/reference/cli/dockerd/)
+- [Docker, protect the Docker daemon socket](https://docs.docker.com/engine/security/protect-access/)
+- [Docker, daemon configuration file reference](https://docs.docker.com/reference/cli/dockerd/)
 
 ---
 
-### CONTAINERS-0008 — The Docker daemon writes container logs to a bounded, retrievable driver
+### CONTAINERS-0008: The Docker daemon writes container logs to a bounded, retrievable driver
 
 | | |
 |---|---|
@@ -884,13 +884,13 @@ itself will not trim it.
 
 **A full /var/lib/docker is not a logging incident, it is an outage.** The
 daemon cannot write container state, containers cannot start, and on most hosts
-/var is the same filesystem the package manager and the journal use — so the
+/var is the same filesystem the package manager and the journal use, so the
 recovery tools go down with it. It is also a denial of service somebody else can
 reach: anything that can make a containerised service log can make it log a lot,
 which turns a chatty error path into a way to stop the host.
 
-The other half is retention. Whatever the logs are for — an investigation, an
-incident timeline, a compliance obligation — they have to still exist when
+The other half is retention. Whatever the logs are for, an investigation, an
+incident timeline, a compliance obligation, they have to still exist when
 somebody looks. json-file's are deleted with the container, so a compromised
 container that is restarted takes its own evidence with it, and "docker logs"
 on the new one shows nothing. A driver that ships the output off the host keeps
@@ -902,8 +902,8 @@ Four shapes pass:
     Docker's own recommendation for a host that keeps its logs locally.
   - **journald** or **syslog**, which hand each line to the daemon that already
     owns rotation and retention on this host.
-  - a shipping driver — **fluentd**, **gelf**, **awslogs**, **splunk**,
-    **gcplogs** — which sends the output somewhere else, so neither this disk
+  - a shipping driver, **fluentd**, **gelf**, **awslogs**, **splunk**,
+    **gcplogs**, which sends the output somewhere else, so neither this disk
     nor the loss of this host is what bounds it.
   - **json-file with a max-size log option**, which is the default driver made
     to rotate. Whether 10m or 10g is a sensible bound is a judgement this build
@@ -920,19 +920,19 @@ This is rated Low because nothing here is a privilege boundary. It is a
 denial-of-service exposure and an audit-availability one, and both matter on
 the day rather than continuously.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set a logging driver that bounds and retains container output, and restart the daemon.
 
-1. Decide first where the logs should live. If this host is part of an estate with central logging, use the driver that ships to it — fluentd, gelf, awslogs, splunk or gcplogs — because that is the only option that survives the host.
+1. Decide first where the logs should live. If this host is part of an estate with central logging, use the driver that ships to it, fluentd, gelf, awslogs, splunk or gcplogs, because that is the only option that survives the host.
 2. If the logs stay on the host and journald is already collecting everything else, set "log-driver": "journald" in /etc/docker/daemon.json. Container output then obeys the journal's own SystemMaxUse limits, and docker logs keeps working.
 3. If neither applies, use "log-driver": "local", which rotates at 20 MB across five files with nothing else to configure.
-4. To keep json-file — because a tool reads the file directly, say — bound it explicitly: "log-driver": "json-file" with "log-opts": {"max-size": "10m", "max-file": "3"}.
+4. To keep json-file, because a tool reads the file directly, say, bound it explicitly: "log-driver": "json-file" with "log-opts": {"max-size": "10m", "max-file": "3"}.
 5. Check the file parses before restarting anything: dockerd --validate --config-file /etc/docker/daemon.json. A malformed daemon.json stops the daemon from starting at all.
 6. Restart the daemon: systemctl restart docker.
-7. The setting is a default for containers started afterwards. Existing containers keep the driver they were created with, so recreate them — or accept that the old ones are still unbounded.
+7. The setting is a default for containers started afterwards. Existing containers keep the driver they were created with, so recreate them, or accept that the old ones are still unbounded.
 8. Deal with what has already accumulated: du -sh /var/lib/docker/containers/\* will show which container's log is the problem, and it is truncated safely only by recreating the container, not by deleting the file underneath a running daemon.
 
 ```sh
@@ -941,21 +941,21 @@ du -sh /var/lib/docker/containers/*/*-json.log 2>/dev/null | sort -h | tail
 dockerd --validate --config-file /etc/docker/daemon.json
 ```
 
-> **Caution.** Changing the driver changes where docker logs reads from, so anything that scrapes the json files directly — a log agent bind-mounted onto /var/lib/docker/containers is the usual one — stops seeing new output. Restarting the daemon also stops every running container unless live-restore is enabled.
+> **Caution.** Changing the driver changes where docker logs reads from, so anything that scrapes the json files directly, a log agent bind-mounted onto /var/lib/docker/containers is the usual one, stops seeing new output. Restarting the daemon also stops every running container unless live-restore is enabled.
 
-**Controls** — `nist-800-53-r5 AU-4`, `nist-800-53-r5 AU-11`, `nist-800-53-r5 AU-12`, `nist-800-53-r5 SC-5`
+**Controls.** `nist-800-53-r5 AU-4`, `nist-800-53-r5 AU-11`, `nist-800-53-r5 AU-12`, `nist-800-53-r5 SC-5`
 
 **References**
 
-- [Docker — configure logging drivers](https://docs.docker.com/engine/logging/configure/)
-- [Docker — local file logging driver](https://docs.docker.com/engine/logging/drivers/local/)
-- [Docker — daemon configuration file reference](https://docs.docker.com/reference/cli/dockerd/)
+- [Docker, configure logging drivers](https://docs.docker.com/engine/logging/configure/)
+- [Docker, local file logging driver](https://docs.docker.com/engine/logging/drivers/local/)
+- [Docker, daemon configuration file reference](https://docs.docker.com/reference/cli/dockerd/)
 
 ---
 
 ## CRON
 
-### CRON-0001 — The system crontab is owned by root and writable only by root
+### CRON-0001: The system crontab is owned by root and writable only by root
 
 | | |
 |---|---|
@@ -967,7 +967,7 @@ dockerd --validate --config-file /etc/docker/daemon.json
 
 /etc/crontab names commands and the accounts they run as, and
 cron executes them without asking anything further. Write access to that file
-is therefore write access to a root shell that starts on a schedule — no
+is therefore write access to a root shell that starts on a schedule, no
 exploit, no authentication step, and nothing in the file that looks unusual
 afterwards, because a crontab entry is what a crontab is supposed to contain.
 
@@ -979,12 +979,12 @@ that is group- or world-writable is the same thing without the indirection.
 Both are produced by ordinary accidents far more often than by attack: a
 deployment script that chowns /etc to a service account, a restored backup that
 carried the wrong ownership, an administrator who ran chmod -R on a parent
-directory. That is precisely why it is worth checking — nobody remembers doing
+directory. That is precisely why it is worth checking, nobody remembers doing
 it.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Restore root ownership and remove group and other write permission.
 
@@ -999,9 +999,9 @@ stat -c '%n %a %U:%G' /etc/crontab
 chown root:root /etc/crontab && chmod 600 /etc/crontab
 ```
 
-> **Caution.** Fix the permissions, but do not stop there. If a non-root account could write this file, the correct assumption is that the host is compromised rather than merely misconfigured — read the contents and the logs before you overwrite the evidence.
+> **Caution.** Fix the permissions, but do not stop there. If a non-root account could write this file, the correct assumption is that the host is compromised rather than merely misconfigured, read the contents and the logs before you overwrite the evidence.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-5`, `nist-800-53-r5 AC-3`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-5`, `nist-800-53-r5 AC-3`
 
 **References**
 
@@ -1009,7 +1009,7 @@ chown root:root /etc/crontab && chmod 600 /etc/crontab
 
 ---
 
-### CRON-0002 — The cron drop-in directories are owned by root and writable only by root
+### CRON-0002: The cron drop-in directories are owned by root and writable only by root
 
 | | |
 |---|---|
@@ -1035,13 +1035,13 @@ inside it. Unix permits creating a file in any directory you can write, whoever
 owns the directory's existing contents, so a world-writable /etc/cron.d full of
 correctly-owned root files is still a root shell for anyone with an account.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Restore root ownership and remove group and other write permission from every cron directory.
 
-1. List what is there before changing it: 'ls -la /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly'. If a directory was writable, look for files you did not put there — that is the payload, and it will not look out of place.
+1. List what is there before changing it: 'ls -la /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly'. If a directory was writable, look for files you did not put there, that is the payload, and it will not look out of place.
 2. Restore ownership and mode: 'chown root:root /etc/cron.\*' then 'chmod 755 /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly'. Use 700 instead if you also intend to close CRON-0005.
 3. Check the files inside as well as the directory: 'find /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly ! -user root -o -perm /022'.
 4. Establish how it happened. A group-writable cron directory is usually the work of a deployment script that chowned a parent, so the same script has probably done it elsewhere.
@@ -1054,7 +1054,7 @@ find /etc/cron.d -type f ! -user root
 
 > **Caution.** Treat a writable cron directory as a compromise until you have shown otherwise. Unlike a modified file, a dropped-in file leaves the rest of the directory byte-identical, so package verification and file-integrity monitoring that only watch known paths will report nothing wrong.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-5`, `nist-800-53-r5 AC-3`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-5`, `nist-800-53-r5 AC-3`
 
 **References**
 
@@ -1063,7 +1063,7 @@ find /etc/cron.d -type f ! -user root
 
 ---
 
-### CRON-0003 — Access to crontab is restricted by an allow list
+### CRON-0003: Access to crontab is restricted by an allow list
 
 | | |
 |---|---|
@@ -1082,9 +1082,9 @@ cron package rather than anything readable on the host: Debian's cron and
 Red Hat's cronie make different choices, and both document the behaviour as
 site-dependent.
 
-The direction is what matters. An allow list fails closed — an account created
+The direction is what matters. An allow list fails closed, an account created
 tomorrow is not on it, so it cannot schedule anything until somebody decides it
-should. A deny list fails open — the same account is permitted by omission, and
+should. A deny list fails open, the same account is permitted by omission, and
 nothing about creating it draws attention to the fact. Every service account a
 package installs, every user a directory service introduces, and every account
 an attacker adds is admitted by a deny list without a single edit to it.
@@ -1094,19 +1094,19 @@ persistence mechanism. A job survives reboots, runs without a session, and
 looks exactly like the legitimate jobs beside it.
 
 This check does not read either file, so it reports which mechanism is in force
-rather than who is on the list. An empty cron.allow — the strictest possible
-configuration, permitting nobody but root — is indistinguishable here from a
+rather than who is on the list. An empty cron.allow, the strictest possible
+configuration, permitting nobody but root, is indistinguishable here from a
 populated one.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Create /etc/cron.allow listing the accounts that may schedule jobs, and remove /etc/cron.deny.
 
-1. Find out who currently schedules anything before restricting it. Per-user crontabs live in the spool — '/var/spool/cron/crontabs' on Debian-family systems, '/var/spool/cron' on Red Hat-family ones — and 'ls' there names every account with a crontab.
+1. Find out who currently schedules anything before restricting it. Per-user crontabs live in the spool, '/var/spool/cron/crontabs' on Debian-family systems, '/var/spool/cron' on Red Hat-family ones, and 'ls' there names every account with a crontab.
 2. Create the allow list with those accounts, one per line: 'printf 'root\n' > /etc/cron.allow', then add each account you confirmed in the previous step.
-3. Secure the file itself: 'chown root:root /etc/cron.allow' and 'chmod 600 /etc/cron.allow'. CRON-0004 checks this — a writable allow list is an allow list any user can add themselves to.
+3. Secure the file itself: 'chown root:root /etc/cron.allow' and 'chmod 600 /etc/cron.allow'. CRON-0004 checks this, a writable allow list is an allow list any user can add themselves to.
 4. Remove /etc/cron.deny once cron.allow is in place. Leaving it is not dangerous, but it is inert, and an inert access-control file is one somebody will eventually edit believing it works.
 5. Verify from an unprivileged account that is not on the list: 'crontab -l' should be refused with 'You (user) are not allowed to use this program'.
 
@@ -1115,17 +1115,17 @@ ls -l /etc/cron.allow /etc/cron.deny
 ls /var/spool/cron/crontabs /var/spool/cron 2>/dev/null
 ```
 
-> **Caution.** An allow list that omits an account which currently has a crontab does not delete that crontab — the existing job keeps running — but the account can no longer list or edit it, which turns a scheduled job into one nobody can see or change. Enumerate the spool before writing the file, not afterwards.
+> **Caution.** An allow list that omits an account which currently has a crontab does not delete that crontab, the existing job keeps running, but the account can no longer list or edit it, which turns a scheduled job into one nobody can see or change. Enumerate the spool before writing the file, not afterwards.
 
-**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-7`
+**Controls.** `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-7`
 
 **References**
 
-- [crontab(1) — cron.allow and cron.deny](https://man7.org/linux/man-pages/man1/crontab.1.html)
+- [crontab(1), cron.allow and cron.deny](https://man7.org/linux/man-pages/man1/crontab.1.html)
 
 ---
 
-### CRON-0004 — The cron access-control files are owned by root and writable only by root
+### CRON-0004: The cron access-control files are owned by root and writable only by root
 
 | | |
 |---|---|
@@ -1140,28 +1140,28 @@ is not an access-control file. A writable /etc/cron.allow lets any user append
 their own name and schedule jobs; a writable /etc/cron.deny lets them delete
 the line that was keeping them out. Either way the restriction CRON-0003
 reports as being in force is not in force, and nothing about the configuration
-looks wrong — the mechanism is present, correctly named, and doing nothing.
+looks wrong. The mechanism is present, correctly named, and doing nothing.
 
 This is the reason CRON-0003 and this check are separate. The first asks which
 mechanism governs cron access; this one asks whether that mechanism is beyond
 the reach of the people it restricts. A host can pass one and fail the other,
-and the combination — an allow list that anyone may edit — is worse than having
+and the combination, an allow list that anyone may edit, is worse than having
 no allow list at all, because it produces a report saying access is restricted.
 
 Both files are also world-readable by default on most distributions, which is
 harmless: knowing who may schedule jobs is not itself an exposure. Write access
 is the whole of the finding here.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Restore root ownership and remove group and other write permission from the access-control files.
 
 1. Read the file first: 'cat /etc/cron.allow /etc/cron.deny 2>/dev/null'. If an unprivileged account could write it, check every name against who is supposed to be there.
 2. Restore ownership and mode: 'chown root:root /etc/cron.allow' and 'chmod 600 /etc/cron.allow'; the same for /etc/cron.deny if it exists.
 3. Cross-check against the spool. A name added to cron.allow is only useful to an attacker alongside a crontab, so list '/var/spool/cron/crontabs' or '/var/spool/cron' and confirm every entry belongs to somebody who should have one.
-4. Consider removing /etc/cron.deny entirely if /etc/cron.allow exists — cron ignores it, and an ignored file with wrong permissions is a finding nobody can act on usefully.
+4. Consider removing /etc/cron.deny entirely if /etc/cron.allow exists, cron ignores it, and an ignored file with wrong permissions is a finding nobody can act on usefully.
 
 ```sh
 stat -c '%n %a %U:%G' /etc/cron.allow /etc/cron.deny
@@ -1170,7 +1170,7 @@ chown root:root /etc/cron.allow && chmod 600 /etc/cron.allow
 
 > **Caution.** Changing the mode does not undo anything that was already added while the file was writable. Read the contents and the crontab spool before fixing the permissions, because fixing them first removes the thing that would tell you whether the exposure was used.
 
-**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-5`
+**Controls.** `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-5`
 
 **References**
 
@@ -1178,7 +1178,7 @@ chown root:root /etc/cron.allow && chmod 600 /etc/cron.allow
 
 ---
 
-### CRON-0005 — The cron schedule is not readable by unprivileged accounts
+### CRON-0005: The cron schedule is not readable by unprivileged accounts
 
 | | |
 |---|---|
@@ -1189,7 +1189,7 @@ chown root:root /etc/cron.allow && chmod 600 /etc/cron.allow
 | Tags | `cron`, `scheduled-tasks`, `information-disclosure` |
 
 The schedule is reconnaissance. It names what runs as root,
-where the scripts live, and — precisely — when. That last part is what makes it
+where the scripts live, and, precisely, when. That last part is what makes it
 worth restricting: an attacker who knows a backup script runs as root at 03:15
 and reads from a directory their account can write knows exactly which file to
 place and exactly how long they will wait. Without the schedule they are
@@ -1208,9 +1208,9 @@ directories; Debian, Ubuntu, RHEL and Fedora all ship 0644 and 0755, so a host
 that has never been hardened fails this by vendor default rather than by
 mistake.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Remove group and other read permission from the crontab and the drop-in directories.
 
@@ -1218,16 +1218,16 @@ Remove group and other read permission from the crontab and the drop-in director
 2. Tighten the crontab: 'chmod 600 /etc/crontab'.
 3. Tighten the directories: 'chmod 700 /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly'.
 4. Check nothing unprivileged depended on reading them: monitoring agents that report scheduled jobs, and configuration-management tools running as a non-root account, are the two that break.
-5. While you are there, look at what the lines actually contain. A credential passed as a command-line argument is visible in 'ps' to every user on the host whatever this file's mode is, so tightening the mode does not fix that one — moving the secret into a root-only environment file does.
+5. While you are there, look at what the lines actually contain. A credential passed as a command-line argument is visible in 'ps' to every user on the host whatever this file's mode is, so tightening the mode does not fix that one, moving the secret into a root-only environment file does.
 
 ```sh
 stat -c '%n %a %U:%G' /etc/crontab /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly
 chmod 600 /etc/crontab && chmod 700 /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly
 ```
 
-> **Caution.** run-parts needs no read access for anyone but root, so cron itself is unaffected — but monitoring and configuration-management agents that inventory scheduled jobs as a non-root user will silently start reporting nothing rather than failing loudly. Check what reads these paths before tightening them.
+> **Caution.** run-parts needs no read access for anyone but root, so cron itself is unaffected, but monitoring and configuration-management agents that inventory scheduled jobs as a non-root user will silently start reporting nothing rather than failing loudly. Check what reads these paths before tightening them.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`
 
 **References**
 
@@ -1237,7 +1237,7 @@ chmod 600 /etc/crontab && chmod 700 /etc/cron.d /etc/cron.hourly /etc/cron.daily
 
 ## FILESYS
 
-### FILESYS-0001 — No setuid or setgid executable is writable by group or other
+### FILESYS-0001: No setuid or setgid executable is writable by group or other
 
 | | |
 |---|---|
@@ -1248,14 +1248,14 @@ chmod 600 /etc/crontab && chmod 700 /etc/cron.d /etc/cron.hourly /etc/cron.daily
 | Tags | `filesys`, `suid`, `privilege-escalation`, `permissions` |
 
 A setuid executable runs with its owner's privileges rather
-than the caller's — usually root's. That is the entire point of the mechanism
+than the caller's, usually root's. That is the entire point of the mechanism
 and it is why passwd, sudo and mount work at all. It also means the file's
 *contents* are executed as root by anybody who runs it.
 
 So a setuid binary that a non-root account can write is not a permissions
 problem. It is a root shell with a waiting period: the unprivileged account
 overwrites the file with anything it likes, waits for the next person to run it
-— or runs it themselves — and the code executes as the owner. No exploit, no
+, or runs it themselves, and the code executes as the owner. No exploit, no
 vulnerability, no authentication step. The same reasoning applies to setgid,
 one privilege level down.
 
@@ -1269,9 +1269,9 @@ The usual causes are mundane: a chmod -R that swept up a bin directory, a
 package built with the wrong umask, a deployment that chowns its tree to a
 service account and happens to ship a setuid helper.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Remove group and other write from the file, then establish whether it was already modified.
 
@@ -1287,17 +1287,17 @@ rpm -Vf <path>
 dpkg --verify
 ```
 
-> **Caution.** Removing the setuid bit from a binary that genuinely needs it breaks whatever depends on it, sometimes only for non-root users and sometimes only at the next reboot. Remove the \*write\* bits first — that closes the escalation immediately and changes nothing else — and evaluate the setuid bit separately.
+> **Caution.** Removing the setuid bit from a binary that genuinely needs it breaks whatever depends on it, sometimes only for non-root users and sometimes only at the next reboot. Remove the \*write\* bits first, that closes the escalation immediately and changes nothing else, and evaluate the setuid bit separately.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-5`, `nist-800-53-r5 SI-7`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-5`, `nist-800-53-r5 SI-7`
 
 **References**
 
-- [chmod(1) — setuid and setgid](https://man7.org/linux/man-pages/man1/chmod.1.html)
+- [chmod(1), setuid and setgid](https://man7.org/linux/man-pages/man1/chmod.1.html)
 
 ---
 
-### FILESYS-0002 — No setuid or setgid executable outside the system binary directories
+### FILESYS-0002: No setuid or setgid executable outside the system binary directories
 
 | | |
 |---|---|
@@ -1322,7 +1322,7 @@ The rule here is about **location**, not about names, and that is deliberate.
 A list of blessed binary names would silently excuse whatever an attacker
 chooses to call their implant. A list of directories cannot, because writing
 into those directories already requires the privilege that the setuid bit
-would grant — so a setuid file there tells you far less than one outside them.
+would grant, so a setuid file there tells you far less than one outside them.
 
 What this check cannot do is tell an attacker's binary from a legitimate one
 inside those directories. FILESYS-0001 covers the property that is decidable
@@ -1330,16 +1330,16 @@ without a name list; establishing that /usr/bin holds only what the package
 manager put there is a job for 'rpm -Va' or 'dpkg --verify', and it needs
 package metadata this tool does not collect.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Establish what the file is before removing it; if it is not accounted for, treat the host as compromised.
 
-1. Do not delete it first. Record it — 'ls -la', 'stat', 'sha256sum' — and check the hash against a malware reputation service and against the same binary in /usr/bin. A setuid copy of /bin/bash owned by root in somebody's home directory is not ambiguous.
+1. Do not delete it first. Record it, 'ls -la', 'stat', 'sha256sum', and check the hash against a malware reputation service and against the same binary in /usr/bin. A setuid copy of /bin/bash owned by root in somebody's home directory is not ambiguous.
 2. Establish when it appeared. The inode change time ('stat -c %z') is harder to forge than the modification time, and it usually bounds when the host was first touched.
 3. If it is not accounted for by a deployment or an archive extraction you can name, treat the host as compromised rather than as misconfigured. Somebody had root to create it, and this file is the artifact rather than the cause.
-4. If it is accounted for — a restored backup, a build tree — remove the bit rather than the file: 'chmod u-s,g-s <path>'.
+4. If it is accounted for, a restored backup, a build tree, remove the bit rather than the file: 'chmod u-s,g-s <path>'.
 5. Prevent the recurrence: mount /home, /tmp and /var/tmp with nosuid, which makes the bit inert on those filesystems whatever the mode says. FILESYS-0007 and FILESYS-0009 check exactly that.
 
 ```sh
@@ -1348,17 +1348,17 @@ stat <path>
 sha256sum <path>
 ```
 
-> **Caution.** If this is an attacker's artifact, deleting it destroys the evidence and does not remove their access — they had root to create it and may have other paths back. Preserve it and treat the finding as an incident before cleaning up.
+> **Caution.** If this is an attacker's artifact, deleting it destroys the evidence and does not remove their access, they had root to create it and may have other paths back. Preserve it and treat the finding as an incident before cleaning up.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SI-4`, `nist-800-53-r5 SI-7`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 SI-4`, `nist-800-53-r5 SI-7`
 
 **References**
 
-- [MITRE ATT&CK T1548.001 — Setuid and Setgid](https://attack.mitre.org/techniques/T1548/001/)
+- [MITRE ATT&CK T1548.001. Setuid and Setgid](https://attack.mitre.org/techniques/T1548/001/)
 
 ---
 
-### FILESYS-0003 — No file is world-writable
+### FILESYS-0003: No file is world-writable
 
 | | |
 |---|---|
@@ -1369,7 +1369,7 @@ sha256sum <path>
 | Tags | `filesys`, `permissions`, `integrity` |
 
 A world-writable file is one that every account on the host
-may rewrite — including the service accounts that packages create, which is the
+may rewrite, including the service accounts that packages create, which is the
 part that matters. An attacker who reaches a web server running as www-data has
 not got a shell as a person; they have got one as an account nobody thinks of
 as a user, and every world-writable file on the host is now theirs to change.
@@ -1381,17 +1381,17 @@ somebody else edits. None of these needs an exploit; the permission *is* the
 grant.
 
 Symlinks are excluded from this check and the exclusion is load-bearing. A
-symlink's own mode is lrwxrwxrwx on Linux and the kernel ignores it entirely —
-access is decided by the target — so including them would report thousands of
+symlink's own mode is lrwxrwxrwx on Linux and the kernel ignores it entirely,
+access is decided by the target, so including them would report thousands of
 false findings on a stock host and bury the real ones among them.
 
 Directories are counted separately, by FILESYS-0004 and FILESYS-0005, because a
 world-writable directory is a different exposure with a different remedy: /tmp
 is world-writable by design and correct.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Remove the world-write bit, after establishing which account was supposed to be writing the file.
 
@@ -1399,16 +1399,16 @@ Remove the world-write bit, after establishing which account was supposed to be 
 2. Create a group for the accounts that genuinely share it, then 'chgrp <group> <path>' and 'chmod 664 <path>'. That is the fix the world-write bit was standing in for.
 3. Where nothing shares it: 'chmod o-w <path>'.
 4. Look at the file's content as well as its mode if it is a script, a configuration file or anything root reads. World-writable means it may already have been changed, and the mode does not record whether it was.
-5. Check the directory too. A world-writable \*directory\* lets anyone replace the file regardless of the file's own mode, which makes fixing the file alone insufficient — FILESYS-0004 and FILESYS-0005 cover that.
+5. Check the directory too. A world-writable \*directory\* lets anyone replace the file regardless of the file's own mode, which makes fixing the file alone insufficient. FILESYS-0004 and FILESYS-0005 cover that.
 
 ```sh
 find / -xdev -type f -perm -0002 -ls
 chmod o-w <path>
 ```
 
-> **Caution.** Some applications genuinely expect a shared writable file — a lock file, a spool, a socket path. Removing the permission can break them in ways that appear only under load or at the next restart. Identify the writer before changing the mode, and prefer a group to a world-write bit rather than simply removing it.
+> **Caution.** Some applications genuinely expect a shared writable file, a lock file, a spool, a socket path. Removing the permission can break them in ways that appear only under load or at the next restart. Identify the writer before changing the mode, and prefer a group to a world-write bit rather than simply removing it.
 
-**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 SI-7`
+**Controls.** `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 SI-7`
 
 **References**
 
@@ -1416,7 +1416,7 @@ chmod o-w <path>
 
 ---
 
-### FILESYS-0004 — World-writable directories have the sticky bit set
+### FILESYS-0004: World-writable directories have the sticky bit set
 
 | | |
 |---|---|
@@ -1433,7 +1433,7 @@ the whole of this check.
 In a world-writable directory without the sticky bit, any account can remove
 any other account's file and put its own there under the same name. The victim
 opens the path they have always opened and reads content somebody else wrote.
-Nothing about the file's own mode prevents it — the file was not modified, it
+Nothing about the file's own mode prevents it. The file was not modified. It
 was replaced.
 
 The sticky bit closes exactly this. On a directory it means "only the file's
@@ -1449,15 +1449,15 @@ existed.
 
 FILESYS-0005 asks a different question about the same directories: whether they
 should be world-writable at all. A directory can pass this check and fail that
-one — a sticky world-writable /usr/bin is still catastrophic.
+one, a sticky world-writable /usr/bin is still catastrophic.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set the sticky bit, or replace the world-write permission with a group.
 
-1. Ask first whether the directory needs to be world-writable. A shared drop point between two services wants a group — 'chgrp shared <dir>' and 'chmod 2770 <dir>' — not world write. That removes the problem rather than containing it.
+1. Ask first whether the directory needs to be world-writable. A shared drop point between two services wants a group, 'chgrp shared <dir>' and 'chmod 2770 <dir>', not world write. That removes the problem rather than containing it.
 2. Where it genuinely is a shared workspace: 'chmod +t <dir>'. The mode becomes 1777 and the directory behaves like /tmp.
 3. Check what is already in it. Without the sticky bit, files there may already have been replaced, and their modification times will look ordinary because the replacement is a new file rather than an edit.
 4. Watch for the pattern that creates these: 'mkdir -m 777' in an install script or a Dockerfile. Fixing the directory without fixing the script means it returns at the next deployment.
@@ -1468,17 +1468,17 @@ chmod +t <dir>
 ls -ld /tmp
 ```
 
-> **Caution.** The sticky bit stops one account deleting another's files, which is occasionally what a workflow was relying on — a cleanup job running as a service account will start failing on files it does not own. Check what removes files from the directory before setting it.
+> **Caution.** The sticky bit stops one account deleting another's files, which is occasionally what a workflow was relying on, a cleanup job running as a service account will start failing on files it does not own. Check what removes files from the directory before setting it.
 
-**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 SI-7`
+**Controls.** `nist-800-53-r5 AC-3`, `nist-800-53-r5 SI-7`
 
 **References**
 
-- [chmod(1) — the restricted deletion flag](https://man7.org/linux/man-pages/man1/chmod.1.html)
+- [chmod(1), the restricted deletion flag](https://man7.org/linux/man-pages/man1/chmod.1.html)
 
 ---
 
-### FILESYS-0005 — No system directory is world-writable
+### FILESYS-0005: No system directory is world-writable
 
 | | |
 |---|---|
@@ -1494,7 +1494,7 @@ directory should be world-writable at all.
 
 The sticky bit restricts deleting and renaming *existing* entries. It does
 nothing about creating new ones. So a world-writable /usr/bin with the sticky
-bit set still lets any account add a file — and adding a file to a directory on
+bit set still lets any account add a file, and adding a file to a directory on
 $PATH is enough on its own. The account creates something plausible, waits for
 an administrator to mistype a command or for a script to call a binary by name
 rather than by path, and their code runs as whoever ran it.
@@ -1504,20 +1504,20 @@ boot: a new file in /etc/cron.d, /etc/sudoers.d or /etc/systemd/system is root
 on a timer. Under /boot it survives reinstalling the operating system above it.
 
 This is the same escalation the CRON and SERVICES modules check from their own
-angles — CRON-0002 for the cron drop-in directories, SERVICES-0005 for the unit
+angles. CRON-0002 for the cron drop-in directories, SERVICES-0005 for the unit
 directories. This check covers the tree those live in, and it fires whether or
 not the sticky bit is present, because the sticky bit was never the control
 that mattered here.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Remove world write from the directory and audit everything currently in it.
 
 1. Audit the contents before fixing the mode. Anyone could have added a file, and a file that is already there keeps working after you remove the permission. 'ls -la' with an eye on ownership and timestamps, and for a package-owned directory 'rpm -Vf <dir>' or 'dpkg --verify' to name what does not belong.
 2. Remove the permission: 'chmod o-w <dir>'. The conventional mode is 0755.
-3. Pay particular attention to drop-in directories under /etc — cron.d, sudoers.d, systemd/system, profile.d, ld.so.conf.d. A single file left in one of those is a persistent root shell that survives the permission fix.
+3. Pay particular attention to drop-in directories under /etc, cron.d, sudoers.d, systemd/system, profile.d, ld.so.conf.d. A single file left in one of those is a persistent root shell that survives the permission fix.
 4. Establish how it happened. This mode is almost always set by an install script or a container build doing 'chmod -R 777' on a tree to make an application work, and it will come back at the next deployment unless that is changed.
 5. Where an application genuinely needs to write inside a system tree, give it a subdirectory it owns rather than write access to the parent.
 
@@ -1527,17 +1527,17 @@ ls -la <dir>
 chmod o-w <dir>
 ```
 
-> **Caution.** Treat this as possible compromise rather than as untidiness, and audit the directory's contents before changing the mode. Fixing the permission stops new files being added and removes nothing that is already there — a cron drop-in or a systemd unit left behind keeps running as root afterwards.
+> **Caution.** Treat this as possible compromise rather than as untidiness, and audit the directory's contents before changing the mode. Fixing the permission stops new files being added and removes nothing that is already there, a cron drop-in or a systemd unit left behind keeps running as root afterwards.
 
-**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-5`, `nist-800-53-r5 SI-7`
+**Controls.** `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-5`, `nist-800-53-r5 SI-7`
 
 **References**
 
-- [MITRE ATT&CK T1574 — Hijack Execution Flow](https://attack.mitre.org/techniques/T1574/)
+- [MITRE ATT&CK T1574. Hijack Execution Flow](https://attack.mitre.org/techniques/T1574/)
 
 ---
 
-### FILESYS-0006 — No device node exists outside /dev
+### FILESYS-0006: No device node exists outside /dev
 
 | | |
 |---|---|
@@ -1548,7 +1548,7 @@ chmod o-w <dir>
 | Tags | `filesys`, `device`, `privilege-escalation`, `persistence` |
 
 A device node is a doorway to hardware, and the kernel does
-not care where the doorway is. /dev/sda is not special because of its path — it
+not care where the doorway is. /dev/sda is not special because of its path, it
 is a block device node with a major and minor number, and an identical node
 created in /tmp or in a home directory reaches the same disk.
 
@@ -1558,7 +1558,7 @@ cannot read /etc/shadow through the filesystem can read the bytes of /etc/shadow
 straight off the disk. A character device node for /dev/mem or /dev/kmem
 bypasses the kernel's own memory protection. Creating one needs root, so a node
 outside /dev is either a mistake made by root or an artifact left by somebody
-who had root — and in the second case it is a way back in that survives the
+who had root, and in the second case it is a way back in that survives the
 patch which closed the original hole.
 
 The mistakes are real too. Extracting an archive as root with 'tar -p', or
@@ -1572,15 +1572,15 @@ world-readable is usable by any account afterwards.
 This is one reason the walker stats non-regular files rather than skipping
 them, and never opens one.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Record the node and establish where it came from before removing it.
 
-1. Record it first: 'ls -l' shows the major and minor numbers in place of a size, and 'stat' shows when the inode was created. Which device it points at tells you what it was for — 8,x is a SCSI or SATA disk, 1,1 is /dev/mem.
+1. Record it first: 'ls -l' shows the major and minor numbers in place of a size, and 'stat' shows when the inode was created. Which device it points at tells you what it was for, 8,x is a SCSI or SATA disk, 1,1 is /dev/mem.
 2. Work out whether anything on the host explains it. Extracting an archive as root with 'tar -p', or restoring a backup of /dev to the wrong path, produces exactly this and is not an attack.
-3. If nothing explains it, treat the host as compromised. Creating a device node requires root, so whoever made it already had the privilege this node would grant — the node is the artifact, not the cause.
+3. If nothing explains it, treat the host as compromised. Creating a device node requires root, so whoever made it already had the privilege this node would grant, the node is the artifact, not the cause.
 4. Remove it once it is recorded: 'rm <path>'.
 5. Prevent the recurrence by mounting /home, /tmp and /var/tmp with nodev, which makes device nodes on those filesystems inert whatever their mode. FILESYS-0007 through FILESYS-0009 check that.
 
@@ -1589,9 +1589,9 @@ find / -xdev \( -type b -o -type c \) ! -path '/dev/*' -ls
 stat <path>
 ```
 
-> **Caution.** If this is an attacker's artifact, deleting it destroys evidence and does not remove their access. Record it — path, major and minor numbers, timestamps — and treat the finding as an incident before cleaning up.
+> **Caution.** If this is an attacker's artifact, deleting it destroys evidence and does not remove their access. Record it, path, major and minor numbers, timestamps, and treat the finding as an incident before cleaning up.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-4`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-4`
 
 **References**
 
@@ -1599,7 +1599,7 @@ stat <path>
 
 ---
 
-### FILESYS-0007 — /tmp is a separate mount with nodev, nosuid and noexec
+### FILESYS-0007: /tmp is a separate mount with nodev, nosuid and noexec
 
 | | |
 |---|---|
@@ -1611,21 +1611,21 @@ stat <path>
 
 /tmp is the one directory on the host that every account can
 write to, which makes it the first place anything an attacker brings with them
-lands. A downloaded payload, an extracted archive, a compiled exploit — all of
+lands. A downloaded payload, an extracted archive, a compiled exploit, all of
 it arrives in /tmp because /tmp is where an unprivileged account is allowed to
 put things.
 
 Three mount options remove three different capabilities from that ground:
 
-- **noexec** — nothing written here can be executed directly. This is the one
+- **noexec**, nothing written here can be executed directly. This is the one
   that matters most, because it breaks the step immediately after "download the
   payload" for the ordinary case.
-- **nosuid** — a setuid binary here does not run with its owner's privileges.
+- **nosuid**, a setuid binary here does not run with its owner's privileges.
   Without it, /tmp is a place to park a setuid root shell.
-- **nodev** — a device node here does not reach the hardware it names. Without
+- **nodev**, a device node here does not reach the hardware it names. Without
   it, /tmp is a place to park a reader for the raw disk.
 
-Being a **separate filesystem** is what makes the options possible at all —
+Being a **separate filesystem** is what makes the options possible at all,
 they are per-mount properties, so a /tmp that is merely a directory on the root
 filesystem cannot carry them. It is also a availability control in its own
 right: a runaway process filling /tmp fills the root filesystem, and a host
@@ -1633,20 +1633,20 @@ with no space on / stops being able to log, to rotate, and in some cases to
 boot.
 
 None of the three is a strong boundary on its own. noexec is bypassable by
-invoking the interpreter directly — 'sh /tmp/x' rather than '/tmp/x', or
-'ld.so /tmp/binary' — and anyone who says otherwise has not tried it. What they
+invoking the interpreter directly, 'sh /tmp/x' rather than '/tmp/x', or
+'ld.so /tmp/binary', and anyone who says otherwise has not tried it. What they
 do is remove the easy path, which is the path automated tooling and most
 opportunistic attacks actually take.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
-Make /tmp a separate filesystem — tmpfs is the simplest — and mount it nodev,nosuid,noexec.
+Make /tmp a separate filesystem, tmpfs is the simplest, and mount it nodev,nosuid,noexec.
 
 1. On a systemd host the easiest route is the unit that already exists: 'systemctl unmask tmp.mount' then 'systemctl enable --now tmp.mount'. It mounts a tmpfs on /tmp with the hardening options already set.
 2. To size it or to use a disk-backed filesystem instead, add an fstab entry: 'tmpfs /tmp tmpfs defaults,rw,nosuid,nodev,noexec,relatime,size=2G 0 0'.
-3. Check what is in /tmp before switching to tmpfs. A tmpfs starts empty and does not survive a reboot, so anything a service is currently keeping there is gone — which is correct for /tmp and occasionally a surprise for software that misuses it.
+3. Check what is in /tmp before switching to tmpfs. A tmpfs starts empty and does not survive a reboot, so anything a service is currently keeping there is gone, which is correct for /tmp and occasionally a surprise for software that misuses it.
 4. Apply and verify: 'mount -o remount /tmp' for an existing mount, then 'findmnt /tmp' to confirm the options are actually in force rather than merely written in fstab.
 5. Test that noexec does not break anything you depend on. Some package installers and a few Java and Node tools extract executables to /tmp and run them; the usual fix is to point them elsewhere with TMPDIR rather than to give up the option.
 
@@ -1656,17 +1656,17 @@ systemctl enable --now tmp.mount
 mount -o remount,nodev,nosuid,noexec /tmp
 ```
 
-> **Caution.** noexec on /tmp breaks software that extracts and runs helpers there — some installers, some JVM native libraries, some Node modules — and the failure is usually an obscure permission error rather than a clear one. Test the workloads on the host before making it permanent, and set TMPDIR for the offenders rather than dropping the option.
+> **Caution.** noexec on /tmp breaks software that extracts and runs helpers there, some installers, some JVM native libraries, some Node modules, and the failure is usually an obscure permission error rather than a clear one. Test the workloads on the host before making it permanent, and set TMPDIR for the offenders rather than dropping the option.
 
-**Controls** — `nist-800-53-r5 CM-7`, `nist-800-53-r5 SC-2`
+**Controls.** `nist-800-53-r5 CM-7`, `nist-800-53-r5 SC-2`
 
 **References**
 
-- [mount(8) — filesystem-independent mount options](https://man7.org/linux/man-pages/man8/mount.8.html)
+- [mount(8), filesystem-independent mount options](https://man7.org/linux/man-pages/man8/mount.8.html)
 
 ---
 
-### FILESYS-0008 — /dev/shm is mounted with nodev, nosuid and noexec
+### FILESYS-0008: /dev/shm is mounted with nodev, nosuid and noexec
 
 | | |
 |---|---|
@@ -1687,7 +1687,7 @@ by the file-integrity monitoring and the forensic image alike. Attackers use it
 for exactly that reason, and it is a routine finding in intrusions where /tmp
 was hardened and this was not.
 
-The same three options apply for the same three reasons as /tmp — noexec so
+The same three options apply for the same three reasons as /tmp, noexec so
 nothing written there runs, nosuid so a setuid binary there does not escalate,
 nodev so a device node there reaches nothing.
 
@@ -1697,9 +1697,9 @@ than executed, so noexec here costs almost nothing. On many distributions the
 defaults are already nosuid and nodev but **not** noexec, which is why this
 check is worth running on a host that looks fine.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Add an fstab entry for /dev/shm with nodev,nosuid,noexec and remount it.
 
@@ -1707,7 +1707,7 @@ Add an fstab entry for /dev/shm with nodev,nosuid,noexec and remount it.
 2. Apply it without rebooting: 'mount -o remount /dev/shm'.
 3. Verify the options are actually in force rather than merely written down: 'findmnt /dev/shm'. An fstab entry for an already-mounted filesystem does nothing until the remount.
 4. Expect this to be the cheapest of the three mount checks to satisfy. /dev/shm holds shared memory segments, which are mapped rather than executed, so noexec breaks essentially nothing.
-5. On a systemd host, confirm nothing re-mounts it without the options at boot — 'systemctl show -p Options dev-shm.mount' shows what systemd believes it should be.
+5. On a systemd host, confirm nothing re-mounts it without the options at boot, 'systemctl show -p Options dev-shm.mount' shows what systemd believes it should be.
 
 ```sh
 findmnt /dev/shm
@@ -1716,7 +1716,7 @@ mount -o remount,nodev,nosuid,noexec /dev/shm
 
 > **Caution.** A small number of database and HPC products place executable helpers in /dev/shm, and PostgreSQL's dynamic shared memory uses it heavily though not for execution. Check the workload before making the change permanent, but expect no impact on an ordinary host.
 
-**Controls** — `nist-800-53-r5 CM-7`, `nist-800-53-r5 SC-2`
+**Controls.** `nist-800-53-r5 CM-7`, `nist-800-53-r5 SC-2`
 
 **References**
 
@@ -1724,7 +1724,7 @@ mount -o remount,nodev,nosuid,noexec /dev/shm
 
 ---
 
-### FILESYS-0009 — /home is a separate mount with nodev and nosuid
+### FILESYS-0009: /home is a separate mount with nodev and nosuid
 
 | | |
 |---|---|
@@ -1735,7 +1735,7 @@ mount -o remount,nodev,nosuid,noexec /dev/shm
 | Tags | `filesys`, `mount`, `hardening` |
 
 Home directories are writable by the people who own them,
-which makes /home the second place — after /tmp — that anything a user brings
+which makes /home the second place, after /tmp, that anything a user brings
 to the host ends up. Two of the three usual hardening options belong there
 without argument:
 
@@ -1752,7 +1752,7 @@ device node there.
 **noexec is reported and not required, and that is a deliberate judgement.**
 Enforcing it on /home breaks Python virtual environments, local Go and Rust
 builds, node_modules with native binaries, and every '~/.local/bin' on the
-host — which is to say most of what a developer workstation exists to do. CIS
+host, which is to say most of what a developer workstation exists to do. CIS
 treats it as a separate, stricter item for that reason. On a server where
 nobody builds or runs anything from a home directory it is worth setting, and
 the finding says so; on a workstation, requiring it would produce a failure
@@ -1763,17 +1763,17 @@ Being a separate filesystem also bounds the damage a user filling their home
 directory can do: without it, /home fills the root filesystem and the host
 stops being able to log.
 
-A host with no /home at all — a single-purpose appliance, a container — has no
+A host with no /home at all, a single-purpose appliance, a container, has no
 subject here rather than a failure.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Mount /home as its own filesystem with nodev and nosuid; consider noexec only where nobody builds.
 
 1. If /home is already a separate filesystem, this is an fstab edit and a remount: add 'nodev,nosuid' to its options and run 'mount -o remount /home'.
-2. If it is not, it needs a filesystem — a partition, an LVM volume, or a loopback file on a host you cannot repartition. Moving an existing /home means copying with 'rsync -aHAX' to preserve ownership, ACLs and extended attributes, from single-user mode or with nobody logged in.
+2. If it is not, it needs a filesystem, a partition, an LVM volume, or a loopback file on a host you cannot repartition. Moving an existing /home means copying with 'rsync -aHAX' to preserve ownership, ACLs and extended attributes, from single-user mode or with nobody logged in.
 3. Verify with 'findmnt /home' that the options are in force rather than merely written in fstab.
 4. Decide about noexec separately and on evidence. On a server where no one builds anything it is worth adding. On any host where people use virtualenvs, language toolchains or '~/.local/bin', it breaks their work and the right response to the resulting failure is to remove the option again.
 5. If you do add noexec, tell the people who use the host before rather than after. The failure mode is a permission-denied error on a binary that plainly exists, which is one of the more confusing things a workstation can do.
@@ -1784,17 +1784,17 @@ mount -o remount,nodev,nosuid /home
 lsblk -f
 ```
 
-> **Caution.** Moving /home onto a new filesystem copies data while people may be using it. Do it with nobody logged in, use 'rsync -aHAX' so ownership, ACLs and extended attributes survive, and keep the old copy until the new mount has been verified — a botched /home migration locks every non-root account out of its own files.
+> **Caution.** Moving /home onto a new filesystem copies data while people may be using it. Do it with nobody logged in, use 'rsync -aHAX' so ownership, ACLs and extended attributes survive, and keep the old copy until the new mount has been verified, a botched /home migration locks every non-root account out of its own files.
 
-**Controls** — `nist-800-53-r5 CM-7`, `nist-800-53-r5 SC-2`
+**Controls.** `nist-800-53-r5 CM-7`, `nist-800-53-r5 SC-2`
 
 **References**
 
-- [mount(8) — filesystem-independent mount options](https://man7.org/linux/man-pages/man8/mount.8.html)
+- [mount(8), filesystem-independent mount options](https://man7.org/linux/man-pages/man8/mount.8.html)
 
 ---
 
-### FILESYS-0010 — Every uid and gid owning a file resolves to a local account or group
+### FILESYS-0010: Every uid and gid owning a file resolves to a local account or group
 
 | | |
 |---|---|
@@ -1807,13 +1807,13 @@ lsblk -f
 Ownership on a Unix filesystem is a number. The name is a
 lookup, performed at display time, against a database that can change without
 the filesystem knowing. Delete an account and its files do not become
-ownerless — they keep the number, and 'ls -l' starts printing the number
+ownerless, they keep the number, and 'ls -l' starts printing the number
 because there is no longer a name for it.
 
 That gap matters for one specific and entirely mundane reason: **uids are
 reused.** Every distribution's useradd allocates the lowest free uid above
 UID_MIN. So the next account created on this host inherits the number, and with
-it every file the departed account left behind — its home directory, its
+it every file the departed account left behind, its home directory, its
 crontabs, anything it wrote into a shared area, anything it owned in a backup
 that is later restored. Nobody grants that access and nobody sees it happen.
 The new user simply has it, and an audit of "who can read this" that consults
@@ -1836,18 +1836,18 @@ identities can come from somewhere this offline scan cannot ask, it returns
 UNKNOWN rather than reporting a legitimate directory account as belonging to
 nobody.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Find out what wrote them, then either reassign the files to an account that should own them or delete them. Do not create an account to match the number.
 
-1. List them before changing anything: 'find / -xdev \( -nouser -o -nogroup \) -ls'. The -xdev matters — without it the search walks network filesystems whose account databases are not this host's, and every file on them looks unowned.
+1. List them before changing anything: 'find / -xdev \( -nouser -o -nogroup \) -ls'. The -xdev matters, without it the search walks network filesystems whose account databases are not this host's, and every file on them looks unowned.
 2. Establish what the number used to be. 'lastlog', '/var/log/auth.log' and the package manager's log usually name the account that was removed; a uid above UID\_MIN was a person or a build, and a uid below it was almost always a package's service account that outlived its package.
-3. If the files still matter, chown them to the account that should own them now. If they do not, delete them — an unowned tree kept 'just in case' is one that will be inherited silently.
+3. If the files still matter, chown them to the account that should own them now. If they do not, delete them, an unowned tree kept 'just in case' is one that will be inherited silently.
 4. Do not create an account with the old uid to make the finding go away. That grants a live account everything the dead one could reach, which is the outcome this check exists to prevent, arrived at deliberately.
 5. Where the cause was a container or a tar archive, fix the cause: bind mounts need matching uid ranges or a userns mapping, and 'tar --same-owner' should not be used to unpack an archive from a host with different accounts.
-6. Where a service account was orphaned by a package removal, remove the leftovers with it — 'apt purge' rather than 'apt remove', or 'userdel -r' at the time the account goes.
+6. Where a service account was orphaned by a package removal, remove the leftovers with it, 'apt purge' rather than 'apt remove', or 'userdel -r' at the time the account goes.
 
 ```sh
 find / -xdev \( -nouser -o -nogroup \) -ls
@@ -1857,18 +1857,18 @@ chown <user>:<group> <path>
 
 > **Caution.** Never chown a tree recursively without looking at it first. A single 'chown -R' across a directory that legitimately holds several owners flattens all of them, and the previous ownership is not recorded anywhere you can get it back from. Confirm this host is not joined to a directory service before treating any of this as a finding: 'getent passwd <uid>' resolving a name that /etc/passwd does not contain means the account is real and this check should have returned UNKNOWN.
 
-**Controls** — `nist-800-53-r5 AC-2`, `nist-800-53-r5 AC-3`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 AC-2`, `nist-800-53-r5 AC-3`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [find(1) — -nouser and -nogroup](https://man7.org/linux/man-pages/man1/find.1.html)
+- [find(1), -nouser and -nogroup](https://man7.org/linux/man-pages/man1/find.1.html)
 - [nsswitch.conf(5)](https://man7.org/linux/man-pages/man5/nsswitch.conf.5.html)
 
 ---
 
 ## KERNEL
 
-### KERNEL-0001 — Address-space layout randomisation is fully enabled
+### KERNEL-0001: Address-space layout randomisation is fully enabled
 
 | | |
 |---|---|
@@ -1879,7 +1879,7 @@ chown <user>:<group> <path>
 | Tags | `kernel`, `memory-protection`, `exploit-mitigation` |
 
 Address-space layout randomisation places the stack, the heap,
-shared libraries and — for position-independent executables — the program image
+shared libraries and, for position-independent executables, the program image
 itself at addresses that differ on every execution. Without it, an attacker who
 finds a memory-corruption bug knows in advance where everything is, and a
 crash-only bug becomes reliable code execution.
@@ -1887,12 +1887,12 @@ crash-only bug becomes reliable code execution.
 kernel.randomize_va_space takes three values. 0 disables randomisation
 entirely. 1 randomises the stack, the shared libraries and the mmap base but
 leaves the heap where the linker put it, which leaves heap-grooming attacks
-intact. 2 additionally randomises the brk-managed heap and is the value every
+intact. 2 also randomises the brk-managed heap and is the value every
 current distribution ships.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set kernel.randomize\_va\_space to 2 and persist it in /etc/sysctl.d/.
 
@@ -1906,15 +1906,15 @@ sysctl -w kernel.randomize_va_space=2
 sysctl kernel.randomize_va_space
 ```
 
-**Controls** — `nist-800-53-r5 SI-16`
+**Controls.** `nist-800-53-r5 SI-16`
 
 **References**
 
-- [proc(5) — /proc/sys/kernel/randomize\_va\_space](https://man7.org/linux/man-pages/man5/proc.5.html)
+- [proc(5), /proc/sys/kernel/randomize\_va\_space](https://man7.org/linux/man-pages/man5/proc.5.html)
 
 ---
 
-### KERNEL-0002 — Kernel pointers are not exposed to unprivileged users
+### KERNEL-0002: Kernel pointers are not exposed to unprivileged users
 
 | | |
 |---|---|
@@ -1935,9 +1935,9 @@ replaces them with zeros for processes without CAP_SYSLOG. 2 replaces them for
 everyone, including root, which is stricter and occasionally breaks
 profiling tools such as perf.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set kernel.kptr\_restrict to 1 and persist it in /etc/sysctl.d/.
 
@@ -1951,15 +1951,15 @@ sysctl -w kernel.kptr_restrict=1
 sysctl kernel.kptr_restrict
 ```
 
-**Controls** — `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-16`
+**Controls.** `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-16`
 
 **References**
 
-- [Linux kernel documentation — kptr\_restrict](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#kptr-restrict)
+- [Linux kernel documentation, kptr\_restrict](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#kptr-restrict)
 
 ---
 
-### KERNEL-0003 — Debugging other processes with ptrace is restricted
+### KERNEL-0003: Debugging other processes with ptrace is restricted
 
 | | |
 |---|---|
@@ -1971,7 +1971,7 @@ sysctl kernel.kptr_restrict
 
 ptrace lets one process read and write another's memory. With
 the default permissive policy, any process may attach to any other process
-running as the same user — so a single compromised program can read the
+running as the same user, so a single compromised program can read the
 credentials, session tokens and private keys held by every other program that
 user is running, without needing a privilege escalation at all.
 
@@ -1984,9 +1984,9 @@ Yama is not compiled into every kernel. Where it is absent this check is
 NOT_APPLICABLE rather than a failure: there is no parameter to set, and the
 restriction has to come from somewhere else.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set kernel.yama.ptrace\_scope to 1 and persist it in /etc/sysctl.d/.
 
@@ -2002,15 +2002,15 @@ sysctl kernel.yama.ptrace_scope
 
 > **Caution.** Value 3 is irreversible until the machine reboots. Do not set 3 unless you are certain nothing on the host needs ptrace, including the crash handlers of services that are not currently running.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-2`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-2`
 
 **References**
 
-- [Linux kernel documentation — Yama ptrace\_scope](https://www.kernel.org/doc/html/latest/admin-guide/LSM/Yama.html)
+- [Linux kernel documentation. Yama ptrace\_scope](https://www.kernel.org/doc/html/latest/admin-guide/LSM/Yama.html)
 
 ---
 
-### KERNEL-0004 — The kernel ring buffer is not readable by unprivileged users
+### KERNEL-0004: The kernel ring buffer is not readable by unprivileged users
 
 | | |
 |---|---|
@@ -2028,9 +2028,9 @@ defeating address-space randomisation.
 
 kernel.dmesg_restrict set to 1 requires CAP_SYSLOG to read the ring buffer.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set kernel.dmesg\_restrict to 1 and persist it in /etc/sysctl.d/.
 
@@ -2043,15 +2043,15 @@ sysctl -w kernel.dmesg_restrict=1
 sysctl kernel.dmesg_restrict
 ```
 
-**Controls** — `nist-800-53-r5 SC-4`
+**Controls.** `nist-800-53-r5 SC-4`
 
 **References**
 
-- [Linux kernel documentation — dmesg\_restrict](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#dmesg-restrict)
+- [Linux kernel documentation, dmesg\_restrict](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#dmesg-restrict)
 
 ---
 
-### KERNEL-0005 — Setuid programs do not write core dumps
+### KERNEL-0005: Setuid programs do not write core dumps
 
 | | |
 |---|---|
@@ -2063,13 +2063,13 @@ sysctl kernel.dmesg_restrict
 
 A core dump is a copy of a process's memory written to disk. When
 a setuid program dumps core, that memory belongs to the privileged identity the
-program assumed — it can hold password hashes, private keys, decrypted secrets
-and the contents of files the invoking user cannot read — and the dump lands
+program assumed, it can hold password hashes, private keys, decrypted secrets
+and the contents of files the invoking user cannot read, and the dump lands
 somewhere the invoking user often can.
 
 fs.suid_dumpable takes three values. 0 means setuid programs never dump, which
 is the safe setting. 1 means they dump like any other program, and is a
-straightforward way to read privileged memory. 2 — "suidsafe" — means they dump
+straightforward way to read privileged memory. 2, "suidsafe", means they dump
 but only root may read the result.
 
 0 and 2 both pass. 2 is what systemd-coredump needs to capture a setuid crash at
@@ -2078,9 +2078,9 @@ than an oversight. It is not equivalent to 0 and the verdict says so: the
 privileged memory still reaches the disk, where it outlives the process, is
 picked up by backups and is readable by anything that reaches root.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set fs.suid\_dumpable to 0 and persist it in /etc/sysctl.d/.
 
@@ -2094,15 +2094,15 @@ sysctl -w fs.suid_dumpable=0
 sysctl fs.suid_dumpable
 ```
 
-**Controls** — `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-11`
+**Controls.** `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-11`
 
 **References**
 
-- [proc(5) — /proc/sys/fs/suid\_dumpable](https://man7.org/linux/man-pages/man5/proc.5.html)
+- [proc(5), /proc/sys/fs/suid\_dumpable](https://man7.org/linux/man-pages/man5/proc.5.html)
 
 ---
 
-### KERNEL-0006 — Unprivileged users cannot load BPF programs
+### KERNEL-0006: Unprivileged users cannot load BPF programs
 
 | | |
 |---|---|
@@ -2116,7 +2116,7 @@ The bpf() system call compiles user-supplied bytecode and runs it
 inside the kernel. The verifier that is supposed to prove such a program safe
 is one of the most complex pieces of the kernel and has been a recurring source
 of local privilege escalations; leaving it reachable by unprivileged users
-gives every local account a large, intricate attack surface for no benefit on a
+gives every local account a large and complicated attack surface for no benefit on a
 server.
 
 kernel.unprivileged_bpf_disabled set to 1 refuses unprivileged bpf() and cannot
@@ -2126,9 +2126,9 @@ raised to 1. Set to 0 unprivileged loading is permitted.
 The parameter does not exist on kernels built without BPF, where this check is
 NOT_APPLICABLE.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set kernel.unprivileged\_bpf\_disabled to 1 and persist it in /etc/sysctl.d/.
 
@@ -2144,15 +2144,15 @@ sysctl kernel.unprivileged_bpf_disabled
 
 > **Caution.** Value 1 cannot be lowered again without rebooting. On a host where an unprivileged agent turns out to need bpf(), recovery requires a reboot.
 
-**Controls** — `nist-800-53-r5 CM-7`, `nist-800-53-r5 AC-6`
+**Controls.** `nist-800-53-r5 CM-7`, `nist-800-53-r5 AC-6`
 
 **References**
 
-- [Linux kernel documentation — unprivileged\_bpf\_disabled](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#unprivileged-bpf-disabled)
+- [Linux kernel documentation, unprivileged\_bpf\_disabled](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#unprivileged-bpf-disabled)
 
 ---
 
-### KERNEL-0007 — The running kernel parameters match the configured ones
+### KERNEL-0007: The running kernel parameters match the configured ones
 
 | | |
 |---|---|
@@ -2175,17 +2175,17 @@ later during an unrelated maintenance window.
 This check compares every parameter the module probes against the value its
 configuration sets, and reports each one that differs.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Reconcile /proc/sys with the sysctl configuration, then apply the files.
 
-1. For each parameter in the evidence, decide which value is correct — the running one or the configured one.
+1. For each parameter in the evidence, decide which value is correct, the running one or the configured one.
 2. Where the configuration is correct and the kernel is not, apply it: sysctl --system
 3. Where the running value is correct and no file sets it, add it to /etc/sysctl.d/60-hardening.conf so it survives a reboot.
 4. Re-run the audit and confirm the parameters agree.
-5. If a parameter reverts after 'sysctl --system', something later in boot is overriding it — check for a drop-in with a higher-sorting name, a container runtime, or a network manager hook.
+5. If a parameter reverts after 'sysctl --system', something later in boot is overriding it, check for a drop-in with a higher-sorting name, a container runtime, or a network manager hook.
 
 ```sh
 sysctl --system
@@ -2194,7 +2194,7 @@ sysctl --all
 
 > **Caution.** 'sysctl --system' applies every setting in every configuration file at once, not only the drifted ones. On a host whose files have not been applied in a long time this can change networking behaviour immediately. Review the files before running it.
 
-**Controls** — `nist-800-53-r5 CM-6`, `nist-800-53-r5 CM-2`
+**Controls.** `nist-800-53-r5 CM-6`, `nist-800-53-r5 CM-2`
 
 **References**
 
@@ -2203,7 +2203,7 @@ sysctl --all
 
 ---
 
-### KERNEL-0008 — Reverse-path filtering is enabled on every network interface
+### KERNEL-0008: Reverse-path filtering is enabled on every network interface
 
 | | |
 |---|---|
@@ -2231,9 +2231,9 @@ loose mode: the source must be routable via some interface. Loose mode is a
 deliberate and correct choice on a multi-homed host with asymmetric routing, so
 it passes, and the finding says which interfaces are in it.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set net.ipv4.conf.all.rp\_filter to 1 and persist it in /etc/sysctl.d/.
 
@@ -2250,16 +2250,16 @@ sysctl -w net.ipv4.conf.default.rp_filter=1
 
 > **Caution.** Strict mode drops traffic on a host with asymmetric routing, which can remove your own access if you are connected over the interface that stops accepting replies. On a multi-homed or policy-routed host, use loose mode (2) and verify connectivity from a second session before persisting the change.
 
-**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-5`
+**Controls.** `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-5`
 
 **References**
 
-- [Linux kernel documentation — ip-sysctl rp\_filter](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
-- [RFC 3704 — Ingress Filtering for Multihomed Networks](https://www.rfc-editor.org/rfc/rfc3704)
+- [Linux kernel documentation, ip-sysctl rp\_filter](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [RFC 3704. Ingress Filtering for Multihomed Networks](https://www.rfc-editor.org/rfc/rfc3704)
 
 ---
 
-### KERNEL-0009 — Symlink following is restricted in world-writable directories
+### KERNEL-0009: Symlink following is restricted in world-writable directories
 
 | | |
 |---|---|
@@ -2280,9 +2280,9 @@ directory owner owns it. That breaks the attack at the point of use, without
 requiring every privileged program in the distribution to be audited for the
 race it depends on.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set fs.protected\_symlinks to 1 and persist it in /etc/sysctl.d/.
 
@@ -2295,15 +2295,15 @@ sysctl -w fs.protected_symlinks=1
 sysctl fs.protected_symlinks
 ```
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SI-16`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 SI-16`
 
 **References**
 
-- [Linux kernel documentation — fs.protected\_symlinks](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-symlinks)
+- [Linux kernel documentation, fs.protected\_symlinks](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-symlinks)
 
 ---
 
-### KERNEL-0010 — Hardlink creation is restricted to files the user can already read
+### KERNEL-0010: Hardlink creation is restricted to files the user can already read
 
 | | |
 |---|---|
@@ -2324,9 +2324,9 @@ attacker's link exists.
 fs.protected_hardlinks set to 1 permits a hardlink only when the user owns the
 source file, or can both read and write it.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set fs.protected\_hardlinks to 1 and persist it in /etc/sysctl.d/.
 
@@ -2340,15 +2340,15 @@ sysctl -w fs.protected_hardlinks=1
 sysctl fs.protected_hardlinks
 ```
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 AC-3`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 AC-3`
 
 **References**
 
-- [Linux kernel documentation — fs.protected\_hardlinks](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-hardlinks)
+- [Linux kernel documentation, fs.protected\_hardlinks](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-hardlinks)
 
 ---
 
-### KERNEL-0011 — Opening another user's FIFO in a shared directory is restricted
+### KERNEL-0011: Opening another user's FIFO in a shared directory is restricted
 
 | | |
 |---|---|
@@ -2360,7 +2360,7 @@ sysctl fs.protected_hardlinks
 
 A program that creates a file in /tmp with O_CREAT gets whatever
 is already at that path. If an attacker put a FIFO there first, the program
-does not create a file — it opens the attacker's pipe. Writing to it blocks
+does not create a file, it opens the attacker's pipe. Writing to it blocks
 until the attacker chooses to read, which hangs the program; reading from it
 returns whatever the attacker decided to supply, which the program then trusts
 as its own data.
@@ -2372,9 +2372,9 @@ covers group-writable sticky directories.
 The parameter appeared in Linux 4.19 and does not exist on kernels older than
 that, where this check is NOT_APPLICABLE.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set fs.protected\_fifos to 1 and persist it in /etc/sysctl.d/.
 
@@ -2388,15 +2388,15 @@ sysctl -w fs.protected_fifos=1
 sysctl fs.protected_fifos
 ```
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-5`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-5`
 
 **References**
 
-- [Linux kernel documentation — fs.protected\_fifos](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-fifos)
+- [Linux kernel documentation, fs.protected\_fifos](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-fifos)
 
 ---
 
-### KERNEL-0012 — Opening another user's file in a shared directory is restricted
+### KERNEL-0012: Opening another user's file in a shared directory is restricted
 
 | | |
 |---|---|
@@ -2409,7 +2409,7 @@ sysctl fs.protected_fifos
 This is the same weakness KERNEL-0011 covers, for ordinary files
 rather than FIFOs. A privileged program creating a predictably named file in
 /tmp with O_CREAT will happily open a file an attacker created there first,
-then write its output into a file the attacker owns and can read afterwards —
+then write its output into a file the attacker owns and can read afterwards,
 or read the attacker's content believing it to be its own.
 
 fs.protected_regular set to 1 refuses an O_CREAT open of a regular file the
@@ -2420,9 +2420,9 @@ group-writable sticky directories.
 The parameter appeared in Linux 4.19 and does not exist on kernels older than
 that, where this check is NOT_APPLICABLE.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set fs.protected\_regular to 1 and persist it in /etc/sysctl.d/.
 
@@ -2436,15 +2436,15 @@ sysctl -w fs.protected_regular=1
 sysctl fs.protected_regular
 ```
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`
 
 **References**
 
-- [Linux kernel documentation — fs.protected\_regular](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-regular)
+- [Linux kernel documentation, fs.protected\_regular](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-regular)
 
 ---
 
-### KERNEL-0013 — Unprivileged access to performance counters is restricted
+### KERNEL-0013: Unprivileged access to performance counters is restricted
 
 | | |
 |---|---|
@@ -2464,16 +2464,16 @@ fragile piece of kernel code, and has produced its own local privilege
 escalations.
 
 kernel.perf_event_paranoid restricts it. -1 imposes no restriction at all.
-0 requires CAP_PERFMON for raw tracepoint access, 1 additionally for CPU-wide
-events, and 2 additionally for kernel profiling. Value 3 — refuse
-perf_event_open() entirely without CAP_PERFMON — exists only on kernels
+0 requires CAP_PERFMON for raw tracepoint access, 1 also for CPU-wide events,
+and 2 also for kernel profiling. Value 3, refuse
+perf_event_open() entirely without CAP_PERFMON, exists only on kernels
 carrying the Debian, Ubuntu or Android patch, so this check requires 2 rather
 than 3: demanding a value a mainline kernel cannot express would fail hosts
 that are configured as strictly as they are able to be.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set kernel.perf\_event\_paranoid to 2 and persist it in /etc/sysctl.d/.
 
@@ -2488,15 +2488,15 @@ sysctl -w kernel.perf_event_paranoid=2
 sysctl kernel.perf_event_paranoid
 ```
 
-**Controls** — `nist-800-53-r5 SC-4`, `nist-800-53-r5 AC-6`
+**Controls.** `nist-800-53-r5 SC-4`, `nist-800-53-r5 AC-6`
 
 **References**
 
-- [perf\_event\_open(2) — perf\_event\_paranoid](https://man7.org/linux/man-pages/man2/perf_event_open.2.html)
+- [perf\_event\_open(2), perf\_event\_paranoid](https://man7.org/linux/man-pages/man2/perf_event_open.2.html)
 
 ---
 
-### KERNEL-0014 — Core dumps are not written to an attacker-influenced location
+### KERNEL-0014: Core dumps are not written to an attacker-influenced location
 
 | | |
 |---|---|
@@ -2508,13 +2508,13 @@ sysctl kernel.perf_event_paranoid
 
 A core dump is a copy of a process's memory. Where it lands is
 decided entirely by kernel.core_pattern, and the kernel's own default is the
-bare word "core" — a relative path, which means the dump is written into the
+bare word "core", a relative path, which means the dump is written into the
 crashing process's current working directory.
 
 That is the dangerous case. A daemon's working directory is not always a place
 the operator has thought about, and a process that can be induced to chdir
-somewhere writable will drop its memory — session tokens, decrypted
-configuration, private keys — into a directory an attacker is watching. Writing
+somewhere writable will drop its memory, session tokens, decrypted
+configuration, private keys, into a directory an attacker is watching. Writing
 cores into /tmp is the same failure stated explicitly.
 
 A pattern beginning with "|" pipes the dump to a program instead of writing it
@@ -2525,15 +2525,15 @@ operator can set its permissions.
 KERNEL-0005 covers the related and separate question of whether setuid programs
 dump at all.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Pipe core dumps to an absolute-path handler, or write them to a directory only root can read.
 
 1. Where the distribution ships a crash handler, use it: systemd hosts set 'kernel.core\_pattern = \|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h'.
 2. Where crash dumps are not wanted at all, disable them with a handler that discards: 'kernel.core\_pattern = \|/bin/false'.
-3. Where dumps must be written to disk, use an absolute path in a directory owned by root and mode 0700, and set a retention policy — a core dump is a copy of process memory and is as sensitive as the process was.
+3. Where dumps must be written to disk, use an absolute path in a directory owned by root and mode 0700, and set a retention policy, a core dump is a copy of process memory and is as sensitive as the process was.
 4. Persist the choice in /etc/sysctl.d/, then verify: sysctl kernel.core\_pattern
 
 ```sh
@@ -2543,15 +2543,15 @@ sysctl -w kernel.core_pattern='|/bin/false'
 
 > **Caution.** Changing core\_pattern away from a crash handler removes the crash reports an operator may be relying on to diagnose production failures. Confirm what consumes them before switching to a discarding handler.
 
-**Controls** — `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-11`
+**Controls.** `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-11`
 
 **References**
 
-- [core(5) — naming of core dump files](https://man7.org/linux/man-pages/man5/core.5.html)
+- [core(5), naming of core dump files](https://man7.org/linux/man-pages/man5/core.5.html)
 
 ---
 
-### KERNEL-0015 — Source-routed packets are refused on every network interface
+### KERNEL-0015: Source-routed packets are refused on every network interface
 
 | | |
 |---|---|
@@ -2564,7 +2564,7 @@ sysctl -w kernel.core_pattern='|/bin/false'
 A source-routed packet carries its own return path. The sender
 dictates which hops the reply traverses, which lets an attacker steer traffic
 through a machine they control, reach addresses that are not routable from
-where they are, and receive replies to a source address they have spoofed —
+where they are, and receive replies to a source address they have spoofed,
 because the reply follows the attached route rather than the routing table.
 
 There is no legitimate modern use. IP source routing was deprecated for exactly
@@ -2574,14 +2574,14 @@ drop such packets.
 **The combining rule is the opposite of the one KERNEL-0008 uses, and the
 difference matters.** An interface accepts source routing only when
 net.ipv4.conf.all.accept_source_route *and* that interface's own setting are
-both non-zero — the kernel takes the logical AND, where for rp_filter it takes
+both non-zero, the kernel takes the logical AND, where for rp_filter it takes
 the maximum. So conf.all at 0 disables source routing everywhere regardless of
 per-interface values, and a check that reused the rp_filter logic here would
 report a safe host as unsafe.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set net.ipv4.conf.all.accept\_source\_route to 0 and persist it in /etc/sysctl.d/.
 
@@ -2596,16 +2596,16 @@ sysctl -w net.ipv4.conf.all.accept_source_route=0
 sysctl -w net.ipv4.conf.default.accept_source_route=0
 ```
 
-**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`
+**Controls.** `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`
 
 **References**
 
-- [RFC 7126 — Filtering of IP-Optioned Packets](https://www.rfc-editor.org/rfc/rfc7126)
-- [Linux kernel documentation — ip-sysctl accept\_source\_route](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [RFC 7126. Filtering of IP-Optioned Packets](https://www.rfc-editor.org/rfc/rfc7126)
+- [Linux kernel documentation, ip-sysctl accept\_source\_route](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
 
 ---
 
-### KERNEL-0016 — TCP SYN cookies are enabled
+### KERNEL-0016: TCP SYN cookies are enabled
 
 | | |
 |---|---|
@@ -2626,13 +2626,13 @@ returns, reconstructing the connection only if the client completes the
 handshake. The cost is that a few TCP options cannot be carried in a cookie, so
 the kernel enables them only under overflow rather than always.
 
-Severity is LOW deliberately. This is availability hardening — it grants an
-attacker nothing, it removes a cheap way to deny service — and treating it as
+Severity is LOW deliberately. This is availability hardening, it grants an
+attacker nothing, it removes a cheap way to deny service, and treating it as
 equivalent to a privilege-escalation finding would mis-rank a triage queue.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set net.ipv4.tcp\_syncookies to 1 and persist it in /etc/sysctl.d/.
 
@@ -2646,15 +2646,15 @@ sysctl -w net.ipv4.tcp_syncookies=1
 sysctl net.ipv4.tcp_syncookies
 ```
 
-**Controls** — `nist-800-53-r5 SC-5`
+**Controls.** `nist-800-53-r5 SC-5`
 
 **References**
 
-- [Linux kernel documentation — ip-sysctl tcp\_syncookies](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [Linux kernel documentation, ip-sysctl tcp\_syncookies](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
 
 ---
 
-### KERNEL-0017 — BPF hardening is written to the sysctl configuration
+### KERNEL-0017: BPF hardening is written to the sysctl configuration
 
 | | |
 |---|---|
@@ -2670,7 +2670,7 @@ whether it will still be refused after the next reboot.
 
 The gap between those is real and is not covered by KERNEL-0007. That check
 compares each running parameter against its configured value and reports drift
-— but a parameter that no file mentions at all is skipped, because there is
+, but a parameter that no file mentions at all is skipped, because there is
 nothing to compare it to. So a host hardened with
 
 	sysctl -w kernel.unprivileged_bpf_disabled=1
@@ -2698,13 +2698,13 @@ which is why both are named rather than one standing in for the pair.
 
 **A conflict is not a verdict.** Where two files set the same parameter to
 different values, which one wins depends on whether systemd-sysctl or procps
-applied them, and this check will not guess — it reports UNKNOWN and names both
+applied them, and this check will not guess, it reports UNKNOWN and names both
 files. Getting that wrong would be a confident claim about what the host does
 after a reboot, which is the one thing this check exists to describe.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write both parameters to a file in /etc/sysctl.d/ and apply them.
 
@@ -2721,19 +2721,19 @@ grep -rn 'unprivileged_bpf_disabled\|bpf_jit_harden' /etc/sysctl.conf /etc/sysct
 systemd-analyze cat-config sysctl.d
 ```
 
-> **Caution.** Disabling unprivileged BPF breaks unprivileged tooling that uses it — some observability agents, and seccomp-bpf is unaffected but eBPF-based tracing run as a normal user is not. Check what on this host loads BPF programs before changing it. JIT hardening costs a little throughput on hot paths for programs that are loaded, which is rarely measurable outside a packet-processing workload.
+> **Caution.** Disabling unprivileged BPF breaks unprivileged tooling that uses it, some observability agents, and seccomp-bpf is unaffected but eBPF-based tracing run as a normal user is not. Check what on this host loads BPF programs before changing it. JIT hardening costs a little throughput on hot paths for programs that are loaded, which is rarely measurable outside a packet-processing workload.
 
-**Controls** — `nist-800-53-r5 CM-6`, `nist-800-53-r5 SI-16`, `nist-800-53-r5 AC-6`
+**Controls.** `nist-800-53-r5 CM-6`, `nist-800-53-r5 SI-16`, `nist-800-53-r5 AC-6`
 
 **References**
 
-- [Linux kernel — unprivileged\_bpf\_disabled](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#unprivileged-bpf-disabled)
-- [Linux kernel — bpf\_jit\_harden](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/net.html#bpf-jit-harden)
+- [Linux kernel, unprivileged\_bpf\_disabled](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#unprivileged-bpf-disabled)
+- [Linux kernel, bpf\_jit\_harden](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/net.html#bpf-jit-harden)
 - [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
 
 ---
 
-### KERNEL-0018 — Kernel pointer restriction is written to the sysctl configuration
+### KERNEL-0018: Kernel pointer restriction is written to the sysctl configuration
 
 | | |
 |---|---|
@@ -2751,28 +2751,28 @@ the whole layout with it.
 
 kptr_restrict decides who gets to see them, and it has three settings:
 
-  - 0 — %pK prints the real address. Anything that reads /proc/kallsyms,
+  - 0, %pK prints the real address. Anything that reads /proc/kallsyms,
         /proc/modules, /proc/timer_list or a dozen other files learns the
         layout.
-  - 1 — the address is printed as zeros unless the reader holds CAP_SYSLOG.
-  - 2 — the address is printed as zeros for everyone, privileged or not.
+  - 1: the address is printed as zeros unless the reader holds CAP_SYSLOG.
+  - 2: the address is printed as zeros for everyone, privileged or not.
 
 **1 is the baseline and 2 is the hardened position.** 1 closes the
 unprivileged leak, which is the exposure: an ordinary local account reads zeros.
-What it leaves open is CAP_SYSLOG, and that is not a rare thing to hold — a
+What it leaves open is CAP_SYSLOG, and that is not a rare thing to hold, a
 container given it for logging, a monitoring agent, anything that reads the ring
 buffer. 2 removes the distinction, at a cost this check does not get to impose:
 perf, bpftrace and crash analysis see zeros as root too.
 
 So 1 and 2 both pass and the verdict says which one is there. **Until catalog 33
 a configured 1 failed here**, on the same host where KERNEL-0002 passed the
-identical running value — one report carrying a PASS and a FAIL about one
+identical running value, one report carrying a PASS and a FAIL about one
 number. The runtime check was the one describing the exposure correctly, and
 this one now agrees with it.
 
 This is a check about files. KERNEL-0002 asks what the running kernel does; this
 asks whether it will still do it after a reboot, which is a different question
-and is not covered by KERNEL-0007 either — that compares running against
+and is not covered by KERNEL-0007 either, that compares running against
 configured and skips a parameter no file mentions, because there is nothing to
 compare it against.
 
@@ -2782,13 +2782,13 @@ ship kernel.kptr_restrict = 1 in a vendor file and Red Hat ships it in
 running kernel is already at 1 or 2 the failure is reported at LOW, because what
 is missing there is the record rather than the protection.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write kernel.kptr\_restrict = 1 to a file in /etc/sysctl.d/ and apply it; 2 if nothing here profiles the kernel.
 
-1. Check what already sets it first: grep -rn kptr\_restrict /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. On Ubuntu a vendor file sets 1, and a drop-in in /etc/sysctl.d overrides it only because /etc is walked after /usr/lib — number yours above whatever you find.
+1. Check what already sets it first: grep -rn kptr\_restrict /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. On Ubuntu a vendor file sets 1, and a drop-in in /etc/sysctl.d overrides it only because /etc is walked after /usr/lib, number yours above whatever you find.
 2. Create /etc/sysctl.d/60-kptr.conf containing kernel.kptr\_restrict = 1. That is what this check requires: it hides pointers from every unprivileged reader, which is the exposure.
 3. Apply without rebooting: sysctl --system, then confirm with sysctl kernel.kptr\_restrict.
 4. Consider 2 rather than 1 where nothing on the host profiles the kernel. 1 still prints pointers in full to anything holding CAP\_SYSLOG, and a container granted it for logging is enough. 2 closes that and is what KSPP recommends.
@@ -2803,16 +2803,16 @@ systemd-analyze cat-config sysctl.d
 
 > **Caution.** At 2 kernel addresses read as zeros for root as well, which breaks perf, bpftrace and kernel crash analysis. Test the tooling this host depends on before setting it fleet-wide; the setting is trivial to apply and the breakage appears the next time somebody profiles something.
 
-**Controls** — `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-16`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-16`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — kptr\_restrict](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#kptr-restrict)
+- [Linux kernel, kptr\_restrict](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#kptr-restrict)
 - [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
 
 ---
 
-### KERNEL-0019 — Kernel ring buffer restriction is written to the sysctl configuration
+### KERNEL-0019: Kernel ring buffer restriction is written to the sysctl configuration
 
 | | |
 |---|---|
@@ -2829,7 +2829,7 @@ decides who may read the buffer those lines are printed into.
 At 0 any local user runs dmesg. What they get is not a log so much as a
 narrated tour of the kernel's memory: driver initialisation with device
 addresses, stack traces from anything that has oopsed since boot, module load
-addresses, and — on a host that has not set kptr_restrict — pointers in the
+addresses, and, on a host that has not set kptr_restrict, pointers in the
 clear. It is also where a great deal of hardware and topology detail lives,
 which is reconnaissance rather than exploitation but is reconnaissance an
 unprivileged process should not be handed.
@@ -2847,14 +2847,14 @@ checks give it.
 
 This reads the files. KERNEL-0004 asks what the running kernel does.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write kernel.dmesg\_restrict = 1 to a file in /etc/sysctl.d/ and apply it.
 
 1. Check what already sets it: grep -rn dmesg\_restrict /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d.
-2. Create or extend a drop-in — the same file as kernel.kptr\_restrict is the natural home, since the two settings close the same leak from opposite ends — containing kernel.dmesg\_restrict = 1.
+2. Create or extend a drop-in, the same file as kernel.kptr\_restrict is the natural home, since the two settings close the same leak from opposite ends, containing kernel.dmesg\_restrict = 1.
 3. Apply without rebooting: sysctl --system, then confirm with sysctl kernel.dmesg\_restrict.
 4. Check what reads dmesg as a non-root user before rolling it out. Some hardware-monitoring and crash-reporting agents do; the answer for those is usually CAP\_SYSLOG on the unit rather than an open buffer for everyone.
 5. Do KERNEL-0018 at the same time if it is also failing. Restricting dmesg while kernel pointers are still printed in the clear leaves the leak open through /proc/kallsyms, and hiding pointers while dmesg is world-readable leaves the stack traces.
@@ -2867,16 +2867,16 @@ systemd-analyze cat-config sysctl.d
 
 > **Caution.** An unprivileged process that legitimately reads dmesg stops working. That is usually a monitoring agent, and the fix is AmbientCapabilities=CAP\_SYSLOG on its unit rather than reopening the buffer to everyone.
 
-**Controls** — `nist-800-53-r5 SC-4`, `nist-800-53-r5 AU-9`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 SC-4`, `nist-800-53-r5 AU-9`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — dmesg\_restrict](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#dmesg-restrict)
+- [Linux kernel, dmesg\_restrict](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#dmesg-restrict)
 - [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
 
 ---
 
-### KERNEL-0020 — Yama ptrace restriction is written to the sysctl configuration
+### KERNEL-0020: Yama ptrace restriction is written to the sysctl configuration
 
 | | |
 |---|---|
@@ -2895,11 +2895,11 @@ into it without dropping a file on disk.
 
 The Yama LSM gates that, and kernel.yama.ptrace_scope chooses how far:
 
-  - 0 — classic behaviour. Any process may trace any other with the same uid.
-  - 1 — a process may trace only its own descendants, unless the target has
+  - 0, classic behaviour. Any process may trace any other with the same uid.
+  - 1, a process may trace only its own descendants, unless the target has
         opted in with PR_SET_PTRACER.
-  - 2 — only a process with CAP_SYS_PTRACE may trace anything.
-  - 3 — no process may trace another, ever, and the value cannot be lowered
+  - 2, only a process with CAP_SYS_PTRACE may trace anything.
+  - 3, no process may trace another, ever, and the value cannot be lowered
         without a reboot.
 
 **Anything above 0 passes**, because the right level depends on what the host
@@ -2917,15 +2917,15 @@ has nothing to drift from.
 the LSM is built in and enabled, and asking a file to set a parameter the
 kernel does not implement would be asking for a line that does nothing.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write kernel.yama.ptrace\_scope = 1 to a file in /etc/sysctl.d/ and apply it.
 
 1. Check what already sets it: grep -rn ptrace\_scope /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Ubuntu ships 1 in a vendor file; most others ship nothing.
 2. Create or extend a drop-in containing kernel.yama.ptrace\_scope = 1. That is the level to start at: it stops a process reading an unrelated one owned by the same user, and leaves an ordinary debugger able to trace the children it started.
-3. Go to 2 only where no unprivileged debugging happens at all, and to 3 only where nothing debugs anything — 3 cannot be lowered again without a reboot, which is the point of it and also the reason to be sure.
+3. Go to 2 only where no unprivileged debugging happens at all, and to 3 only where nothing debugs anything, 3 cannot be lowered again without a reboot, which is the point of it and also the reason to be sure.
 4. Apply without rebooting: sysctl --system, then confirm with sysctl kernel.yama.ptrace\_scope.
 5. Check what debugs what before rolling it out. gdb attaching to a running process, strace on something already started, and some crash reporters and profilers all use ptrace across the process tree. Under 1 the answer for a legitimate debugger is usually to start the target from it rather than attach, or PR\_SET\_PTRACER on the target.
 
@@ -2937,16 +2937,16 @@ systemd-analyze cat-config sysctl.d
 
 > **Caution.** Attaching a debugger or strace to an already-running process stops working for unprivileged users at 1 and for everyone without CAP\_SYS\_PTRACE at 2. Crash reporters and APM agents are the usual casualties. Level 3 cannot be undone without rebooting.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-16`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`, `nist-800-53-r5 SI-16`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — Yama ptrace\_scope](https://www.kernel.org/doc/html/latest/admin-guide/LSM/Yama.html)
+- [Linux kernel. Yama ptrace\_scope](https://www.kernel.org/doc/html/latest/admin-guide/LSM/Yama.html)
 - [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
 
 ---
 
-### KERNEL-0021 — The magic SysRq key is disabled in the sysctl configuration
+### KERNEL-0021: The magic SysRq key is disabled in the sysctl configuration
 
 | | |
 |---|---|
@@ -2963,14 +2963,14 @@ what makes it a liability the rest of the time.
 
 kernel.sysrq is a bitmask, and the functions it can enable are not equivalent:
 
-  - 2   — change the console log level, which can silence kernel logging
-  - 4   — keyboard control, including turning off raw mode
-  - 8   — debugging dumps: registers, memory, every task's stack
-  - 16  — sync all filesystems
-  - 32  — remount everything read-only
-  - 64  — signal processes, including SIGKILL to every task
-  - 128 — reboot or power off immediately
-  - 256 — renice all real-time tasks
+  - 2  , change the console log level, which can silence kernel logging
+  - 4  , keyboard control, including turning off raw mode
+  - 8  , debugging dumps: registers, memory, every task's stack
+  - 16 , sync all filesystems
+  - 32 , remount everything read-only
+  - 64 , signal processes, including SIGKILL to every task
+  - 128, reboot or power off immediately
+  - 256, renice all real-time tasks
 
 0 disables the lot; 1 enables the lot. **The dangerous half is not the reboot.**
 It is 8, which dumps kernel memory and task state to the console and defeats
@@ -2981,7 +2981,7 @@ attacker at the console kill the audit daemon before doing anything else.
 **This needs console access, which is why it is rated below the leak checks
 beside it.** But "console" includes a serial console on a management network, a
 hypervisor's virtual console, an IPMI or iDRAC session and a cloud provider's
-web terminal — none of which is the locked room the phrase suggests, and
+web terminal, none of which is the locked room the phrase suggests, and
 several of which are reachable by anyone who has the management credentials
 rather than the host's.
 
@@ -2990,15 +2990,15 @@ enables everything, and the verdict says which by decoding the mask rather than
 printing the number. A host with kernel.sysrq = 16 has thought about this and
 chosen to keep the emergency sync; a host with 1 has not.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write kernel.sysrq = 0 to a file in /etc/sysctl.d/ and apply it.
 
 1. Check what already sets it: grep -rn 'kernel.sysrq' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. systemd ships a default in /usr/lib/sysctl.d/50-default.conf, so a drop-in in /etc/sysctl.d is what overrides it.
 2. Create or extend a drop-in containing kernel.sysrq = 0.
-3. Decide first whether anyone actually uses it. On a physical machine with an operations team that recovers wedged hosts from a console, the sync and remount-read-only functions are genuinely valuable and the honest answer may be 16 or 48 rather than 0 — a narrow mask, chosen and written down, which this check reports at Low rather than as a plain failure.
+3. Decide first whether anyone actually uses it. On a physical machine with an operations team that recovers wedged hosts from a console, the sync and remount-read-only functions are genuinely valuable and the honest answer may be 16 or 48 rather than 0, a narrow mask, chosen and written down, which this check reports at Low rather than as a plain failure.
 4. Never leave the debugging dumps enabled. Bit 8 prints registers, memory and every task's stack to the console, which defeats address-space randomisation for anyone who can read it.
 5. Apply without rebooting: sysctl --system, then confirm with sysctl kernel.sysrq.
 6. Remember the kernel command line can set it too: sysrq\_always\_enabled in the bootloader configuration overrides this and is not visible to a check that reads sysctl files.
@@ -3009,18 +3009,18 @@ grep -rn 'kernel.sysrq' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sy
 systemd-analyze cat-config sysctl.d
 ```
 
-> **Caution.** Disabling SysRq removes the last resort for recovering a machine whose userspace is gone. Where that matters — physical hosts with console access and an operations team who use it — a narrow mask is a better answer than 0, and better than leaving the default in place.
+> **Caution.** Disabling SysRq removes the last resort for recovering a machine whose userspace is gone. Where that matters, physical hosts with console access and an operations team who use it, a narrow mask is a better answer than 0, and better than leaving the default in place.
 
-**Controls** — `nist-800-53-r5 PE-3`, `nist-800-53-r5 AC-3`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 PE-3`, `nist-800-53-r5 AC-3`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — Magic SysRq key](https://www.kernel.org/doc/html/latest/admin-guide/sysrq.html)
+- [Linux kernel. Magic SysRq key](https://www.kernel.org/doc/html/latest/admin-guide/sysrq.html)
 - [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
 
 ---
 
-### KERNEL-0022 — Perf event restriction is written to the sysctl configuration
+### KERNEL-0022: Perf event restriction is written to the sysctl configuration
 
 | | |
 |---|---|
@@ -3033,24 +3033,24 @@ systemd-analyze cat-config sysctl.d
 perf_event_open is a system call that asks the kernel to
 instrument the hardware: cycle counters, cache misses, branch mispredictions,
 and the addresses being executed while it counts. It exists for profiling and it
-is very good at it, which is the problem — the same measurements that show a
+is very good at it, which is the problem, the same measurements that show a
 developer where their program spends its time show an attacker what another
 process is doing, at instruction granularity.
 
 kernel.perf_event_paranoid decides how much of that an unprivileged process may
 ask for:
 
-  - -1 — everything, including raw tracepoints and kernel measurements.
-  -  0 — no raw tracepoint access; CPU events still allowed.
-  -  1 — no CPU event access for unprivileged users.
-  -  2 — no kernel profiling. The upstream default since Linux 4.6.
-  -  3 — no unprivileged perf at all. A Debian and Ubuntu patch, not upstream.
+  - -1, everything, including raw tracepoints and kernel measurements.
+  -  0, no raw tracepoint access; CPU events still allowed.
+  -  1, no CPU event access for unprivileged users.
+  -  2, no kernel profiling. The upstream default since Linux 4.6.
+  -  3, no unprivileged perf at all. A Debian and Ubuntu patch, not upstream.
 
 **Below 2 the call is a side-channel primitive and a KASLR oracle.** Kernel
 measurements return addresses from the kernel's own execution, which is a direct
 read of the layout randomisation is meant to hide; and the counter resolution is
 fine enough to have carried practical cache-timing attacks against
-cryptographic code in another process. Neither needs a bug — this is the
+cryptographic code in another process. Neither needs a bug, this is the
 interface working as documented.
 
 2 is the bar because it is upstream's own default and because 3 does not exist
@@ -3062,9 +3062,9 @@ This is a check about files. KERNEL-0013 asks what the running kernel does; a
 host set with sysctl -w and nothing on disk passes that and reverts at the next
 boot.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write kernel.perf\_event\_paranoid = 2 to a file in /etc/sysctl.d/, or 3 on a Debian-family kernel.
 
@@ -3082,16 +3082,16 @@ systemd-analyze cat-config sysctl.d
 
 > **Caution.** Unprivileged profiling stops working. perf top, bpftrace and Java Flight Recorder are the usual casualties, and at 3 they stop for everyone without CAP\_PERFMON. Grant the capability to the units that need it rather than lowering the value for the whole host.
 
-**Controls** — `nist-800-53-r5 SC-4`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 SC-4`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — perf\_event\_paranoid](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#perf-event-paranoid)
+- [Linux kernel, perf\_event\_paranoid](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#perf-event-paranoid)
 - [perf\_event\_open(2)](https://man7.org/linux/man-pages/man2/perf_event_open.2.html)
 
 ---
 
-### KERNEL-0023 — TCP SYN cookies are written to the sysctl configuration
+### KERNEL-0023: TCP SYN cookies are written to the sysctl configuration
 
 | | |
 |---|---|
@@ -3111,9 +3111,9 @@ client completes the handshake.
 
 net.ipv4.tcp_syncookies takes three values:
 
-  - 0 — never. The backlog is the only defence.
-  - 1 — on overflow. The upstream default, and the value to write down.
-  - 2 — always, rather than only under overflow.
+  - 0, never. The backlog is the only defence.
+  - 1, on overflow. The upstream default, and the value to write down.
+  - 2, always, rather than only under overflow.
 
 **Every distribution the corpus covers runs 1 already, and almost none of them
 say so in a file.** That is the finding. A running value with nothing behind it
@@ -3124,16 +3124,16 @@ which is a specific way it gets turned off by someone who is not thinking about
 floods.
 
 2 passes. It uses cookies for every connection rather than only under overflow,
-which is stricter and costs a few TCP options — window scaling, SACK and
-timestamps cannot be carried in a cookie — on every connection rather than only
+which is stricter and costs a few TCP options, window scaling, SACK and
+timestamps cannot be carried in a cookie, on every connection rather than only
 during an attack. That is a throughput decision, not a security one, so a host
 that has made it is passed and told what it costs.
 
 This is a check about files. KERNEL-0016 asks what the running kernel does.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write net.ipv4.tcp\_syncookies = 1 to a file in /etc/sysctl.d/.
 
@@ -3151,16 +3151,16 @@ systemd-analyze cat-config sysctl.d
 
 > **Caution.** Value 1 costs nothing on a host that is not under attack, because the fallback only engages when a backlog overflows. Value 2 is the one to be careful with: it drops window scaling, SACK and timestamps on every connection, which is measurable on a high-throughput or high-latency link.
 
-**Controls** — `nist-800-53-r5 SC-5`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 SC-5`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — ip-sysctl tcp\_syncookies](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [Linux kernel, ip-sysctl tcp\_syncookies](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
 - [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
 
 ---
 
-### KERNEL-0024 — Reverse-path filtering is written to the sysctl configuration
+### KERNEL-0024: Reverse-path filtering is written to the sysctl configuration
 
 | | |
 |---|---|
@@ -3180,15 +3180,15 @@ address and hiding where the traffic really came from.
 Two keys are checked, because they answer different questions:
 
   - net.ipv4.conf.default.rp_filter is the template every interface created
-    after boot inherits — a container's veth, a VPN tunnel, a hot-plugged NIC.
+    after boot inherits, a container's veth, a VPN tunnel, a hot-plugged NIC.
     Nothing else covers those, because they do not exist when the files are
     applied.
   - net.ipv4.conf.all.rp_filter is the floor. The kernel takes the *maximum*
     of it and the interface's own value, so it can raise filtering everywhere
     but never lower it.
 
-Either 1 or 2 passes. 1 is strict — the reverse path must be the same
-interface — and 2 is loose, requiring only that the source be routable
+Either 1 or 2 passes. 1 is strict, the reverse path must be the same
+interface, and 2 is loose, requiring only that the source be routable
 somewhere. Loose mode is the correct and deliberate choice on a multi-homed
 host with asymmetric routing, so failing it would punish the operators who
 thought about it hardest.
@@ -3205,9 +3205,9 @@ an operator to stop reading the report.
 This is a check about files. KERNEL-0008 computes the effective value for each
 interface that exists right now.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write net.ipv4.conf.all.rp\_filter = 1 and net.ipv4.conf.default.rp\_filter = 1 to a file in /etc/sysctl.d/.
 
@@ -3223,19 +3223,19 @@ grep -rn rp_filter /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.
 systemd-analyze cat-config sysctl.d
 ```
 
-> **Caution.** Strict mode drops legitimate traffic on a host with asymmetric routing — multiple uplinks, policy routing, or a router doing anything other than symmetric forwarding. Check the routing table before setting 1 host-wide; loose mode (2) is the safe answer where routing is not symmetric, and a per-interface override is the answer where only one interface is affected.
+> **Caution.** Strict mode drops legitimate traffic on a host with asymmetric routing, multiple uplinks, policy routing, or a router doing anything other than symmetric forwarding. Check the routing table before setting 1 host-wide; loose mode (2) is the safe answer where routing is not symmetric, and a per-interface override is the answer where only one interface is affected.
 
-**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-5`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-5`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — ip-sysctl rp\_filter](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
-- [RFC 3704 — Ingress Filtering for Multihomed Networks](https://www.rfc-editor.org/rfc/rfc3704)
+- [Linux kernel, ip-sysctl rp\_filter](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [RFC 3704. Ingress Filtering for Multihomed Networks](https://www.rfc-editor.org/rfc/rfc3704)
 - [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
 
 ---
 
-### KERNEL-0025 — Source routing and ICMP redirects are refused in the sysctl configuration
+### KERNEL-0025: Source routing and ICMP redirects are refused in the sysctl configuration
 
 | | |
 |---|---|
@@ -3257,12 +3257,12 @@ legitimate use.
 
 **ICMP redirects.** A redirect is an unauthenticated packet that rewrites this
 host's routing table. Accept one from an attacker on the same segment and
-traffic to a chosen destination goes through them instead — a
+traffic to a chosen destination goes through them instead, a
 man-in-the-middle that needs no ARP spoofing and leaves nothing on disk. A host
 that does not route has no reason to take routing advice from the network.
 
 All four keys must be 0: conf.all and conf.default for each. **default is not
-redundant with all** — it is the template copied into interfaces created after
+redundant with all**, it is the template copied into interfaces created after
 the files are applied, which is every container veth, VPN tunnel and hot-plugged
 NIC on a modern host, and nothing else covers them.
 
@@ -3277,22 +3277,23 @@ separately even though the fix is the same line twice:
     absence of any configuration is materially worse here.
 
 A key set by a glob counts as set: a file writing net.ipv4.conf.*.accept_source_route
-has configured every interface it matched, and a bare -net.ipv4.conf.all.…
-line withholds that one key from the pattern deliberately.
+has configured every interface it matched, and a bare
+-net.ipv4.conf.all.accept_source_route line withholds that one key from the
+pattern deliberately.
 
 This is a check about files. KERNEL-0015 computes the effective source-routing
 value for each interface that exists right now; redirect acceptance has no
 runtime counterpart yet.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write all four keys as 0 to a file in /etc/sysctl.d/.
 
 1. Check what already sets them, patterns included: grep -rn 'accept\_source\_route\\|accept\_redirects' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d.
 2. Create or extend a drop-in with all four lines: net.ipv4.conf.all.accept\_source\_route = 0, net.ipv4.conf.default.accept\_source\_route = 0, net.ipv4.conf.all.accept\_redirects = 0, net.ipv4.conf.default.accept\_redirects = 0.
-3. Set the default keys even though the all keys look sufficient. default is the template for interfaces created after the files are applied — container veths, VPN tunnels, hot-plugged NICs — and nothing else reaches them.
+3. Set the default keys even though the all keys look sufficient. default is the template for interfaces created after the files are applied, container veths, VPN tunnels, hot-plugged NICs, and nothing else reaches them.
 4. Add the IPv6 equivalents where IPv6 is in use: net.ipv6.conf.all.accept\_ra, net.ipv6.conf.all.accept\_redirects and net.ipv6.conf.default.accept\_redirects. IPv6 has no source-routing key to set, having removed the header, but router advertisements are the larger equivalent exposure.
 5. Apply without rebooting: sysctl --system, then confirm per interface with sysctl -a \| grep -E 'accept\_(source\_route\|redirects)'.
 6. Set net.ipv4.conf.all.secure\_redirects = 0 as well if nothing needs redirects at all; on its own it only narrows acceptance to the current default gateways rather than refusing them.
@@ -3303,19 +3304,19 @@ grep -rn 'accept_source_route\|accept_redirects' /etc/sysctl.conf /etc/sysctl.d 
 systemd-analyze cat-config sysctl.d
 ```
 
-> **Caution.** Refusing redirects is safe on a host with a single default gateway and changes routing behaviour on one that depends on being redirected — an unusual arrangement, but check the routing table on a router or a multi-homed host first. Refusing source routing breaks nothing in modern use; the feature has been deprecated for two decades.
+> **Caution.** Refusing redirects is safe on a host with a single default gateway and changes routing behaviour on one that depends on being redirected, an unusual arrangement, but check the routing table on a router or a multi-homed host first. Refusing source routing breaks nothing in modern use; the feature has been deprecated for two decades.
 
-**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — ip-sysctl accept\_source\_route and accept\_redirects](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
-- [RFC 7126 — Filtering of IP-Optioned Packets](https://www.rfc-editor.org/rfc/rfc7126)
+- [Linux kernel, ip-sysctl accept\_source\_route and accept\_redirects](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [RFC 7126. Filtering of IP-Optioned Packets](https://www.rfc-editor.org/rfc/rfc7126)
 - [sysctl.d(5)](https://man7.org/linux/man-pages/man5/sysctl.d.5.html)
 
 ---
 
-### KERNEL-0026 — IPv6 router advertisements are refused in the sysctl configuration
+### KERNEL-0026: IPv6 router advertisements are refused in the sysctl configuration
 
 | | |
 |---|---|
@@ -3331,7 +3332,7 @@ default gateway is. It is how IPv6 stateless autoconfiguration is designed to
 work, and it is the whole attack.
 
 Anyone who can put a frame on the segment can send one. There is no race to win
-and no cache to poison — a host that accepts RAs installs the attacker as its
+and no cache to poison, a host that accepts RAs installs the attacker as its
 default gateway because that is what the protocol says to do. Two things make
 it worse than the IPv4 equivalent:
 
@@ -3347,7 +3348,7 @@ host forwards, and 2 accepts even when it does. **1 is the default**, so a host
 that has never been configured accepts them.
 
 Both keys are checked. conf.default is the template every interface created
-after boot inherits — a container veth, a VPN tunnel, a hot-plugged NIC — and
+after boot inherits, a container veth, a VPN tunnel, a hot-plugged NIC, and
 nothing else reaches them.
 
 This check is for a host that gets its addresses statically or by DHCPv6. On a
@@ -3357,11 +3358,11 @@ See the remediation.
 
 This is a check about files. Nothing reads the running value yet.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
-Write net.ipv6.conf.all.accept\_ra = 0 and net.ipv6.conf.default.accept\_ra = 0 to a file in /etc/sysctl.d/ — but confirm this host does not use SLAAC first.
+Write net.ipv6.conf.all.accept\_ra = 0 and net.ipv6.conf.default.accept\_ra = 0 to a file in /etc/sysctl.d/, but confirm this host does not use SLAAC first.
 
 1. Find out how this host gets its IPv6 address before changing anything. `ip -6 addr show` marking an address `dynamic mngtmpaddr` means it came from a router advertisement, and refusing RAs will remove it along with the default route. An address from DHCPv6 or from a static configuration is unaffected.
 2. Check what already sets it, patterns included: grep -rn accept\_ra /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d.
@@ -3377,19 +3378,19 @@ sysctl -a 2>/dev/null | grep accept_ra
 grep -rn accept_ra /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null
 ```
 
-> **Caution.** On a host that autoconfigures over IPv6 this removes its address, its default route and any DNS server learned from the advertisement — IPv6 connectivity stops. That is the trade, not a mistake. Verify the addressing method before applying it, and be aware that a cloud provider's network may hand out IPv6 by RA even where IPv4 comes from DHCP.
+> **Caution.** On a host that autoconfigures over IPv6 this removes its address, its default route and any DNS server learned from the advertisement. IPv6 connectivity stops. That is the trade, not a mistake. Verify the addressing method before applying it, and be aware that a cloud provider's network may hand out IPv6 by RA even where IPv4 comes from DHCP.
 
-**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 SC-7`, `nist-800-53-r5 SC-8`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — ip-sysctl accept\_ra](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
-- [RFC 6104 — Rogue IPv6 Router Advertisement Problem Statement](https://www.rfc-editor.org/rfc/rfc6104)
-- [RFC 6105 — IPv6 Router Advertisement Guard](https://www.rfc-editor.org/rfc/rfc6105)
+- [Linux kernel, ip-sysctl accept\_ra](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [RFC 6104. Rogue IPv6 Router Advertisement Problem Statement](https://www.rfc-editor.org/rfc/rfc6104)
+- [RFC 6105. IPv6 Router Advertisement Guard](https://www.rfc-editor.org/rfc/rfc6105)
 
 ---
 
-### KERNEL-0027 — Sending ICMP redirects is refused in the sysctl configuration
+### KERNEL-0027: Sending ICMP redirects is refused in the sysctl configuration
 
 | | |
 |---|---|
@@ -3409,7 +3410,7 @@ smaller and different problem:
 
   - **It describes the network to anyone who can reach this host.** A redirect
     names a gateway and a destination, so an attacker who can elicit one learns
-    a route they were not told about — internal topology, from the outside of
+    a route they were not told about, internal topology, from the outside of
     it.
   - **It is a statement that this host is forwarding at all.** On a machine
     that is not meant to be a router, a redirect leaving it is evidence that
@@ -3417,7 +3418,7 @@ smaller and different problem:
 
 **The parameter only has effect while forwarding is enabled, which is exactly
 why it is worth writing down.** A host that is not forwarding sends no
-redirects whatever this says, so setting it costs nothing today — and container
+redirects whatever this says, so setting it costs nothing today, and container
 runtimes, VPN daemons and virtualisation hosts all enable
 net.ipv4.ip_forward as a side effect of being installed. Docker turns it on at
 start-up. The value of writing 0 down is that the day something enables
@@ -3429,13 +3430,13 @@ every few seconds.
 
 This is a check about files. Nothing reads the running value yet.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write net.ipv4.conf.all.send\_redirects = 0 and net.ipv4.conf.default.send\_redirects = 0 to a file in /etc/sysctl.d/.
 
-1. Check whether this host is meant to route: sysctl net.ipv4.ip\_forward. If it is a router, a NAT gateway or a firewall with more than one leg, leave this alone — sending redirects is part of the job and suppressing them makes traffic take a longer path rather than no path.
+1. Check whether this host is meant to route: sysctl net.ipv4.ip\_forward. If it is a router, a NAT gateway or a firewall with more than one leg, leave this alone, sending redirects is part of the job and suppressing them makes traffic take a longer path rather than no path.
 2. Check what already sets it, patterns included: grep -rn send\_redirects /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d.
 3. Create or extend a drop-in containing net.ipv4.conf.all.send\_redirects = 0 and net.ipv4.conf.default.send\_redirects = 0.
 4. Apply without rebooting: sysctl --system, then confirm with sysctl -a \| grep send\_redirects.
@@ -3449,16 +3450,16 @@ grep -rn send_redirects /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sy
 
 > **Caution.** On a genuine router this suppresses a legitimate optimisation: hosts on the segment keep sending through this machine instead of learning the better first hop, so traffic takes an extra hop rather than failing. Do not set it on a device whose purpose is to route.
 
-**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 SC-7`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — ip-sysctl send\_redirects](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
-- [RFC 1122 — Requirements for Internet Hosts](https://www.rfc-editor.org/rfc/rfc1122)
+- [Linux kernel, ip-sysctl send\_redirects](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [RFC 1122. Requirements for Internet Hosts](https://www.rfc-editor.org/rfc/rfc1122)
 
 ---
 
-### KERNEL-0028 — RFC 1337 TIME-WAIT protection is written to the sysctl configuration
+### KERNEL-0028: RFC 1337 TIME-WAIT protection is written to the sysctl configuration
 
 | | |
 |---|---|
@@ -3477,7 +3478,7 @@ a new connection has taken the same tuple and be accepted as part of it.
 **A reset ends TIME-WAIT early, and that is the hazard RFC 1337 describes.** An
 RST for a socket in TIME-WAIT tears it down immediately and frees the tuple for
 reuse. A delayed segment from the old connection can then land inside the new
-one — the sequence numbers may fall in the new window by chance, or be chosen —
+one, the sequence numbers may fall in the new window by chance, or be chosen,
 and the receiver accepts data that belongs to a connection that ended.
 
 net.ipv4.tcp_rfc1337 = 1 makes the kernel drop RSTs aimed at TIME-WAIT sockets
@@ -3492,13 +3493,13 @@ because it closes a common door.
 
 This is a check about files. Nothing reads the running value yet.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write net.ipv4.tcp\_rfc1337 = 1 to a file in /etc/sysctl.d/.
 
-1. Check what already sets it: grep -rn tcp\_rfc1337 /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Expect nothing — the kernel defaults to 0 and no distribution in this project's corpus ships it.
+1. Check what already sets it: grep -rn tcp\_rfc1337 /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Expect nothing, the kernel defaults to 0 and no distribution in this project's corpus ships it.
 2. Create or extend a drop-in containing net.ipv4.tcp\_rfc1337 = 1.
 3. Apply without rebooting: sysctl --system, then confirm with sysctl net.ipv4.tcp\_rfc1337.
 4. Do not pair this with net.ipv4.tcp\_tw\_reuse or the long-removed tcp\_tw\_recycle as a set of 'TIME-WAIT tuning'. They pull in opposite directions: this one makes TIME-WAIT more durable on purpose, and those exist to get out of it sooner.
@@ -3510,16 +3511,16 @@ grep -rn tcp_rfc1337 /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysct
 
 > **Caution.** Effectively none. Sockets already in TIME-WAIT stay there for their full wait instead of being cut short by a reset, which is what the state is for. A host exhausting its ephemeral ports under very high connection churn is the only place the extra durability is felt, and the answer there is the port range and keep-alive behaviour rather than accepting resets from anyone.
 
-**Controls** — `nist-800-53-r5 SC-5`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 SC-5`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [RFC 1337 — TIME-WAIT Assassination Hazards in TCP](https://www.rfc-editor.org/rfc/rfc1337)
-- [Linux kernel — ip-sysctl tcp\_rfc1337](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
+- [RFC 1337. TIME-WAIT Assassination Hazards in TCP](https://www.rfc-editor.org/rfc/rfc1337)
+- [Linux kernel, ip-sysctl tcp\_rfc1337](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html)
 
 ---
 
-### KERNEL-0029 — The setuid core-dump policy is written to the sysctl configuration
+### KERNEL-0029: The setuid core-dump policy is written to the sysctl configuration
 
 | | |
 |---|---|
@@ -3531,18 +3532,18 @@ grep -rn tcp_rfc1337 /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysct
 
 A core dump is the crashing process's memory written to disk.
 For an ordinary program that is a debugging convenience. For a setuid program it
-is a copy of whatever the program held while running as somebody else — a
+is a copy of whatever the program held while running as somebody else, a
 password read from a terminal, a private key, a Kerberos ticket, a session token
-— plus the addresses everything sat at, which is a defeat of layout
+, plus the addresses everything sat at, which is a defeat of layout
 randomisation thrown in.
 
 fs.suid_dumpable decides what happens when a setuid or setgid program crashes:
 
-  - 0 — no dump. The upstream default.
-  - 1 — dump like any other process, owned by the *running* user. An
+  - 0, no dump. The upstream default.
+  - 1, dump like any other process, owned by the *running* user. An
     unprivileged user crashes a setuid binary and reads privileged memory out
     of the resulting file. This is the value that must never be set.
-  - 2 — dump, readable only by root. "suidsafe": what systemd-coredump needs to
+  - 2, dump, readable only by root. "suidsafe": what systemd-coredump needs to
     capture a crash of a setuid binary at all.
 
 **0 and 2 both pass, and they are not equivalent.** At 2 the privileged memory
@@ -3556,18 +3557,18 @@ values this check does. The pair used to disagree about 2, which put a PASS and
 a FAIL on the same parameter in one report.
 
 This is a check about files. The kernel already defaults to 0, so most hosts
-fail this while being safe today — which is the point: a default is not a
+fail this while being safe today, which is the point: a default is not a
 decision, and nothing on the host records that anyone chose it.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write fs.suid\_dumpable = 0 to a file in /etc/sysctl.d/, or 2 where crash reports for setuid binaries are needed.
 
-1. Check what already sets it: grep -rn suid\_dumpable /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Expect nothing on most hosts — the kernel defaults to 0 and no distribution in this project's corpus writes it down.
+1. Check what already sets it: grep -rn suid\_dumpable /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Expect nothing on most hosts, the kernel defaults to 0 and no distribution in this project's corpus writes it down.
 2. Create or extend a drop-in containing fs.suid\_dumpable = 0. Write it down even though the running kernel almost certainly reports 0 already: that is the built-in default rather than a decision, and a debugging or crash-reporting package that sets 1 will win silently.
-3. Use 2 instead only where crashes of setuid binaries genuinely have to be captured — systemd-coredump cannot collect them at 0. Understand what that buys the attacker who reaches root, and make sure the dumps are not swept into a backup or a log shipper.
+3. Use 2 instead only where crashes of setuid binaries genuinely have to be captured, systemd-coredump cannot collect them at 0. Understand what that buys the attacker who reaches root, and make sure the dumps are not swept into a backup or a log shipper.
 4. Apply without rebooting: sysctl --system, then confirm with sysctl fs.suid\_dumpable.
 5. Check where dumps land if you set 2: kernel.core\_pattern decides, and a pattern piping to a program runs that program as root. KERNEL-0014 covers it.
 
@@ -3577,18 +3578,18 @@ grep -rn suid_dumpable /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sys
 sysctl kernel.core_pattern
 ```
 
-> **Caution.** At 0 a crashing setuid binary produces nothing to debug with, which matters if you are actually chasing a crash in one. That is the intended trade. Note that 2 is not a middle setting for safety — it is a middle setting for debuggability, and the memory still reaches the disk.
+> **Caution.** At 0 a crashing setuid binary produces nothing to debug with, which matters if you are actually chasing a crash in one. That is the intended trade. Note that 2 is not a middle setting for safety, it is a middle setting for debuggability, and the memory still reaches the disk.
 
-**Controls** — `nist-800-53-r5 SC-4`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 SC-4`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — fs.suid\_dumpable](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#suid-dumpable)
+- [Linux kernel, fs.suid\_dumpable](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#suid-dumpable)
 - [core(5)](https://man7.org/linux/man-pages/man5/core.5.html)
 
 ---
 
-### KERNEL-0030 — Hardlink protection is written to the sysctl configuration
+### KERNEL-0030: Hardlink protection is written to the sysctl configuration
 
 | | |
 |---|---|
@@ -3599,7 +3600,7 @@ sysctl kernel.core_pattern
 | Tags | `kernel`, `sysctl`, `persistence`, `privilege-escalation` |
 
 A hardlink is a second name for the same inode, and creating
-one traditionally needed no permission on the file at all — only write access to
+one traditionally needed no permission on the file at all, only write access to
 the directory the new name goes in. That is the whole problem. An unprivileged
 user with a writable directory could link a file they cannot read, and the link
 kept the original's contents and permissions while sitting somewhere they
@@ -3615,7 +3616,7 @@ Two things follow, and both were real vulnerability classes:
 
 fs.protected_hardlinks = 1 requires that the user creating a link either owns
 the file or can read and write it. It closed a run of CVEs at a stroke and has
-essentially no compatibility cost — which is why every distribution enables it
+essentially no compatibility cost, which is why every distribution enables it
 and why almost none of them write it down.
 
 **The kernel defaults this to 1 on any current build, so most hosts are
@@ -3625,16 +3626,16 @@ drop-in from setting 0.
 
 This is a check about files. KERNEL-0010 asks what the running kernel does.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write fs.protected\_hardlinks = 1 to a file in /etc/sysctl.d/.
 
 1. Check what already sets it: grep -rn protected\_hardlinks /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. systemd ships it in 50-default.conf on most systemd hosts, and Ubuntu in 99-protect-links.conf; the RPM family commonly relies on the kernel default and writes nothing.
 2. Create or extend a drop-in containing fs.protected\_hardlinks = 1. Write it down even though the running kernel reports 1: that is the kernel's built-in default rather than a decision on this host, and a drop-in setting 0 would win without anything recording that 1 was intended.
 3. Apply without rebooting: sysctl --system, then confirm with sysctl fs.protected\_hardlinks.
-4. Set fs.protected\_symlinks in the same file — the two close halves of the same problem and are always configured together. KERNEL-0031 covers it.
+4. Set fs.protected\_symlinks in the same file, the two close halves of the same problem and are always configured together. KERNEL-0031 covers it.
 
 ```sh
 sysctl fs.protected_hardlinks
@@ -3644,16 +3645,16 @@ systemd-analyze cat-config sysctl.d
 
 > **Caution.** Effectively none. The restriction only refuses links to files the linking user could not already read and write, which no ordinary workload does. Very old backup or packaging tools that hardlink across ownership boundaries as root are unaffected, since root is exempt.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 AC-3`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 AC-3`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — fs.protected\_hardlinks](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-hardlinks)
-- [Linux kernel commit 800179c9b8a1 — hardlink restrictions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=800179c9b8a1)
+- [Linux kernel, fs.protected\_hardlinks](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-hardlinks)
+- [Linux kernel commit 800179c9b8a1, hardlink restrictions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=800179c9b8a1)
 
 ---
 
-### KERNEL-0031 — Symlink protection is written to the sysctl configuration
+### KERNEL-0031: Symlink protection is written to the sysctl configuration
 
 | | |
 |---|---|
@@ -3671,8 +3672,8 @@ win because the attacker chooses when to run, and it has been the mechanism
 behind a very long run of CVEs.
 
 fs.protected_symlinks = 1 breaks it in the kernel rather than in each program.
-In a world-writable sticky directory — /tmp, /var/tmp, /dev/shm — a symlink is
-only followed when the person following it owns the link, or owns the directory.
+In a world-writable sticky directory such as /tmp, /var/tmp or /dev/shm, a
+symlink is only followed when the person following it owns the link, or owns the directory.
 An attacker's link in /tmp is therefore not followed by root, and the race
 becomes unwinnable regardless of how the program was written.
 
@@ -3687,16 +3688,16 @@ decision, and nothing here stops a drop-in from setting 0.
 
 This is a check about files. KERNEL-0009 asks what the running kernel does.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write fs.protected\_symlinks = 1 to a file in /etc/sysctl.d/.
 
 1. Check what already sets it: grep -rn protected\_symlinks /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. systemd ships it in 50-default.conf on most systemd hosts, and Ubuntu in 99-protect-links.conf; the RPM family commonly relies on the kernel default and writes nothing.
 2. Create or extend a drop-in containing fs.protected\_symlinks = 1. Write it down even though the running kernel reports 1: that is the kernel's built-in default rather than a decision on this host.
 3. Apply without rebooting: sysctl --system, then confirm with sysctl fs.protected\_symlinks.
-4. Set fs.protected\_hardlinks in the same file — the two close halves of the same problem and are always configured together. KERNEL-0030 covers it.
+4. Set fs.protected\_hardlinks in the same file, the two close halves of the same problem and are always configured together. KERNEL-0030 covers it.
 5. Consider fs.protected\_regular = 2 and fs.protected\_fifos = 1 alongside them: they extend the same idea from following a link to opening a file or FIFO another user planted. KERNEL-0011 and KERNEL-0012 read the running values.
 
 ```sh
@@ -3707,18 +3708,18 @@ systemd-analyze cat-config sysctl.d
 
 > **Caution.** Effectively none. The restriction applies only inside world-writable sticky directories and only to links whose owner differs from both the follower and the directory owner, which is a pattern legitimate software does not rely on. A program that genuinely needs to follow another user's link in /tmp is describing the vulnerability rather than a requirement.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SI-10`, `nist-800-53-r5 CM-6`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 SI-10`, `nist-800-53-r5 CM-6`
 
 **References**
 
-- [Linux kernel — fs.protected\_symlinks](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-symlinks)
-- [Linux kernel commit 800179c9b8a1 — symlink restrictions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=800179c9b8a1)
+- [Linux kernel, fs.protected\_symlinks](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-symlinks)
+- [Linux kernel commit 800179c9b8a1, symlink restrictions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=800179c9b8a1)
 
 ---
 
 ## LOGGING
 
-### LOGGING-0001 — rsyslog creates log files unreadable by other
+### LOGGING-0001: rsyslog creates log files unreadable by other
 
 | | |
 |---|---|
@@ -3736,7 +3737,7 @@ identifiers, tokens and query strings that were never meant to leave the
 process that wrote them.
 
 rsyslog creates these files itself, with the mode its configuration tells it
-to, and its built-in default is 0644 — readable by every account on the host.
+to, and its built-in default is 0644, readable by every account on the host.
 An attacker with any unprivileged shell therefore starts with the
 authentication history, which tells them which accounts exist, which are used,
 and from which addresses a login will not look unusual.
@@ -3747,15 +3748,15 @@ how an 'adm' or 'systemd-journal' group gives an operations team log access
 without handing out root, which is a real improvement over the alternative and
 should not be reported as a defect.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set the log file creation mode to 0640 and fix the files already on disk.
 
-1. Set the mode in whichever syntax the file already uses. Legacy: '$FileCreateMode 0640' near the top of /etc/rsyslog.conf, before the file actions. RainerScript: add 'fileCreateMode="0640"' to each omfile action, or set it once with a legacy directive — rsyslog accepts both in the same file.
+1. Set the mode in whichever syntax the file already uses. Legacy: '$FileCreateMode 0640' near the top of /etc/rsyslog.conf, before the file actions. RainerScript: add 'fileCreateMode="0640"' to each omfile action, or set it once with a legacy directive, rsyslog accepts both in the same file.
 2. Note that the legacy directive is positional: it governs the actions written after it. Placing it at the bottom of the file changes nothing.
-3. Fix what already exists — the mode only applies to files rsyslog creates from now on: 'chmod o-rwx,g-wx /var/log/\*.log' and the same for the rotated copies.
+3. Fix what already exists, the mode only applies to files rsyslog creates from now on: 'chmod o-rwx,g-wx /var/log/\*.log' and the same for the rotated copies.
 4. Check logrotate too. 'create' directives in /etc/logrotate.conf and /etc/logrotate.d/ set the mode of the file after rotation and will silently reinstate 0644 at the next rotation.
 5. Restart rsyslog and confirm: 'systemctl restart rsyslog' then 'stat -c "%n %a" /var/log/syslog'.
 
@@ -3764,9 +3765,9 @@ grep -rEn 'FileCreateMode|fileCreateMode' /etc/rsyslog.conf /etc/rsyslog.d/
 stat -c '%n %a %U:%G' /var/log/*.log
 ```
 
-> **Caution.** Tightening the mode breaks anything reading logs as a non-root, non-group account: log shippers, monitoring agents and some web-facing log viewers. Add those agents to the log group rather than widening the mode back — and check logrotate, or the next rotation will undo the change without anybody noticing.
+> **Caution.** Tightening the mode breaks anything reading logs as a non-root, non-group account: log shippers, monitoring agents and some web-facing log viewers. Add those agents to the log group rather than widening the mode back, and check logrotate, or the next rotation will undo the change without anybody noticing.
 
-**Controls** — `nist-800-53-r5 AU-9`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`
+**Controls.** `nist-800-53-r5 AU-9`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`
 
 **References**
 
@@ -3774,7 +3775,7 @@ stat -c '%n %a %U:%G' /var/log/*.log
 
 ---
 
-### LOGGING-0002 — Logs are forwarded to a remote collector
+### LOGGING-0002: Logs are forwarded to a remote collector
 
 | | |
 |---|---|
@@ -3786,7 +3787,7 @@ stat -c '%n %a %U:%G' /var/log/*.log
 
 A log that only exists on the host it describes is not
 evidence. It is a file the attacker who took the host can edit, truncate or
-delete, and doing so is one of the first things any competent intrusion does —
+delete, and doing so is one of the first things any competent intrusion does,
 before anybody knows to go looking. Every other check in this module protects a
 record that a local-only configuration allows to be erased.
 
@@ -3808,15 +3809,15 @@ reads both:
 A host that forwards is reported as passing whichever syntax it used. Whether
 the transport it chose is reliable is LOGGING-0005's question.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Configure a remote destination, using a reliable transport.
 
-1. Decide where logs go before configuring anything, and confirm the collector will accept from this host — a forwarding rule pointing at a listener that drops the traffic is worse than none, because it looks configured.
+1. Decide where logs go before configuring anything, and confirm the collector will accept from this host, a forwarding rule pointing at a listener that drops the traffic is worse than none, because it looks configured.
 2. Prefer the RainerScript form on any rsyslog 8 host: 'action(type="omfwd" target="logs.example.net" port="514" protocol="tcp" queue.type="linkedlist" queue.filename="fwd" action.resumeRetryCount="-1")'. The queue parameters are what let the host survive a collector outage without losing messages.
-3. The legacy equivalent is '\*.\* @@logs.example.net:514' — two at-signs for TCP, one for UDP. Both syntaxes work in the same file; use whichever the rest of the file uses rather than mixing.
+3. The legacy equivalent is '\*.\* @@logs.example.net:514', two at-signs for TCP, one for UDP. Both syntaxes work in the same file; use whichever the rest of the file uses rather than mixing.
 4. Encrypt it if the path is not trusted: rsyslog supports TLS through the gtls driver, and RELP with TLS is the sturdiest of the options.
 5. Verify end to end: 'logger -p auth.info plumbline-test' and confirm the line arrives at the collector. Do not assume it works because rsyslog restarted cleanly.
 
@@ -3825,17 +3826,17 @@ grep -rEn '^\*\.\*|omfwd|omrelp|@@' /etc/rsyslog.conf /etc/rsyslog.d/
 logger -p auth.info plumbline-test
 ```
 
-> **Caution.** Forwarding sends the contents of your logs — including authentication records and anything an application logged carelessly — across the network to another host. Confirm the transport is encrypted where the path is not trusted, and confirm the collector's own retention and access controls before pointing production hosts at it.
+> **Caution.** Forwarding sends the contents of your logs, including authentication records and anything an application logged carelessly, across the network to another host. Confirm the transport is encrypted where the path is not trusted, and confirm the collector's own retention and access controls before pointing production hosts at it.
 
-**Controls** — `nist-800-53-r5 AU-9(2)`, `nist-800-53-r5 AU-4`, `nist-800-53-r5 AU-6`
+**Controls.** `nist-800-53-r5 AU-9(2)`, `nist-800-53-r5 AU-4`, `nist-800-53-r5 AU-6`
 
 **References**
 
-- [rsyslog — omfwd](https://www.rsyslog.com/doc/configuration/modules/omfwd.html)
+- [rsyslog, omfwd](https://www.rsyslog.com/doc/configuration/modules/omfwd.html)
 
 ---
 
-### LOGGING-0003 — The systemd journal is stored persistently
+### LOGGING-0003: The systemd journal is stored persistently
 
 | | |
 |---|---|
@@ -3846,7 +3847,7 @@ logger -p auth.info plumbline-test
 | Tags | `logging`, `forensics`, `retention` |
 
 A volatile journal lives in /run/log/journal, which is a
-tmpfs. Every record in it is destroyed at the next boot — and "the machine was
+tmpfs. Every record in it is destroyed at the next boot, and "the machine was
 rebooted" is a description of most incidents, whether the reboot was the
 attacker covering their tracks, a kernel panic they caused, or an operator
 restarting a host that was behaving oddly. Investigating afterwards means
@@ -3871,13 +3872,13 @@ Persistence is not a substitute for forwarding (LOGGING-0002). A persistent
 journal is still a local file that root can delete; it survives a reboot, not
 an attacker.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set Storage=persistent and give the journal a size limit.
 
-1. Set 'Storage=persistent' under [Journal] in /etc/systemd/journald.conf, or in a drop-in under /etc/systemd/journald.conf.d/ — the drop-in is the better place on a configuration-managed host, and it overrides the main file.
+1. Set 'Storage=persistent' under [Journal] in /etc/systemd/journald.conf, or in a drop-in under /etc/systemd/journald.conf.d/, the drop-in is the better place on a configuration-managed host, and it overrides the main file.
 2. Bound the size in the same change: 'SystemMaxUse=1G' or similar. journald defaults to 10% of the filesystem, which on a large disk is a great deal of space and on a small one is a disk-full outage.
 3. Create the directory and restart: 'mkdir -p /var/log/journal && systemd-tmpfiles --create --prefix /var/log/journal && systemctl restart systemd-journald'.
 4. Confirm it took effect: 'journalctl --disk-usage' reports the on-disk size, and 'journalctl --list-boots' should show more than the current boot once the host has been restarted.
@@ -3887,9 +3888,9 @@ systemd-analyze cat-config systemd/journald.conf
 journalctl --disk-usage
 ```
 
-> **Caution.** Persisting the journal starts consuming disk on a host that was not consuming any. Set SystemMaxUse in the same change — a full /var is an outage, and on many hosts it is an outage that also stops the logging you just enabled.
+> **Caution.** Persisting the journal starts consuming disk on a host that was not consuming any. Set SystemMaxUse in the same change, a full /var is an outage, and on many hosts it is an outage that also stops the logging you just enabled.
 
-**Controls** — `nist-800-53-r5 AU-4`, `nist-800-53-r5 AU-11`, `nist-800-53-r5 AU-9`
+**Controls.** `nist-800-53-r5 AU-4`, `nist-800-53-r5 AU-11`, `nist-800-53-r5 AU-9`
 
 **References**
 
@@ -3897,7 +3898,7 @@ journalctl --disk-usage
 
 ---
 
-### LOGGING-0004 — journald forwards to syslog where rsyslog is present
+### LOGGING-0004: journald forwards to syslog where rsyslog is present
 
 | | |
 |---|---|
@@ -3910,7 +3911,7 @@ journalctl --disk-usage
 On a host running both daemons, journald is where records
 arrive and rsyslog is what sends them anywhere else. If journald does not hand
 them over, rsyslog's forwarding rules (LOGGING-0002) receive nothing from the
-journal — and the host looks correctly configured from either file alone.
+journal, and the host looks correctly configured from either file alone.
 
 That is the failure worth catching: two configurations that are each defensible
 and that do not connect. An operator who has set up remote logging in rsyslog
@@ -3919,8 +3920,8 @@ leaving, and the gap is visible only by reading the two files together.
 
 **The proposition tested is that forwarding is explicitly configured**, not
 that it happens to be on. journald's default for ForwardToSyslog has changed
-across systemd versions — it was yes historically and is no in current
-releases — and Plumbline does not read the systemd version. Relying on an
+across systemd versions, it was yes historically and is no in current
+releases, and Plumbline does not read the systemd version. Relying on an
 unstated default that has already flipped once is not a configuration, so an
 absent setting is a definite FAIL rather than an UNKNOWN: the fact tested, "it
 is explicitly set", is decided by the files. This is the same shape as
@@ -3930,17 +3931,17 @@ This check is NOT_APPLICABLE where rsyslog is not installed. A journald-only
 host has nothing to forward to, and LOGGING-0002 and LOGGING-0003 are the
 checks that apply to it.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set ForwardToSyslog=yes explicitly, or remove rsyslog if it is not being used.
 
-1. Decide which daemon owns forwarding first. Running both with journald not forwarding is a common and reasonable arrangement — if rsyslog is installed but unused, removing it is the better fix and makes this check NOT\_APPLICABLE.
+1. Decide which daemon owns forwarding first. Running both with journald not forwarding is a common and reasonable arrangement, if rsyslog is installed but unused, removing it is the better fix and makes this check NOT\_APPLICABLE.
 2. To connect them, set 'ForwardToSyslog=yes' under [Journal], preferably in a drop-in under /etc/systemd/journald.conf.d/. Set it explicitly even if the current default already does what you want: the default has changed once and may again.
 3. Restart journald: 'systemctl restart systemd-journald'.
 4. Verify end to end rather than by reading the file: 'logger -p auth.info plumbline-test' and confirm the line appears in the rsyslog-written file, not only in 'journalctl'.
-5. Watch for duplication. With forwarding on and the journal persistent, every record is stored twice — that is usually the intent, but it doubles the disk the logs consume.
+5. Watch for duplication. With forwarding on and the journal persistent, every record is stored twice, that is usually the intent, but it doubles the disk the logs consume.
 
 ```sh
 systemd-analyze cat-config systemd/journald.conf | grep -i forwardtosyslog
@@ -3949,15 +3950,15 @@ logger -p auth.info plumbline-test
 
 > **Caution.** Turning forwarding on doubles log volume on a host that also persists the journal, and on a busy host that can fill /var faster than anybody expects. Check SystemMaxUse and the rsyslog side's rotation before making the change.
 
-**Controls** — `nist-800-53-r5 AU-6`, `nist-800-53-r5 AU-9(2)`
+**Controls.** `nist-800-53-r5 AU-6`, `nist-800-53-r5 AU-9(2)`
 
 **References**
 
-- [journald.conf(5) — ForwardToSyslog](https://www.freedesktop.org/software/systemd/man/journald.conf.html)
+- [journald.conf(5). ForwardToSyslog](https://www.freedesktop.org/software/systemd/man/journald.conf.html)
 
 ---
 
-### LOGGING-0005 — Remote log forwarding uses a reliable transport
+### LOGGING-0005: Remote log forwarding uses a reliable transport
 
 | | |
 |---|---|
@@ -3968,7 +3969,7 @@ logger -p auth.info plumbline-test
 | Tags | `logging`, `forensics`, `network`, `tamper-resistance` |
 
 Forwarding over UDP drops messages silently, and it drops
-them hardest under load — which is precisely the condition that produces the
+them hardest under load, which is precisely the condition that produces the
 logs worth keeping. A host under attack generates a burst of authentication
 failures, and a UDP forwarder discards whatever the socket buffer cannot hold,
 with no error anywhere and no gap that anything downstream can detect. The
@@ -3976,15 +3977,15 @@ collector receives a plausible-looking stream that is missing the interesting
 part.
 
 Two further properties make UDP the wrong choice here. It is connectionless, so
-a collector that is down produces no failure on the sending side at all — the
+a collector that is down produces no failure on the sending side at all, the
 host carries on believing it is forwarding. And it is trivially spoofable: an
 attacker on the path can inject records that the collector will attribute to
 this host, which turns the log from evidence into something an adversary can
 write to.
 
 TCP fixes the silent-loss problem and makes an unreachable collector visible.
-RELP fixes the remaining gap — TCP acknowledges receipt by the kernel, RELP
-acknowledges processing by the application — and is the right answer where the
+RELP fixes the remaining gap. TCP acknowledges receipt by the kernel, RELP
+acknowledges processing by the application, and is the right answer where the
 log is genuinely evidentiary.
 
 **Where the protocol is not stated, this check treats it as UDP**, because
@@ -3996,13 +3997,13 @@ This check is NOT_APPLICABLE where no remote destination is configured at all.
 That absence is LOGGING-0002's finding, reported once rather than twice under
 two names.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Move the destination to TCP or RELP, and give it a disk-assisted queue.
 
-1. Confirm the collector accepts the new transport before changing the sender. A collector listening only on UDP/514 will simply stop receiving, and — because UDP fails silently — nobody will notice until somebody goes looking for a log.
+1. Confirm the collector accepts the new transport before changing the sender. A collector listening only on UDP/514 will simply stop receiving, and, because UDP fails silently, nobody will notice until somebody goes looking for a log.
 2. Legacy syntax: change the single '@' to '@@'. '\*.\* @@logs.example.net:514'.
 3. RainerScript: set 'protocol="tcp"' on the omfwd action, or switch to 'action(type="omrelp" target="..." port="2514")' where the collector supports RELP.
 4. Add a queue, or TCP only moves the loss rather than removing it: 'queue.type="linkedlist" queue.filename="fwd" queue.maxdiskspace="1g" action.resumeRetryCount="-1"' lets the host buffer to disk through a collector outage instead of discarding.
@@ -4013,20 +4014,20 @@ grep -rEn '@@?[a-zA-Z0-9]|omfwd|omrelp' /etc/rsyslog.conf /etc/rsyslog.d/
 ss -tnp | grep :514
 ```
 
-> **Caution.** TCP forwarding without a queue can block rsyslog when the collector is slow or unreachable, which on some configurations blocks the applications writing to it. Configure a disk-assisted queue and a resume-retry count in the same change — moving to TCP without one trades silent loss for an availability risk.
+> **Caution.** TCP forwarding without a queue can block rsyslog when the collector is slow or unreachable, which on some configurations blocks the applications writing to it. Configure a disk-assisted queue and a resume-retry count in the same change, moving to TCP without one trades silent loss for an availability risk.
 
-**Controls** — `nist-800-53-r5 AU-9(2)`, `nist-800-53-r5 AU-4`, `nist-800-53-r5 SC-8`
+**Controls.** `nist-800-53-r5 AU-9(2)`, `nist-800-53-r5 AU-4`, `nist-800-53-r5 SC-8`
 
 **References**
 
-- [rsyslog — omfwd](https://www.rsyslog.com/doc/configuration/modules/omfwd.html)
-- [RFC 5424 — The Syslog Protocol](https://www.rfc-editor.org/rfc/rfc5424)
+- [rsyslog, omfwd](https://www.rsyslog.com/doc/configuration/modules/omfwd.html)
+- [RFC 5424. The Syslog Protocol](https://www.rfc-editor.org/rfc/rfc5424)
 
 ---
 
 ## MEMORY
 
-### MEMORY-0001 — Privileged binaries are position-independent executables
+### MEMORY-0001: Privileged binaries are position-independent executables
 
 | | |
 |---|---|
@@ -4040,7 +4041,7 @@ A position-independent executable can be loaded at a
 different base address on every execution, which is what lets ASLR randomise
 its code. A binary linked at a fixed address (ELF type ET_EXEC) cannot be
 moved, so its instruction addresses are identical on every host running that
-build — and an attacker who needs a gadget in it does not have to leak an
+build, and an attacker who needs a gadget in it does not have to leak an
 address first.
 
 The exposure is worth attention specifically on setuid-root utilities and the
@@ -4052,13 +4053,13 @@ Every mainstream distribution has built these binaries as PIE for years, so a
 failure here usually means a locally compiled or vendor-supplied replacement
 rather than a distribution default.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Replace the binary with a position-independent build.
 
-1. Confirm the finding independently: readelf -h <path> \| grep Type — ET\_DYN is a PIE, ET\_EXEC is not.
+1. Confirm the finding independently: readelf -h <path> \| grep Type. ET\_DYN is a PIE, ET\_EXEC is not.
 2. Identify what owns the file: dpkg -S <path> or rpm -qf <path>. A file no package owns was installed outside the package manager and is the likely cause.
 3. If a package owns it, reinstall from the distribution: every mainstream distribution has shipped these as PIE for years, so a fixed-address build usually means the file was replaced locally.
 4. If it was built locally, rebuild with -fPIE in CFLAGS and -pie in LDFLAGS, then confirm with readelf before installing.
@@ -4071,15 +4072,15 @@ dpkg -S /usr/bin/sudo || rpm -qf /usr/bin/sudo
 
 > **Caution.** Replacing a setuid-root binary can leave you unable to escalate privileges. Verify a second route to root in a separate session before swapping sudo or su, and keep the original file until the replacement is confirmed working.
 
-**Controls** — `nist-800-53-r5 SI-16`
+**Controls.** `nist-800-53-r5 SI-16`
 
 **References**
 
-- [elf(5) — ELF header types](https://man7.org/linux/man-pages/man5/elf.5.html)
+- [elf(5). ELF header types](https://man7.org/linux/man-pages/man5/elf.5.html)
 
 ---
 
-### MEMORY-0002 — Privileged binaries use full RELRO
+### MEMORY-0002: Privileged binaries use full RELRO
 
 | | |
 |---|---|
@@ -4093,7 +4094,7 @@ RELRO maps a dynamically linked program's relocation data
 read-only once the dynamic linker has finished with it. Partial RELRO covers
 the sections resolved at startup and stops short of the PLT's global offset
 table, because lazy binding writes an address into that table the first time
-each imported function is called — so the table has to stay writable for the
+each imported function is called, so the table has to stay writable for the
 life of the process.
 
 That writable table is a well-worn target. An attacker with an arbitrary write
@@ -4110,13 +4111,13 @@ This check reports FAIL only when the relocation table is actually left
 writable. A statically linked binary resolves nothing at run time and is
 NOT_APPLICABLE rather than a failure: it has no lazy binding to close.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Rebuild the binary with full RELRO, or obtain a build that has it.
 
-1. Confirm the finding independently: readelf -d <path> \| grep -E 'BIND\_NOW\|FLAGS' — full RELRO needs a GNU\_RELRO segment plus BIND\_NOW, DF\_BIND\_NOW or DF\_1\_NOW.
+1. Confirm the finding independently: readelf -d <path> \| grep -E 'BIND\_NOW\|FLAGS', full RELRO needs a GNU\_RELRO segment plus BIND\_NOW, DF\_BIND\_NOW or DF\_1\_NOW.
 2. Check the GNU\_RELRO segment is present too: readelf -l <path> \| grep GNU\_RELRO. A binary with neither needs both flags, not just one.
 3. Identify what owns the file: dpkg -S <path> or rpm -qf <path>.
 4. If a package owns it, check whether the distribution ships a hardened build; most enable this by default and a missing flag suggests the file was replaced locally.
@@ -4130,15 +4131,15 @@ readelf -l /usr/bin/sudo | grep GNU_RELRO
 
 > **Caution.** Replacing a setuid-root binary can leave you unable to escalate privileges. Verify a second route to root in a separate session before swapping sudo or su, and keep the original file until the replacement is confirmed working.
 
-**Controls** — `nist-800-53-r5 SI-16`
+**Controls.** `nist-800-53-r5 SI-16`
 
 **References**
 
-- [ld(1) — -z relro and -z now](https://man7.org/linux/man-pages/man1/ld.1.html)
+- [ld(1), -z relro and -z now](https://man7.org/linux/man-pages/man1/ld.1.html)
 
 ---
 
-### MEMORY-0003 — Privileged binaries are built with stack protection
+### MEMORY-0003: Privileged binaries are built with stack protection
 
 | | |
 |---|---|
@@ -4171,17 +4172,17 @@ gets its memory safety from the language and reports here as though it had none.
 That is a limitation of what a symbol table can tell you, not a finding about
 the binary.
 
-So this check reports what the symbols say — no more. Confirm what produced the
+So this check reports what the symbols say, no more. Confirm what produced the
 binary before treating a failure as a defect.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Confirm what built the binary, then rebuild with a stack protector if it is C or C++.
 
 1. Rule out the two known false positives first. A binary from a memory-safe language (Rust, Go) does not use this mechanism, and a small C program with no local arrays legitimately has no instrumented function.
-2. Confirm the finding independently: readelf -sW <path> \| grep \_\_stack\_chk\_fail — no output means no reference.
+2. Confirm the finding independently: readelf -sW <path> \| grep \_\_stack\_chk\_fail, no output means no reference.
 3. Check the binary is not merely stripped of the table you are reading: a fully stripped static binary reports UNKNOWN here rather than FAIL, so a FAIL means a table was read and the symbol was not in it.
 4. Identify what owns the file: dpkg -S <path> or rpm -qf <path>.
 5. If it was built locally as C or C++, rebuild with -fstack-protector-strong in CFLAGS and confirm with readelf before installing.
@@ -4194,15 +4195,15 @@ dpkg -S /usr/bin/sudo || rpm -qf /usr/bin/sudo
 
 > **Caution.** Replacing a setuid-root binary can leave you unable to escalate privileges. Verify a second route to root in a separate session before swapping sudo or su, and keep the original file until the replacement is confirmed working.
 
-**Controls** — `nist-800-53-r5 SI-16`
+**Controls.** `nist-800-53-r5 SI-16`
 
 **References**
 
-- [gcc(1) — -fstack-protector-strong](https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html)
+- [gcc(1), -fstack-protector-strong](https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html)
 
 ---
 
-### MEMORY-0004 — Privileged binaries are built with \_FORTIFY\_SOURCE
+### MEMORY-0004: Privileged binaries are built with \_FORTIFY\_SOURCE
 
 | | |
 |---|---|
@@ -4213,7 +4214,7 @@ dpkg -S /usr/bin/sudo || rpm -qf /usr/bin/sudo
 | Tags | `memory`, `exploit-mitigation`, `fortify-source`, `setuid` |
 
 _FORTIFY_SOURCE substitutes a checked variant for libc calls
-whose destination size the compiler can work out — memcpy becomes __memcpy_chk,
+whose destination size the compiler can work out, memcpy becomes __memcpy_chk,
 sprintf becomes __sprintf_chk, and so on. The checked variant knows how large
 the buffer is and aborts instead of writing past it. It costs almost nothing at
 run time and turns a class of buffer overflow into a clean abort.
@@ -4224,7 +4225,7 @@ produced the call.
 
 Absence is the harder half, because two very different binaries produce it. One
 was compiled without the option. The other was compiled with it and calls
-nothing the macro could substitute — a program that never formats a string or
+nothing the macro could substitute, a program that never formats a string or
 copies a buffer has nothing to fortify, and looks identical from outside.
 
 The check separates them by counting the unfortified originals. A binary that
@@ -4238,13 +4239,13 @@ calls no fortifiable libc function; one that links against libc for string and
 memory work will report FAIL, which reflects what its symbol table says rather
 than how it manages memory.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Rebuild the binary with \_FORTIFY\_SOURCE, or obtain a build that has it.
 
-1. Confirm the finding independently: readelf -sW <path> \| grep '\_chk' — no output means no fortified entry point was linked.
+1. Confirm the finding independently: readelf -sW <path> \| grep '\_chk', no output means no fortified entry point was linked.
 2. Check which unfortified calls the binary does make: readelf -sW <path> \| grep -E 'memcpy\|sprintf\|strcpy\|printf'. Those are what the option would have covered.
 3. Identify what owns the file: dpkg -S <path> or rpm -qf <path>.
 4. If it was built locally, rebuild with -D\_FORTIFY\_SOURCE=3 (or =2 on older toolchains) and an optimisation level of at least -O1, which the macro requires to work at all.
@@ -4257,17 +4258,17 @@ dpkg -S /usr/bin/sudo || rpm -qf /usr/bin/sudo
 
 > **Caution.** Replacing a setuid-root binary can leave you unable to escalate privileges. Verify a second route to root in a separate session before swapping sudo or su, and keep the original file until the replacement is confirmed working.
 
-**Controls** — `nist-800-53-r5 SI-16`
+**Controls.** `nist-800-53-r5 SI-16`
 
 **References**
 
-- [feature\_test\_macros(7) — \_FORTIFY\_SOURCE](https://man7.org/linux/man-pages/man7/feature_test_macros.7.html)
+- [feature\_test\_macros(7), \_FORTIFY\_SOURCE](https://man7.org/linux/man-pages/man7/feature_test_macros.7.html)
 
 ---
 
 ## NETWORK
 
-### NETWORK-0001 — A host-based firewall is configured
+### NETWORK-0001: A host-based firewall is configured
 
 | | |
 |---|---|
@@ -4279,7 +4280,7 @@ dpkg -S /usr/bin/sudo || rpm -qf /usr/bin/sudo
 
 A host firewall is the control that survives every mistake
 made above it. A perimeter is a statement about where an attacker is, and it
-stops being true the moment one is inside it — a compromised workstation on the
+stops being true the moment one is inside it, a compromised workstation on the
 same VLAN, a container escaping onto the host network, a cloud security group
 edited to unblock a deployment and never edited back. The host firewall is the
 only rule set that does not depend on that assumption.
@@ -4292,23 +4293,23 @@ it, and every one of them is closed by a default-deny host firewall without
 anybody having to notice.
 
 This check reports what is **configured**, not what is loaded. It reads the
-files a firewall is restored from — nftables.conf, an iptables-save file,
-ufw.conf, firewalld.conf — and a file that exists but holds no statements does
+files a firewall is restored from, nftables.conf, an iptables-save file,
+ufw.conf, firewalld.conf, and a file that exists but holds no statements does
 not count. Debian's nftables package installs /etc/nftables.conf whether or not
 anybody has written a rule in it, and a check that treated the file's existence
 as a firewall would report every such host as protected.
 
-The other half — whether the unit that loads the ruleset is enabled — is the
+The other half, whether the unit that loads the ruleset is enabled, is the
 SERVICES module's to answer, and this check does not claim it.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Configure a default-deny host firewall that permits only the services this host is meant to offer.
 
 1. Establish what is listening before you block anything: 'ss -tulpn' names every socket and the process behind it. Every entry is either something this host is meant to offer, or a finding in its own right.
-2. Pick the tool the distribution manages. ufw on Ubuntu and Debian, firewalld on RHEL and Fedora, plain nftables where configuration management owns the ruleset. Running two is worse than running one — NETWORK-0003 checks for that.
+2. Pick the tool the distribution manages. ufw on Ubuntu and Debian, firewalld on RHEL and Fedora, plain nftables where configuration management owns the ruleset. Running two is worse than running one. NETWORK-0003 checks for that.
 3. Set the default before adding any rule: 'ufw default deny incoming' or, in nftables, 'policy drop' on the input chain. A ruleset built the other way round is a deny list, and everything a future package opens is reachable until somebody notices.
 4. Allow ssh first, and from a session you can afford to lose: 'ufw allow OpenSSH'. Locking yourself out of a remote host is the ordinary failure of this task, not an exotic one.
 5. Enable it and make it survive a reboot: 'ufw enable', or 'systemctl enable --now nftables.service'. A ruleset in a file that no unit loads is a document, not a control.
@@ -4323,7 +4324,7 @@ firewall-cmd --list-all
 
 > **Caution.** Enabling a default-deny firewall over ssh will disconnect you if the ssh rule is wrong, and the host will still be running with no way in. Add the ssh allow rule and confirm it before enabling, keep a second session open throughout, and on a host you cannot physically reach schedule a job that disables the firewall in ten minutes unless you cancel it.
 
-**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 CM-7`, `nist-800-53-r5 AC-4`
+**Controls.** `nist-800-53-r5 SC-7`, `nist-800-53-r5 CM-7`, `nist-800-53-r5 AC-4`
 
 **References**
 
@@ -4332,7 +4333,7 @@ firewall-cmd --list-all
 
 ---
 
-### NETWORK-0002 — The firewall's default inbound policy denies
+### NETWORK-0002: The firewall's default inbound policy denies
 
 | | |
 |---|---|
@@ -4350,7 +4351,7 @@ the ports somebody thought of on the day they wrote it, and against nothing
 else. Every port a future package opens is reachable the moment it opens;
 every service moved to a new port is reachable at the new one; every daemon
 that binds an ephemeral port is reachable there. The ruleset does not have to
-be wrong for this to happen — it only has to be finished.
+be wrong for this to happen. It only has to be finished.
 
 Default-deny with a list of allows fails closed. A new listening socket is
 unreachable until somebody decides otherwise, which converts "we did not think
@@ -4362,19 +4363,19 @@ How the default is written depends on the tool. nftables and iptables state it
 on the input chain (`policy drop`, `:INPUT DROP`). ufw states it in
 /etc/default/ufw as DEFAULT_INPUT_POLICY. firewalld has no policy keyword at
 all: every zone it ships rejects what it does not explicitly allow **except**
-`trusted`, whose target is ACCEPT — so on firewalld the default zone's name
+`trusted`, whose target is ACCEPT, so on firewalld the default zone's name
 is the policy, and it is the one setting an operator can get catastrophically
 wrong in a single word.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Set the input chain's default to drop, then add allow rules for the services this host offers.
 
 1. Enumerate what must keep working before changing the default: 'ss -tulpn' for listening sockets, and the firewall's own rule list for what is currently permitted. Anything reachable today that is not in your allow list will stop being reachable.
 2. Write the allow rules first, with the default still at accept. They have no effect yet, which is exactly why this order is safe.
-3. Change the default last. ufw: 'ufw default deny incoming'. nftables: set 'policy drop' on the input chain. iptables: ':INPUT DROP' in the saved rules, or 'iptables -P INPUT DROP'. firewalld: change DefaultZone away from 'trusted' — 'firewall-cmd --set-default-zone=public'.
+3. Change the default last. ufw: 'ufw default deny incoming'. nftables: set 'policy drop' on the input chain. iptables: ':INPUT DROP' in the saved rules, or 'iptables -P INPUT DROP'. firewalld: change DefaultZone away from 'trusted', 'firewall-cmd --set-default-zone=public'.
 4. Do not forget loopback and established traffic. A default-drop input chain with no 'iif lo accept' breaks every local service that talks to itself, and one with no conntrack accept for established connections breaks every outbound connection's replies. Both failures look like the network is broken rather than like the firewall is.
 5. Verify from another host: 'nmap -Pn <host>' from somewhere else is the only measurement that reflects what an attacker sees.
 
@@ -4386,15 +4387,15 @@ firewall-cmd --get-default-zone
 
 > **Caution.** Changing the default to drop without an allow rule for ssh disconnects you immediately and leaves the host running with no way in. Add the ssh rule, confirm it from a second session, and on a host you cannot physically reach schedule a job that reverts the change in ten minutes unless you cancel it. Loopback and established-connection accepts are needed too, and their absence looks like a network fault rather than a firewall one.
 
-**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 AC-4`
+**Controls.** `nist-800-53-r5 SC-7`, `nist-800-53-r5 AC-4`
 
 **References**
 
-- [firewalld.zone(5) — zone targets](https://firewalld.org/documentation/man-pages/firewalld.zone.html)
+- [firewalld.zone(5), zone targets](https://firewalld.org/documentation/man-pages/firewalld.zone.html)
 
 ---
 
-### NETWORK-0003 — Exactly one firewall configuration is in force
+### NETWORK-0003: Exactly one firewall configuration is in force
 
 | | |
 |---|---|
@@ -4410,8 +4411,8 @@ than on anything anybody wrote down.
 
 The mechanism is the same in every combination. ufw and firewalld are
 *managers*: each owns the ruleset, and each begins by flushing what is there
-and installing its own. A saved ruleset — /etc/nftables.conf, an iptables-save
-file — is loaded verbatim by its own unit. Whichever runs last wins outright,
+and installing its own. A saved ruleset, /etc/nftables.conf, an iptables-save
+file, is loaded verbatim by its own unit. Whichever runs last wins outright,
 and the others' rules are simply not present in the kernel afterwards.
 
 **The danger is not that the host ends up unprotected.** It usually does not;
@@ -4420,7 +4421,7 @@ file. They add an allow rule to nftables.conf, reload it, watch the service
 report success, and the rule is gone at the next boot when ufw flushes the
 table. Or they remove an allow rule believing they have closed a port that
 firewalld is still opening. Every subsequent change is made against a model of
-the host that is wrong, and nothing about the tooling says so — each tool
+the host that is wrong, and nothing about the tooling says so, each tool
 reports its own view correctly.
 
 This is the same shape as the trap CRON-0003 names: a configuration file that
@@ -4433,16 +4434,16 @@ existing, keeps being edited, and stops meaning anything.
 Two files of the *same* kind are one configuration, not two: rules.v4 and
 rules.v6 are the IPv4 and IPv6 halves of one ruleset and are loaded together.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Choose the tool the distribution manages, migrate the other's rules into it, and remove the loser outright.
 
 1. Find out which one is actually in effect before deciding anything. 'nft list ruleset' shows what is in the kernel now; compare it against each configuration file. The one that matches is the winner, and it is often not the one the team believes in.
 2. Choose by what the distribution manages: ufw on Ubuntu and Debian, firewalld on RHEL and Fedora, plain nftables where configuration management owns the ruleset and no interactive tool should be touching it.
-3. Migrate the losing configuration's rules into the winner before removing anything, working from the file rather than from the kernel — the loser's rules are not loaded, so they will not appear in 'nft list ruleset'.
-4. Disable and mask the losing unit: 'systemctl disable --now iptables.service' then 'systemctl mask' it. Masking matters here for the reason it matters in SERVICES-0001 — a package upgrade re-runs its preset and a merely disabled unit can come back enabled.
+3. Migrate the losing configuration's rules into the winner before removing anything, working from the file rather than from the kernel, the loser's rules are not loaded, so they will not appear in 'nft list ruleset'.
+4. Disable and mask the losing unit: 'systemctl disable --now iptables.service' then 'systemctl mask' it. Masking matters here for the reason it matters in SERVICES-0001, a package upgrade re-runs its preset and a merely disabled unit can come back enabled.
 5. Remove or rename the losing configuration file. Leaving it is not dangerous, but an inert firewall configuration is one somebody will eventually edit believing it works, which is the whole failure this check is about.
 6. Verify from another host afterwards: 'nmap -Pn <host>' from somewhere else confirms the surviving ruleset actually does what the removed one was believed to be doing.
 
@@ -4452,19 +4453,19 @@ systemctl is-enabled ufw firewalld nftables iptables
 ufw status verbose
 ```
 
-> **Caution.** Removing the configuration that turns out to be the one in effect opens every port it was closing, and the change is invisible until something is scanned. Establish which is loaded — compare 'nft list ruleset' against each file — before disabling either.
+> **Caution.** Removing the configuration that turns out to be the one in effect opens every port it was closing, and the change is invisible until something is scanned. Establish which is loaded, compare 'nft list ruleset' against each file, before disabling either.
 
-**Controls** — `nist-800-53-r5 CM-6`, `nist-800-53-r5 SC-7`
+**Controls.** `nist-800-53-r5 CM-6`, `nist-800-53-r5 SC-7`
 
 **References**
 
-- [nftables — replacing iptables](https://wiki.nftables.org/wiki-nftables/index.php/Main_Page)
+- [nftables, replacing iptables](https://wiki.nftables.org/wiki-nftables/index.php/Main_Page)
 
 ---
 
 ## SERVICES
 
-### SERVICES-0001 — No cleartext-credential network service is enabled
+### SERVICES-0001: No cleartext-credential network service is enabled
 
 | | |
 |---|---|
@@ -4477,8 +4478,8 @@ ufw status verbose
 telnet, rsh, rlogin, rexec, FTP and TFTP transmit
 authentication material as plaintext across the network. A password captured
 this way requires no cryptanalysis and no vulnerability: anyone positioned on
-the path — a switch, a router, a compromised host on the same segment, a cloud
-provider's virtual network — reads it as it goes past, along with everything
+the path, a switch, a router, a compromised host on the same segment, a cloud
+provider's virtual network, reads it as it goes past, along with everything
 typed in the session afterwards.
 
 The r-commands are worse still. rsh and rlogin authenticate on .rhosts and
@@ -4498,16 +4499,16 @@ at boot. A daemon started by hand and never enabled does not appear here, and
 neither does one run from inetd or xinetd, which are separate mechanisms this
 module does not read.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Disable and mask the cleartext service, and remove the package that ships it.
 
 1. Find out whether anything still uses it before switching it off. 'ss -tnp' shows current connections to the port; the daemon's own log, or 'journalctl -u <unit>', shows who has connected recently. A service nobody has used in a month is safe to remove; one in daily use needs its callers migrated first.
 2. Disable it: 'systemctl disable --now <unit>'. This removes the enablement symlink and stops it in one step.
 3. Mask it as well: 'systemctl mask <unit>'. Disabling stops it starting at boot; masking stops anything starting it at all, including another unit that names it as a dependency and including a package upgrade that re-runs its preset.
-4. Remove the package outright where you can — 'apt purge telnetd' or 'dnf remove telnet-server' — which is the only step that also removes the binary. Note that the \*client\* package is a separate one and is usually worth keeping.
+4. Remove the package outright where you can, 'apt purge telnetd' or 'dnf remove telnet-server', which is the only step that also removes the binary. Note that the \*client\* package is a separate one and is usually worth keeping.
 5. Migrate the callers: ssh replaces telnet, rsh and rlogin; scp, sftp or rsync-over-ssh replaces FTP. For TFTP, which exists to serve boot images to devices with no room for a TLS stack, confine it to an isolated provisioning network rather than trying to secure the protocol.
 
 ```sh
@@ -4518,16 +4519,16 @@ systemctl mask telnet.socket
 
 > **Caution.** Masking a unit that something else Requires= makes that dependency fail, which on a hard dependency takes the depending unit down with it. Check 'systemctl list-dependencies --reverse <unit>' before masking anything you did not install yourself.
 
-**Controls** — `nist-800-53-r5 AC-17`, `nist-800-53-r5 CM-7`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 SC-8`
+**Controls.** `nist-800-53-r5 AC-17`, `nist-800-53-r5 CM-7`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 SC-8`
 
 **References**
 
-- [systemd.unit(5) — [Install] and enablement symlinks](https://man7.org/linux/man-pages/man5/systemd.unit.5.html)
-- [RFC 4251 — SSH Protocol Architecture (§9.1, why cleartext protocols were replaced)](https://www.rfc-editor.org/rfc/rfc4251)
+- [systemd.unit(5), [Install] and enablement symlinks](https://man7.org/linux/man-pages/man5/systemd.unit.5.html)
+- [RFC 4251. SSH Protocol Architecture (§9.1, why cleartext protocols were replaced)](https://www.rfc-editor.org/rfc/rfc4251)
 
 ---
 
-### SERVICES-0002 — Network discovery and RPC portmapping services are not enabled
+### SERVICES-0002: Network discovery and RPC portmapping services are not enabled
 
 | | |
 |---|---|
@@ -4544,7 +4545,7 @@ majority of servers.
 
 What they cost is reconnaissance and reachable code. avahi-daemon announces the
 host's name, its addresses and the services it offers to every machine in the
-broadcast domain, and answers queries about them — an attacker who lands on any
+broadcast domain, and answers queries about them, an attacker who lands on any
 host on the segment gets an inventory of the others without sending a single
 scan. rpcbind publishes which RPC service is listening on which port to anyone
 who asks, and has spent years on abuse lists as a UDP amplification reflector
@@ -4556,19 +4557,19 @@ The judgement here is genuinely a policy one, and the check says so rather than
 pretending otherwise. A print server should run CUPS. An NFS server needs
 rpcbind. A desktop fleet may want mDNS. What the check asserts is that these
 services should be present because somebody decided they should be, and the
-common case — a server image that inherited them from a desktop package set —
+common case, a server image that inherited them from a desktop package set,
 is not that. Where the service is intentional, suppress the finding: a recorded
 decision is worth more than a silent exception.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Disable the service, or record the decision to keep it as a suppression.
 
 1. Decide first whether this host serves the role. rpcbind is needed by an NFS server and by an NFS client using NFSv3; NFSv4 does not need it. cups-browsed is needed to discover printers announced on the network, not to print to one configured by address. avahi-daemon is needed for .local name resolution, which almost nothing on a server uses.
 2. Where it is not needed: 'systemctl disable --now <unit>'. For socket-activated units disable the .socket as well as the .service, or the socket will start the service on the next connection.
-3. Remove the package where the role is settled — 'apt purge avahi-daemon', 'dnf remove avahi' — which prevents a later dependency from pulling it back in enabled.
+3. Remove the package where the role is settled, 'apt purge avahi-daemon', 'dnf remove avahi', which prevents a later dependency from pulling it back in enabled.
 4. Where it is needed, keep it and bound it instead: rpcbind and avahi both take a listen-address, and a firewall rule confining them to the segment that needs them removes most of the exposure without removing the function.
 5. Where the service is intentional, add a suppression for this check with the reason. A recorded decision survives the next audit; an unexplained failing check gets ignored, and then so does the next one.
 
@@ -4578,9 +4579,9 @@ ss -lnp | grep -E ':(111|631|5353)\b'
 systemctl disable --now avahi-daemon.socket avahi-daemon.service
 ```
 
-> **Caution.** Disabling rpcbind on a host that mounts NFSv3 shares breaks those mounts at the next boot, and the failure looks like a network problem rather than a configuration one. Confirm the NFS version in use — 'nfsstat -m' names it per mount — before touching it.
+> **Caution.** Disabling rpcbind on a host that mounts NFSv3 shares breaks those mounts at the next boot, and the failure looks like a network problem rather than a configuration one. Confirm the NFS version in use, 'nfsstat -m' names it per mount, before touching it.
 
-**Controls** — `nist-800-53-r5 CM-7`, `nist-800-53-r5 SC-7`
+**Controls.** `nist-800-53-r5 CM-7`, `nist-800-53-r5 SC-7`
 
 **References**
 
@@ -4589,7 +4590,7 @@ systemctl disable --now avahi-daemon.socket avahi-daemon.service
 
 ---
 
-### SERVICES-0003 — Exactly one time synchronisation daemon is enabled
+### SERVICES-0003: Exactly one time synchronisation daemon is enabled
 
 | | |
 |---|---|
@@ -4604,14 +4605,14 @@ Three things break without it, and each breaks quietly.
 
 Log correlation is the first. An incident is reconstructed by ordering events
 across hosts, and a host whose clock is minutes out contributes events that
-appear in the wrong place in the sequence — or, worse, appear to have happened
+appear in the wrong place in the sequence, or, worse, appear to have happened
 before the intrusion that caused them. The investigation does not fail loudly;
 it produces a timeline that is wrong.
 
 Authentication is the second. Kerberos rejects tickets outside a five-minute
 skew by design, because the timestamp is the replay defence. TLS certificates,
 signed tokens, TOTP codes and short-lived cloud credentials all fail closed
-against a clock that has drifted — and an operator debugging that failure will
+against a clock that has drifted, and an operator debugging that failure will
 find nothing wrong with the certificate.
 
 Scheduled work is the third. Certificate renewal, log rotation and credential
@@ -4621,21 +4622,21 @@ Two daemons enabled at once is its own failure and a subtler one. They compete
 for the same UDP port and for the same clock: the second to start fails to bind
 and exits, and which one that is depends on start order rather than on
 configuration. The host then synchronises through whichever daemon won, using
-whichever server list that one was given — which is very often not the list the
+whichever server list that one was given, which is very often not the list the
 administrator edited. This is a common outcome of installing chrony on a system
 already running systemd-timesyncd, because installing it does not disable the
 other.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Enable exactly one time synchronisation daemon and mask the rest.
 
 1. Choose one. chrony is the right default on almost anything: it converges faster than ntpd, copes with intermittent connectivity and virtualised clocks, and is what both Red Hat and Debian ship as the recommendation. systemd-timesyncd is a reasonable choice for a client that only needs SNTP and is already present.
 2. Establish what is enabled now, including the one you did not install: 'systemctl list-unit-files --state=enabled \| grep -E 'chrony\|ntp\|timesync''.
 3. Enable the one you chose: 'systemctl enable --now chronyd.service' (or 'chrony.service' on Debian-family systems).
-4. Mask every other one: 'systemctl mask systemd-timesyncd.service'. Mask rather than disable — installing an NTP package re-runs its preset, and a merely disabled unit can come back enabled.
+4. Mask every other one: 'systemctl mask systemd-timesyncd.service'. Mask rather than disable, installing an NTP package re-runs its preset, and a merely disabled unit can come back enabled.
 5. Point it at servers you control or trust, in /etc/chrony.conf or /etc/chrony/chrony.conf. A host that takes its time from an arbitrary public pool takes it from whoever answers first.
 6. Verify it is actually disciplining the clock rather than merely running: 'chronyc tracking' shows the reference source and the current offset; 'timedatectl' reports whether the system clock is synchronised at all.
 
@@ -4647,7 +4648,7 @@ chronyc tracking
 
 > **Caution.** A host whose clock is badly wrong will have it stepped when synchronisation starts, and a large backward step can make log timestamps go backwards and confuse anything holding a lease or a timer. On a host that has drifted for months, expect the correction to be visible in the logs and note when it happened.
 
-**Controls** — `nist-800-53-r5 AU-8`, `nist-800-53-r5 SC-45`
+**Controls.** `nist-800-53-r5 AU-8`, `nist-800-53-r5 SC-45`
 
 **References**
 
@@ -4656,7 +4657,7 @@ chronyc tracking
 
 ---
 
-### SERVICES-0004 — Every enabled unit resolves to a unit file that exists
+### SERVICES-0004: Every enabled unit resolves to a unit file that exists
 
 | | |
 |---|---|
@@ -4682,27 +4683,27 @@ no routine moment at which those two diverge visibly.
 The security consequence depends on what dangled. A dangling link to auditd, to
 a firewall unit, to a log shipper or to an intrusion detection agent is a
 control that everybody believes is in place and that has not run since the
-package was removed — which is the most expensive failure a control can have,
+package was removed, which is the most expensive failure a control can have,
 because it also suppresses the alarm that would have reported its absence.
 
 There is a second, sharper reading. A symlink is a name that resolves at use.
 A dangling one names a path that does not exist *yet*, and anyone who can
 create a file there decides what systemd loads at the next boot. Where the
 target is under a directory a non-root account can write, the dangling link is
-not merely inert — it is a scheduled execution slot waiting to be filled.
+not merely inert, it is a scheduled execution slot waiting to be filled.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Decide per link whether the service should return or the link should go, then remove the dangling links.
 
 1. Ask systemd for its own account first: 'systemctl list-unit-files --state=enabled' beside 'journalctl -b \| grep "Unit .\* not found"' shows what it tried to start and could not.
-2. For each broken link, decide which half is wrong. A unit that should be running means the package was removed by accident — reinstall it. A unit that should not means the link is left over — remove it.
+2. For each broken link, decide which half is wrong. A unit that should be running means the package was removed by accident, reinstall it. A unit that should not means the link is left over, remove it.
 3. Remove a leftover link with 'systemctl disable <unit>' rather than 'rm'. disable removes every link for that unit across all targets; deleting the one you found leaves the others, and the problem recurs looking slightly different.
 4. Where 'systemctl disable' refuses because the unit file is gone, remove the link directly: 'rm /etc/systemd/system/multi-user.target.wants/<unit>', then 'systemctl daemon-reload'.
 5. Treat a dangling link under a writable directory as urgent rather than untidy. Anyone who can create the target file decides what systemd loads at the next boot; check the target's parent directory with 'ls -ld' before deciding how quickly to act.
-6. Add the check to whatever runs after package removal. These links are created by an operation that succeeds — removing a package without disabling its units first — so they accumulate silently unless something looks.
+6. Add the check to whatever runs after package removal. These links are created by an operation that succeeds, removing a package without disabling its units first, so they accumulate silently unless something looks.
 
 ```sh
 find /etc/systemd/system /usr/lib/systemd/system -xtype l -print
@@ -4710,17 +4711,17 @@ systemctl list-unit-files --state=enabled
 journalctl -b -p warning | grep -i 'not found'
 ```
 
-> **Caution.** 'find -xtype l' lists links whose target does not exist, which is what you want, but it follows the link to decide — so run it as a user who can read the target directories or it will report links as broken that are merely unreadable.
+> **Caution.** 'find -xtype l' lists links whose target does not exist, which is what you want, but it follows the link to decide, so run it as a user who can read the target directories or it will report links as broken that are merely unreadable.
 
-**Controls** — `nist-800-53-r5 CM-6`, `nist-800-53-r5 SI-7`
+**Controls.** `nist-800-53-r5 CM-6`, `nist-800-53-r5 SI-7`
 
 **References**
 
-- [systemctl(1) — enable, disable, is-enabled](https://man7.org/linux/man-pages/man1/systemctl.1.html)
+- [systemctl(1), enable, disable, is-enabled](https://man7.org/linux/man-pages/man1/systemctl.1.html)
 
 ---
 
-### SERVICES-0005 — Unit directories and unit files are writable by root alone
+### SERVICES-0005: Unit directories and unit files are writable by root alone
 
 | | |
 |---|---|
@@ -4733,7 +4734,7 @@ journalctl -b -p warning | grep -i 'not found'
 A systemd unit file is a list of commands run as whatever user
 it names, at boot, before anybody logs in. Write access to a unit file, or to
 the directory holding one, is therefore arbitrary code execution as root on the
-next reboot — with no exploit, no authentication step and nothing to detect,
+next reboot, with no exploit, no authentication step and nothing to detect,
 because the resulting process is exactly the sort of thing that is supposed to
 start at boot.
 
@@ -4757,9 +4758,9 @@ reached two ways. A file owned by an unprivileged account is one that account
 can chmod at will, so "root-owned but group-writable" and "owned by deploy"
 mean the same thing in the end.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Restore root ownership and remove group and other write on the unit paths named in the finding.
 
@@ -4776,17 +4777,17 @@ find /etc/systemd/system /usr/lib/systemd/system \( ! -user root -o -perm /022 \
 chown root:root <path> && chmod go-w <path>
 ```
 
-> **Caution.** A unit path writable by a non-root account should be treated as possibly already modified, not merely as misconfigured. Fix the mode, but also compare the unit against the package's version — 'rpm -V' or 'dpkg --verify' names the package files that have changed — before concluding nothing happened.
+> **Caution.** A unit path writable by a non-root account should be treated as possibly already modified, not merely as misconfigured. Fix the mode, but also compare the unit against the package's version, 'rpm -V' or 'dpkg --verify' names the package files that have changed, before concluding nothing happened.
 
-**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-5`
+**Controls.** `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-5`
 
 **References**
 
-- [systemd.unit(5) — unit load path and precedence](https://man7.org/linux/man-pages/man5/systemd.unit.5.html)
+- [systemd.unit(5), unit load path and precedence](https://man7.org/linux/man-pages/man5/systemd.unit.5.html)
 
 ---
 
-### SERVICES-0006 — Audited system services set NoNewPrivileges
+### SERVICES-0006: Audited system services set NoNewPrivileges
 
 | | |
 |---|---|
@@ -4797,8 +4798,8 @@ chown root:root <path> && chmod go-w <path>
 | Tags | `services`, `systemd`, `sandboxing`, `privilege-escalation` |
 
 NoNewPrivileges=yes sets the kernel's no_new_privs bit on a
-unit's processes. Once set it cannot be cleared — not by the process, not by
-any child it forks, not by exec — and while it is set the kernel refuses to
+unit's processes. Once set it cannot be cleared, not by the process, not by
+any child it forks, not by exec, and while it is set the kernel refuses to
 grant privileges the process did not already have: a setuid binary runs as the
 calling user, file capabilities are ignored, and an SELinux or AppArmor
 transition that would raise privilege is denied.
@@ -4811,7 +4812,7 @@ hold", and it costs nothing at runtime.
 
 **It is not free for every service, and two of the units below are exactly
 that case.** A daemon that relies on a setuid helper breaks outright when the
-bit is set — the helper simply runs without its privileges — so those units are
+bit is set, the helper simply runs without its privileges, so those units are
 exempt and named as such in every verdict:
 
   - **cron.service** runs user cron jobs in its own process tree, and
@@ -4826,7 +4827,7 @@ An exemption is not a suppression. A suppression is an operator accepting a
 finding on their host; an exemption is this catalog saying the remediation
 would break the service, which is a property of the software and true
 everywhere it runs. The distinction matters because only one of them should be
-invisible to the next operator, and it is not this one — the units are listed
+invisible to the next operator, and it is not this one. The units are listed
 in the verdict with the reason, whether the check passes or fails.
 
 Two things follow, and both are enforced rather than left to the reader's
@@ -4845,11 +4846,11 @@ most plausible way to arrive at it by accident.
 
 This check reads a fixed, small list of long-lived root daemons rather than
 every unit on the host. Reading every unit would mean reading every unit body,
-which is what this module exists in order not to do — a bundle would then carry
+which is what this module exists in order not to do. A bundle would then carry
 every ExecStart and every Environment= on the machine.
 
 **A unit that is not installed is skipped without comment**, which is
-different again from being exempt — one is a host that does not run the
+different again from being exempt, one is a host that does not run the
 software, the other a host that runs it and should not harden it. cron.service is absent
 on a host that uses cronie under another name, and dbus.service on a container
 image with no message bus; neither is a finding. If none of the audited units
@@ -4857,24 +4858,24 @@ is installed the check is NOT_APPLICABLE, because there is nothing to have an
 opinion about.
 
 Silence is a failure here, and deliberately so. The default is off, so a unit
-that never mentions NoNewPrivileges is running without it — the same posture as
+that never mentions NoNewPrivileges is running without it, the same posture as
 one that sets it to no. The two are told apart in the finding anyway, because
 they are different acts: an operator who wrote NoNewPrivileges=no had a reason,
 and that reason is the first thing to establish before changing it.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Add NoNewPrivileges=yes to a drop-in for each service, after establishing that it uses no setuid helper.
 
-1. Establish what the service needs before changing it. NoNewPrivileges neuters setuid binaries and file capabilities for everything the unit starts, so a daemon that shells out to a setuid helper stops working the moment it is set — and it fails at the helper rather than at startup, so the breakage may not appear until something rare happens.
-2. Two of the units this check audits are exactly that case and are exempt from it: dbus.service, whose dbus-daemon-launch-helper is setuid root, and cron.service, whose jobs frequently call sudo. They appear in the verdict with the reason rather than as findings. If you have established that neither applies on your host — no setuid helper, no cron job that escalates — setting the bit on them is a real improvement, and this check will credit it.
+1. Establish what the service needs before changing it. NoNewPrivileges neuters setuid binaries and file capabilities for everything the unit starts, so a daemon that shells out to a setuid helper stops working the moment it is set, and it fails at the helper rather than at startup, so the breakage may not appear until something rare happens.
+2. Two of the units this check audits are exactly that case and are exempt from it: dbus.service, whose dbus-daemon-launch-helper is setuid root, and cron.service, whose jobs frequently call sudo. They appear in the verdict with the reason rather than as findings. If you have established that neither applies on your host, no setuid helper, no cron job that escalates, setting the bit on them is a real improvement, and this check will credit it.
 3. Where the service is self-contained, add the setting as a drop-in rather than editing the vendor unit, so a package upgrade does not undo it: systemctl edit <unit>, then a [Service] section containing NoNewPrivileges=yes.
 4. Reload and restart: systemctl daemon-reload, then systemctl restart <unit>.
 5. Confirm the assembled unit rather than the file you edited: systemctl show -p NoNewPrivileges <unit> reports what systemd actually loaded, drop-ins and precedence included.
 6. Exercise the service afterwards, including the paths that are rare. A setuid helper that is called once a day will not fail during the restart.
-7. If a service genuinely requires a setuid helper, treat that as the finding and record the exception. The alternative is often to give the unit the one capability it needs — AmbientCapabilities= — and set NoNewPrivileges anyway, which is a smaller grant than every setuid binary on the host.
+7. If a service genuinely requires a setuid helper, treat that as the finding and record the exception. The alternative is often to give the unit the one capability it needs, AmbientCapabilities=, and set NoNewPrivileges anyway, which is a smaller grant than every setuid binary on the host.
 
 ```sh
 systemctl show -p NoNewPrivileges -p ProtectSystem -p ProtectHome cron.service systemd-journald.service dbus.service
@@ -4884,17 +4885,17 @@ systemd-analyze security cron.service
 
 > **Caution.** Setting NoNewPrivileges on a unit that relies on a setuid helper breaks it, sometimes long after the restart that introduced the change. dbus.service and cron.service are both in that category on most distributions. Establish what each unit actually executes before changing it, and restart services one at a time.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-7`, `nist-800-53-r5 SI-16`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 CM-7`, `nist-800-53-r5 SI-16`
 
 **References**
 
-- [systemd.exec(5) — NoNewPrivileges](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
-- [Linux kernel — no\_new\_privs](https://docs.kernel.org/userspace-api/no_new_privs.html)
-- [systemd-analyze(1) — security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
+- [systemd.exec(5). NoNewPrivileges](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
+- [Linux kernel, no\_new\_privs](https://docs.kernel.org/userspace-api/no_new_privs.html)
+- [systemd-analyze(1), security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
 
 ---
 
-### SERVICES-0007 — Audited system services run with the system directories read-only
+### SERVICES-0007: Audited system services run with the system directories read-only
 
 | | |
 |---|---|
@@ -4908,16 +4909,16 @@ ProtectSystem mounts the directories a daemon has no business
 writing into read-only, in a mount namespace private to that service. It has
 four levels and they are cumulative:
 
-  - no       — the default. The service may write anywhere its uid allows.
-  - yes      — /usr and the boot loader directories are read-only.
-  - full     — adds /etc.
-  - strict   — the entire hierarchy is read-only except /dev, /proc and /sys,
+  - no      , the default. The service may write anywhere its uid allows.
+  - yes, /usr and the boot loader directories are read-only.
+  - full    , adds /etc.
+  - strict  , the entire hierarchy is read-only except /dev, /proc and /sys,
                which is what a daemon with an explicit ReadWritePaths should use.
 
 **Write access to /usr is a persistence vector, not an untidiness.** A daemon
 compromised through its own network-facing code can replace a binary that
-something else runs as root — a package's helper, a shell that a login invokes,
-a systemd generator — and survive the restart of the service that was actually
+something else runs as root, a package's helper, a shell that a login invokes,
+a systemd generator, and survive the restart of the service that was actually
 exploited. Write access to /etc is the same idea one level up: rewrite a PAM
 line, a sudoers drop-in, or a unit file, and the next boot hands the attacker
 everything. Read-only mounts remove the step entirely rather than making it
@@ -4925,7 +4926,7 @@ harder, which is why this rates above the rest of the sandboxing directives.
 
 Anything from yes upward passes. The check does not insist on strict, because
 the right level depends on what the daemon legitimately writes, and a host that
-chose yes deliberately is not the problem this exists to find — the problem is
+chose yes deliberately is not the problem this exists to find. The problem is
 the service that never considered the question and is running with the whole
 filesystem writable.
 
@@ -4939,25 +4940,25 @@ contrast is the useful part. cron.service is exempt: it executes arbitrary
 operator-supplied jobs inside its own mount namespace, so any filesystem
 restriction on the unit silently becomes a restriction on code the packager
 never saw. dbus.service is *not* exempt, unlike its exemption from
-SERVICES-0006 — its own writes go to /run and /var, and on a systemd host
+SERVICES-0006, its own writes go to /run and /var, and on a systemd host
 dbus-activated services are started by systemd as their own units rather than
 as children of dbus, so they do not inherit its namespace. The setuid launch
 helper that makes NoNewPrivileges unsafe there has nothing to do with where the
 daemon may write.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set ProtectSystem in a drop-in for each service, starting at full and using ReadWritePaths for what the daemon legitimately writes.
 
 1. Find out what the service writes before restricting it: systemd-analyze security <unit> gives an overall picture, and running the daemon under strace -f -e trace=file, or simply reading its documentation, tells you which paths it opens for writing.
 2. Start at ProtectSystem=full unless you know the daemon writes to /etc. It covers /usr, the boot loader directories and /etc, and it is the level most system daemons can take unchanged.
 3. Add it as a drop-in rather than editing the vendor unit, so a package upgrade does not undo it: systemctl edit <unit>, then a [Service] section containing ProtectSystem=full.
-4. Where the daemon does write into a protected directory, do not step back down a level — name the exception instead: ReadWritePaths=/etc/example keeps everything else read-only. That is what lets a daemon run at strict.
+4. Where the daemon does write into a protected directory, do not step back down a level, name the exception instead: ReadWritePaths=/etc/example keeps everything else read-only. That is what lets a daemon run at strict.
 5. Reload and restart: systemctl daemon-reload, then systemctl restart <unit>.
 6. Confirm the assembled unit rather than the file you edited: systemctl show -p ProtectSystem <unit> reports what systemd actually loaded, drop-ins and precedence included.
-7. Exercise the service afterwards, including the paths that are rare — a daemon that writes a state file once a day will not fail during the restart.
+7. Exercise the service afterwards, including the paths that are rare, a daemon that writes a state file once a day will not fail during the restart.
 
 ```sh
 systemctl show -p ProtectSystem -p ReadWritePaths systemd-journald.service dbus.service
@@ -4967,16 +4968,16 @@ systemctl cat dbus.service
 
 > **Caution.** ProtectSystem gives the unit a private mount namespace, so anything the service starts inherits the restriction. That is the point for a daemon and the reason cron.service is exempt: its children are jobs somebody else wrote. Restart services one at a time and check that the daemon still writes what it needs to.
 
-**Controls** — `nist-800-53-r5 CM-5`, `nist-800-53-r5 CM-7`, `nist-800-53-r5 SI-7`, `nist-800-53-r5 AC-6`
+**Controls.** `nist-800-53-r5 CM-5`, `nist-800-53-r5 CM-7`, `nist-800-53-r5 SI-7`, `nist-800-53-r5 AC-6`
 
 **References**
 
-- [systemd.exec(5) — ProtectSystem](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
-- [systemd-analyze(1) — security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
+- [systemd.exec(5). ProtectSystem](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
+- [systemd-analyze(1), security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
 
 ---
 
-### SERVICES-0008 — Audited system services cannot reach user home directories
+### SERVICES-0008: Audited system services cannot reach user home directories
 
 | | |
 |---|---|
@@ -4989,24 +4990,24 @@ systemctl cat dbus.service
 ProtectHome takes /home, /root and /run/user away from a
 service, in a mount namespace private to it. It has four levels:
 
-  - no         — the default. The service sees every home directory on the host.
-  - yes        — they are empty and inaccessible.
-  - read-only  — they are mounted read-only. **The contents are still readable.**
-  - tmpfs      — they are replaced with empty tmpfs mounts.
+  - no        , the default. The service sees every home directory on the host.
+  - yes       , they are empty and inaccessible.
+  - read-only , they are mounted read-only. **The contents are still readable.**
+  - tmpfs     , they are replaced with empty tmpfs mounts.
 
 **A root daemon that can read /root and /home is one exploit away from every
 credential on the estate.** The interesting file is not the user's documents; it
 is ~/.ssh/id_ed25519, ~/.aws/credentials, ~/.kube/config, ~/.docker/config.json
 and the token some tool cached in ~/.config. None of those is protected by file
 permissions against a process already running as root, and all of them are
-reusable somewhere else — which turns a single compromised daemon into lateral
+reusable somewhere else, which turns a single compromised daemon into lateral
 movement across every host and cloud account those keys reach. That is why this
 sits at High rather than beside the other sandboxing directives: it is the one
 whose absence exports the blast radius off the machine.
 
 There is almost never a reason for a system daemon to look. A message bus, a
 log writer, a time synchroniser and a name resolver have no business in a user's
-home directory, and the ones that do — a backup agent, a file server — are
+home directory, and the ones that do, a backup agent, a file server, are
 identifiable and few.
 
 **read-only passes and buys less than the other two.** It stops a daemon
@@ -5020,19 +5021,19 @@ every key under /root.
 **cron.service is exempt**, for the reason it is exempt from the other two: it
 runs arbitrary operator-supplied jobs inside its own mount namespace, and user
 cron jobs routinely execute scripts kept in a home directory and read data from
-one. dbus.service and systemd-journald.service are audited — neither has any
+one. dbus.service and systemd-journald.service are audited, neither has any
 business in /home, and unlike NoNewPrivileges there is nothing about dbus's
 setuid launch helper that bears on where the daemon may read.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set ProtectHome=yes in a drop-in for each service, or tmpfs where the daemon needs the directories to exist.
 
-1. Establish whether the daemon has any business in a home directory before setting it. Most system services do not; the ones that do — backup agents, file servers, anything that serves user content — are identifiable, and for those the answer is an exemption in your own policy rather than a setting.
+1. Establish whether the daemon has any business in a home directory before setting it. Most system services do not; the ones that do, backup agents, file servers, anything that serves user content, are identifiable, and for those the answer is an exemption in your own policy rather than a setting.
 2. Prefer ProtectHome=yes, which makes /home, /root and /run/user empty and inaccessible. Use tmpfs where a daemon needs the directories to exist but not to contain anything.
-3. Use read-only only when the daemon genuinely reads user files. It closes the persistence route — no planted authorized\_keys, no altered shell profile — and leaves every private key in those directories readable, which is most of what this check is about.
+3. Use read-only only when the daemon genuinely reads user files. It closes the persistence route, no planted authorized\_keys, no altered shell profile, and leaves every private key in those directories readable, which is most of what this check is about.
 4. Add it as a drop-in rather than editing the vendor unit, so a package upgrade does not undo it: systemctl edit <unit>, then a [Service] section containing ProtectHome=yes.
 5. Reload and restart: systemctl daemon-reload, then systemctl restart <unit>.
 6. Confirm the assembled unit rather than the file you edited: systemctl show -p ProtectHome <unit> reports what systemd actually loaded, drop-ins and precedence included.
@@ -5046,16 +5047,16 @@ systemctl cat systemd-journald.service
 
 > **Caution.** ProtectHome gives the unit a private mount namespace, so anything the service starts inherits it. That is the point for a daemon and the reason cron.service is exempt: its children are jobs somebody else wrote, and they routinely live in a home directory. Restart services one at a time.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 CM-7`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-4`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 CM-7`
 
 **References**
 
-- [systemd.exec(5) — ProtectHome](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
-- [systemd-analyze(1) — security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
+- [systemd.exec(5). ProtectHome](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
+- [systemd-analyze(1), security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
 
 ---
 
-### SERVICES-0010 — AppArmor is enforcing at least one profile
+### SERVICES-0010: AppArmor is enforcing at least one profile
 
 | | |
 |---|---|
@@ -5069,7 +5070,7 @@ Mandatory access control is the layer that survives the other
 layers being wrong. Unix permissions decide what an account may do; a profile
 decides what a *program* may do, whoever is running it. When a daemon is
 compromised, the permissions of the account it runs as are exactly what the
-attacker inherits — and a profile is the thing that says "this process reads
+attacker inherits, and a profile is the thing that says "this process reads
 its configuration and writes its spool, and nothing else", regardless of what
 the account would otherwise have been allowed.
 
@@ -5077,7 +5078,7 @@ the account would otherwise have been allowed.
 and permits it: it exists so that a profile can be written by watching what a
 program actually does. A host with two hundred profiles all in complain looks
 protected to anything that counts profiles, and denies nothing. That is the
-specific failure this check is shaped around, and it is a common state — it is
+specific failure this check is shaped around, and it is a common state, it is
 what a host that started a profiling exercise and never finished it looks
 like.
 
@@ -5092,9 +5093,9 @@ the kernel interface nor a profile directory exists.
 are installed on disk and nothing about whether any of them is in force, and
 the check says so rather than drawing a verdict from the half it has.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Enable the apparmor service and put the installed profiles into enforce mode.
 
@@ -5110,9 +5111,9 @@ systemctl enable --now apparmor
 aa-enforce /etc/apparmor.d/*
 ```
 
-> **Caution.** Enforcing a profile written in complain mode against a workload it never observed will deny that workload. Move profiles to enforce one at a time on a host doing real work, and read the kernel log afterwards — a denial is silent to the program except as a failure it may not report clearly.
+> **Caution.** Enforcing a profile written in complain mode against a workload it never observed will deny that workload. Move profiles to enforce one at a time on a host doing real work, and read the kernel log afterwards, a denial is silent to the program except as a failure it may not report clearly.
 
-**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-39`
+**Controls.** `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 SC-39`
 
 **References**
 
@@ -5121,7 +5122,7 @@ aa-enforce /etc/apparmor.d/*
 
 ---
 
-### SERVICES-0011 — Audited system services are sandboxed at the strict tier
+### SERVICES-0011: Audited system services are sandboxed at the strict tier
 
 | | |
 |---|---|
@@ -5139,7 +5140,7 @@ are not degrees of the same thing.
 read-only except /dev, /proc and /sys, and anything the daemon genuinely writes
 has to be named in ReadWritePaths=, StateDirectory= or one of its siblings. The
 first two stop a compromised daemon replacing a binary or a configuration file.
-Only the third stops it writing anywhere at all — into /var/spool, into /srv,
+Only the third stops it writing anywhere at all, into /var/spool, into /srv,
 into an application directory under /opt that nobody thought of.
 
 **ProtectHome** at `yes` or `tmpfs` makes /home, /root and
@@ -5153,7 +5154,7 @@ apart.
 **Declaring the writable paths is the work, and it is the point.** `strict` is not a switch that can be flipped on a daemon nobody has profiled: a service
 that writes a runtime file it never declared fails at the write, which surfaces
 as the daemon misbehaving rather than as a unit that refuses to start. That is
-why this is a separate finding from SERVICES-0007 — the remediation is an
+why this is a separate finding from SERVICES-0007. The remediation is an
 investigation, not a line.
 
 This examines a fixed list of units. See SERVICES-0007 for why the list is
@@ -5161,9 +5162,9 @@ named rather than discovered: reading every unit on the host means reading
 every unit *body*, and a bundle would then carry every ExecStart= and every
 Environment= on the machine.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort HIGH
+**Remediation.** Effort: HIGH
 
 Add ProtectSystem=strict and ProtectHome=yes in a drop-in, after establishing what each service writes.
 
@@ -5179,20 +5180,20 @@ systemctl edit <unit>
 systemctl daemon-reload
 ```
 
-> **Caution.** ProtectSystem=strict makes the entire filesystem read-only except what the unit declares, and a service that writes an undeclared path fails at the write rather than at the restart — so the failure appears as the daemon misbehaving, possibly long after the change. Establish what the service needs to write before applying this, and restart it under real load rather than only checking that it comes up. ProtectHome=yes hides /home and /root entirely: anything that reads a user's file, a key or a script from there stops working.
+> **Caution.** ProtectSystem=strict makes the entire filesystem read-only except what the unit declares, and a service that writes an undeclared path fails at the write rather than at the restart, so the failure appears as the daemon misbehaving, possibly long after the change. Establish what the service needs to write before applying this, and restart it under real load rather than only checking that it comes up. ProtectHome=yes hides /home and /root entirely: anything that reads a user's file, a key or a script from there stops working.
 
-**Controls** — `nist-800-53-r5 CM-7`, `nist-800-53-r5 SC-39`, `nist-800-53-r5 SI-7`
+**Controls.** `nist-800-53-r5 CM-7`, `nist-800-53-r5 SC-39`, `nist-800-53-r5 SI-7`
 
 **References**
 
-- [systemd.exec(5) — ProtectSystem](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
-- [systemd-analyze(1) — security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
+- [systemd.exec(5). ProtectSystem](https://man7.org/linux/man-pages/man5/systemd.exec.5.html)
+- [systemd-analyze(1), security](https://man7.org/linux/man-pages/man1/systemd-analyze.1.html)
 
 ---
 
 ## SSHD
 
-### SSHD-0002 — Root login over SSH is disabled
+### SSHD-0002: Root login over SSH is disabled
 
 | | |
 |---|---|
@@ -5203,7 +5204,7 @@ systemctl daemon-reload
 | Tags | `ssh`, `remote-access`, `accountability` |
 
 Direct root login over SSH removes the accountability that
-sudo provides — every action is attributed to "root" rather than to a person —
+sudo provides, every action is attributed to "root" rather than to a person,
 and it presents remote attackers with a username that is guaranteed to exist on
 every system, which makes credential attacks meaningfully cheaper.
 
@@ -5211,9 +5212,9 @@ PermitRootLogin no requires an administrator to authenticate as themselves and
 then escalate, which leaves an audit trail. The OpenSSH default when the
 keyword is absent is prohibit-password: key-based root login remains possible.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set PermitRootLogin to no and reload sshd.
 
@@ -5230,15 +5231,15 @@ systemctl reload sshd
 
 > **Caution.** Applying this while your only access is a root SSH session will lock you out. Verify a non-root path in a separate session first, and never reload sshd from the session you would lose.
 
-**Controls** — `nist-800-53-r5 AC-6(2)`, `nist-800-53-r5 AC-6(5)`, `nist-800-53-r5 IA-2(1)`
+**Controls.** `nist-800-53-r5 AC-6(2)`, `nist-800-53-r5 AC-6(5)`, `nist-800-53-r5 IA-2(1)`
 
 **References**
 
-- [sshd\_config(5) — PermitRootLogin](https://man.openbsd.org/sshd_config#PermitRootLogin)
+- [sshd\_config(5). PermitRootLogin](https://man.openbsd.org/sshd_config#PermitRootLogin)
 
 ---
 
-### SSHD-0003 — Password authentication over SSH is disabled
+### SSHD-0003: Password authentication over SSH is disabled
 
 | | |
 |---|---|
@@ -5262,11 +5263,11 @@ an attacker must first obtain rather than a string they can derive.
 The OpenSSH default is yes, so a host that has never been configured accepts
 passwords. Debian, Ubuntu and RHEL all ship it explicitly as yes as well, which
 means this finding appears on a stock installation of every mainstream
-distribution — correctly.
+distribution, correctly.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Deploy keys for every account that needs SSH access, then set PasswordAuthentication no.
 
@@ -5283,15 +5284,15 @@ sshd -T | grep -Ei 'passwordauthentication|kbdinteractive'
 
 > **Caution.** This is the change most likely to lock you out of a remote host. Verify key authentication works in a second, independent session before reloading, and never reload from the session you would lose. If the host has no out-of-band console, arrange one first.
 
-**Controls** — `nist-800-53-r5 IA-2(1)`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 AC-17`
+**Controls.** `nist-800-53-r5 IA-2(1)`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 AC-17`
 
 **References**
 
-- [sshd\_config(5) — PasswordAuthentication](https://man.openbsd.org/sshd_config#PasswordAuthentication)
+- [sshd\_config(5). PasswordAuthentication](https://man.openbsd.org/sshd_config#PasswordAuthentication)
 
 ---
 
-### SSHD-0004 — Accounts with empty passwords cannot log in over SSH
+### SSHD-0004: Accounts with empty passwords cannot log in over SSH
 
 | | |
 |---|---|
@@ -5305,7 +5306,7 @@ PermitEmptyPasswords yes allows an account whose password
 field in /etc/shadow is empty to authenticate over SSH by pressing return. No
 guessing, no credential, no rate limit that matters.
 
-The OpenSSH default is no, so this can only be reached deliberately — usually by
+The OpenSSH default is no, so this can only be reached deliberately, usually by
 a hardening script that inverted a value, an appliance image built for
 convenience, or a container base image where a password was never set and the
 setting was relaxed to make the account usable.
@@ -5316,9 +5317,9 @@ accept it. Either alone is survivable. Both together is remote unauthenticated
 access, which is why this check is CRITICAL rather than HIGH: no other single
 sshd_config value produces that outcome by itself.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set PermitEmptyPasswords no, and fix the accounts that made it reachable.
 
@@ -5333,17 +5334,17 @@ sshd -T | grep -i permitemptypasswords
 awk -F: '$2 == "" {print $1}' /etc/shadow
 ```
 
-> **Caution.** If a service or automation authenticates as an account with an empty password, this change stops it. That is the correct outcome, but find out what breaks before you are told by an outage — and treat any account that was reachable this way as potentially compromised rather than merely misconfigured.
+> **Caution.** If a service or automation authenticates as an account with an empty password, this change stops it. That is the correct outcome, but find out what breaks before you are told by an outage, and treat any account that was reachable this way as potentially compromised rather than merely misconfigured.
 
-**Controls** — `nist-800-53-r5 IA-5`, `nist-800-53-r5 IA-2`, `nist-800-53-r5 AC-17`
+**Controls.** `nist-800-53-r5 IA-5`, `nist-800-53-r5 IA-2`, `nist-800-53-r5 AC-17`
 
 **References**
 
-- [sshd\_config(5) — PermitEmptyPasswords](https://man.openbsd.org/sshd_config#PermitEmptyPasswords)
+- [sshd\_config(5). PermitEmptyPasswords](https://man.openbsd.org/sshd_config#PermitEmptyPasswords)
 
 ---
 
-### SSHD-0005 — X11 forwarding is disabled
+### SSHD-0005: X11 forwarding is disabled
 
 | | |
 |---|---|
@@ -5361,7 +5362,7 @@ trusted local network.
 
 X11 forwarding extends that display across an SSH connection. When a user with
 forwarding enabled logs into a server, a process on the server can reach back
-through the tunnel to their workstation's display — so a compromise of the
+through the tunnel to their workstation's display, so a compromise of the
 server becomes a keylogger on the administrator's desktop. 'ForwardX11Trusted'
 makes this explicit; without it the X11 SECURITY extension restricts some
 operations, but it is widely regarded as insufficient and OpenSSH's own manual
@@ -5369,36 +5370,36 @@ warns against relying on it.
 
 The upstream OpenSSH default is no. **Debian and Ubuntu ship X11Forwarding yes
 in their packaged sshd_config**, so this check reports a finding on a stock
-installation of either — which is correct, and is the most common reason it
+installation of either, which is correct, and is the most common reason it
 appears.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set X11Forwarding no; use a browser or a purpose-built remote desktop where a GUI is genuinely needed.
 
 1. Find out whether anything uses it before disabling it: 'grep -i x11 /var/log/auth.log' or 'journalctl -u sshd \| grep -i x11' shows forwarding requests.
 2. Set 'X11Forwarding no' in /etc/ssh/sshd\_config. On Debian and Ubuntu the packaged file sets it to yes explicitly, so the line must be changed rather than removed.
-3. Where a small number of users genuinely need it, scope it rather than enabling it globally: a 'Match User' block confines the exposure to named accounts — Plumbline reports that as a conditional finding rather than a clean pass, which is the honest reading.
+3. Where a small number of users genuinely need it, scope it rather than enabling it globally: a 'Match User' block confines the exposure to named accounts. Plumbline reports that as a conditional finding rather than a clean pass, which is the honest reading.
 4. Validate and reload: 'sshd -t' then 'systemctl reload sshd'.
 
 ```sh
 sshd -T | grep -i x11forwarding
 ```
 
-> **Caution.** Administrators who run graphical tools over SSH — installers, database consoles, some vendor appliances — will find them stop working with no error more helpful than 'cannot open display'. Establish the replacement path before making the change.
+> **Caution.** Administrators who run graphical tools over SSH, installers, database consoles, some vendor appliances, will find them stop working with no error more helpful than 'cannot open display'. Establish the replacement path before making the change.
 
-**Controls** — `nist-800-53-r5 CM-7`, `nist-800-53-r5 AC-17`
+**Controls.** `nist-800-53-r5 CM-7`, `nist-800-53-r5 AC-17`
 
 **References**
 
-- [sshd\_config(5) — X11Forwarding](https://man.openbsd.org/sshd_config#X11Forwarding)
-- [ssh(1) — X11 forwarding warning](https://man.openbsd.org/ssh#X)
+- [sshd\_config(5). X11Forwarding](https://man.openbsd.org/sshd_config#X11Forwarding)
+- [ssh(1). X11 forwarding warning](https://man.openbsd.org/ssh#X)
 
 ---
 
-### SSHD-0006 — Authentication attempts per connection are limited
+### SSHD-0006: Authentication attempts per connection are limited
 
 | | |
 |---|---|
@@ -5411,7 +5412,7 @@ sshd -T | grep -i x11forwarding
 MaxAuthTries bounds the number of authentication attempts sshd
 will accept on a single TCP connection before dropping it. It does not limit how
 many connections an attacker may open, so it is not by itself a defence against
-password guessing — pam_faillock and a rate limit at the network layer are what
+password guessing, pam_faillock and a rate limit at the network layer are what
 do that.
 
 What it does control is the cost per connection and, less obviously, what gets
@@ -5425,9 +5426,9 @@ The upstream default is 6. This check accepts 4 or fewer, and treats 0 as a
 misconfiguration rather than maximum strictness: sshd refuses every
 authentication at 0, which is a denial of service rather than a hardening.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set MaxAuthTries to 4 or fewer, and add a real lockout mechanism alongside it.
 
@@ -5442,15 +5443,15 @@ sshd -T | grep -i maxauthtries
 
 > **Caution.** Users with many keys in their agent can be disconnected before the correct key is offered, which presents as an intermittent 'Too many authentication failures' that is easy to misattribute to the server. Warn users to set IdentitiesOnly, or raise the limit slightly rather than leaving it at the default.
 
-**Controls** — `nist-800-53-r5 AC-7`, `nist-800-53-r5 AU-2`
+**Controls.** `nist-800-53-r5 AC-7`, `nist-800-53-r5 AU-2`
 
 **References**
 
-- [sshd\_config(5) — MaxAuthTries](https://man.openbsd.org/sshd_config#MaxAuthTries)
+- [sshd\_config(5). MaxAuthTries](https://man.openbsd.org/sshd_config#MaxAuthTries)
 
 ---
 
-### SSHD-0007 — Idle SSH sessions are disconnected
+### SSHD-0007: Idle SSH sessions are disconnected
 
 | | |
 |---|---|
@@ -5462,7 +5463,7 @@ sshd -T | grep -i maxauthtries
 
 An SSH session that is idle is a session nobody is watching.
 The laptop is closed, the terminal is behind a browser window, the desk is
-empty — and the session is still authenticated, still authorised, and still
+empty, and the session is still authenticated, still authorised, and still
 able to run anything the user can run. That is the exposure an idle timeout
 closes: not an attack on the protocol, but the ordinary case of an unattended
 authenticated shell.
@@ -5475,41 +5476,41 @@ the mechanism outright: an interval of 0 means no probe is ever sent, and a
 count of 0 means the connection is never terminated no matter how many probes
 go unanswered.
 
-The OpenSSH defaults are interval 0 and count 3 — no timeout at all. This check
+The OpenSSH defaults are interval 0 and count 3, no timeout at all. This check
 requires both to be positive and their product to be at most 15 minutes.
 
 Note that this is not the same as TMOUT in the shell. TMOUT ends the shell; the
 client-alive mechanism ends the connection, which also covers port forwards and
 sessions where no shell was ever started.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set ClientAliveInterval 300 and ClientAliveCountMax 3, and check that neither is zero.
 
 1. Set both in /etc/ssh/sshd\_config: 'ClientAliveInterval 300' and 'ClientAliveCountMax 3'. That is a 15-minute idle timeout.
-2. Check specifically that ClientAliveCountMax is not 0. A zero there disables termination entirely while leaving the configuration looking as though a timeout is in force — it is the most common way this setting is wrong.
+2. Check specifically that ClientAliveCountMax is not 0. A zero there disables termination entirely while leaving the configuration looking as though a timeout is in force, it is the most common way this setting is wrong.
 3. Confirm the effective values rather than the file: 'sshd -T \| grep -i clientalive' resolves Include directives and Match defaults.
-4. Consider TMOUT in /etc/profile.d/ as well. It ends an idle shell; this setting ends an idle connection, and they cover different cases — a session with a port forward and no shell is only covered by this one.
+4. Consider TMOUT in /etc/profile.d/ as well. It ends an idle shell; this setting ends an idle connection, and they cover different cases, a session with a port forward and no shell is only covered by this one.
 5. Validate and reload: 'sshd -t' then 'systemctl reload sshd'.
 
 ```sh
 sshd -T | grep -i clientalive
 ```
 
-> **Caution.** Long-running work started in a foreground shell — a database migration, a large rsync — will be killed when the connection drops. Tell users to run such work under tmux or screen before shortening the timeout, or the first casualty will be a job somebody has been running for six hours.
+> **Caution.** Long-running work started in a foreground shell, a database migration, a large rsync, will be killed when the connection drops. Tell users to run such work under tmux or screen before shortening the timeout, or the first casualty will be a job somebody has been running for six hours.
 
-**Controls** — `nist-800-53-r5 AC-11`, `nist-800-53-r5 AC-12`, `nist-800-53-r5 AC-17`
+**Controls.** `nist-800-53-r5 AC-11`, `nist-800-53-r5 AC-12`, `nist-800-53-r5 AC-17`
 
 **References**
 
-- [sshd\_config(5) — ClientAliveInterval](https://man.openbsd.org/sshd_config#ClientAliveInterval)
-- [sshd\_config(5) — ClientAliveCountMax](https://man.openbsd.org/sshd_config#ClientAliveCountMax)
+- [sshd\_config(5). ClientAliveInterval](https://man.openbsd.org/sshd_config#ClientAliveInterval)
+- [sshd\_config(5). ClientAliveCountMax](https://man.openbsd.org/sshd_config#ClientAliveCountMax)
 
 ---
 
-### SSHD-0008 — TCP forwarding is restricted
+### SSHD-0008: TCP forwarding is restricted
 
 | | |
 |---|---|
@@ -5528,7 +5529,7 @@ with /usr/sbin/nologin still forwards.
 That matters because network segmentation is usually the control that survives
 when everything else has failed. A database in a private subnet, a management
 interface on a separate VLAN, an internal API with no authentication because it
-is "not reachable" — all of them are reachable from a workstation the moment one
+is "not reachable", all of them are reachable from a workstation the moment one
 account on a host in that subnet can forward. Egress filtering fails the same
 way in reverse.
 
@@ -5539,20 +5540,20 @@ This check fails only the unrestricted values. 'local' and 'remote' each close
 one direction and are reported as a pass with the remaining direction named,
 because which one a host needs is a question about its role that no scanner can
 answer. Note also that this is not a boundary against a determined user with
-shell access — anyone who can execute code can run their own tunnel — so it is
+shell access, anyone who can execute code can run their own tunnel, so it is
 a control over the default and the accidental, not over the adversary who
 already has a shell.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Set AllowTcpForwarding no, or restrict it to the direction the host's role requires.
 
 1. Establish what uses it first. Forwarding is invisible in most monitoring; 'ss -tnp' on the host during normal operation shows the loopback listeners that -R creates, and client-side ~/.ssh/config files often document -L usage.
 2. For a host with no tunnelling role, set 'AllowTcpForwarding no' in /etc/ssh/sshd\_config.
-3. For a bastion, forwarding is the point — scope it instead. A 'Match Group jumpusers' block with 'AllowTcpForwarding yes' inside an otherwise-'no' configuration confines it to the accounts that need it. Plumbline reports that as a conditional finding rather than a clean pass, which is the accurate reading: the capability exists, for a named set of users.
-4. Where an account only needs sftp, combine 'ForceCommand internal-sftp' with 'AllowTcpForwarding no' — the shell restriction alone does not stop forwarding.
+3. For a bastion, forwarding is the point, scope it instead. A 'Match Group jumpusers' block with 'AllowTcpForwarding yes' inside an otherwise-'no' configuration confines it to the accounts that need it. Plumbline reports that as a conditional finding rather than a clean pass, which is the accurate reading: the capability exists, for a named set of users.
+4. Where an account only needs sftp, combine 'ForceCommand internal-sftp' with 'AllowTcpForwarding no', the shell restriction alone does not stop forwarding.
 5. Validate and reload: 'sshd -t' then 'systemctl reload sshd'.
 
 ```sh
@@ -5561,15 +5562,15 @@ sshd -T | grep -i allowtcpforwarding
 
 > **Caution.** Database clients, CI runners and remote IDE sessions frequently tunnel through a host without anyone recording that they do. Turning this off produces connection failures in tooling far from the host you changed, and the error surfaces on the client, not here.
 
-**Controls** — `nist-800-53-r5 SC-7`, `nist-800-53-r5 AC-4`, `nist-800-53-r5 CM-7`
+**Controls.** `nist-800-53-r5 SC-7`, `nist-800-53-r5 AC-4`, `nist-800-53-r5 CM-7`
 
 **References**
 
-- [sshd\_config(5) — AllowTcpForwarding](https://man.openbsd.org/sshd_config#AllowTcpForwarding)
+- [sshd\_config(5). AllowTcpForwarding](https://man.openbsd.org/sshd_config#AllowTcpForwarding)
 
 ---
 
-### SSHD-0009 — sshd logging is detailed enough to reconstruct access
+### SSHD-0009: sshd logging is detailed enough to reconstruct access
 
 | | |
 |---|---|
@@ -5601,13 +5602,13 @@ recommended": the output includes material from the authentication exchange
 that has no place in a log an operations team reads. It also produces enough
 volume to roll a log file before an investigator reaches it.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set LogLevel VERBOSE, and confirm the log is actually being collected.
 
-1. Set 'LogLevel VERBOSE' in /etc/ssh/sshd\_config. INFO also passes this check; VERBOSE additionally records key fingerprints and is what makes key-based logins individually attributable.
+1. Set 'LogLevel VERBOSE' in /etc/ssh/sshd\_config. INFO also passes this check. VERBOSE records key fingerprints, which is what makes key-based logins individually attributable.
 2. Verify the fingerprints are appearing: after a key login, 'journalctl -u sshd \| grep -i "Accepted publickey"' should show a SHA256: fingerprint.
 3. Confirm the log leaves the host. A local authentication log is deleted by whoever compromises the host; forwarding to a collector is what makes it evidence. LOGGING module checks cover that side.
 4. If the level was at DEBUG, check the existing log files for authentication material before rotating them, and rotate them rather than leaving them in place.
@@ -5620,15 +5621,15 @@ journalctl -u sshd -n 50
 
 > **Caution.** VERBOSE increases log volume noticeably on a busy bastion. Check the retention and disk headroom on the log partition before making the change, or the first symptom will be a full filesystem rather than a better audit trail.
 
-**Controls** — `nist-800-53-r5 AU-2`, `nist-800-53-r5 AU-3`, `nist-800-53-r5 AU-12`
+**Controls.** `nist-800-53-r5 AU-2`, `nist-800-53-r5 AU-3`, `nist-800-53-r5 AU-12`
 
 **References**
 
-- [sshd\_config(5) — LogLevel](https://man.openbsd.org/sshd_config#LogLevel)
+- [sshd\_config(5). LogLevel](https://man.openbsd.org/sshd_config#LogLevel)
 
 ---
 
-### SSHD-0010 — No deprecated or broken cipher is offered
+### SSHD-0010: No deprecated or broken cipher is offered
 
 | | |
 |---|---|
@@ -5640,7 +5641,7 @@ journalctl -u sshd -n 50
 
 The Ciphers list is what the server will agree to encrypt a
 session with. A client chooses from it, so the weakest entry is the weakest
-session this host will ever carry — and a client that prefers a weak cipher,
+session this host will ever carry, and a client that prefers a weak cipher,
 whether through age or through an attacker's influence over the negotiation, is
 not exotic.
 
@@ -5649,7 +5650,7 @@ Three families fail this check:
 - **CBC modes** (anything ending -cbc). SSH's use of CBC lets an attacker who
   can inject ciphertext recover 32 bits of plaintext with probability 2^-18 per
   attempt (CVE-2008-5161). OpenSSH removed CBC from its default list in 7.6.
-- **64-bit block ciphers** — 3DES, Blowfish, CAST-128. Sweet32 (CVE-2016-2183)
+- **64-bit block ciphers**, 3DES, Blowfish, CAST-128. Sweet32 (CVE-2016-2183)
   recovers plaintext from a long-lived connection carrying enough data, and a
   persistent SSH tunnel is exactly the shape that attack wants.
 - **RC4** (arcfour). Biased keystream, prohibited for TLS by RFC 7465, removed
@@ -5662,15 +5663,15 @@ effective list is compiled into the sshd binary, differs by release, and is
 rewritten by Red Hat's crypto-policies; asserting it without reading the binary
 would be a guess. See algorithms.go.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Set an explicit Ciphers list containing only AEAD and CTR modes.
 
 1. Find out what actually connects before restricting anything. 'journalctl -u sshd \| grep -i "cipher"' at LogLevel VERBOSE, or a packet capture of a few negotiations, will show which ciphers clients are choosing.
 2. Set an explicit list in /etc/ssh/sshd\_config: 'Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr'.
-3. Prefer the absolute form over 'Ciphers -\*-cbc'. The relative form leaves the rest of the list at whatever this binary was built with, which is both unauditable and version-dependent — Plumbline reports it as UNKNOWN for that reason.
+3. Prefer the absolute form over 'Ciphers -\*-cbc'. The relative form leaves the rest of the list at whatever this binary was built with, which is both unauditable and version-dependent. Plumbline reports it as UNKNOWN for that reason.
 4. On RHEL 8+ and Fedora, sshd's list is governed by crypto-policies. Changing sshd\_config alone may be overridden; 'update-crypto-policies --show' tells you which profile is active, and a policy submodule is the durable place to make the change.
 5. Validate and reload: 'sshd -t' then 'systemctl reload sshd'.
 
@@ -5679,19 +5680,19 @@ sshd -T | grep -i '^ciphers'
 ssh -Q cipher
 ```
 
-> **Caution.** Clients older than roughly 2014 — embedded management controllers, network appliances, legacy Java SSH libraries — may support nothing on a modern list and will fail to connect with 'no matching cipher found'. Inventory what connects to this host before restricting it, especially on anything with out-of-band management.
+> **Caution.** Clients older than roughly 2014, embedded management controllers, network appliances, legacy Java SSH libraries, may support nothing on a modern list and will fail to connect with 'no matching cipher found'. Inventory what connects to this host before restricting it, especially on anything with out-of-band management.
 
-**Controls** — `nist-800-53-r5 SC-8`, `nist-800-53-r5 SC-8(1)`, `nist-800-53-r5 SC-13`
+**Controls.** `nist-800-53-r5 SC-8`, `nist-800-53-r5 SC-8(1)`, `nist-800-53-r5 SC-13`
 
 **References**
 
-- [sshd\_config(5) — Ciphers](https://man.openbsd.org/sshd_config#Ciphers)
-- [CVE-2008-5161 — SSH CBC plaintext recovery](https://nvd.nist.gov/vuln/detail/CVE-2008-5161)
-- [CVE-2016-2183 — Sweet32](https://nvd.nist.gov/vuln/detail/CVE-2016-2183)
+- [sshd\_config(5). Ciphers](https://man.openbsd.org/sshd_config#Ciphers)
+- [CVE-2008-5161. SSH CBC plaintext recovery](https://nvd.nist.gov/vuln/detail/CVE-2008-5161)
+- [CVE-2016-2183. Sweet32](https://nvd.nist.gov/vuln/detail/CVE-2016-2183)
 
 ---
 
-### SSHD-0011 — No deprecated or truncated MAC is offered
+### SSHD-0011: No deprecated or truncated MAC is offered
 
 | | |
 |---|---|
@@ -5703,7 +5704,7 @@ ssh -Q cipher
 
 The MAC is what stops an attacker on the path from modifying a
 session rather than merely reading it. Encryption without integrity is not a
-weaker guarantee, it is a different one — and SSH's own history is a series of
+weaker guarantee, it is a different one, and SSH's own history is a series of
 attacks that exploited exactly that gap.
 
 Four categories fail:
@@ -5726,16 +5727,16 @@ When MACs is absent this check returns UNKNOWN rather than PASS, for the reason
 set out in algorithms.go: the effective list is compiled into the binary and
 cannot be read from the configuration.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Set an explicit MACs list containing only full-length SHA-2 and UMAC-128 constructions, preferring the ETM forms.
 
 1. Set an explicit list in /etc/ssh/sshd\_config: 'MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com'.
-2. Note that the AEAD ciphers — chacha20-poly1305 and the -gcm modes — carry their own integrity and ignore this list entirely. On a host whose Ciphers list is AEAD-only, the MACs list only governs the fallback, but leaving a broken entry there is still a negotiable path.
+2. Note that the AEAD ciphers, chacha20-poly1305 and the -gcm modes, carry their own integrity and ignore this list entirely. On a host whose Ciphers list is AEAD-only, the MACs list only governs the fallback, but leaving a broken entry there is still a negotiable path.
 3. Prefer the absolute form over 'MACs -hmac-sha1\*'; the relative form leaves the remainder at the binary's built-in default, which Plumbline reports as UNKNOWN because it cannot be read from configuration.
-4. On RHEL 8+ and Fedora, check 'update-crypto-policies --show' — the system policy can override what sshd\_config says.
+4. On RHEL 8+ and Fedora, check 'update-crypto-policies --show', the system policy can override what sshd\_config says.
 5. Validate and reload: 'sshd -t' then 'systemctl reload sshd'.
 
 ```sh
@@ -5745,16 +5746,16 @@ ssh -Q mac
 
 > **Caution.** The same compatibility warning as SSHD-0010 applies: older embedded clients frequently offer only hmac-sha1, and restricting this list will disconnect them with 'no matching MAC found'. Check management controllers and appliances before changing a host they reach.
 
-**Controls** — `nist-800-53-r5 SC-8`, `nist-800-53-r5 SC-8(1)`, `nist-800-53-r5 SC-13`
+**Controls.** `nist-800-53-r5 SC-8`, `nist-800-53-r5 SC-8(1)`, `nist-800-53-r5 SC-13`
 
 **References**
 
-- [sshd\_config(5) — MACs](https://man.openbsd.org/sshd_config#MACs)
-- [RFC 9142 — Key Exchange (KEX) Method Updates for SSH](https://www.rfc-editor.org/rfc/rfc9142)
+- [sshd\_config(5). MACs](https://man.openbsd.org/sshd_config#MACs)
+- [RFC 9142. Key Exchange (KEX) Method Updates for SSH](https://www.rfc-editor.org/rfc/rfc9142)
 
 ---
 
-### SSHD-0012 — No deprecated key exchange method is offered
+### SSHD-0012: No deprecated key exchange method is offered
 
 | | |
 |---|---|
@@ -5771,35 +5772,35 @@ the session regardless of how strong the cipher and MAC were.
 
 Two families fail:
 
-- **The 1024-bit MODP groups** — diffie-hellman-group1-sha1 and its relatives.
+- **The 1024-bit MODP groups**, diffie-hellman-group1-sha1 and its relatives.
   Logjam (2015) showed that a single expensive precomputation against a fixed
   1024-bit group makes individual exchanges cheap thereafter, and that the
   small number of groups in widespread use makes that precomputation worth
   doing. The prudent assumption is that it has been done.
-- **SHA-1 key exchanges** — group14-sha1, group-exchange-sha1, and the gss-
+- **SHA-1 key exchanges**, group14-sha1, group-exchange-sha1, and the gss-
   variants. RFC 9142 deprecates SHA-1 for SSH key exchange, and OpenSSH removed
   these from its default list in 8.2.
 
 A note on scope: the Terrapin attack (CVE-2023-48795) is a weakness in the
 handshake's sequence-number handling rather than in any algorithm on this list,
 and it is fixed by OpenSSH 9.6's strict-KEX extension rather than by a
-configuration change. This check does not detect it — a host with a perfectly
+configuration change. This check does not detect it, a host with a perfectly
 acceptable KexAlgorithms list can still be vulnerable if the binary predates
 9.6. Version-based detection belongs to a vulnerability feed, not here.
 
 When KexAlgorithms is absent this check returns UNKNOWN rather than PASS, for
 the reason set out in algorithms.go.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Set an explicit KexAlgorithms list of SHA-2 curve and large-group methods.
 
 1. Set an explicit list in /etc/ssh/sshd\_config: 'KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group-exchange-sha256'.
 2. Where the host must keep a DH group-exchange method, also remove the small moduli from /etc/ssh/moduli: 'awk \'$5 >= 3071\' /etc/ssh/moduli > /etc/ssh/moduli.tmp && mv /etc/ssh/moduli.tmp /etc/ssh/moduli'. Leaving 1024-bit moduli in that file undoes much of the point of the list.
 3. Confirm the sshd binary is 9.6 or later, so the strict-KEX mitigation for Terrapin (CVE-2023-48795) is present. That is a version question, not a configuration one, and this check does not answer it: 'sshd -V' or the package version.
-4. On RHEL 8+ and Fedora, check 'update-crypto-policies --show' — the system policy governs this list too.
+4. On RHEL 8+ and Fedora, check 'update-crypto-policies --show', the system policy governs this list too.
 5. Validate and reload: 'sshd -t' then 'systemctl reload sshd'.
 
 ```sh
@@ -5809,17 +5810,17 @@ ssh -Q kex
 
 > **Caution.** Key exchange is the first thing negotiated, so a client that supports nothing on the list fails before authentication with 'no matching key exchange method found' and no indication of which host setting caused it. This is the algorithm list most likely to break old automation; check it against every client that reaches this host, including backup agents and monitoring probes.
 
-**Controls** — `nist-800-53-r5 SC-8`, `nist-800-53-r5 SC-12`, `nist-800-53-r5 SC-13`
+**Controls.** `nist-800-53-r5 SC-8`, `nist-800-53-r5 SC-12`, `nist-800-53-r5 SC-13`
 
 **References**
 
-- [sshd\_config(5) — KexAlgorithms](https://man.openbsd.org/sshd_config#KexAlgorithms)
-- [RFC 9142 — Key Exchange (KEX) Method Updates for SSH](https://www.rfc-editor.org/rfc/rfc9142)
+- [sshd\_config(5). KexAlgorithms](https://man.openbsd.org/sshd_config#KexAlgorithms)
+- [RFC 9142. Key Exchange (KEX) Method Updates for SSH](https://www.rfc-editor.org/rfc/rfc9142)
 - [Logjam / Weak Diffie-Hellman](https://weakdh.org/)
 
 ---
 
-### SSHD-0013 — Per-user .rhosts and .shosts files are ignored
+### SSHD-0013: Per-user .rhosts and .shosts files are ignored
 
 | | |
 |---|---|
@@ -5836,22 +5837,22 @@ which is exactly the thing an attacker on the network controls.
 
 IgnoreRhosts yes tells sshd not to consult them. The keyword only has an effect
 where host-based authentication is actually enabled (SSHD-0014), so on most
-hosts this is defence in depth rather than an active exposure — but the two
+hosts this is defence in depth rather than an active exposure, but the two
 settings are frequently changed together by the same legacy migration, and a
 host that has turned one on has usually turned the other on too.
 
 The OpenSSH default is yes. A host reporting a failure here has been configured
 to honour these files deliberately, which is worth knowing on its own.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set IgnoreRhosts yes and remove the trust files that are already on disk.
 
 1. Set 'IgnoreRhosts yes' in /etc/ssh/sshd\_config. This is the OpenSSH default, so the line can also be removed.
 2. Find the files that exist regardless: 'find /home /root -maxdepth 2 -name .rhosts -o -name .shosts'.
-3. Read each one before deleting it — its contents record who was trusted, which is worth keeping for the incident record if the host has been exposed.
+3. Read each one before deleting it, its contents record who was trusted, which is worth keeping for the incident record if the host has been exposed.
 4. Confirm host-based authentication is also off (SSHD-0014), since that is what gives these files their effect.
 5. Validate and reload: 'sshd -t' then 'systemctl reload sshd'.
 
@@ -5862,15 +5863,15 @@ find /home /root -maxdepth 2 \( -name .rhosts -o -name .shosts \)
 
 > **Caution.** A legacy application that still relies on r-command trust will stop authenticating. Those are rare in 2026 and each one is a standing unauthenticated-access path, so find out what breaks rather than leaving the setting in place.
 
-**Controls** — `nist-800-53-r5 IA-2`, `nist-800-53-r5 AC-17`, `nist-800-53-r5 CM-7`
+**Controls.** `nist-800-53-r5 IA-2`, `nist-800-53-r5 AC-17`, `nist-800-53-r5 CM-7`
 
 **References**
 
-- [sshd\_config(5) — IgnoreRhosts](https://man.openbsd.org/sshd_config#IgnoreRhosts)
+- [sshd\_config(5). IgnoreRhosts](https://man.openbsd.org/sshd_config#IgnoreRhosts)
 
 ---
 
-### SSHD-0014 — Host-based authentication is disabled
+### SSHD-0014: Host-based authentication is disabled
 
 | | |
 |---|---|
@@ -5886,9 +5887,9 @@ host proves its identity with its own host key, and from that point sshd accepts
 whichever local username the client asserts.
 
 The consequence is that the trusted host's security boundary becomes this host's
-security boundary. Anyone with root on the trusted machine — or anyone who can
+security boundary. Anyone with root on the trusted machine, or anyone who can
 read its host key, which lives on disk and is often included in backups and
-machine images — can authenticate here as any user the trust covers. A single
+machine images, can authenticate here as any user the trust covers. A single
 compromised workstation becomes access to every host that trusted it, with no
 credential to steal and nothing in this host's logs that distinguishes it from
 a legitimate login.
@@ -5896,15 +5897,15 @@ a legitimate login.
 The OpenSSH default is no. This is the modern descendant of rhosts trust
 (SSHD-0013), and the two are usually enabled together.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Set HostbasedAuthentication no and remove the trust configuration behind it.
 
 1. Establish what currently depends on it before changing anything: 'cat /etc/ssh/shosts.equiv /etc/hosts.equiv' and the per-user ~/.shosts files list the trusted hosts.
 2. Replace the trust with keys for whatever automation relied on it. A per-account key with a forced command is both narrower and auditable.
-3. Set 'HostbasedAuthentication no' in /etc/ssh/sshd\_config — the OpenSSH default, so the line may simply be removed.
+3. Set 'HostbasedAuthentication no' in /etc/ssh/sshd\_config, the OpenSSH default, so the line may simply be removed.
 4. Remove /etc/shosts.equiv, /etc/hosts.equiv and any ~/.shosts files, after recording their contents for the incident trail.
 5. Validate and reload: 'sshd -t' then 'systemctl reload sshd'.
 
@@ -5913,17 +5914,17 @@ sshd -T | grep -i hostbasedauthentication
 cat /etc/ssh/shosts.equiv /etc/hosts.equiv 2>/dev/null
 ```
 
-> **Caution.** Cluster tooling from the HPC and older Unix worlds — parallel shells, batch schedulers, some backup agents — depends on this. Each of those is currently authenticating with no per-user credential; migrate them to keys rather than leaving the trust in place, and expect the migration to take longer than the config change.
+> **Caution.** Cluster tooling from the HPC and older Unix worlds, parallel shells, batch schedulers, some backup agents, depends on this. Each of those is currently authenticating with no per-user credential; migrate them to keys rather than leaving the trust in place, and expect the migration to take longer than the config change.
 
-**Controls** — `nist-800-53-r5 IA-2`, `nist-800-53-r5 IA-3`, `nist-800-53-r5 AC-17`
+**Controls.** `nist-800-53-r5 IA-2`, `nist-800-53-r5 IA-3`, `nist-800-53-r5 AC-17`
 
 **References**
 
-- [sshd\_config(5) — HostbasedAuthentication](https://man.openbsd.org/sshd_config#HostbasedAuthentication)
+- [sshd\_config(5). HostbasedAuthentication](https://man.openbsd.org/sshd_config#HostbasedAuthentication)
 
 ---
 
-### SSHD-0015 — Users cannot set arbitrary environment variables at login
+### SSHD-0015: Users cannot set arbitrary environment variables at login
 
 | | |
 |---|---|
@@ -5944,20 +5945,20 @@ session, including anything the session later escalates to. PATH, LD_LIBRARY_PAT
 and BASH_ENV are variations on the same theme.
 
 Where this matters most is exactly where the user was supposed to be
-constrained — a forced-command key, a restricted shell, an sftp-only account.
+constrained, a forced-command key, a restricted shell, an sftp-only account.
 Each of those confines what the user may run, and none of them confines what
 the user may load into it.
 
 The OpenSSH default is no, and the manual page recommends leaving it there.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set PermitUserEnvironment no and use AcceptEnv or SetEnv for variables that genuinely need to pass through.
 
 1. Find out what is relying on it: 'ls /home/\*/.ssh/environment' and 'grep -l environment= /home/\*/.ssh/authorized\_keys'.
-2. Set 'PermitUserEnvironment no' in /etc/ssh/sshd\_config — the OpenSSH default, so the line may be removed.
+2. Set 'PermitUserEnvironment no' in /etc/ssh/sshd\_config, the OpenSSH default, so the line may be removed.
 3. Where a variable genuinely must reach the session, name it explicitly: 'AcceptEnv' allows a listed variable from the client, and 'SetEnv' sets one from the server. Both are administrator-controlled, which is the difference that matters.
 4. Validate and reload: 'sshd -t' then 'systemctl reload sshd'.
 
@@ -5966,17 +5967,17 @@ sshd -T | grep -i permituserenvironment
 ls /home/*/.ssh/environment 2>/dev/null
 ```
 
-> **Caution.** Automation that sets variables through authorized\_keys — build agents and deployment keys most often — will lose them silently: the session starts normally and the variable is simply absent. Check for the files before reloading rather than after the first failed job.
+> **Caution.** Automation that sets variables through authorized\_keys, build agents and deployment keys most often, will lose them silently: the session starts normally and the variable is simply absent. Check for the files before reloading rather than after the first failed job.
 
-**Controls** — `nist-800-53-r5 CM-7`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 SI-3`
+**Controls.** `nist-800-53-r5 CM-7`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 SI-3`
 
 **References**
 
-- [sshd\_config(5) — PermitUserEnvironment](https://man.openbsd.org/sshd_config#PermitUserEnvironment)
+- [sshd\_config(5). PermitUserEnvironment](https://man.openbsd.org/sshd_config#PermitUserEnvironment)
 
 ---
 
-### SSHD-0016 — Unauthenticated connections are closed promptly
+### SSHD-0016: Unauthenticated connections are closed promptly
 
 | | |
 |---|---|
@@ -5991,26 +5992,26 @@ before the client has authenticated. Every such connection occupies one of the
 slots MaxStartups allows, and each one runs a pre-authentication process.
 
 The default is 120 seconds, which means an attacker can hold the listener's
-unauthenticated capacity with a trickle of connections that never complete —
+unauthenticated capacity with a trickle of connections that never complete,
 the classic slow-loris shape applied to SSH. Reducing it to 60 seconds or less
 halves the cost of holding a slot without inconveniencing anyone: an interactive
 login that takes more than a minute to authenticate has a different problem.
 
 The wider reason to care is that pre-authentication code is the most exposed
 code in the daemon. It is what CVE-2024-6387 ("regreSSHion") reached, and that
-vulnerability was triggered specifically by letting the grace timer expire — on
+vulnerability was triggered specifically by letting the grace timer expire, on
 a host running the vulnerable version, a shorter grace time raised the cost of
 the attack because each attempt had to be repeated more often. Shortening the
 window does not fix such bugs, but it reduces how long an unauthenticated peer
 gets to work with the code that contains them.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set LoginGraceTime to 60 seconds or less.
 
-1. Set 'LoginGraceTime 60' in /etc/ssh/sshd\_config. Never set it to 0 — that disables the timeout rather than tightening it.
+1. Set 'LoginGraceTime 60' in /etc/ssh/sshd\_config. Never set it to 0, that disables the timeout rather than tightening it.
 2. Review MaxStartups at the same time; the grace time and the connection limit together decide how cheaply the listener can be saturated.
 3. Validate and reload: 'sshd -t' then 'systemctl reload sshd'.
 
@@ -6020,16 +6021,16 @@ sshd -T | grep -Ei 'logingracetime|maxstartups'
 
 > **Caution.** Interactive authentication that involves a hardware token, a push notification or a slow directory lookup can legitimately take longer than a user expects. Sixty seconds is comfortable for all three; going much below that will start rejecting real logins during a directory outage.
 
-**Controls** — `nist-800-53-r5 SC-5`, `nist-800-53-r5 AC-17`
+**Controls.** `nist-800-53-r5 SC-5`, `nist-800-53-r5 AC-17`
 
 **References**
 
-- [sshd\_config(5) — LoginGraceTime](https://man.openbsd.org/sshd_config#LoginGraceTime)
+- [sshd\_config(5). LoginGraceTime](https://man.openbsd.org/sshd_config#LoginGraceTime)
 - [CVE-2024-6387 (regreSSHion)](https://nvd.nist.gov/vuln/detail/CVE-2024-6387)
 
 ---
 
-### SSHD-0017 — A pre-authentication warning banner is presented
+### SSHD-0017: A pre-authentication warning banner is presented
 
 | | |
 |---|---|
@@ -6042,8 +6043,8 @@ sshd -T | grep -Ei 'logingracetime|maxstartups'
 Banner names a file whose contents sshd sends to the client
 before authentication. It has no effect on what anyone can do.
 
-Its purpose is evidentiary. Several legal regimes — and most organisational
-computer-use policies — distinguish between a system that announced its access
+Its purpose is evidentiary. Several legal regimes, and most organisational
+computer-use policies, distinguish between a system that announced its access
 conditions and one that did not, and the announcement has to precede
 authentication to be relied on. Where an organisation intends to be able to act
 on unauthorised access, this is the mechanism that records the intent.
@@ -6055,15 +6056,15 @@ the internet by construction. And Banner is not the same as MOTD, which is
 displayed after authentication and therefore says nothing to anyone who failed
 to authenticate.
 
-The OpenSSH default is 'none' — no banner.
+The OpenSSH default is 'none', no banner.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Write a banner file containing your organisation's access notice and point Banner at it.
 
-1. Get the wording from whoever owns it — legal or security, not the person editing sshd\_config. The text is the entire value of this control and a generic one may not carry the effect intended.
+1. Get the wording from whoever owns it, legal or security, not the person editing sshd\_config. The text is the entire value of this control and a generic one may not carry the effect intended.
 2. Write it to /etc/issue.net and set 'Banner /etc/issue.net' in /etc/ssh/sshd\_config.
 3. Check what the file does not say: no hostname, no operating system version, no role, no contact details. Everything in it is shown to anyone who connects, before they authenticate.
 4. Confirm the file is world-readable and not a symlink into anything unexpected: 'ls -lL /etc/issue.net'.
@@ -6074,17 +6075,17 @@ sshd -T | grep -i banner
 ssh -o PreferredAuthentications=none <host>
 ```
 
-> **Caution.** Automated clients that parse SSH output — older scripted transfers and some monitoring probes — can be confused by unexpected banner text. Test against the automation that talks to this host, not only from an interactive terminal.
+> **Caution.** Automated clients that parse SSH output, older scripted transfers and some monitoring probes, can be confused by unexpected banner text. Test against the automation that talks to this host, not only from an interactive terminal.
 
-**Controls** — `nist-800-53-r5 AC-8`
+**Controls.** `nist-800-53-r5 AC-8`
 
 **References**
 
-- [sshd\_config(5) — Banner](https://man.openbsd.org/sshd_config#Banner)
+- [sshd\_config(5). Banner](https://man.openbsd.org/sshd_config#Banner)
 
 ---
 
-### SSHD-0018 — SSH agent forwarding is disabled
+### SSHD-0018: SSH agent forwarding is disabled
 
 | | |
 |---|---|
@@ -6095,7 +6096,7 @@ ssh -o PreferredAuthentications=none <host>
 | Tags | `ssh`, `remote-access`, `lateral-movement`, `credentials` |
 
 Agent forwarding places a socket on the server that anyone
-with root there — or the user's own uid — can use to sign authentication
+with root there, or the user's own uid, can use to sign authentication
 requests with the keys held in the user's local agent. The keys themselves do
 not move, which is what the feature is usually defended with, but the ability to
 authenticate with them does, for as long as the session is open. A compromised
@@ -6110,18 +6111,18 @@ every case where agent forwarding is still configured.
 
 The OpenSSH default is yes. This ships at LOW because the exposure requires the
 server to be compromised first, and because the setting is only reachable when
-a user chooses to forward — but on a bastion, which is precisely where agent
+a user chooses to forward, but on a bastion, which is precisely where agent
 forwarding is most used, that first condition is the whole threat model.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set AllowAgentForwarding no and move users to ProxyJump.
 
 1. Establish the replacement first: 'ssh -J bastion.example.net target.example.net', or a 'ProxyJump' line in the users' ~/.ssh/config. This is what agent forwarding is usually being used for.
 2. Set 'AllowAgentForwarding no' in /etc/ssh/sshd\_config.
-3. Note that this is not a security boundary against a determined user — anyone who can run a shell here can forward a connection themselves. It removes the default and the accident, not the capability.
+3. Note that this is not a security boundary against a determined user, anyone who can run a shell here can forward a connection themselves. It removes the default and the accident, not the capability.
 4. Validate and reload: 'sshd -t' then 'systemctl reload sshd'.
 
 ```sh
@@ -6130,16 +6131,16 @@ sshd -T | grep -i allowagentforwarding
 
 > **Caution.** Deployment tooling that hops through this host to reach a git remote or a downstream server will stop authenticating. ProxyJump or a deploy key scoped to the specific repository are the replacements; arrange one before the change rather than after the pipeline fails.
 
-**Controls** — `nist-800-53-r5 AC-17`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 CM-7`
+**Controls.** `nist-800-53-r5 AC-17`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 CM-7`
 
 **References**
 
-- [sshd\_config(5) — AllowAgentForwarding](https://man.openbsd.org/sshd_config#AllowAgentForwarding)
-- [ssh\_config(5) — ProxyJump](https://man.openbsd.org/ssh_config#ProxyJump)
+- [sshd\_config(5). AllowAgentForwarding](https://man.openbsd.org/sshd_config#AllowAgentForwarding)
+- [ssh\_config(5). ProxyJump](https://man.openbsd.org/ssh_config#ProxyJump)
 
 ---
 
-### SSHD-0019 — sshd verifies ownership and permissions of user key files
+### SSHD-0019: sshd verifies ownership and permissions of user key files
 
 | | |
 |---|---|
@@ -6155,7 +6156,7 @@ is writable by group or other. StrictModes yes is what performs that check.
 
 With StrictModes no, a world-writable home directory becomes a way in: anyone
 who can write it can create ~/.ssh/authorized_keys, add their own public key,
-and log in as that user. No credential is stolen and nothing is guessed — the
+and log in as that user. No credential is stolen and nothing is guessed, the
 account simply starts trusting a new key. The same applies to a home directory
 on a group-writable share, which is the more common accidental case.
 
@@ -6164,16 +6165,16 @@ always a home directory on a network filesystem whose ownership does not survive
 the mount, and the correct fix is to repair the mount rather than to stop
 checking.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set StrictModes yes and fix the permissions that made turning it off seem necessary.
 
 1. Find what would now be rejected: 'find /home -maxdepth 1 -perm /022 -type d' lists group- or world-writable home directories.
 2. Repair them: 'chmod go-w /home/<user>', 'chmod 700 /home/<user>/.ssh', 'chmod 600 /home/<user>/.ssh/authorized\_keys', and confirm ownership with 'chown -R <user>: /home/<user>/.ssh'.
-3. Where home directories are on NFS, the usual cause is an ownership mismatch across the mount rather than a genuine permission problem — fix the export or the idmap rather than the sshd setting.
-4. Set 'StrictModes yes' in /etc/ssh/sshd\_config — the OpenSSH default, so the line may be removed.
+3. Where home directories are on NFS, the usual cause is an ownership mismatch across the mount rather than a genuine permission problem, fix the export or the idmap rather than the sshd setting.
+4. Set 'StrictModes yes' in /etc/ssh/sshd\_config, the OpenSSH default, so the line may be removed.
 5. Validate and reload: 'sshd -t' then 'systemctl reload sshd'.
 
 ```sh
@@ -6181,17 +6182,17 @@ sshd -T | grep -i strictmodes
 find /home -maxdepth 1 -perm /022 -type d
 ```
 
-> **Caution.** Turning this back on will refuse key authentication for any user whose permissions are currently wrong, and the failure is silent from the client's side — it simply falls through to the next method or is rejected. Audit and repair the directories in the same maintenance window as the change.
+> **Caution.** Turning this back on will refuse key authentication for any user whose permissions are currently wrong, and the failure is silent from the client's side, it simply falls through to the next method or is rejected. Audit and repair the directories in the same maintenance window as the change.
 
-**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 IA-5`
+**Controls.** `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 IA-5`
 
 **References**
 
-- [sshd\_config(5) — StrictModes](https://man.openbsd.org/sshd_config#StrictModes)
+- [sshd\_config(5). StrictModes](https://man.openbsd.org/sshd_config#StrictModes)
 
 ---
 
-### SSHD-0020 — sshd runs the PAM account and session stack
+### SSHD-0020: sshd runs the PAM account and session stack
 
 | | |
 |---|---|
@@ -6219,12 +6220,12 @@ that lives there stops applying to SSH logins specifically:
 
 The upstream OpenSSH default is **no**. Every mainstream distribution ships
 'UsePAM yes' in its packaged sshd_config, so a host reporting a failure here has
-either had the line removed or is running a configuration built from scratch —
+either had the line removed or is running a configuration built from scratch,
 and in either case a policy the operator believes is in force is not.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set UsePAM yes and confirm the PAM stack for sshd is present.
 
@@ -6241,17 +6242,17 @@ ls -l /etc/pam.d/sshd
 
 > **Caution.** If /etc/pam.d/sshd is missing or broken, turning UsePAM on refuses every SSH login immediately. Verify the file exists, reload from a session you are not depending on, and keep a console or second session open.
 
-**Controls** — `nist-800-53-r5 AC-7`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 AC-2`
+**Controls.** `nist-800-53-r5 AC-7`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 AC-2`
 
 **References**
 
-- [sshd\_config(5) — UsePAM](https://man.openbsd.org/sshd_config#UsePAM)
+- [sshd\_config(5). UsePAM](https://man.openbsd.org/sshd_config#UsePAM)
 
 ---
 
 ## USERS
 
-### USERS-0001 — Only the root account has uid 0
+### USERS-0001: Only the root account has uid 0
 
 | | |
 |---|---|
@@ -6262,8 +6263,8 @@ ls -l /etc/pam.d/sshd
 | Tags | `users`, `privilege-escalation`, `persistence` |
 
 The kernel grants privilege by uid, not by name. An account
-called "backup" with uid 0 is root — it can read every file, load kernel
-modules and change any password — and nothing in the shell prompt, the process
+called "backup" with uid 0 is root, it can read every file, load kernel
+modules and change any password, and nothing in the shell prompt, the process
 list or the audit log distinguishes it from the real thing.
 
 A second uid 0 account is one of the quietest persistence mechanisms available
@@ -6273,9 +6274,9 @@ that enumerate "the root account", and on a busy host nobody reads
 who wanted a personal root login and did not realise sudo already provided
 one with an audit trail.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Give every account other than root a unique non-zero uid, or remove it.
 
@@ -6291,7 +6292,7 @@ lastlog -u <name>
 
 > **Caution.** Changing root's own uid, or removing the account that a running service authenticates as, will break the host. Confirm what depends on the account before altering it, and keep a root session open while you do.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 AC-2`, `nist-800-53-r5 IA-2`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 AC-2`, `nist-800-53-r5 IA-2`
 
 **References**
 
@@ -6299,7 +6300,7 @@ lastlog -u <name>
 
 ---
 
-### USERS-0002 — System accounts have no interactive login shell
+### USERS-0002: System accounts have no interactive login shell
 
 | | |
 |---|---|
@@ -6311,8 +6312,8 @@ lastlog -u <name>
 
 A system account exists to own files and run a daemon, not to be
 logged into. Leaving it with a real shell turns every one of them into a
-potential entry point: an attacker who obtains its credential — from a
-configuration file, a backup, a compromised service — gets a session rather
+potential entry point: an attacker who obtains its credential, from a
+configuration file, a backup, a compromised service, gets a session rather
 than an error, and from a session they get an environment, a shell history and
 somewhere to run things.
 
@@ -6320,15 +6321,15 @@ Setting the shell to nologin or false costs nothing, because nothing about
 running a daemon requires the ability to log in.
 
 Two details decide whether this check is right or merely plausible. **An empty
-shell field is not "no shell"** — the system substitutes /bin/sh, so an empty
+shell field is not "no shell"**, the system substitutes /bin/sh, so an empty
 field is the most permissive setting in the file, not the most restrictive.
 And the path to nologin differs by distribution, /usr/sbin on Debian-family
 systems and /sbin on Red Hat-family ones, so a check that knew only one would
 report every account on the other as interactive.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set the shell of every system account to nologin.
 
@@ -6342,9 +6343,9 @@ awk -F: '$3 >= 1 && $3 <= 999 {print $1, $7}' /etc/passwd
 usermod -s /usr/sbin/nologin <name>
 ```
 
-> **Caution.** Some deployment tooling runs commands as a service account through 'su' or 'runuser', both of which need a working shell. Changing the shell will break those jobs silently — they will fail at the next run rather than immediately.
+> **Caution.** Some deployment tooling runs commands as a service account through 'su' or 'runuser', both of which need a working shell. Changing the shell will break those jobs silently, they will fail at the next run rather than immediately.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 AC-2`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 AC-2`
 
 **References**
 
@@ -6352,7 +6353,7 @@ usermod -s /usr/sbin/nologin <name>
 
 ---
 
-### USERS-0003 — No account has an empty password
+### USERS-0003: No account has an empty password
 
 | | |
 |---|---|
@@ -6363,8 +6364,8 @@ usermod -s /usr/sbin/nologin <name>
 | Tags | `users`, `authentication`, `credentials` |
 
 An empty password field in /etc/shadow means the account
-authenticates with no password at all. Wherever the PAM stack consults shadow —
-console login, su, and any service configured to use it — pressing return is
+authenticates with no password at all. Wherever the PAM stack consults shadow,
+console login, su, and any service configured to use it, pressing return is
 sufficient.
 
 This is not a theoretical state. It is produced by 'passwd -d', by automated
@@ -6373,15 +6374,15 @@ backup. It is distinct from a locked account: a lock token means no password
 can ever match, which is safe, while an empty field means every password
 matches, which is the opposite.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set a password on the account, or lock it if it should not authenticate.
 
 1. Decide which the account should be. An account that a person uses needs a password; an account that only owns files or runs a daemon needs a lock.
 2. To lock it so no password can ever match: 'passwd -l <name>'. This is the right answer for a service account.
-3. To set a password: 'passwd <name>'. Do not leave it until later — the state you are fixing is what 'later' looks like.
+3. To set a password: 'passwd <name>'. Do not leave it until later, the state you are fixing is what 'later' looks like.
 4. Verify: 'passwd -S <name>' reports 'L' for locked, 'P' for a usable password, and 'NP' for no password.
 5. Check whether the account was used while it was open: 'lastlog -u <name>' and 'last <name>'.
 
@@ -6392,7 +6393,7 @@ passwd -l <name>
 
 > **Caution.** Locking an account that a service authenticates as will stop that service. Confirm what uses the account first; locking root in particular can leave a host with no console recovery path.
 
-**Controls** — `nist-800-53-r5 IA-5`, `nist-800-53-r5 IA-2`, `nist-800-53-r5 AC-2`
+**Controls.** `nist-800-53-r5 IA-5`, `nist-800-53-r5 IA-2`, `nist-800-53-r5 AC-2`
 
 **References**
 
@@ -6400,7 +6401,7 @@ passwd -l <name>
 
 ---
 
-### USERS-0004 — Password hashes use a modern algorithm
+### USERS-0004: Password hashes use a modern algorithm
 
 | | |
 |---|---|
@@ -6424,11 +6425,11 @@ merely slower.
 Changing the system's hashing scheme does not rewrite existing hashes. Each
 account keeps whatever it was hashed with until its password is next changed,
 so a host that switched years ago can still be carrying MD5 hashes for accounts
-nobody has touched — which are exactly the accounts nobody is watching.
+nobody has touched, which are exactly the accounts nobody is watching.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Change the affected passwords so they are re-hashed with the system's current scheme.
 
@@ -6444,15 +6445,15 @@ chage -d 0 <name>
 
 > **Caution.** 'chage -d 0' forces a password change at the account's next login. Applied to a service account that logs in non-interactively, it will lock that service out silently at its next authentication.
 
-**Controls** — `nist-800-53-r5 IA-5(1)`, `nist-800-53-r5 SC-13`
+**Controls.** `nist-800-53-r5 IA-5(1)`, `nist-800-53-r5 SC-13`
 
 **References**
 
-- [crypt(5) — password hashing methods](https://man7.org/linux/man-pages/man5/crypt.5.html)
+- [crypt(5), password hashing methods](https://man7.org/linux/man-pages/man5/crypt.5.html)
 
 ---
 
-### USERS-0005 — No uid or account name is used by more than one entry
+### USERS-0005: No uid or account name is used by more than one entry
 
 | | |
 |---|---|
@@ -6465,7 +6466,7 @@ chage -d 0 <name>
 Two accounts sharing a uid are the same account as far as the
 kernel is concerned. They can read each other's files, signal each other's
 processes and inherit each other's group memberships, while appearing in every
-listing as two separate identities — which destroys attribution: an audit log
+listing as two separate identities, which destroys attribution: an audit log
 recording a uid cannot say which of the two names was responsible.
 
 Two entries sharing a name are worse in a different way. Name resolution
@@ -6474,20 +6475,20 @@ shell, its home directory and its group are all silently ignored. An
 administrator who edits the second copy makes no change at all and has no way
 to tell.
 
-Both states are usually accidental — a provisioning script that allocated a uid
-already in use, or a file edited by two tools at once — and both are also a
+Both states are usually accidental, a provisioning script that allocated a uid
+already in use, or a file edited by two tools at once, and both are also a
 tidy way to hide an account in plain sight.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Give every account a unique uid and a unique name.
 
 1. List the collisions: 'awk -F: '\''{print $3}'\'' /etc/passwd \| sort \| uniq -d' for uids, and the same on $1 for names.
 2. For a duplicated uid, decide which account should keep it and record which files the other owns before changing anything: 'find / -xdev -uid <uid> -print > /root/uid-<uid>.list'.
 3. Allocate a free uid and apply it: 'usermod -u <newuid> <name>', then re-own the recorded files with 'chown'.
-4. For a duplicated name, remove the unreachable entry — but first confirm it is genuinely redundant, because it may be the entry somebody believed was in effect.
+4. For a duplicated name, remove the unreachable entry, but first confirm it is genuinely redundant, because it may be the entry somebody believed was in effect.
 5. Verify with 'pwck', which reports both conditions.
 
 ```sh
@@ -6495,9 +6496,9 @@ pwck -r
 awk -F: '{print $3}' /etc/passwd | sort | uniq -d
 ```
 
-> **Caution.** Changing a uid does not change the ownership of files already on disk; those files become owned by whatever account now holds the old uid. Record the file list before making the change — after it, the old uid no longer identifies them.
+> **Caution.** Changing a uid does not change the ownership of files already on disk; those files become owned by whatever account now holds the old uid. Record the file list before making the change, after it, the old uid no longer identifies them.
 
-**Controls** — `nist-800-53-r5 IA-2`, `nist-800-53-r5 IA-4`, `nist-800-53-r5 AU-6`
+**Controls.** `nist-800-53-r5 IA-2`, `nist-800-53-r5 IA-4`, `nist-800-53-r5 AU-6`
 
 **References**
 
@@ -6505,7 +6506,7 @@ awk -F: '{print $3}' /etc/passwd | sort | uniq -d
 
 ---
 
-### USERS-0006 — The account database contains no legacy NIS import entries
+### USERS-0006: The account database contains no legacy NIS import entries
 
 | | |
 |---|---|
@@ -6518,7 +6519,7 @@ awk -F: '{print $3}' /etc/passwd | sort | uniq -d
 A line in /etc/passwd whose first field begins with "+" is NIS
 compatibility syntax: it tells glibc to pull accounts from a directory service
 and merge them into the local database. A bare "+::::::" imports every account
-NIS offers, with whatever uid, shell and group the directory says — including,
+NIS offers, with whatever uid, shell and group the directory says, including,
 if the directory is compromised or spoofed, uid 0.
 
 NIS transmits its maps without authentication or encryption and its successor,
@@ -6528,13 +6529,13 @@ the network was assumed to be trustworthy.
 
 The entry also changes what every other check in this module can conclude. Once
 accounts arrive from somewhere this scan cannot read, "no account has uid 0"
-becomes a statement about a list that is explicitly not the whole list — which
+becomes a statement about a list that is explicitly not the whole list, which
 is why the other USERS checks resolve to UNKNOWN when one of these is present
 rather than reporting a PASS they cannot support.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Remove the compatibility entries and configure directory accounts through nsswitch.conf.
 
@@ -6551,7 +6552,7 @@ getent passwd <name>
 
 > **Caution.** Removing the entries on a host that really is using NIS will make every directory account stop resolving, which locks out everyone who is not a local user. Verify the replacement resolves accounts before removing the old mechanism, and keep a local root session open.
 
-**Controls** — `nist-800-53-r5 IA-2`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 SC-8`
+**Controls.** `nist-800-53-r5 IA-2`, `nist-800-53-r5 IA-5`, `nist-800-53-r5 SC-8`
 
 **References**
 
@@ -6559,7 +6560,7 @@ getent passwd <name>
 
 ---
 
-### USERS-0007 — Group 0 is confined to root
+### USERS-0007: Group 0 is confined to root
 
 | | |
 |---|---|
@@ -6571,8 +6572,8 @@ getent passwd <name>
 
 Group 0 is the group half of root's identity. Files created by
 root are owned by group 0 unless something says otherwise, and a great many of
-them — including, on most distributions, /etc/shadow's directory, the systemd
-unit tree and /root itself — grant the group read access that they deny to
+them, including, on most distributions, /etc/shadow's directory, the systemd
+unit tree and /root itself, grant the group read access that they deny to
 everyone else. An ordinary account whose primary group is 0 therefore reads a
 substantial part of what root reads, without ever appearing in a listing of
 privileged accounts and without triggering any check that looks at uid 0.
@@ -6580,24 +6581,24 @@ privileged accounts and without triggering any check that looks at uid 0.
 Three things have to hold. Root's own primary group must be 0, because the
 files root creates are expected to land in it and a root account in some other
 group quietly changes the ownership of everything it writes. No ordinary
-account may have primary group 0. And the group's supplementary member list —
-the fourth field of the "root:x:0:" line in /etc/group — must name nobody,
+account may have primary group 0. And the group's supplementary member list,
+the fourth field of the "root:x:0:" line in /etc/group, must name nobody,
 because every name in it holds group 0 as a secondary group at every login.
 
 System accounts with primary group 0 are reported but not failed. Several
 distributions ship them that way, so failing them would produce findings that
 are correct about the file and useless to the person reading them.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Give the account a primary group of its own and remove supplementary members from group 0.
 
 1. List what is in group 0: 'awk -F: '\''$4 == 0 {print $1, $3}'\'' /etc/passwd' for primary members, and 'getent group 0' for supplementary ones.
 2. Record what the account owns before changing its group, because the change does not re-own existing files: 'find / -xdev -user <name> -print > /root/<name>.files'.
 3. Create a group for the account and move it: 'groupadd <name>' then 'usermod -g <name> <name>'.
-4. Re-own the recorded files: 'xargs -a /root/<name>.files chgrp <name>' — check the list first for anything that genuinely should stay group root.
+4. Re-own the recorded files: 'xargs -a /root/<name>.files chgrp <name>', check the list first for anything that genuinely should stay group root.
 5. Remove supplementary members: 'gpasswd -d <name> root'.
 6. If root's own primary group is not 0, set it back with 'usermod -g 0 root' and check what root has created since it changed.
 
@@ -6606,9 +6607,9 @@ awk -F: '$4 == 0 {print $1, $3}' /etc/passwd
 getent group 0
 ```
 
-> **Caution.** Changing an account's primary group does not change the group ownership of files it already created; those files stay group 0 and stay readable to anything still in that group. Record the file list before the change — afterwards the account's group no longer identifies them.
+> **Caution.** Changing an account's primary group does not change the group ownership of files it already created; those files stay group 0 and stay readable to anything still in that group. Record the file list before the change, afterwards the account's group no longer identifies them.
 
-**Controls** — `nist-800-53-r5 AC-6`, `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-2`
+**Controls.** `nist-800-53-r5 AC-6`, `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-2`
 
 **References**
 
@@ -6617,7 +6618,7 @@ getent group 0
 
 ---
 
-### USERS-0008 — No gid or group name is used by more than one entry
+### USERS-0008: No gid or group name is used by more than one entry
 
 | | |
 |---|---|
@@ -6630,7 +6631,7 @@ getent group 0
 Two groups sharing a gid are one group to the kernel. File
 permissions are enforced against the numeric gid, never the name, so granting
 somebody membership of "developers" also grants them everything the other group
-holding that gid can reach — and nothing in either group's definition says so.
+holding that gid can reach, and nothing in either group's definition says so.
 The reverse is equally true when reading an audit trail: a gid in a log or a
 directory listing no longer identifies which group was meant.
 
@@ -6640,21 +6641,21 @@ list are silently ignored. An administrator who adds a user to the second copy
 has made no change at all, and 'getent group <name>' will confirm the first
 entry's contents back to them without any indication that another exists.
 
-Both states are produced by ordinary accidents — a package postinstall that
+Both states are produced by ordinary accidents, a package postinstall that
 allocated a gid already taken, a configuration-management run that appended
-rather than replaced — and both are also an unremarkable-looking way to widen
+rather than replaced, and both are also an unremarkable-looking way to widen
 access to a set of files.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort MEDIUM
+**Remediation.** Effort: MEDIUM
 
 Give every group a unique gid and a unique name.
 
 1. List the collisions: 'awk -F: '\''{print $3}'\'' /etc/group \| sort \| uniq -d' for gids, and the same on $1 for names.
 2. For a duplicated gid, decide which group should keep it and record what the other one owns before changing anything: 'find / -xdev -gid <gid> -print > /root/gid-<gid>.list'.
 3. Allocate a free gid and apply it: 'groupmod -g <newgid> <name>', then re-own the recorded files with 'chgrp'.
-4. For a duplicated name, confirm which entry is actually in force with 'getent group <name>' — it returns the first — and check whether the memberships in the unreachable entry were meant to be active before removing it.
+4. For a duplicated name, confirm which entry is actually in force with 'getent group <name>', it returns the first, and check whether the memberships in the unreachable entry were meant to be active before removing it.
 5. Verify with 'grpck', which reports both conditions.
 
 ```sh
@@ -6664,7 +6665,7 @@ awk -F: '{print $3}' /etc/group | sort | uniq -d
 
 > **Caution.** Changing a gid does not change the group ownership of files already on disk; those files become owned by whatever group now holds the old gid, which can silently widen rather than narrow access. Record the file list before making the change.
 
-**Controls** — `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 AU-6`
+**Controls.** `nist-800-53-r5 AC-3`, `nist-800-53-r5 AC-6`, `nist-800-53-r5 AU-6`
 
 **References**
 
@@ -6673,7 +6674,7 @@ awk -F: '{print $3}' /etc/group | sort | uniq -d
 
 ---
 
-### USERS-0009 — Passwords that can authenticate have a bounded maximum age
+### USERS-0009: Passwords that can authenticate have a bounded maximum age
 
 | | |
 |---|---|
@@ -6699,16 +6700,16 @@ current and none of them is a misreading of the others.
 Plumbline reports the setting at LOW severity against the CIS threshold,
 because that is the number most audits are run against, and states the conflict
 in the finding rather than resolving it. An organisation following NIST's
-position should suppress this check deliberately — which is a decision with a
-record — rather than have the tool make it for them silently.
+position should suppress this check deliberately, which is a decision with a
+record, rather than have the tool make it for them silently.
 
 Only accounts that can actually authenticate are considered. A locked or
 password-less account has no lifetime to bound, and the dozen such accounts
 every distribution ships would otherwise dominate the result.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Decide which framework applies, then set a maximum age or suppress this check deliberately.
 
@@ -6725,7 +6726,7 @@ awk -F: '$2 !~ /^[!*]/ && $2 != "" {print $1, $5}' /etc/shadow
 
 > **Caution.** Setting a maximum age shorter than the time already elapsed since the password was last changed expires it immediately, and the account will be forced to change its password at its next login. On a service account that authenticates non-interactively, that means it stops working with no interactive prompt to reveal why.
 
-**Controls** — `nist-800-53-r5 IA-5`, `nist-800-53-r5 IA-5(1)`
+**Controls.** `nist-800-53-r5 IA-5`, `nist-800-53-r5 IA-5(1)`
 
 **References**
 
@@ -6735,7 +6736,7 @@ awk -F: '$2 !~ /^[!*]/ && $2 != "" {print $1, $5}' /etc/shadow
 
 ---
 
-### USERS-0010 — Passwords that can authenticate have a minimum age set
+### USERS-0010: Passwords that can authenticate have a minimum age set
 
 | | |
 |---|---|
@@ -6753,7 +6754,7 @@ many times as the history depth and arrive back at the password they started
 with, in one sitting, without any policy having been violated. A minimum of one
 day makes that cost a day per cycle, which is enough to make it pointless.
 
-This matters only where password history is actually enforced — pam_pwhistory
+This matters only where password history is actually enforced, pam_pwhistory
 or pam_unix's "remember" option. Where no history is configured there is
 nothing to cycle through and the minimum protects nothing, which is why this
 ships at LOW severity. Plumbline does not yet collect the PAM stack, so it
@@ -6765,15 +6766,15 @@ a change, and passwd refuses the change because the minimum has not elapsed.
 The user cannot recover without an administrator, and nothing in the login
 message explains why. That is reported at MEDIUM.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set a minimum age of at least one day, and never above the maximum.
 
 1. Inspect the account: 'chage -l <name>' reports both the minimum and the maximum together, which is the pair that matters.
 2. Set a minimum: 'chage -m 1 <name>'.
-3. Where the minimum exceeds the maximum, fix that first — the account cannot change its own password until you do. 'chage -m 1 -M 365 <name>' sets both in one command.
+3. Where the minimum exceeds the maximum, fix that first, the account cannot change its own password until you do. 'chage -m 1 -M 365 <name>' sets both in one command.
 4. To change the default for accounts created from now on, set PASS\_MIN\_DAYS in /etc/login.defs. Existing accounts are unaffected.
 5. The minimum only has an effect where password history is enforced. Confirm that pam\_pwhistory or pam\_unix's 'remember' option is configured, or the setting protects nothing.
 
@@ -6782,9 +6783,9 @@ chage -l <name>
 awk -F: '$2 !~ /^[!*]/ && $2 != "" {print $1, $4, $5}' /etc/shadow
 ```
 
-> **Caution.** Do not set a minimum age on an account whose password may need to be rotated urgently — an incident response that has to change a credential twice in one day will be refused by passwd, and the account will have to be edited by an administrator instead.
+> **Caution.** Do not set a minimum age on an account whose password may need to be rotated urgently, an incident response that has to change a credential twice in one day will be refused by passwd, and the account will have to be edited by an administrator instead.
 
-**Controls** — `nist-800-53-r5 IA-5`, `nist-800-53-r5 IA-5(1)`
+**Controls.** `nist-800-53-r5 IA-5`, `nist-800-53-r5 IA-5(1)`
 
 **References**
 
@@ -6793,7 +6794,7 @@ awk -F: '$2 !~ /^[!*]/ && $2 != "" {print $1, $4, $5}' /etc/shadow
 
 ---
 
-### USERS-0012 — The default minimum password age is at least one day
+### USERS-0012: The default minimum password age is at least one day
 
 | | |
 |---|---|
@@ -6806,7 +6807,7 @@ awk -F: '$2 !~ /^[!*]/ && $2 != "" {print $1, $4, $5}' /etc/shadow
 A minimum password age is the setting that makes a password
 history mean anything.
 
-Password history — "you may not reuse your last five passwords" — is enforced
+Password history, "you may not reuse your last five passwords", is enforced
 by pam_pwhistory or pam_unix's remember=. Without a minimum age it costs an
 determined user about thirty seconds to defeat: change the password five times
 in a row, then change it back to the one they started with. The history is
@@ -6823,19 +6824,19 @@ account and what USERS-0010 reads. Setting this fixes the next user and none of
 the current ones.
 
 **Zero is not "unset".** A host with no PASS_MIN_DAYS line and a host with
-PASS_MIN_DAYS 0 behave identically — the shadow suite's own default is zero —
+PASS_MIN_DAYS 0 behave identically, the shadow suite's own default is zero,
 but they are different findings to an operator, because one is a decision and
 the other is an omission. The check reports both and names which it saw.
 
-If a fact it reads was not collected — a file the scan could not read, a collector that failed — this check reports `UNKNOWN` with a reason rather than guessing.
+If a fact it reads was not collected, because the scan could not read a file or because a collector failed, this check reports `UNKNOWN` with a reason. It does not guess.
 
-**Remediation** — effort LOW
+**Remediation.** Effort: LOW
 
 Set PASS\_MIN\_DAYS to 1 in /etc/login.defs, and apply it to the accounts that already exist.
 
 1. Set 'PASS\_MIN\_DAYS 1' in /etc/login.defs. Edit the first occurrence rather than appending: the shadow suite reads the first match and ignores every later one, so a line added at the end of a file that already sets the key has no effect at all.
 2. That is the default for accounts created afterwards. Existing accounts keep whatever is in /etc/shadow's fifth field: 'chage --mindays 1 <user>' sets one, and USERS-0010 is the check that reports them.
-3. A minimum age is only worth setting if a password history is enforced — otherwise it inconveniences users and stops nothing. Check for pam\_pwhistory or remember= on the pam\_unix.so password line.
+3. A minimum age is only worth setting if a password history is enforced, otherwise it inconveniences users and stops nothing. Check for pam\_pwhistory or remember= on the pam\_unix.so password line.
 4. Consider who is affected. A minimum age applies to the user changing their own password, not to root using 'passwd <user>', so a helpdesk reset still works. A user who mistypes a new password into a system that accepted it, though, cannot change it again until the minimum has passed.
 
 ```sh
@@ -6843,9 +6844,9 @@ grep -n PASS_MIN_DAYS /etc/login.defs
 chage --list <user>
 ```
 
-> **Caution.** A minimum password age stops a user changing their password again for that many days, including immediately after a change they regret — a mistyped passphrase they did not notice, or one they have already written down somewhere they should not have. Root can still reset it with 'passwd <user>', which is the escape hatch, and an operator setting this should know that is the only one.
+> **Caution.** A minimum password age stops a user changing their password again for that many days, including immediately after a change they regret, a mistyped passphrase they did not notice, or one they have already written down somewhere they should not have. Root can still reset it with 'passwd <user>', which is the escape hatch, and an operator setting this should know that is the only one.
 
-**Controls** — `nist-800-53-r5 IA-5`
+**Controls.** `nist-800-53-r5 IA-5`
 
 **References**
 

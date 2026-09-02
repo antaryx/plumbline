@@ -18,19 +18,19 @@ the session regardless of how strong the cipher and MAC were.
 
 Two families fail:
 
-- **The 1024-bit MODP groups** — diffie-hellman-group1-sha1 and its relatives.
+- **The 1024-bit MODP groups**, diffie-hellman-group1-sha1 and its relatives.
   Logjam (2015) showed that a single expensive precomputation against a fixed
   1024-bit group makes individual exchanges cheap thereafter, and that the
   small number of groups in widespread use makes that precomputation worth
   doing. The prudent assumption is that it has been done.
-- **SHA-1 key exchanges** — group14-sha1, group-exchange-sha1, and the gss-
+- **SHA-1 key exchanges**, group14-sha1, group-exchange-sha1, and the gss-
   variants. RFC 9142 deprecates SHA-1 for SSH key exchange, and OpenSSH removed
   these from its default list in 8.2.
 
 A note on scope: the Terrapin attack (CVE-2023-48795) is a weakness in the
 handshake's sequence-number handling rather than in any algorithm on this list,
 and it is fixed by OpenSSH 9.6's strict-KEX extension rather than by a
-configuration change. This check does not detect it — a host with a perfectly
+configuration change. This check does not detect it, a host with a perfectly
 acceptable KexAlgorithms list can still be vulnerable if the binary predates
 9.6. Version-based detection belongs to a vulnerability feed, not here.
 
@@ -60,7 +60,7 @@ the reason set out in algorithms.go.`,
 			"Set an explicit list in /etc/ssh/sshd_config: 'KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group-exchange-sha256'.",
 			"Where the host must keep a DH group-exchange method, also remove the small moduli from /etc/ssh/moduli: 'awk \\'$5 >= 3071\\' /etc/ssh/moduli > /etc/ssh/moduli.tmp && mv /etc/ssh/moduli.tmp /etc/ssh/moduli'. Leaving 1024-bit moduli in that file undoes much of the point of the list.",
 			"Confirm the sshd binary is 9.6 or later, so the strict-KEX mitigation for Terrapin (CVE-2023-48795) is present. That is a version question, not a configuration one, and this check does not answer it: 'sshd -V' or the package version.",
-			"On RHEL 8+ and Fedora, check 'update-crypto-policies --show' — the system policy governs this list too.",
+			"On RHEL 8+ and Fedora, check 'update-crypto-policies --show', the system policy governs this list too.",
 			"Validate and reload: 'sshd -t' then 'systemctl reload sshd'.",
 		},
 		Commands: []string{
@@ -77,8 +77,8 @@ the reason set out in algorithms.go.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — KexAlgorithms", URL: "https://man.openbsd.org/sshd_config#KexAlgorithms"},
-		{Title: "RFC 9142 — Key Exchange (KEX) Method Updates for SSH", URL: "https://www.rfc-editor.org/rfc/rfc9142"},
+		{Title: "sshd_config(5). KexAlgorithms", URL: "https://man.openbsd.org/sshd_config#KexAlgorithms"},
+		{Title: "RFC 9142. Key Exchange (KEX) Method Updates for SSH", URL: "https://www.rfc-editor.org/rfc/rfc9142"},
 		{Title: "Logjam / Weak Diffie-Hellman", URL: "https://weakdh.org/"},
 	},
 }

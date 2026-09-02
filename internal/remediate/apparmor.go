@@ -38,12 +38,24 @@ func (apparmorFix) Build(f finding.Finding, _ Options) (Action, bool) {
 	// remediated for as long as nobody power-cycles it.
 	command(&a, "systemctl", "enable", "--now", "apparmor")
 
+	// **aa-enforce ships in apparmor-utils, which a minimal host does not
+	// install**, and the kernel module being active says nothing about the
+	// tooling being present. Unguarded this was worse than a confusing message:
+	// the script runs under `set -eu`, so a missing binary exits 127 and takes
+	// every action sorted after SERVICES-0010 with it — the operator loses the
+	// rest of the run to a package that was never there.
+	//
 	// The glob is a shell glob and is deliberate: aa-enforce takes profile
 	// paths, and the set of profiles installed is what the package manager put
 	// there rather than something plumbline should enumerate from a scan that
 	// may be hours old. Enforcing a profile that is already enforcing is a
 	// no-op, which is what makes this idempotent.
-	literal(&a, "aa-enforce /etc/apparmor.d/*")
+	literal(&a, `if command -v aa-enforce >/dev/null 2>&1; then`)
+	literal(&a, "\taa-enforce /etc/apparmor.d/*")
+	literal(&a, `else`)
+	literal(&a, `	echo "plumbline: aa-enforce not found; install apparmor-utils to enforce the profiles, then run:" >&2`)
+	literal(&a, `	echo "plumbline:   aa-enforce /etc/apparmor.d/*" >&2`)
+	literal(&a, `fi`)
 
 	// **The kernel command line is the one thing neither command can fix**, and
 	// a script that silently left the host unconfined would be worse than one

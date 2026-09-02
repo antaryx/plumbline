@@ -28,7 +28,7 @@ many times as the history depth and arrive back at the password they started
 with, in one sitting, without any policy having been violated. A minimum of one
 day makes that cost a day per cycle, which is enough to make it pointless.
 
-This matters only where password history is actually enforced — pam_pwhistory
+This matters only where password history is actually enforced, pam_pwhistory
 or pam_unix's "remember" option. Where no history is configured there is
 nothing to cycle through and the minimum protects nothing, which is why this
 ships at LOW severity. Plumbline does not yet collect the PAM stack, so it
@@ -136,7 +136,7 @@ message explains why. That is reported at MEDIUM.`,
 		Steps: []string{
 			"Inspect the account: 'chage -l <name>' reports both the minimum and the maximum together, which is the pair that matters.",
 			"Set a minimum: 'chage -m 1 <name>'.",
-			"Where the minimum exceeds the maximum, fix that first — the account cannot change its own password until you do. 'chage -m 1 -M 365 <name>' sets both in one command.",
+			"Where the minimum exceeds the maximum, fix that first, the account cannot change its own password until you do. 'chage -m 1 -M 365 <name>' sets both in one command.",
 			"To change the default for accounts created from now on, set PASS_MIN_DAYS in /etc/login.defs. Existing accounts are unaffected.",
 			"The minimum only has an effect where password history is enforced. Confirm that pam_pwhistory or pam_unix's 'remember' option is configured, or the setting protects nothing.",
 		},
@@ -144,7 +144,7 @@ message explains why. That is reported at MEDIUM.`,
 			"chage -l <name>",
 			"awk -F: '$2 !~ /^[!*]/ && $2 != \"\" {print $1, $4, $5}' /etc/shadow",
 		},
-		Caution: "Do not set a minimum age on an account whose password may need to be rotated urgently — an incident response that has to change a credential twice in one day will be refused by passwd, and the account will have to be edited by an administrator instead.",
+		Caution: "Do not set a minimum age on an account whose password may need to be rotated urgently, an incident response that has to change a credential twice in one day will be refused by passwd, and the account will have to be edited by an administrator instead.",
 	},
 
 	Mappings: []finding.ControlRef{

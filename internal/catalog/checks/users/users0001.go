@@ -14,8 +14,8 @@ var Check0001 = catalog.Check{
 	Module: "USERS",
 	Title:  "Only the root account has uid 0",
 	Description: `The kernel grants privilege by uid, not by name. An account
-called "backup" with uid 0 is root — it can read every file, load kernel
-modules and change any password — and nothing in the shell prompt, the process
+called "backup" with uid 0 is root, it can read every file, load kernel
+modules and change any password, and nothing in the shell prompt, the process
 list or the audit log distinguishes it from the real thing.
 
 A second uid 0 account is one of the quietest persistence mechanisms available

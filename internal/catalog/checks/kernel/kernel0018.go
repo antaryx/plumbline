@@ -23,28 +23,28 @@ the whole layout with it.
 
 kptr_restrict decides who gets to see them, and it has three settings:
 
-  - 0 — %pK prints the real address. Anything that reads /proc/kallsyms,
+  - 0, %pK prints the real address. Anything that reads /proc/kallsyms,
         /proc/modules, /proc/timer_list or a dozen other files learns the
         layout.
-  - 1 — the address is printed as zeros unless the reader holds CAP_SYSLOG.
-  - 2 — the address is printed as zeros for everyone, privileged or not.
+  - 1: the address is printed as zeros unless the reader holds CAP_SYSLOG.
+  - 2: the address is printed as zeros for everyone, privileged or not.
 
 **1 is the baseline and 2 is the hardened position.** 1 closes the
 unprivileged leak, which is the exposure: an ordinary local account reads zeros.
-What it leaves open is CAP_SYSLOG, and that is not a rare thing to hold — a
+What it leaves open is CAP_SYSLOG, and that is not a rare thing to hold, a
 container given it for logging, a monitoring agent, anything that reads the ring
 buffer. 2 removes the distinction, at a cost this check does not get to impose:
 perf, bpftrace and crash analysis see zeros as root too.
 
 So 1 and 2 both pass and the verdict says which one is there. **Until catalog 33
 a configured 1 failed here**, on the same host where KERNEL-0002 passed the
-identical running value — one report carrying a PASS and a FAIL about one
+identical running value, one report carrying a PASS and a FAIL about one
 number. The runtime check was the one describing the exposure correctly, and
 this one now agrees with it.
 
 This is a check about files. KERNEL-0002 asks what the running kernel does; this
 asks whether it will still do it after a reboot, which is a different question
-and is not covered by KERNEL-0007 either — that compares running against
+and is not covered by KERNEL-0007 either, that compares running against
 configured and skips a parameter no file mentions, because there is nothing to
 compare it against.
 
@@ -137,7 +137,7 @@ is missing there is the record rather than the protection.`,
 		Summary: "Write kernel.kptr_restrict = 1 to a file in /etc/sysctl.d/ and apply it; 2 if nothing here profiles the kernel.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Check what already sets it first: grep -rn kptr_restrict /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. On Ubuntu a vendor file sets 1, and a drop-in in /etc/sysctl.d overrides it only because /etc is walked after /usr/lib — number yours above whatever you find.",
+			"Check what already sets it first: grep -rn kptr_restrict /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. On Ubuntu a vendor file sets 1, and a drop-in in /etc/sysctl.d overrides it only because /etc is walked after /usr/lib, number yours above whatever you find.",
 			"Create /etc/sysctl.d/60-kptr.conf containing kernel.kptr_restrict = 1. That is what this check requires: it hides pointers from every unprivileged reader, which is the exposure.",
 			"Apply without rebooting: sysctl --system, then confirm with sysctl kernel.kptr_restrict.",
 			"Consider 2 rather than 1 where nothing on the host profiles the kernel. 1 still prints pointers in full to anything holding CAP_SYSLOG, and a container granted it for logging is enough. 2 closes that and is what KSPP recommends.",
@@ -159,7 +159,7 @@ is missing there is the record rather than the protection.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — kptr_restrict", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#kptr-restrict"},
+		{Title: "Linux kernel, kptr_restrict", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#kptr-restrict"},
 		{Title: "sysctl.d(5)", URL: "https://man7.org/linux/man-pages/man5/sysctl.d.5.html"},
 	},
 }

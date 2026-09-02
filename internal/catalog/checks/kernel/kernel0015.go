@@ -22,7 +22,7 @@ var Check0015 = catalog.Check{
 	Description: `A source-routed packet carries its own return path. The sender
 dictates which hops the reply traverses, which lets an attacker steer traffic
 through a machine they control, reach addresses that are not routable from
-where they are, and receive replies to a source address they have spoofed —
+where they are, and receive replies to a source address they have spoofed,
 because the reply follows the attached route rather than the routing table.
 
 There is no legitimate modern use. IP source routing was deprecated for exactly
@@ -32,7 +32,7 @@ drop such packets.
 **The combining rule is the opposite of the one KERNEL-0008 uses, and the
 difference matters.** An interface accepts source routing only when
 net.ipv4.conf.all.accept_source_route *and* that interface's own setting are
-both non-zero — the kernel takes the logical AND, where for rp_filter it takes
+both non-zero, the kernel takes the logical AND, where for rp_filter it takes
 the maximum. So conf.all at 0 disables source routing everywhere regardless of
 per-interface values, and a check that reused the rp_filter logic here would
 report a safe host as unsafe.`,
@@ -189,8 +189,8 @@ report a safe host as unsafe.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "RFC 7126 — Filtering of IP-Optioned Packets", URL: "https://www.rfc-editor.org/rfc/rfc7126"},
-		{Title: "Linux kernel documentation — ip-sysctl accept_source_route", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
+		{Title: "RFC 7126. Filtering of IP-Optioned Packets", URL: "https://www.rfc-editor.org/rfc/rfc7126"},
+		{Title: "Linux kernel documentation, ip-sysctl accept_source_route", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
 	},
 }
 

@@ -15,7 +15,7 @@ var Check0003 = catalog.Check{
 	Module: "FILESYS",
 	Title:  "No file is world-writable",
 	Description: `A world-writable file is one that every account on the host
-may rewrite — including the service accounts that packages create, which is the
+may rewrite, including the service accounts that packages create, which is the
 part that matters. An attacker who reaches a web server running as www-data has
 not got a shell as a person; they have got one as an account nobody thinks of
 as a user, and every world-writable file on the host is now theirs to change.
@@ -27,8 +27,8 @@ somebody else edits. None of these needs an exploit; the permission *is* the
 grant.
 
 Symlinks are excluded from this check and the exclusion is load-bearing. A
-symlink's own mode is lrwxrwxrwx on Linux and the kernel ignores it entirely —
-access is decided by the target — so including them would report thousands of
+symlink's own mode is lrwxrwxrwx on Linux and the kernel ignores it entirely,
+access is decided by the target, so including them would report thousands of
 false findings on a stock host and bury the real ones among them.
 
 Directories are counted separately, by FILESYS-0004 and FILESYS-0005, because a
@@ -71,13 +71,13 @@ is world-writable by design and correct.`,
 			"Create a group for the accounts that genuinely share it, then 'chgrp <group> <path>' and 'chmod 664 <path>'. That is the fix the world-write bit was standing in for.",
 			"Where nothing shares it: 'chmod o-w <path>'.",
 			"Look at the file's content as well as its mode if it is a script, a configuration file or anything root reads. World-writable means it may already have been changed, and the mode does not record whether it was.",
-			"Check the directory too. A world-writable *directory* lets anyone replace the file regardless of the file's own mode, which makes fixing the file alone insufficient — FILESYS-0004 and FILESYS-0005 cover that.",
+			"Check the directory too. A world-writable *directory* lets anyone replace the file regardless of the file's own mode, which makes fixing the file alone insufficient. FILESYS-0004 and FILESYS-0005 cover that.",
 		},
 		Commands: []string{
 			"find / -xdev -type f -perm -0002 -ls",
 			"chmod o-w <path>",
 		},
-		Caution: "Some applications genuinely expect a shared writable file — a lock file, a spool, a socket path. Removing the permission can break them in ways that appear only under load or at the next restart. Identify the writer before changing the mode, and prefer a group to a world-write bit rather than simply removing it.",
+		Caution: "Some applications genuinely expect a shared writable file, a lock file, a spool, a socket path. Removing the permission can break them in ways that appear only under load or at the next restart. Identify the writer before changing the mode, and prefer a group to a world-write bit rather than simply removing it.",
 	},
 
 	Mappings: []finding.ControlRef{

@@ -21,13 +21,13 @@ var Check0010 = catalog.Check{
 	Description: `Ownership on a Unix filesystem is a number. The name is a
 lookup, performed at display time, against a database that can change without
 the filesystem knowing. Delete an account and its files do not become
-ownerless — they keep the number, and 'ls -l' starts printing the number
+ownerless, they keep the number, and 'ls -l' starts printing the number
 because there is no longer a name for it.
 
 That gap matters for one specific and entirely mundane reason: **uids are
 reused.** Every distribution's useradd allocates the lowest free uid above
 UID_MIN. So the next account created on this host inherits the number, and with
-it every file the departed account left behind — its home directory, its
+it every file the departed account left behind, its home directory, its
 crontabs, anything it wrote into a shared area, anything it owned in a backup
 that is later restored. Nobody grants that access and nobody sees it happen.
 The new user simply has it, and an audit of "who can read this" that consults
@@ -129,12 +129,12 @@ nobody.`,
 		Summary: "Find out what wrote them, then either reassign the files to an account that should own them or delete them. Do not create an account to match the number.",
 		Effort:  "MEDIUM",
 		Steps: []string{
-			"List them before changing anything: 'find / -xdev \\( -nouser -o -nogroup \\) -ls'. The -xdev matters — without it the search walks network filesystems whose account databases are not this host's, and every file on them looks unowned.",
+			"List them before changing anything: 'find / -xdev \\( -nouser -o -nogroup \\) -ls'. The -xdev matters, without it the search walks network filesystems whose account databases are not this host's, and every file on them looks unowned.",
 			"Establish what the number used to be. 'lastlog', '/var/log/auth.log' and the package manager's log usually name the account that was removed; a uid above UID_MIN was a person or a build, and a uid below it was almost always a package's service account that outlived its package.",
-			"If the files still matter, chown them to the account that should own them now. If they do not, delete them — an unowned tree kept 'just in case' is one that will be inherited silently.",
+			"If the files still matter, chown them to the account that should own them now. If they do not, delete them, an unowned tree kept 'just in case' is one that will be inherited silently.",
 			"Do not create an account with the old uid to make the finding go away. That grants a live account everything the dead one could reach, which is the outcome this check exists to prevent, arrived at deliberately.",
 			"Where the cause was a container or a tar archive, fix the cause: bind mounts need matching uid ranges or a userns mapping, and 'tar --same-owner' should not be used to unpack an archive from a host with different accounts.",
-			"Where a service account was orphaned by a package removal, remove the leftovers with it — 'apt purge' rather than 'apt remove', or 'userdel -r' at the time the account goes.",
+			"Where a service account was orphaned by a package removal, remove the leftovers with it, 'apt purge' rather than 'apt remove', or 'userdel -r' at the time the account goes.",
 		},
 		Commands: []string{
 			"find / -xdev \\( -nouser -o -nogroup \\) -ls",
@@ -151,7 +151,7 @@ nobody.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "find(1) — -nouser and -nogroup", URL: "https://man7.org/linux/man-pages/man1/find.1.html"},
+		{Title: "find(1), -nouser and -nogroup", URL: "https://man7.org/linux/man-pages/man1/find.1.html"},
 		{Title: "nsswitch.conf(5)", URL: "https://man7.org/linux/man-pages/man5/nsswitch.conf.5.html"},
 	},
 }

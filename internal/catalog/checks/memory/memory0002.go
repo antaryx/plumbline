@@ -18,7 +18,7 @@ var Check0002 = catalog.Check{
 read-only once the dynamic linker has finished with it. Partial RELRO covers
 the sections resolved at startup and stops short of the PLT's global offset
 table, because lazy binding writes an address into that table the first time
-each imported function is called — so the table has to stay writable for the
+each imported function is called, so the table has to stay writable for the
 life of the process.
 
 That writable table is a well-worn target. An attacker with an arbitrary write
@@ -69,7 +69,7 @@ NOT_APPLICABLE rather than a failure: it has no lazy binding to close.`,
 		Summary: "Rebuild the binary with full RELRO, or obtain a build that has it.",
 		Effort:  "MEDIUM",
 		Steps: []string{
-			"Confirm the finding independently: readelf -d <path> | grep -E 'BIND_NOW|FLAGS' — full RELRO needs a GNU_RELRO segment plus BIND_NOW, DF_BIND_NOW or DF_1_NOW.",
+			"Confirm the finding independently: readelf -d <path> | grep -E 'BIND_NOW|FLAGS', full RELRO needs a GNU_RELRO segment plus BIND_NOW, DF_BIND_NOW or DF_1_NOW.",
 			"Check the GNU_RELRO segment is present too: readelf -l <path> | grep GNU_RELRO. A binary with neither needs both flags, not just one.",
 			"Identify what owns the file: dpkg -S <path> or rpm -qf <path>.",
 			"If a package owns it, check whether the distribution ships a hardened build; most enable this by default and a missing flag suggests the file was replaced locally.",
@@ -88,6 +88,6 @@ NOT_APPLICABLE rather than a failure: it has no lazy binding to close.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "ld(1) — -z relro and -z now", URL: "https://man7.org/linux/man-pages/man1/ld.1.html"},
+		{Title: "ld(1), -z relro and -z now", URL: "https://man7.org/linux/man-pages/man1/ld.1.html"},
 	},
 }

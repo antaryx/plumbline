@@ -38,14 +38,14 @@ defaults, and a host can have the module correctly installed, correctly
 enforcing, and still accept an eight-character password.
 
 Two properties are checked. **Length** is the one that matters most, because it
-is the only parameter an offline cracking attack cares about — character
+is the only parameter an offline cracking attack cares about, character
 variety adds a few bits and each additional character multiplies the search
 space. **Variety** is checked as a secondary constraint because length alone
 permits a fourteen-character password that is a single dictionary word repeated.
 
 pwquality expresses variety two ways and they are easy to confuse. 'minclass'
 names how many of the four character classes must appear. The four credit
-settings — dcredit, ucredit, lcredit, ocredit — are *credits* by default: a
+settings, dcredit, ucredit, lcredit, ocredit, are *credits* by default: a
 positive value means characters of that class count extra toward minlen, which
 is a discount rather than a requirement. Only a **negative** value means "at
 least this many of this class". A configuration setting 'dcredit = 1' has
@@ -155,7 +155,7 @@ guessing the weak one.`,
 		Effort:  "LOW",
 		Steps: []string{
 			"Set them in /etc/security/pwquality.conf rather than as module arguments. The file survives a stack regeneration by authselect or pam-auth-update, is identical across every host you manage, and is where the next person will look.",
-			"Set the length: 'minlen = 14'. This is the parameter that matters to an offline cracking attack — every additional character multiplies the search space, while character variety adds a few bits once.",
+			"Set the length: 'minlen = 14'. This is the parameter that matters to an offline cracking attack, every additional character multiplies the search space, while character variety adds a few bits once.",
 			"Require variety with minclass rather than with credits: 'minclass = 4'. It says plainly that all four character classes must appear.",
 			"If you use the credit settings instead, make them **negative**: 'dcredit = -1' requires at least one digit. A positive value is a discount toward minlen, not a requirement, and 'dcredit = 1' has demanded nothing while appearing to demand a digit.",
 			"Consider 'dictcheck = 1' and 'maxrepeat = 3' as well. Length without them permits a fourteen-character password that is one dictionary word repeated, which is what an attacker's wordlist rules generate first.",
@@ -166,7 +166,7 @@ guessing the weak one.`,
 			"grep -E 'pam_pwquality|pam_cracklib' /etc/pam.d/*",
 			"pwscore <<< 'somecandidatepassword'",
 		},
-		Caution: "Raising the minimum does not affect existing passwords — it applies at the next change — so a host can pass this check and still be full of eight-character passwords set last year. Pair the change with a forced rotation only if the accounts are ones people actually use; forcing it on service accounts breaks whatever holds their credential.",
+		Caution: "Raising the minimum does not affect existing passwords, it applies at the next change, so a host can pass this check and still be full of eight-character passwords set last year. Pair the change with a forced rotation only if the accounts are ones people actually use; forcing it on service accounts breaks whatever holds their credential.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -176,7 +176,7 @@ guessing the weak one.`,
 
 	References: []finding.Reference{
 		{Title: "pwquality.conf(5)", URL: "https://man7.org/linux/man-pages/man5/pwquality.conf.5.html"},
-		{Title: "NIST SP 800-63B §5.1.1 — memorized secrets", URL: "https://pages.nist.gov/800-63-3/sp800-63b.html"},
+		{Title: "NIST SP 800-63B §5.1.1, memorized secrets", URL: "https://pages.nist.gov/800-63-3/sp800-63b.html"},
 	},
 }
 

@@ -20,7 +20,7 @@ var Check0004 = catalog.Check{
 	Description: `On a host running both daemons, journald is where records
 arrive and rsyslog is what sends them anywhere else. If journald does not hand
 them over, rsyslog's forwarding rules (LOGGING-0002) receive nothing from the
-journal — and the host looks correctly configured from either file alone.
+journal, and the host looks correctly configured from either file alone.
 
 That is the failure worth catching: two configurations that are each defensible
 and that do not connect. An operator who has set up remote logging in rsyslog
@@ -29,8 +29,8 @@ leaving, and the gap is visible only by reading the two files together.
 
 **The proposition tested is that forwarding is explicitly configured**, not
 that it happens to be on. journald's default for ForwardToSyslog has changed
-across systemd versions — it was yes historically and is no in current
-releases — and Plumbline does not read the systemd version. Relying on an
+across systemd versions, it was yes historically and is no in current
+releases, and Plumbline does not read the systemd version. Relying on an
 unstated default that has already flipped once is not a configuration, so an
 absent setting is a definite FAIL rather than an UNKNOWN: the fact tested, "it
 is explicitly set", is decided by the files. This is the same shape as
@@ -114,11 +114,11 @@ checks that apply to it.`,
 		Summary: "Set ForwardToSyslog=yes explicitly, or remove rsyslog if it is not being used.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Decide which daemon owns forwarding first. Running both with journald not forwarding is a common and reasonable arrangement — if rsyslog is installed but unused, removing it is the better fix and makes this check NOT_APPLICABLE.",
+			"Decide which daemon owns forwarding first. Running both with journald not forwarding is a common and reasonable arrangement, if rsyslog is installed but unused, removing it is the better fix and makes this check NOT_APPLICABLE.",
 			"To connect them, set 'ForwardToSyslog=yes' under [Journal], preferably in a drop-in under /etc/systemd/journald.conf.d/. Set it explicitly even if the current default already does what you want: the default has changed once and may again.",
 			"Restart journald: 'systemctl restart systemd-journald'.",
 			"Verify end to end rather than by reading the file: 'logger -p auth.info plumbline-test' and confirm the line appears in the rsyslog-written file, not only in 'journalctl'.",
-			"Watch for duplication. With forwarding on and the journal persistent, every record is stored twice — that is usually the intent, but it doubles the disk the logs consume.",
+			"Watch for duplication. With forwarding on and the journal persistent, every record is stored twice, that is usually the intent, but it doubles the disk the logs consume.",
 		},
 		Commands: []string{
 			"systemd-analyze cat-config systemd/journald.conf | grep -i forwardtosyslog",
@@ -133,6 +133,6 @@ checks that apply to it.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "journald.conf(5) — ForwardToSyslog", URL: "https://www.freedesktop.org/software/systemd/man/journald.conf.html"},
+		{Title: "journald.conf(5). ForwardToSyslog", URL: "https://www.freedesktop.org/software/systemd/man/journald.conf.html"},
 	},
 }

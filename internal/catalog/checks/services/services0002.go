@@ -45,7 +45,7 @@ majority of servers.
 
 What they cost is reconnaissance and reachable code. avahi-daemon announces the
 host's name, its addresses and the services it offers to every machine in the
-broadcast domain, and answers queries about them — an attacker who lands on any
+broadcast domain, and answers queries about them, an attacker who lands on any
 host on the segment gets an inventory of the others without sending a single
 scan. rpcbind publishes which RPC service is listening on which port to anyone
 who asks, and has spent years on abuse lists as a UDP amplification reflector
@@ -57,7 +57,7 @@ The judgement here is genuinely a policy one, and the check says so rather than
 pretending otherwise. A print server should run CUPS. An NFS server needs
 rpcbind. A desktop fleet may want mDNS. What the check asserts is that these
 services should be present because somebody decided they should be, and the
-common case — a server image that inherited them from a desktop package set —
+common case, a server image that inherited them from a desktop package set,
 is not that. Where the service is intentional, suppress the finding: a recorded
 decision is worth more than a silent exception.`,
 
@@ -97,7 +97,7 @@ decision is worth more than a silent exception.`,
 		Steps: []string{
 			"Decide first whether this host serves the role. rpcbind is needed by an NFS server and by an NFS client using NFSv3; NFSv4 does not need it. cups-browsed is needed to discover printers announced on the network, not to print to one configured by address. avahi-daemon is needed for .local name resolution, which almost nothing on a server uses.",
 			"Where it is not needed: 'systemctl disable --now <unit>'. For socket-activated units disable the .socket as well as the .service, or the socket will start the service on the next connection.",
-			"Remove the package where the role is settled — 'apt purge avahi-daemon', 'dnf remove avahi' — which prevents a later dependency from pulling it back in enabled.",
+			"Remove the package where the role is settled, 'apt purge avahi-daemon', 'dnf remove avahi', which prevents a later dependency from pulling it back in enabled.",
 			"Where it is needed, keep it and bound it instead: rpcbind and avahi both take a listen-address, and a firewall rule confining them to the segment that needs them removes most of the exposure without removing the function.",
 			"Where the service is intentional, add a suppression for this check with the reason. A recorded decision survives the next audit; an unexplained failing check gets ignored, and then so does the next one.",
 		},
@@ -106,7 +106,7 @@ decision is worth more than a silent exception.`,
 			"ss -lnp | grep -E ':(111|631|5353)\\b'",
 			"systemctl disable --now avahi-daemon.socket avahi-daemon.service",
 		},
-		Caution: "Disabling rpcbind on a host that mounts NFSv3 shares breaks those mounts at the next boot, and the failure looks like a network problem rather than a configuration one. Confirm the NFS version in use — 'nfsstat -m' names it per mount — before touching it.",
+		Caution: "Disabling rpcbind on a host that mounts NFSv3 shares breaks those mounts at the next boot, and the failure looks like a network problem rather than a configuration one. Confirm the NFS version in use, 'nfsstat -m' names it per mount, before touching it.",
 	},
 
 	Mappings: []finding.ControlRef{

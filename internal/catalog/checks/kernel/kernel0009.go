@@ -72,6 +72,6 @@ race it depends on.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel documentation — fs.protected_symlinks", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-symlinks"},
+		{Title: "Linux kernel documentation, fs.protected_symlinks", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-symlinks"},
 	},
 }

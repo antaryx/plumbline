@@ -15,7 +15,7 @@ var Check0001 = catalog.Check{
 	Title:  "A host-based firewall is configured",
 	Description: `A host firewall is the control that survives every mistake
 made above it. A perimeter is a statement about where an attacker is, and it
-stops being true the moment one is inside it — a compromised workstation on the
+stops being true the moment one is inside it, a compromised workstation on the
 same VLAN, a container escaping onto the host network, a cloud security group
 edited to unblock a deployment and never edited back. The host firewall is the
 only rule set that does not depend on that assumption.
@@ -28,13 +28,13 @@ it, and every one of them is closed by a default-deny host firewall without
 anybody having to notice.
 
 This check reports what is **configured**, not what is loaded. It reads the
-files a firewall is restored from — nftables.conf, an iptables-save file,
-ufw.conf, firewalld.conf — and a file that exists but holds no statements does
+files a firewall is restored from, nftables.conf, an iptables-save file,
+ufw.conf, firewalld.conf, and a file that exists but holds no statements does
 not count. Debian's nftables package installs /etc/nftables.conf whether or not
 anybody has written a rule in it, and a check that treated the file's existence
 as a firewall would report every such host as protected.
 
-The other half — whether the unit that loads the ruleset is enabled — is the
+The other half, whether the unit that loads the ruleset is enabled, is the
 SERVICES module's to answer, and this check does not claim it.`,
 
 	BaseSeverity: finding.High,
@@ -72,7 +72,7 @@ SERVICES module's to answer, and this check does not claim it.`,
 		Effort:  "MEDIUM",
 		Steps: []string{
 			"Establish what is listening before you block anything: 'ss -tulpn' names every socket and the process behind it. Every entry is either something this host is meant to offer, or a finding in its own right.",
-			"Pick the tool the distribution manages. ufw on Ubuntu and Debian, firewalld on RHEL and Fedora, plain nftables where configuration management owns the ruleset. Running two is worse than running one — NETWORK-0003 checks for that.",
+			"Pick the tool the distribution manages. ufw on Ubuntu and Debian, firewalld on RHEL and Fedora, plain nftables where configuration management owns the ruleset. Running two is worse than running one. NETWORK-0003 checks for that.",
 			"Set the default before adding any rule: 'ufw default deny incoming' or, in nftables, 'policy drop' on the input chain. A ruleset built the other way round is a deny list, and everything a future package opens is reachable until somebody notices.",
 			"Allow ssh first, and from a session you can afford to lose: 'ufw allow OpenSSH'. Locking yourself out of a remote host is the ordinary failure of this task, not an exotic one.",
 			"Enable it and make it survive a reboot: 'ufw enable', or 'systemctl enable --now nftables.service'. A ruleset in a file that no unit loads is a document, not a control.",

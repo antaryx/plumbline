@@ -22,7 +22,7 @@ session, including anything the session later escalates to. PATH, LD_LIBRARY_PAT
 and BASH_ENV are variations on the same theme.
 
 Where this matters most is exactly where the user was supposed to be
-constrained — a forced-command key, a restricted shell, an sftp-only account.
+constrained, a forced-command key, a restricted shell, an sftp-only account.
 Each of those confines what the user may run, and none of them confines what
 the user may load into it.
 
@@ -49,7 +49,7 @@ The OpenSSH default is no, and the manual page recommends leaving it there.`,
 		Effort:  "LOW",
 		Steps: []string{
 			"Find out what is relying on it: 'ls /home/*/.ssh/environment' and 'grep -l environment= /home/*/.ssh/authorized_keys'.",
-			"Set 'PermitUserEnvironment no' in /etc/ssh/sshd_config — the OpenSSH default, so the line may be removed.",
+			"Set 'PermitUserEnvironment no' in /etc/ssh/sshd_config, the OpenSSH default, so the line may be removed.",
 			"Where a variable genuinely must reach the session, name it explicitly: 'AcceptEnv' allows a listed variable from the client, and 'SetEnv' sets one from the server. Both are administrator-controlled, which is the difference that matters.",
 			"Validate and reload: 'sshd -t' then 'systemctl reload sshd'.",
 		},
@@ -57,7 +57,7 @@ The OpenSSH default is no, and the manual page recommends leaving it there.`,
 			"sshd -T | grep -i permituserenvironment",
 			"ls /home/*/.ssh/environment 2>/dev/null",
 		},
-		Caution: "Automation that sets variables through authorized_keys — build agents and deployment keys most often — will lose them silently: the session starts normally and the variable is simply absent. Check for the files before reloading rather than after the first failed job.",
+		Caution: "Automation that sets variables through authorized_keys, build agents and deployment keys most often, will lose them silently: the session starts normally and the variable is simply absent. Check for the files before reloading rather than after the first failed job.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -67,6 +67,6 @@ The OpenSSH default is no, and the manual page recommends leaving it there.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — PermitUserEnvironment", URL: "https://man.openbsd.org/sshd_config#PermitUserEnvironment"},
+		{Title: "sshd_config(5). PermitUserEnvironment", URL: "https://man.openbsd.org/sshd_config#PermitUserEnvironment"},
 	},
 }

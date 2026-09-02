@@ -24,8 +24,8 @@ returns, reconstructing the connection only if the client completes the
 handshake. The cost is that a few TCP options cannot be carried in a cookie, so
 the kernel enables them only under overflow rather than always.
 
-Severity is LOW deliberately. This is availability hardening — it grants an
-attacker nothing, it removes a cheap way to deny service — and treating it as
+Severity is LOW deliberately. This is availability hardening, it grants an
+attacker nothing, it removes a cheap way to deny service, and treating it as
 equivalent to a privilege-escalation finding would mis-rank a triage queue.`,
 
 	BaseSeverity: finding.Low,
@@ -69,6 +69,6 @@ equivalent to a privilege-escalation finding would mis-rank a triage queue.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel documentation — ip-sysctl tcp_syncookies", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
+		{Title: "Linux kernel documentation, ip-sysctl tcp_syncookies", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
 	},
 }

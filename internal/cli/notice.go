@@ -88,7 +88,7 @@ var scoringNotices = []scoringNotice{
 	{
 		ID:       "kernel-0004-dmesg-severity",
 		Catalog:  27,
-		Until:    "1.2.0",
+		Until:    "2.1.0",
 		Headline: "KERNEL-0004 (kernel.dmesg_restrict) was re-rated LOW to HIGH.",
 		Detail: []string{
 			"The old rating read the ring buffer as untidy logging. It holds kernel and",
@@ -100,7 +100,7 @@ var scoringNotices = []scoringNotice{
 	{
 		ID:       "kernel-0005-suid-dumpable-2",
 		Catalog:  32,
-		Until:    "1.2.0",
+		Until:    "2.1.0",
 		Headline: "KERNEL-0005 accepts fs.suid_dumpable = 2 as a PASS.",
 		Detail: []string{
 			"2 is \"suidsafe\": the dump goes to the core-dump handler rather than to a",
@@ -113,7 +113,7 @@ var scoringNotices = []scoringNotice{
 	{
 		ID:       "kernel-persistence-runtime-tiering",
 		Catalog:  32,
-		Until:    "1.2.0",
+		Until:    "2.1.0",
 		Headline: "Persistence checks no longer report a secure running kernel at full severity.",
 		Detail: []string{
 			"KERNEL-0017 through -0031 fail at LOW, not their base severity, when the",
@@ -129,7 +129,7 @@ var scoringNotices = []scoringNotice{
 	{
 		ID:       "kernel-runtime-persistence-alignment",
 		Catalog:  33,
-		Until:    "1.2.0",
+		Until:    "2.1.0",
 		Headline: "Six KERNEL checks were re-rated so each parameter has one severity.",
 		Detail: []string{
 			"A persistence check used to sit one band above the runtime check for the",

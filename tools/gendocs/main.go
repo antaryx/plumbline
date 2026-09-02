@@ -3,8 +3,8 @@
 //
 // docs/DOCUMENT-MAP.md marks both as *generated* and says they are never
 // hand-maintained, and the reason is the one that makes generated reference
-// documentation worth having at all: a hand-written list of 79 checks is a list
-// that is wrong within a month, and wrong reference documentation for a
+// documentation worth having at all: a hand-written list of 112 checks is a
+// list that is wrong within a month, and wrong reference documentation for a
 // security tool is worse than none, because somebody will act on it.
 //
 // The catalog comes from cli.Catalog(), which is the same assembly the binary
@@ -137,9 +137,9 @@ func checkReference(c *catalog.Catalog) string {
 	var b strings.Builder
 	header(&b, c, "Check reference",
 		"One entry per check: what it tests, which facts it reads, how to fix what "+
-			"it finds, and what it maps to. This is `plumbline explain CHECK-ID` "+
-			"for the whole catalog at once — the command is the same material and "+
-			"needs no network, no bundle and no privileges.")
+			"it finds, and what it maps to. `plumbline explain CHECK-ID` prints the "+
+			"same material one check at a time, with no network, no bundle and no "+
+			"privileges.")
 
 	for _, m := range modules(c) {
 		fmt.Fprintf(&b, "## %s\n\n", m.name)
@@ -151,7 +151,7 @@ func checkReference(c *catalog.Catalog) string {
 }
 
 func entry(b *strings.Builder, ck catalog.Check) {
-	fmt.Fprintf(b, "### %s — %s\n\n", ck.ID, escape(ck.Title))
+	fmt.Fprintf(b, "### %s: %s\n\n", ck.ID, escape(ck.Title))
 
 	if ck.Deprecated != nil {
 		fmt.Fprintf(b, "> **Deprecated since catalog %d.** %s\n",
@@ -181,12 +181,12 @@ func entry(b *strings.Builder, ck catalog.Check) {
 	// one: a check that cannot see what it needs says UNKNOWN rather than
 	// guessing, and a reader of this document has to know that before they read
 	// a PASS as reassurance.
-	b.WriteString("If a fact it reads was not collected — a file the scan could not read, " +
-		"a collector that failed — this check reports `UNKNOWN` with a reason rather " +
-		"than guessing.\n\n")
+	b.WriteString("If a fact it reads was not collected, because the scan could not " +
+		"read a file or because a collector failed, this check reports `UNKNOWN` " +
+		"with a reason. It does not guess.\n\n")
 
 	if r := ck.Remediation; r != nil {
-		fmt.Fprintf(b, "**Remediation** — effort %s\n\n", r.Effort)
+		fmt.Fprintf(b, "**Remediation.** Effort: %s\n\n", r.Effort)
 		if r.Summary != "" {
 			b.WriteString(escape(r.Summary) + "\n\n")
 		}
@@ -209,7 +209,7 @@ func entry(b *strings.Builder, ck catalog.Check) {
 		for _, m := range ck.Mappings {
 			refs = append(refs, fmt.Sprintf("`%s %s`", m.Framework, m.Control))
 		}
-		fmt.Fprintf(b, "**Controls** — %s\n\n", strings.Join(refs, ", "))
+		fmt.Fprintf(b, "**Controls.** %s\n\n", strings.Join(refs, ", "))
 	}
 	if len(ck.References) > 0 {
 		b.WriteString("**References**\n\n")
@@ -281,7 +281,7 @@ func severities(checks []catalog.Check) map[string]int {
 
 func factList(ck catalog.Check) string {
 	if len(ck.Requires) == 0 {
-		return "—"
+		return "no facts"
 	}
 	ids := make([]string, 0, len(ck.Requires))
 	for _, id := range ck.Requires {
@@ -299,10 +299,11 @@ func code(in []string) string {
 	return strings.Join(out, ", ")
 }
 
-// anchor reproduces GitHub's heading-slug rule for "### ID — Title", so the
-// links in MODULE-CATALOG.md land on the right entry.
+// anchor reproduces GitHub's heading-slug rule for "### ID: Title", so the
+// links in MODULE-CATALOG.md land on the right entry. Change the heading
+// format in entry() and this changes with it, or every link goes stale.
 func anchor(id, title string) string {
-	slug := strings.ToLower(id + " — " + title)
+	slug := strings.ToLower(id + ": " + title)
 	var b strings.Builder
 	for _, r := range slug {
 		switch {

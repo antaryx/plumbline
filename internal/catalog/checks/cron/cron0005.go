@@ -23,7 +23,7 @@ var Check0005 = catalog.Check{
 	Module: "CRON",
 	Title:  "The cron schedule is not readable by unprivileged accounts",
 	Description: `The schedule is reconnaissance. It names what runs as root,
-where the scripts live, and — precisely — when. That last part is what makes it
+where the scripts live, and, precisely, when. That last part is what makes it
 worth restricting: an attacker who knows a backup script runs as root at 03:15
 and reads from a directory their account can write knows exactly which file to
 place and exactly how long they will wait. Without the schedule they are
@@ -108,13 +108,13 @@ mistake.`,
 			"Tighten the crontab: 'chmod 600 /etc/crontab'.",
 			"Tighten the directories: 'chmod 700 /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly'.",
 			"Check nothing unprivileged depended on reading them: monitoring agents that report scheduled jobs, and configuration-management tools running as a non-root account, are the two that break.",
-			"While you are there, look at what the lines actually contain. A credential passed as a command-line argument is visible in 'ps' to every user on the host whatever this file's mode is, so tightening the mode does not fix that one — moving the secret into a root-only environment file does.",
+			"While you are there, look at what the lines actually contain. A credential passed as a command-line argument is visible in 'ps' to every user on the host whatever this file's mode is, so tightening the mode does not fix that one, moving the secret into a root-only environment file does.",
 		},
 		Commands: []string{
 			"stat -c '%n %a %U:%G' /etc/crontab /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly",
 			"chmod 600 /etc/crontab && chmod 700 /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly",
 		},
-		Caution: "run-parts needs no read access for anyone but root, so cron itself is unaffected — but monitoring and configuration-management agents that inventory scheduled jobs as a non-root user will silently start reporting nothing rather than failing loudly. Check what reads these paths before tightening them.",
+		Caution: "run-parts needs no read access for anyone but root, so cron itself is unaffected, but monitoring and configuration-management agents that inventory scheduled jobs as a non-root user will silently start reporting nothing rather than failing loudly. Check what reads these paths before tightening them.",
 	},
 
 	Mappings: []finding.ControlRef{

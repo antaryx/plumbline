@@ -19,7 +19,7 @@ var Check0010 = catalog.Check{
 layers being wrong. Unix permissions decide what an account may do; a profile
 decides what a *program* may do, whoever is running it. When a daemon is
 compromised, the permissions of the account it runs as are exactly what the
-attacker inherits — and a profile is the thing that says "this process reads
+attacker inherits, and a profile is the thing that says "this process reads
 its configuration and writes its spool, and nothing else", regardless of what
 the account would otherwise have been allowed.
 
@@ -27,7 +27,7 @@ the account would otherwise have been allowed.
 and permits it: it exists so that a profile can be written by watching what a
 program actually does. A host with two hundred profiles all in complain looks
 protected to anything that counts profiles, and denies nothing. That is the
-specific failure this check is shaped around, and it is a common state — it is
+specific failure this check is shaped around, and it is a common state, it is
 what a host that started a profiling exercise and never finished it looks
 like.
 
@@ -200,7 +200,7 @@ the check says so rather than drawing a verdict from the half it has.`,
 			"systemctl enable --now apparmor",
 			"aa-enforce /etc/apparmor.d/*",
 		},
-		Caution: "Enforcing a profile written in complain mode against a workload it never observed will deny that workload. Move profiles to enforce one at a time on a host doing real work, and read the kernel log afterwards — a denial is silent to the program except as a failure it may not report clearly.",
+		Caution: "Enforcing a profile written in complain mode against a workload it never observed will deny that workload. Move profiles to enforce one at a time on a host doing real work, and read the kernel log afterwards, a denial is silent to the program except as a failure it may not report clearly.",
 	},
 
 	Mappings: []finding.ControlRef{

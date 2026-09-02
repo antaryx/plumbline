@@ -11,6 +11,178 @@ explanation in this file is a defect.
 
 ## [Unreleased]
 
+Documentation only. No change to the tool, the catalog or the schema.
+
+### Changed
+
+- **Operator, trust and project-direction documentation rewritten** for a
+  consistent voice, and audited against the code rather than against the
+  previous draft. `QUICKSTART`, `INSTALLATION`, `USAGE`, `CI-INTEGRATION`,
+  `TROUBLESHOOTING`, `FALSE-POSITIVES`, `FAQ`, `GLOSSARY`, `DEPLOYMENT`,
+  `PERFORMANCE`, `PRIVACY`, `SUPPLY-CHAIN`, `THREAT-MODEL`,
+  `COMPLIANCE-DATA-POLICY`, `PROJECT-BRIEF`, `ROADMAP` and `DOCUMENT-MAP`.
+- **`ROADMAP.md` restructured to four majors.** Remediation became v2.0.0 and
+  shipped. Intelligence and the `CLOUD` module moved to v3.0.0. Reach moved to
+  v4.0.0. `ARCHITECTURE.md` §12 and `PROJECT-BRIEF.md` §6 follow.
+- **`USAGE.md` documents `scan --fix` and `--write-script`**, including the
+  read-only guarantee, idempotency, the unfixable count and the two ways a
+  generated script can hurt a host.
+- **`THREAT-MODEL.md` gains T-14**, covering a generated remediation script that
+  damages the host, plus a review checklist for new remediation actions.
+
+- **Generated reference documentation humanized at the source.** The prose in
+  `CHECK-REFERENCE.md` comes from Go string literals and the `tools/gendocs`
+  templates, so both were rewritten and the file regenerated. 1131 em and en
+  dashes went to zero: 561 from six template strings that repeat on every
+  entry, 570 from the `Title`, `Description`, `Remediation` and `References`
+  fields of the 112 checks. Runtime detail strings were deliberately left
+  alone, because the golden corpus and the check tests pin them and none of
+  them reaches the generated document.
+- **Check entry headings changed from `### ID — Title` to `### ID: Title`.**
+  `anchor()` was updated in the same commit, so all 112 links from
+  `MODULE-CATALOG.md` still resolve.
+- **`docs/REMEDIATION-GUIDE.md` written.** Generating, reading, staging,
+  applying, verifying and rolling back a `scan --fix` script, with the five
+  actions that can end a session called out by check ID.
+
+### Fixed
+
+- **Dependency count corrected everywhere.** Three modules link into the shipped
+  binary; the JSON-schema validator is a test dependency. `SUPPLY-CHAIN.md`,
+  `THREAT-MODEL.md` T-10, `FAQ.md`, `INSTALLATION.md` and `.goreleaser.yaml`
+  said four without distinguishing them.
+- **`DEPLOYMENT.md` no longer claims controls the pipeline does not have.** It
+  described double-build reproducibility, SLSA provenance, per-artifact
+  signatures, CycloneDX SBOMs, a published container image, a verifying install
+  script and several commands that do not exist, all in the present tense. Each
+  is now either corrected or listed in a new §12. This is the same defect the
+  threat model was corrected for at v1.0.0.
+- **`GLOSSARY.md` listed four profiles that do not exist.** The build carries
+  `default` and `cis-l1`.
+- **Stale figures.** 112 checks, 11 modules, catalog 34 and 210 fixture trees
+  replace 79, nine, 13 and 95 across `CONTRIBUTING.md`, `FAQ.md`,
+  `PERFORMANCE.md` and the `ROADMAP.md` banner. Download examples move to
+  `v2.0.0`.
+- **`PROJECT-BRIEF.md` §8 no longer forbids the flag the tool ships.** The
+  non-negotiable is no auto-apply, not no `--fix`.
+
+## [2.0.0] — 2026-08-31
+
+First public open-source release.
+
+### Changed
+
+- **Licence unchanged: Apache-2.0.** A draft of this release relicensed the
+  project to MIT and it was reverted before the tag was cut. Apache section 3
+  grants contributors' patent rights to users and terminates them on patent
+  litigation, and MIT grants none, which is not a trade worth making for a
+  security tool. `LICENSE` and `NOTICE` are unchanged, and `NOTICE` remains an
+  Apache section 4(d) notice as well as the Contributor Covenant's CC BY 4.0
+  attribution.
+
+- **Tool version 2.0.0.** The `internal/version` fallback moved from `1.0.0`;
+  the released value still comes from `git describe` through the Makefile's
+  ldflags, so tagging is what sets it.
+
+- **`README.md` rewritten** for the public release. It now carries a disclaimer
+  and liability warning above the fold, states the real catalog (112 checks, 11
+  modules, catalog 34; it had said 79 checks and catalog 13), documents `--fix`
+  and `--write-script`, and adds a "Design philosophy" section covering the
+  scanner/mutator boundary, idempotency, and why `SERVICES-0011` reports a
+  problem it will not fix.
+
+- **`docs/ARCHITECTURE.md` §13, "Three decisions that shape the tool"**, is the
+  long form of the same three, with the code that enforces each.
+
+- **The four startup notices now expire at `2.1.0` rather than `1.2.0`.** They
+  announce catalog 27 to 33 check corrections, and `VERSIONING` §2.4 requires
+  one minor cycle of warning. Left alone, the jump to 2.0.0 would have expired
+  all four on the release that ships the corrections, so nobody upgrading from
+  1.x would ever have seen them.
+
+### Fixed
+
+- **The documentation said Plumbline has no `--fix` flag. It has had one since
+  the remediation engine landed.** The claim survived in ten places, including
+  `plumbline --help` itself and `LEGAL-DISCLAIMER.md`, which is the document
+  shipped to tell operators what the tool does and does not do. For a release
+  whose headline warning is about generated remediation scripts, this was the
+  most important thing in the repository to correct.
+
+  Updated: `internal/cli/root.go` (the root command's help text),
+  `LEGAL-DISCLAIMER.md`, `CONTRIBUTING.md`, `docs/FAQ.md`, `docs/GLOSSARY.md`,
+  `docs/THREAT-MODEL.md`, `docs/CHECK-AUTHORING.md` and `README.md`.
+
+  `ADR-0006` is **amended rather than rewritten**. Its Decision still reads
+  "there is no `--fix` flag and there never will be", because the reasoning
+  around that sentence is what still governs; an amendment records that the flag
+  exists in proposal-only form, that the distinction the ADR cares about is
+  generating versus applying rather than the flag's name, and that the
+  `SERVICES-0011` incident showed a reviewable script is not automatically a
+  safe one.
+
+  No behaviour changed. `--fix` printed a script before this release and prints
+  one now; only the documentation that denied its existence changed.
+
+
+### Removed
+
+- **`SERVICES-0011` no longer generates a remediation drop-in. `--fix` writes
+  nothing for the strict sandbox tier.** This is withdrawn because it took a
+  host down.
+
+  The generated action wrote a `50-plumbline-sandbox.conf` drop-in setting
+  `ProtectSystem=strict` and `ProtectHome=yes` for every unit the check failed,
+  then printed the units to restart. Under `strict` the *entire* filesystem
+  hierarchy is read-only apart from `/dev`, `/proc` and `/sys` — `/run` and
+  `/var` included, not merely `/usr` and `/etc`. An operator ran the script and
+  followed its restart instruction; `systemd-journald.service`, which writes
+  `/var/log`, and `dbus.service`, which creates its socket under `/run`, did
+  not come back.
+
+  The action carried a six-line note saying to run `systemd-analyze filesystems`
+  first and to declare `ReadWritePaths=`. That was not enough and could not be:
+  the advice was attached to a file the script had already written, and every
+  other step in a plumbline script is safe to run first and read afterwards.
+
+  **What separates this from the other three sandbox fixes is the missing
+  information, not the severity.** `NoNewPrivileges=yes` (`SERVICES-0006`),
+  `ProtectSystem=full` (`SERVICES-0007`) and `ProtectHome=yes` (`SERVICES-0008`)
+  each need one decision an operator can make from the unit's purpose, and all
+  three still generate. `strict` needs the complete set of paths a daemon writes
+  at runtime — which the check does not collect, cannot infer, and which differs
+  per host and per workload.
+
+  **What you get instead**, all of it existing behaviour for a check with no
+  generator:
+
+  | Surface | Before | Now |
+  |---|---|---|
+  | `--fix` script | `plumbline_dropin … ProtectSystem=strict` | no section at all |
+  | `--fix` block | counted as covered | counted in "still failing with no automated fix" |
+  | Warnings section | — | unchanged; carries the catalog remediation |
+  | SARIF `plumbline/remediation` | `"source": "generated"` | `"source": "advisory"`, commands `systemd-analyze security <unit>`, `systemctl edit <unit>`, `systemctl daemon-reload` |
+
+  The catalog's own `Remediation` for `SERVICES-0011` is unchanged and is the
+  fallback: profile the unit, `systemctl edit`, declare `ReadWritePaths=` or
+  `StateDirectory=`/`LogsDirectory=`, restart under real load. It is the same
+  procedure, in the one form that cannot be pasted into a root shell whole.
+
+  **No verdict moves.** The check, its severity, its fixtures and all six golden
+  bundles are untouched — this changes what plumbline *proposes*, never what it
+  *finds*. `ubuntu-2404-hardened` still reports the `SERVICES-0011` FAIL on
+  `systemd-journald.service`.
+
+  **If you already ran it:** the change is one file per unit. Delete
+  `/etc/systemd/system/<unit>.d/50-plumbline-sandbox.conf`, run
+  `systemctl daemon-reload`, and restart the unit. Nothing else in the script
+  wrote that filename.
+
+  Re-introducing a generator for this check needs the fact that is missing — a
+  collector recording what each unit actually writes, and a fix emitting
+  `ReadWritePaths=` from it — not a stronger warning. The reasoning is kept
+  where the registration was, in `internal/remediate/systemd.go`.
+
 ### Check corrections
 
 Catalog 33. The runtime/persistence pair audit. One check widens what it
@@ -114,6 +286,45 @@ because of this release (VERSIONING §2.4).
   this correction is one of the entries it carries.
 
 ### Fixed
+- **`SERVICES-0010`'s `--fix` no longer stops the whole script on a host
+  without `apparmor-utils`.** The generated remediation called `aa-enforce`
+  directly. That binary ships in `apparmor-utils`, which a minimal server image
+  does not install even where the AppArmor module is active and loading
+  profiles, and the failure was worse than a confusing error: the script runs
+  under `set -eu` and actions are sorted by check ID, so a missing binary exits
+  127 and takes `SERVICES-0011`, `USERS-0012` and the closing `sysctl --system`
+  down with it. The operator lost the tail of the run to a package that was
+  never there.
+
+  The call is now guarded, and the absence reported with the package to install
+  and the command to repeat once it is:
+
+  ```sh
+  if command -v aa-enforce >/dev/null 2>&1; then
+  	aa-enforce /etc/apparmor.d/*
+  else
+  	echo "plumbline: aa-enforce not found; install apparmor-utils to enforce the profiles, then run:" >&2
+  	echo "plumbline:   aa-enforce /etc/apparmor.d/*" >&2
+  fi
+  ```
+
+  `command -v` rather than a test against a path: the location differs between
+  distributions and `$PATH` is what the shell would use anyway. Nothing is
+  installed — naming a package is advice, running a package manager is a change
+  the operator never reviewed (ADR-0006).
+
+  Unchanged: `systemctl enable --now apparmor`, the `/proc/cmdline` warning
+  about `apparmor=0`, the check's own verdict, and every other fix. No golden
+  bundle moves; remediation text is not recorded in them.
+
+- **Every generated script is now parsed by `sh -n` on each test run.**
+  Hand-written shell is the one thing in the remediation package the Go
+  compiler has no opinion about, and under `set -eu` an unbalanced `if` in one
+  action is a syntax error in the whole file — nothing runs, including the
+  actions that were correct. The gate ranges over the fix registry rather than
+  a list, so a fix added in a new file is covered the day it registers, and it
+  parses the concatenation of all of them as well as each alone.
+
 - **The unparseable-configuration branch is resolved in one place.**
   `unparseableConfig` replaces the sixth copy of an identical block, with
   `KERNEL-0023` and `-0028` refactored onto it and their wording unchanged.

@@ -17,7 +17,7 @@ var Check0001 = catalog.Check{
 	Title:  "The system crontab is owned by root and writable only by root",
 	Description: `/etc/crontab names commands and the accounts they run as, and
 cron executes them without asking anything further. Write access to that file
-is therefore write access to a root shell that starts on a schedule — no
+is therefore write access to a root shell that starts on a schedule, no
 exploit, no authentication step, and nothing in the file that looks unusual
 afterwards, because a crontab entry is what a crontab is supposed to contain.
 
@@ -29,7 +29,7 @@ that is group- or world-writable is the same thing without the indirection.
 Both are produced by ordinary accidents far more often than by attack: a
 deployment script that chowns /etc to a service account, a restored backup that
 carried the wrong ownership, an administrator who ran chmod -R on a parent
-directory. That is precisely why it is worth checking — nobody remembers doing
+directory. That is precisely why it is worth checking, nobody remembers doing
 it.`,
 
 	BaseSeverity: finding.High,
@@ -129,7 +129,7 @@ it.`,
 			"stat -c '%n %a %U:%G' /etc/crontab",
 			"chown root:root /etc/crontab && chmod 600 /etc/crontab",
 		},
-		Caution: "Fix the permissions, but do not stop there. If a non-root account could write this file, the correct assumption is that the host is compromised rather than merely misconfigured — read the contents and the logs before you overwrite the evidence.",
+		Caution: "Fix the permissions, but do not stop there. If a non-root account could write this file, the correct assumption is that the host is compromised rather than merely misconfigured, read the contents and the logs before you overwrite the evidence.",
 	},
 
 	Mappings: []finding.ControlRef{

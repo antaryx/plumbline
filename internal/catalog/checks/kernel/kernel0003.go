@@ -15,7 +15,7 @@ var Check0003 = catalog.Check{
 	Title:  "Debugging other processes with ptrace is restricted",
 	Description: `ptrace lets one process read and write another's memory. With
 the default permissive policy, any process may attach to any other process
-running as the same user — so a single compromised program can read the
+running as the same user, so a single compromised program can read the
 credentials, session tokens and private keys held by every other program that
 user is running, without needing a privilege escalation at all.
 
@@ -75,6 +75,6 @@ restriction has to come from somewhere else.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel documentation — Yama ptrace_scope", URL: "https://www.kernel.org/doc/html/latest/admin-guide/LSM/Yama.html"},
+		{Title: "Linux kernel documentation. Yama ptrace_scope", URL: "https://www.kernel.org/doc/html/latest/admin-guide/LSM/Yama.html"},
 	},
 }

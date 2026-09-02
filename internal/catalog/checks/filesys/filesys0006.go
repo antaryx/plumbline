@@ -15,7 +15,7 @@ var Check0006 = catalog.Check{
 	Module: "FILESYS",
 	Title:  "No device node exists outside /dev",
 	Description: `A device node is a doorway to hardware, and the kernel does
-not care where the doorway is. /dev/sda is not special because of its path — it
+not care where the doorway is. /dev/sda is not special because of its path, it
 is a block device node with a major and minor number, and an identical node
 created in /tmp or in a home directory reaches the same disk.
 
@@ -25,7 +25,7 @@ cannot read /etc/shadow through the filesystem can read the bytes of /etc/shadow
 straight off the disk. A character device node for /dev/mem or /dev/kmem
 bypasses the kernel's own memory protection. Creating one needs root, so a node
 outside /dev is either a mistake made by root or an artifact left by somebody
-who had root — and in the second case it is a way back in that survives the
+who had root, and in the second case it is a way back in that survives the
 patch which closed the original hole.
 
 The mistakes are real too. Extracting an archive as root with 'tar -p', or
@@ -71,9 +71,9 @@ them, and never opens one.`,
 		Summary: "Record the node and establish where it came from before removing it.",
 		Effort:  "MEDIUM",
 		Steps: []string{
-			"Record it first: 'ls -l' shows the major and minor numbers in place of a size, and 'stat' shows when the inode was created. Which device it points at tells you what it was for — 8,x is a SCSI or SATA disk, 1,1 is /dev/mem.",
+			"Record it first: 'ls -l' shows the major and minor numbers in place of a size, and 'stat' shows when the inode was created. Which device it points at tells you what it was for, 8,x is a SCSI or SATA disk, 1,1 is /dev/mem.",
 			"Work out whether anything on the host explains it. Extracting an archive as root with 'tar -p', or restoring a backup of /dev to the wrong path, produces exactly this and is not an attack.",
-			"If nothing explains it, treat the host as compromised. Creating a device node requires root, so whoever made it already had the privilege this node would grant — the node is the artifact, not the cause.",
+			"If nothing explains it, treat the host as compromised. Creating a device node requires root, so whoever made it already had the privilege this node would grant, the node is the artifact, not the cause.",
 			"Remove it once it is recorded: 'rm <path>'.",
 			"Prevent the recurrence by mounting /home, /tmp and /var/tmp with nodev, which makes device nodes on those filesystems inert whatever their mode. FILESYS-0007 through FILESYS-0009 check that.",
 		},
@@ -81,7 +81,7 @@ them, and never opens one.`,
 			"find / -xdev \\( -type b -o -type c \\) ! -path '/dev/*' -ls",
 			"stat <path>",
 		},
-		Caution: "If this is an attacker's artifact, deleting it destroys evidence and does not remove their access. Record it — path, major and minor numbers, timestamps — and treat the finding as an incident before cleaning up.",
+		Caution: "If this is an attacker's artifact, deleting it destroys evidence and does not remove their access. Record it, path, major and minor numbers, timestamps, and treat the finding as an incident before cleaning up.",
 	},
 
 	Mappings: []finding.ControlRef{

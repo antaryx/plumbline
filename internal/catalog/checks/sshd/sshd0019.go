@@ -18,7 +18,7 @@ is writable by group or other. StrictModes yes is what performs that check.
 
 With StrictModes no, a world-writable home directory becomes a way in: anyone
 who can write it can create ~/.ssh/authorized_keys, add their own public key,
-and log in as that user. No credential is stolen and nothing is guessed — the
+and log in as that user. No credential is stolen and nothing is guessed, the
 account simply starts trusting a new key. The same applies to a home directory
 on a group-writable share, which is the more common accidental case.
 
@@ -48,15 +48,15 @@ checking.`,
 		Steps: []string{
 			"Find what would now be rejected: 'find /home -maxdepth 1 -perm /022 -type d' lists group- or world-writable home directories.",
 			"Repair them: 'chmod go-w /home/<user>', 'chmod 700 /home/<user>/.ssh', 'chmod 600 /home/<user>/.ssh/authorized_keys', and confirm ownership with 'chown -R <user>: /home/<user>/.ssh'.",
-			"Where home directories are on NFS, the usual cause is an ownership mismatch across the mount rather than a genuine permission problem — fix the export or the idmap rather than the sshd setting.",
-			"Set 'StrictModes yes' in /etc/ssh/sshd_config — the OpenSSH default, so the line may be removed.",
+			"Where home directories are on NFS, the usual cause is an ownership mismatch across the mount rather than a genuine permission problem, fix the export or the idmap rather than the sshd setting.",
+			"Set 'StrictModes yes' in /etc/ssh/sshd_config, the OpenSSH default, so the line may be removed.",
 			"Validate and reload: 'sshd -t' then 'systemctl reload sshd'.",
 		},
 		Commands: []string{
 			"sshd -T | grep -i strictmodes",
 			"find /home -maxdepth 1 -perm /022 -type d",
 		},
-		Caution: "Turning this back on will refuse key authentication for any user whose permissions are currently wrong, and the failure is silent from the client's side — it simply falls through to the next method or is rejected. Audit and repair the directories in the same maintenance window as the change.",
+		Caution: "Turning this back on will refuse key authentication for any user whose permissions are currently wrong, and the failure is silent from the client's side, it simply falls through to the next method or is rejected. Audit and repair the directories in the same maintenance window as the change.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -66,6 +66,6 @@ checking.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — StrictModes", URL: "https://man.openbsd.org/sshd_config#StrictModes"},
+		{Title: "sshd_config(5). StrictModes", URL: "https://man.openbsd.org/sshd_config#StrictModes"},
 	},
 }

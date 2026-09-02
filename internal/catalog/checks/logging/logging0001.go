@@ -35,7 +35,7 @@ identifiers, tokens and query strings that were never meant to leave the
 process that wrote them.
 
 rsyslog creates these files itself, with the mode its configuration tells it
-to, and its built-in default is 0644 — readable by every account on the host.
+to, and its built-in default is 0644, readable by every account on the host.
 An attacker with any unprivileged shell therefore starts with the
 authentication history, which tells them which accounts exist, which are used,
 and from which addresses a login will not look unusual.
@@ -132,9 +132,9 @@ should not be reported as a defect.`,
 		Summary: "Set the log file creation mode to 0640 and fix the files already on disk.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Set the mode in whichever syntax the file already uses. Legacy: '$FileCreateMode 0640' near the top of /etc/rsyslog.conf, before the file actions. RainerScript: add 'fileCreateMode=\"0640\"' to each omfile action, or set it once with a legacy directive — rsyslog accepts both in the same file.",
+			"Set the mode in whichever syntax the file already uses. Legacy: '$FileCreateMode 0640' near the top of /etc/rsyslog.conf, before the file actions. RainerScript: add 'fileCreateMode=\"0640\"' to each omfile action, or set it once with a legacy directive, rsyslog accepts both in the same file.",
 			"Note that the legacy directive is positional: it governs the actions written after it. Placing it at the bottom of the file changes nothing.",
-			"Fix what already exists — the mode only applies to files rsyslog creates from now on: 'chmod o-rwx,g-wx /var/log/*.log' and the same for the rotated copies.",
+			"Fix what already exists, the mode only applies to files rsyslog creates from now on: 'chmod o-rwx,g-wx /var/log/*.log' and the same for the rotated copies.",
 			"Check logrotate too. 'create' directives in /etc/logrotate.conf and /etc/logrotate.d/ set the mode of the file after rotation and will silently reinstate 0644 at the next rotation.",
 			"Restart rsyslog and confirm: 'systemctl restart rsyslog' then 'stat -c \"%n %a\" /var/log/syslog'.",
 		},
@@ -142,7 +142,7 @@ should not be reported as a defect.`,
 			"grep -rEn 'FileCreateMode|fileCreateMode' /etc/rsyslog.conf /etc/rsyslog.d/",
 			"stat -c '%n %a %U:%G' /var/log/*.log",
 		},
-		Caution: "Tightening the mode breaks anything reading logs as a non-root, non-group account: log shippers, monitoring agents and some web-facing log viewers. Add those agents to the log group rather than widening the mode back — and check logrotate, or the next rotation will undo the change without anybody noticing.",
+		Caution: "Tightening the mode breaks anything reading logs as a non-root, non-group account: log shippers, monitoring agents and some web-facing log viewers. Add those agents to the log group rather than widening the mode back, and check logrotate, or the next rotation will undo the change without anybody noticing.",
 	},
 
 	Mappings: []finding.ControlRef{

@@ -36,7 +36,7 @@ gets its memory safety from the language and reports here as though it had none.
 That is a limitation of what a symbol table can tell you, not a finding about
 the binary.
 
-So this check reports what the symbols say — no more. Confirm what produced the
+So this check reports what the symbols say, no more. Confirm what produced the
 binary before treating a failure as a defect.`,
 
 	BaseSeverity: finding.Medium,
@@ -72,7 +72,7 @@ binary before treating a failure as a defect.`,
 		Effort:  "MEDIUM",
 		Steps: []string{
 			"Rule out the two known false positives first. A binary from a memory-safe language (Rust, Go) does not use this mechanism, and a small C program with no local arrays legitimately has no instrumented function.",
-			"Confirm the finding independently: readelf -sW <path> | grep __stack_chk_fail — no output means no reference.",
+			"Confirm the finding independently: readelf -sW <path> | grep __stack_chk_fail, no output means no reference.",
 			"Check the binary is not merely stripped of the table you are reading: a fully stripped static binary reports UNKNOWN here rather than FAIL, so a FAIL means a table was read and the symbol was not in it.",
 			"Identify what owns the file: dpkg -S <path> or rpm -qf <path>.",
 			"If it was built locally as C or C++, rebuild with -fstack-protector-strong in CFLAGS and confirm with readelf before installing.",
@@ -90,6 +90,6 @@ binary before treating a failure as a defect.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "gcc(1) — -fstack-protector-strong", URL: "https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html"},
+		{Title: "gcc(1), -fstack-protector-strong", URL: "https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html"},
 	},
 }

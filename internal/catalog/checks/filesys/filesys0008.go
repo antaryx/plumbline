@@ -22,7 +22,7 @@ by the file-integrity monitoring and the forensic image alike. Attackers use it
 for exactly that reason, and it is a routine finding in intrusions where /tmp
 was hardened and this was not.
 
-The same three options apply for the same three reasons as /tmp — noexec so
+The same three options apply for the same three reasons as /tmp, noexec so
 nothing written there runs, nosuid so a setuid binary there does not escalate,
 nodev so a device node there reaches nothing.
 
@@ -53,7 +53,7 @@ check is worth running on a host that looks fine.`,
 			"Apply it without rebooting: 'mount -o remount /dev/shm'.",
 			"Verify the options are actually in force rather than merely written down: 'findmnt /dev/shm'. An fstab entry for an already-mounted filesystem does nothing until the remount.",
 			"Expect this to be the cheapest of the three mount checks to satisfy. /dev/shm holds shared memory segments, which are mapped rather than executed, so noexec breaks essentially nothing.",
-			"On a systemd host, confirm nothing re-mounts it without the options at boot — 'systemctl show -p Options dev-shm.mount' shows what systemd believes it should be.",
+			"On a systemd host, confirm nothing re-mounts it without the options at boot, 'systemctl show -p Options dev-shm.mount' shows what systemd believes it should be.",
 		},
 		Commands: []string{
 			"findmnt /dev/shm",

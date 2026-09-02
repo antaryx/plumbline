@@ -14,7 +14,7 @@ var Check0001 = catalog.Check{
 	Module: "KERNEL",
 	Title:  "Address-space layout randomisation is fully enabled",
 	Description: `Address-space layout randomisation places the stack, the heap,
-shared libraries and — for position-independent executables — the program image
+shared libraries and, for position-independent executables, the program image
 itself at addresses that differ on every execution. Without it, an attacker who
 finds a memory-corruption bug knows in advance where everything is, and a
 crash-only bug becomes reliable code execution.
@@ -22,7 +22,7 @@ crash-only bug becomes reliable code execution.
 kernel.randomize_va_space takes three values. 0 disables randomisation
 entirely. 1 randomises the stack, the shared libraries and the mmap base but
 leaves the heap where the linker put it, which leaves heap-grooming attacks
-intact. 2 additionally randomises the brk-managed heap and is the value every
+intact. 2 also randomises the brk-managed heap and is the value every
 current distribution ships.`,
 
 	BaseSeverity: finding.High,
@@ -75,6 +75,6 @@ current distribution ships.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "proc(5) — /proc/sys/kernel/randomize_va_space", URL: "https://man7.org/linux/man-pages/man5/proc.5.html"},
+		{Title: "proc(5), /proc/sys/kernel/randomize_va_space", URL: "https://man7.org/linux/man-pages/man5/proc.5.html"},
 	},
 }

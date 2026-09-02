@@ -14,7 +14,7 @@ var Check0003 = catalog.Check{
 	Module: "LOGGING",
 	Title:  "The systemd journal is stored persistently",
 	Description: `A volatile journal lives in /run/log/journal, which is a
-tmpfs. Every record in it is destroyed at the next boot — and "the machine was
+tmpfs. Every record in it is destroyed at the next boot, and "the machine was
 rebooted" is a description of most incidents, whether the reboot was the
 attacker covering their tracks, a kernel panic they caused, or an operator
 restarting a host that was behaving oddly. Investigating afterwards means
@@ -120,7 +120,7 @@ an attacker.`,
 		Summary: "Set Storage=persistent and give the journal a size limit.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Set 'Storage=persistent' under [Journal] in /etc/systemd/journald.conf, or in a drop-in under /etc/systemd/journald.conf.d/ — the drop-in is the better place on a configuration-managed host, and it overrides the main file.",
+			"Set 'Storage=persistent' under [Journal] in /etc/systemd/journald.conf, or in a drop-in under /etc/systemd/journald.conf.d/, the drop-in is the better place on a configuration-managed host, and it overrides the main file.",
 			"Bound the size in the same change: 'SystemMaxUse=1G' or similar. journald defaults to 10% of the filesystem, which on a large disk is a great deal of space and on a small one is a disk-full outage.",
 			"Create the directory and restart: 'mkdir -p /var/log/journal && systemd-tmpfiles --create --prefix /var/log/journal && systemctl restart systemd-journald'.",
 			"Confirm it took effect: 'journalctl --disk-usage' reports the on-disk size, and 'journalctl --list-boots' should show more than the current boot once the host has been restarted.",
@@ -129,7 +129,7 @@ an attacker.`,
 			"systemd-analyze cat-config systemd/journald.conf",
 			"journalctl --disk-usage",
 		},
-		Caution: "Persisting the journal starts consuming disk on a host that was not consuming any. Set SystemMaxUse in the same change — a full /var is an outage, and on many hosts it is an outage that also stops the logging you just enabled.",
+		Caution: "Persisting the journal starts consuming disk on a host that was not consuming any. Set SystemMaxUse in the same change, a full /var is an outage, and on many hosts it is an outage that also stops the logging you just enabled.",
 	},
 
 	Mappings: []finding.ControlRef{

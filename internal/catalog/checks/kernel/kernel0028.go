@@ -25,7 +25,7 @@ a new connection has taken the same tuple and be accepted as part of it.
 **A reset ends TIME-WAIT early, and that is the hazard RFC 1337 describes.** An
 RST for a socket in TIME-WAIT tears it down immediately and frees the tuple for
 reuse. A delayed segment from the old connection can then land inside the new
-one — the sequence numbers may fall in the new window by chance, or be chosen —
+one, the sequence numbers may fall in the new window by chance, or be chosen,
 and the receiver accepts data that belongs to a connection that ended.
 
 net.ipv4.tcp_rfc1337 = 1 makes the kernel drop RSTs aimed at TIME-WAIT sockets
@@ -103,7 +103,7 @@ This is a check about files. Nothing reads the running value yet.`,
 		Summary: "Write net.ipv4.tcp_rfc1337 = 1 to a file in /etc/sysctl.d/.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Check what already sets it: grep -rn tcp_rfc1337 /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Expect nothing — the kernel defaults to 0 and no distribution in this project's corpus ships it.",
+			"Check what already sets it: grep -rn tcp_rfc1337 /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Expect nothing, the kernel defaults to 0 and no distribution in this project's corpus ships it.",
 			"Create or extend a drop-in containing net.ipv4.tcp_rfc1337 = 1.",
 			"Apply without rebooting: sysctl --system, then confirm with sysctl net.ipv4.tcp_rfc1337.",
 			"Do not pair this with net.ipv4.tcp_tw_reuse or the long-removed tcp_tw_recycle as a set of 'TIME-WAIT tuning'. They pull in opposite directions: this one makes TIME-WAIT more durable on purpose, and those exist to get out of it sooner.",
@@ -121,8 +121,8 @@ This is a check about files. Nothing reads the running value yet.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "RFC 1337 — TIME-WAIT Assassination Hazards in TCP", URL: "https://www.rfc-editor.org/rfc/rfc1337"},
-		{Title: "Linux kernel — ip-sysctl tcp_rfc1337", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
+		{Title: "RFC 1337. TIME-WAIT Assassination Hazards in TCP", URL: "https://www.rfc-editor.org/rfc/rfc1337"},
+		{Title: "Linux kernel, ip-sysctl tcp_rfc1337", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
 	},
 }
 

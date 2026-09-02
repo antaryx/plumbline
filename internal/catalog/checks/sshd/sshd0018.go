@@ -12,7 +12,7 @@ var Check0018 = catalog.Check{
 	Module: "SSHD",
 	Title:  "SSH agent forwarding is disabled",
 	Description: `Agent forwarding places a socket on the server that anyone
-with root there — or the user's own uid — can use to sign authentication
+with root there, or the user's own uid, can use to sign authentication
 requests with the keys held in the user's local agent. The keys themselves do
 not move, which is what the feature is usually defended with, but the ability to
 authenticate with them does, for as long as the session is open. A compromised
@@ -27,7 +27,7 @@ every case where agent forwarding is still configured.
 
 The OpenSSH default is yes. This ships at LOW because the exposure requires the
 server to be compromised first, and because the setting is only reachable when
-a user chooses to forward — but on a bastion, which is precisely where agent
+a user chooses to forward, but on a bastion, which is precisely where agent
 forwarding is most used, that first condition is the whole threat model.`,
 
 	BaseSeverity: finding.Low,
@@ -52,7 +52,7 @@ forwarding is most used, that first condition is the whole threat model.`,
 		Steps: []string{
 			"Establish the replacement first: 'ssh -J bastion.example.net target.example.net', or a 'ProxyJump' line in the users' ~/.ssh/config. This is what agent forwarding is usually being used for.",
 			"Set 'AllowAgentForwarding no' in /etc/ssh/sshd_config.",
-			"Note that this is not a security boundary against a determined user — anyone who can run a shell here can forward a connection themselves. It removes the default and the accident, not the capability.",
+			"Note that this is not a security boundary against a determined user, anyone who can run a shell here can forward a connection themselves. It removes the default and the accident, not the capability.",
 			"Validate and reload: 'sshd -t' then 'systemctl reload sshd'.",
 		},
 		Commands: []string{
@@ -68,7 +68,7 @@ forwarding is most used, that first condition is the whole threat model.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — AllowAgentForwarding", URL: "https://man.openbsd.org/sshd_config#AllowAgentForwarding"},
-		{Title: "ssh_config(5) — ProxyJump", URL: "https://man.openbsd.org/ssh_config#ProxyJump"},
+		{Title: "sshd_config(5). AllowAgentForwarding", URL: "https://man.openbsd.org/sshd_config#AllowAgentForwarding"},
+		{Title: "ssh_config(5). ProxyJump", URL: "https://man.openbsd.org/ssh_config#ProxyJump"},
 	},
 }

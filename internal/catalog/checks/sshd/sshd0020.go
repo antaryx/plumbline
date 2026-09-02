@@ -34,7 +34,7 @@ that lives there stops applying to SSH logins specifically:
 
 The upstream OpenSSH default is **no**. Every mainstream distribution ships
 'UsePAM yes' in its packaged sshd_config, so a host reporting a failure here has
-either had the line removed or is running a configuration built from scratch —
+either had the line removed or is running a configuration built from scratch,
 and in either case a policy the operator believes is in force is not.`,
 
 	BaseSeverity: finding.High,
@@ -78,6 +78,6 @@ and in either case a policy the operator believes is in force is not.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — UsePAM", URL: "https://man.openbsd.org/sshd_config#UsePAM"},
+		{Title: "sshd_config(5). UsePAM", URL: "https://man.openbsd.org/sshd_config#UsePAM"},
 	},
 }

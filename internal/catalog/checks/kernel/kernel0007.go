@@ -181,11 +181,11 @@ configuration sets, and reports each one that differs.`,
 		Summary: "Reconcile /proc/sys with the sysctl configuration, then apply the files.",
 		Effort:  "LOW",
 		Steps: []string{
-			"For each parameter in the evidence, decide which value is correct — the running one or the configured one.",
+			"For each parameter in the evidence, decide which value is correct, the running one or the configured one.",
 			"Where the configuration is correct and the kernel is not, apply it: sysctl --system",
 			"Where the running value is correct and no file sets it, add it to /etc/sysctl.d/60-hardening.conf so it survives a reboot.",
 			"Re-run the audit and confirm the parameters agree.",
-			"If a parameter reverts after 'sysctl --system', something later in boot is overriding it — check for a drop-in with a higher-sorting name, a container runtime, or a network manager hook.",
+			"If a parameter reverts after 'sysctl --system', something later in boot is overriding it, check for a drop-in with a higher-sorting name, a container runtime, or a network manager hook.",
 		},
 		Commands: []string{
 			"sysctl --system",

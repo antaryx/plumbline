@@ -25,7 +25,7 @@ smaller and different problem:
 
   - **It describes the network to anyone who can reach this host.** A redirect
     names a gateway and a destination, so an attacker who can elicit one learns
-    a route they were not told about — internal topology, from the outside of
+    a route they were not told about, internal topology, from the outside of
     it.
   - **It is a statement that this host is forwarding at all.** On a machine
     that is not meant to be a router, a redirect leaving it is evidence that
@@ -33,7 +33,7 @@ smaller and different problem:
 
 **The parameter only has effect while forwarding is enabled, which is exactly
 why it is worth writing down.** A host that is not forwarding sends no
-redirects whatever this says, so setting it costs nothing today — and container
+redirects whatever this says, so setting it costs nothing today, and container
 runtimes, VPN daemons and virtualisation hosts all enable
 net.ipv4.ip_forward as a side effect of being installed. Docker turns it on at
 start-up. The value of writing 0 down is that the day something enables
@@ -85,7 +85,7 @@ This is a check about files. Nothing reads the running value yet.`,
 		Summary: "Write net.ipv4.conf.all.send_redirects = 0 and net.ipv4.conf.default.send_redirects = 0 to a file in /etc/sysctl.d/.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Check whether this host is meant to route: sysctl net.ipv4.ip_forward. If it is a router, a NAT gateway or a firewall with more than one leg, leave this alone — sending redirects is part of the job and suppressing them makes traffic take a longer path rather than no path.",
+			"Check whether this host is meant to route: sysctl net.ipv4.ip_forward. If it is a router, a NAT gateway or a firewall with more than one leg, leave this alone, sending redirects is part of the job and suppressing them makes traffic take a longer path rather than no path.",
 			"Check what already sets it, patterns included: grep -rn send_redirects /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d.",
 			"Create or extend a drop-in containing net.ipv4.conf.all.send_redirects = 0 and net.ipv4.conf.default.send_redirects = 0.",
 			"Apply without rebooting: sysctl --system, then confirm with sysctl -a | grep send_redirects.",
@@ -105,8 +105,8 @@ This is a check about files. Nothing reads the running value yet.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — ip-sysctl send_redirects", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
-		{Title: "RFC 1122 — Requirements for Internet Hosts", URL: "https://www.rfc-editor.org/rfc/rfc1122"},
+		{Title: "Linux kernel, ip-sysctl send_redirects", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
+		{Title: "RFC 1122. Requirements for Internet Hosts", URL: "https://www.rfc-editor.org/rfc/rfc1122"},
 	},
 }
 

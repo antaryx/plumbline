@@ -17,7 +17,7 @@ var Check0006 = catalog.Check{
 inside the kernel. The verifier that is supposed to prove such a program safe
 is one of the most complex pieces of the kernel and has been a recurring source
 of local privilege escalations; leaving it reachable by unprivileged users
-gives every local account a large, intricate attack surface for no benefit on a
+gives every local account a large and complicated attack surface for no benefit on a
 server.
 
 kernel.unprivileged_bpf_disabled set to 1 refuses unprivileged bpf() and cannot
@@ -82,6 +82,6 @@ NOT_APPLICABLE.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel documentation — unprivileged_bpf_disabled", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#unprivileged-bpf-disabled"},
+		{Title: "Linux kernel documentation, unprivileged_bpf_disabled", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#unprivileged-bpf-disabled"},
 	},
 }

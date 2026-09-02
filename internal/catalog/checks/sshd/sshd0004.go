@@ -15,7 +15,7 @@ var Check0004 = catalog.Check{
 field in /etc/shadow is empty to authenticate over SSH by pressing return. No
 guessing, no credential, no rate limit that matters.
 
-The OpenSSH default is no, so this can only be reached deliberately — usually by
+The OpenSSH default is no, so this can only be reached deliberately, usually by
 a hardening script that inverted a value, an appliance image built for
 convenience, or a container base image where a password was never set and the
 setting was relaxed to make the account usable.
@@ -55,7 +55,7 @@ sshd_config value produces that outcome by itself.`,
 			"sshd -T | grep -i permitemptypasswords",
 			"awk -F: '$2 == \"\" {print $1}' /etc/shadow",
 		},
-		Caution: "If a service or automation authenticates as an account with an empty password, this change stops it. That is the correct outcome, but find out what breaks before you are told by an outage — and treat any account that was reachable this way as potentially compromised rather than merely misconfigured.",
+		Caution: "If a service or automation authenticates as an account with an empty password, this change stops it. That is the correct outcome, but find out what breaks before you are told by an outage, and treat any account that was reachable this way as potentially compromised rather than merely misconfigured.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -65,6 +65,6 @@ sshd_config value produces that outcome by itself.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — PermitEmptyPasswords", URL: "https://man.openbsd.org/sshd_config#PermitEmptyPasswords"},
+		{Title: "sshd_config(5). PermitEmptyPasswords", URL: "https://man.openbsd.org/sshd_config#PermitEmptyPasswords"},
 	},
 }

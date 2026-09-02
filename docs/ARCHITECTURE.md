@@ -449,11 +449,156 @@ So that "we'll add it later" is a decision on record rather than an omission:
 
 | Deferred | To | Why |
 |---|---|---|
-| Vulnerability correlation | v2 | Needs vendor security feeds; doing it with NVD alone is wrong (audit A-03) |
-| Compliance mapping beyond public-domain frameworks | v2, as user-supplied packs | Licensing (audit A-02) |
-| Containers / cloud modules | v2 | Larger fixture surface; cloud needs IMDS network access, which breaks the offline invariant and needs its own opt-in flag |
-| Remediation script generation | v2 | The check catalog must stabilise first, or every fix is rewritten |
-| Interactive TUI browser | v2 | High cost; JSON and terminal output cover v1 |
-| Extension mechanism | v3 | Not Go `plugin` under any circumstances (audit A-06) |
-| macOS | v3 | Needs hardware and a fixture corpus; do not claim it before then |
-| Fleet aggregation | v3 | Bundles make it straightforward later; premature now |
+| Remediation script generation | **shipped in v2.0.0** | The check catalog had to stabilise first, or every fix gets rewritten. See §13.1 |
+| Containers module | **shipped in v2.0.0** | Landed early; the fixture surface turned out tractable |
+| Vulnerability correlation | v3 | Needs vendor security feeds; doing it with NVD alone is wrong (audit A-03) |
+| Compliance mapping beyond public-domain frameworks | v3, as user-supplied packs | Licensing (audit A-02) |
+| Cloud module | v3 | IMDS needs network access, which breaks the offline invariant and needs its own opt-in flag |
+| Interactive TUI browser | v3 | High cost; JSON and terminal output cover the need |
+| Extension mechanism | v4 | Not Go `plugin` under any circumstances (audit A-06) |
+| macOS | v4 | Needs hardware and a fixture corpus; do not claim it before then |
+| Fleet aggregation | v4 | Bundles make it straightforward later; premature now |
+
+---
+
+## 13. Three decisions that shape the tool
+
+Most of what follows from the architecture above can be reconstructed from three
+choices. They are collected here because they are the ones people ask about, and
+because two of them look like missing features until you know why they are not.
+
+### 13.1 The scanner and the mutator are separate programs, and Plumbline is only the first
+
+Plumbline never edits the host it audits. There is no code path that applies a
+plan, not behind a flag, not behind a confirmation prompt, and not in a
+privileged helper. `scan --fix` renders a shell script to the report and
+`--write-script` saves it to a file. Both stop there.
+
+The reason is an asymmetry rather than a preference. A tool that repairs what it
+finds is convenient roughly 95% of the time. The other 5% is a root process
+acting on a heuristic verdict, on a machine its author cannot see, rewriting
+`sshd_config` or a firewall rule, and locking an operator out of a host in
+another country. Recovery needs console or physical access that many people do
+not have. The upside is saved keystrokes; the downside is unrecoverable loss of
+access to production. That trade does not balance at any confidence level a
+scanner can reach from configuration files.
+
+The boundary is structural, not a policy someone remembers to follow.
+`internal/remediate` builds an `Action` whose commands are strings, and
+`Script` renders a plan to text. Neither has a `System`, so neither can open a
+file, run a process, or write anything. The one package that can touch the OS is
+`internal/system`, and `make verify` fails the build if anything outside it
+calls `os.Open`, `os.ReadFile`, `exec.Command` or their neighbours. A future
+contributor who wanted to add `--apply` could not do it inside the remediation
+package at all; they would have to cross the seam, and the seam is checked.
+
+Two consequences are worth stating because they are load-bearing.
+
+The generated script is an artifact. You can diff it, attach it to a change
+request, hand it to someone with more context about the host, run it under
+Ansible, or run three of its eight sections. An in-tool mutation is none of
+those things; it is an opaque event with a log line after it.
+
+The script is also the honest place for the warnings. Every command is preceded
+by its check ID and by whatever caution the fix carries, in the file the
+operator is about to run, rather than in documentation they may never open.
+
+See [ADR-0006](adr/0006-no-auto-remediation.md), including its amendment.
+
+### 13.2 Every generated script is idempotent, by construction
+
+Running the script twice leaves the host in the same state as running it once.
+This is a property of how each fix is written and it is tested by running the
+generated script twice against a temporary tree and comparing the results, not
+asserted in a comment.
+
+The general rule is that a fix rewrites in place and appends only when the key
+is absent. Getting this wrong is not a tidiness problem. It produces a file with
+two settings for one parameter, and the operator who later edits the wrong one
+changes nothing while believing otherwise.
+
+`sysctl.d` goes through `plumbline_sysctl_set`, an `awk` pass that walks the
+file, finds the first live assignment of the key, replaces its value, passes
+every other line through untouched, and appends the setting only if it reached
+the end without finding one. Comments survive. So does the `-` prefix that marks
+a setting whose failure should be ignored, because the matcher strips it before
+comparing keys rather than treating the line as unparseable.
+
+`login.defs` needs the same mechanism for the opposite reason, and it is the
+clearest example of why this matters. `shadow(3)` reads the file top to bottom
+and takes the *first* definition of a key; every later one is dead. Appending
+`ENCRYPT_METHOD SHA512` to a file that already says `ENCRYPT_METHOD MD5`
+higher up therefore changes nothing at all, on exactly the hosts that need the
+change, while the script runs cleanly and exits 0. The operator now believes a
+host is fixed that is not. The generated editor rewrites the first definition
+and comments out the later ones with a marker saying why.
+
+systemd drop-ins are written whole rather than appended to, so a second run
+produces identical bytes instead of a second copy of a directive for systemd to
+resolve. `daemon.json` is parsed, modified and re-serialised through `python3`
+rather than edited with `sed`, and the helper exits before writing when the key
+already holds the wanted value, so a no-op run leaves the file's mtime and
+formatting alone. Every helper that edits a file copies it to `.bak` once,
+before its first change.
+
+Idempotency is also what makes the script safe to run after a partial failure.
+Under `set -eu` a script that dies halfway can be read, fixed and re-run from
+the top without the completed half doing damage on the second pass.
+
+### 13.3 SERVICES-0011 reports a problem it refuses to fix
+
+`SERVICES-0011` fails a service that is not sandboxed at the strict tier, and
+Plumbline will not write the directive that would satisfy it. This is the one
+place where the catalog knows a fix and the generator declines to emit it, so it
+is worth reading as a rule rather than as an exception.
+
+`ProtectSystem=strict` mounts the entire filesystem hierarchy read-only apart
+from `/dev`, `/proc` and `/sys`. That includes `/run` and `/var`, which is the
+detail that catches people, since `ProtectSystem=full` (what `SERVICES-0007`
+proposes) covers only `/usr`, `/boot`, `/efi` and `/etc` and leaves the rest
+writable. A daemon that writes a path it never declared fails at the write and
+not at the restart, so it starts cleanly and misbehaves later.
+
+Plumbline used to generate this drop-in. The action carried six lines of warning
+in bold, telling the operator to run `systemd-analyze filesystems` first and to
+declare `ReadWritePaths=` for anything the service legitimately writes. An
+operator ran the script, followed its own printed instruction to restart the
+units it had written for, and `systemd-journald` (which writes `/var/log`) and
+`dbus` (whose socket lives under `/run`) did not come back.
+
+The warning was accurate and it failed anyway. It was attached to a file the
+script had already written, and every other action Plumbline generates is safe
+to run first and read afterwards, so the format itself teaches that comments are
+context rather than preconditions. A caution that only works if it is read in a
+different register from every other caution in the same document is not a
+control.
+
+That reframes the question. It is not how loudly a fix should warn, but whether
+the fix can be written correctly from what a scan knows. Here it cannot. The
+three sandbox fixes that still generate each need one decision an operator can
+make from a unit's purpose: does it call a setuid helper (`SERVICES-0006`), does
+it write `/etc` (`SERVICES-0007`), does it read a user's home (`SERVICES-0008`).
+`strict` needs the complete set of paths a daemon writes at runtime. That is an
+enumeration, not a decision, and the check does not collect it, cannot infer it,
+and would be wrong about it on the next host or the next workload.
+
+So the check reports and hands over the procedure: profile the unit,
+`systemctl edit`, declare `ReadWritePaths=` or better `StateDirectory=` and
+`LogsDirectory=`, then restart under real load rather than checking that the
+unit comes up. Nothing was special-cased to make this work. A check with no
+registered generator already had a defined path through every surface:
+`remediationFor` in the SARIF renderer ranks the generated script above the
+catalog's own commands and emits the latter with `"source": "advisory"`, the
+`--fix` block counts the finding under "still failing with no automated fix",
+and the warnings section never consulted the registry at all. Unregistering the
+fix was one deletion and every surface reported the new state correctly.
+
+The rule this produced, kept in `internal/remediate/systemd.go` where the
+registration used to be: a proposal can itself be too dangerous to make, when
+the operator's realistic behaviour on receiving it is to run it. Generating is
+still not applying. It is not free either.
+
+Re-introducing a generator here needs the missing fact, not better wording. A
+collector that records what each unit actually writes would let a fix emit
+`strict` together with the `ReadWritePaths=` that make it survivable, and that
+fix would be worth having.

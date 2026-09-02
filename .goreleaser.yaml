@@ -118,7 +118,7 @@ nfpms:
         Bug: https://github.com/antaryx/plumbline/issues
 
 # One SBOM per artifact, generated from what was actually built rather than
-# from go.mod. The dependency list is short on purpose — four modules — and
+# from go.mod. The dependency list is short on purpose, three linked modules,
 # publishing it is how that claim becomes checkable instead of a sentence in a
 # README.
 sboms:

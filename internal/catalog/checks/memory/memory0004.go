@@ -16,7 +16,7 @@ var Check0004 = catalog.Check{
 	Title:  "Privileged binaries are built with _FORTIFY_SOURCE",
 
 	Description: `_FORTIFY_SOURCE substitutes a checked variant for libc calls
-whose destination size the compiler can work out — memcpy becomes __memcpy_chk,
+whose destination size the compiler can work out, memcpy becomes __memcpy_chk,
 sprintf becomes __sprintf_chk, and so on. The checked variant knows how large
 the buffer is and aborts instead of writing past it. It costs almost nothing at
 run time and turns a class of buffer overflow into a clean abort.
@@ -27,7 +27,7 @@ produced the call.
 
 Absence is the harder half, because two very different binaries produce it. One
 was compiled without the option. The other was compiled with it and calls
-nothing the macro could substitute — a program that never formats a string or
+nothing the macro could substitute, a program that never formats a string or
 copies a buffer has nothing to fortify, and looks identical from outside.
 
 The check separates them by counting the unfortified originals. A binary that
@@ -89,7 +89,7 @@ than how it manages memory.`,
 		Summary: "Rebuild the binary with _FORTIFY_SOURCE, or obtain a build that has it.",
 		Effort:  "MEDIUM",
 		Steps: []string{
-			"Confirm the finding independently: readelf -sW <path> | grep '_chk' — no output means no fortified entry point was linked.",
+			"Confirm the finding independently: readelf -sW <path> | grep '_chk', no output means no fortified entry point was linked.",
 			"Check which unfortified calls the binary does make: readelf -sW <path> | grep -E 'memcpy|sprintf|strcpy|printf'. Those are what the option would have covered.",
 			"Identify what owns the file: dpkg -S <path> or rpm -qf <path>.",
 			"If it was built locally, rebuild with -D_FORTIFY_SOURCE=3 (or =2 on older toolchains) and an optimisation level of at least -O1, which the macro requires to work at all.",
@@ -107,6 +107,6 @@ than how it manages memory.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "feature_test_macros(7) — _FORTIFY_SOURCE", URL: "https://man7.org/linux/man-pages/man7/feature_test_macros.7.html"},
+		{Title: "feature_test_macros(7), _FORTIFY_SOURCE", URL: "https://man7.org/linux/man-pages/man7/feature_test_macros.7.html"},
 	},
 }

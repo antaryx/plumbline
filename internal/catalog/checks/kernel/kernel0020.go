@@ -23,11 +23,11 @@ into it without dropping a file on disk.
 
 The Yama LSM gates that, and kernel.yama.ptrace_scope chooses how far:
 
-  - 0 — classic behaviour. Any process may trace any other with the same uid.
-  - 1 — a process may trace only its own descendants, unless the target has
+  - 0, classic behaviour. Any process may trace any other with the same uid.
+  - 1, a process may trace only its own descendants, unless the target has
         opted in with PR_SET_PTRACER.
-  - 2 — only a process with CAP_SYS_PTRACE may trace anything.
-  - 3 — no process may trace another, ever, and the value cannot be lowered
+  - 2, only a process with CAP_SYS_PTRACE may trace anything.
+  - 3, no process may trace another, ever, and the value cannot be lowered
         without a reboot.
 
 **Anything above 0 passes**, because the right level depends on what the host
@@ -127,7 +127,7 @@ kernel does not implement would be asking for a line that does nothing.`,
 		Steps: []string{
 			"Check what already sets it: grep -rn ptrace_scope /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Ubuntu ships 1 in a vendor file; most others ship nothing.",
 			"Create or extend a drop-in containing kernel.yama.ptrace_scope = 1. That is the level to start at: it stops a process reading an unrelated one owned by the same user, and leaves an ordinary debugger able to trace the children it started.",
-			"Go to 2 only where no unprivileged debugging happens at all, and to 3 only where nothing debugs anything — 3 cannot be lowered again without a reboot, which is the point of it and also the reason to be sure.",
+			"Go to 2 only where no unprivileged debugging happens at all, and to 3 only where nothing debugs anything, 3 cannot be lowered again without a reboot, which is the point of it and also the reason to be sure.",
 			"Apply without rebooting: sysctl --system, then confirm with sysctl kernel.yama.ptrace_scope.",
 			"Check what debugs what before rolling it out. gdb attaching to a running process, strace on something already started, and some crash reporters and profilers all use ptrace across the process tree. Under 1 the answer for a legitimate debugger is usually to start the target from it rather than attach, or PR_SET_PTRACER on the target.",
 		},
@@ -147,7 +147,7 @@ kernel does not implement would be asking for a line that does nothing.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — Yama ptrace_scope", URL: "https://www.kernel.org/doc/html/latest/admin-guide/LSM/Yama.html"},
+		{Title: "Linux kernel. Yama ptrace_scope", URL: "https://www.kernel.org/doc/html/latest/admin-guide/LSM/Yama.html"},
 		{Title: "sysctl.d(5)", URL: "https://man7.org/linux/man-pages/man5/sysctl.d.5.html"},
 	},
 }

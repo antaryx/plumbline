@@ -27,12 +27,12 @@ legitimate use.
 
 **ICMP redirects.** A redirect is an unauthenticated packet that rewrites this
 host's routing table. Accept one from an attacker on the same segment and
-traffic to a chosen destination goes through them instead — a
+traffic to a chosen destination goes through them instead, a
 man-in-the-middle that needs no ARP spoofing and leaves nothing on disk. A host
 that does not route has no reason to take routing advice from the network.
 
 All four keys must be 0: conf.all and conf.default for each. **default is not
-redundant with all** — it is the template copied into interfaces created after
+redundant with all**, it is the template copied into interfaces created after
 the files are applied, which is every container veth, VPN tunnel and hot-plugged
 NIC on a modern host, and nothing else covers them.
 
@@ -47,8 +47,9 @@ separately even though the fix is the same line twice:
     absence of any configuration is materially worse here.
 
 A key set by a glob counts as set: a file writing net.ipv4.conf.*.accept_source_route
-has configured every interface it matched, and a bare -net.ipv4.conf.all.…
-line withholds that one key from the pattern deliberately.
+has configured every interface it matched, and a bare
+-net.ipv4.conf.all.accept_source_route line withholds that one key from the
+pattern deliberately.
 
 This is a check about files. KERNEL-0015 computes the effective source-routing
 value for each interface that exists right now; redirect acceptance has no
@@ -94,7 +95,7 @@ runtime counterpart yet.`,
 		Steps: []string{
 			"Check what already sets them, patterns included: grep -rn 'accept_source_route\\|accept_redirects' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d.",
 			"Create or extend a drop-in with all four lines: net.ipv4.conf.all.accept_source_route = 0, net.ipv4.conf.default.accept_source_route = 0, net.ipv4.conf.all.accept_redirects = 0, net.ipv4.conf.default.accept_redirects = 0.",
-			"Set the default keys even though the all keys look sufficient. default is the template for interfaces created after the files are applied — container veths, VPN tunnels, hot-plugged NICs — and nothing else reaches them.",
+			"Set the default keys even though the all keys look sufficient. default is the template for interfaces created after the files are applied, container veths, VPN tunnels, hot-plugged NICs, and nothing else reaches them.",
 			"Add the IPv6 equivalents where IPv6 is in use: net.ipv6.conf.all.accept_ra, net.ipv6.conf.all.accept_redirects and net.ipv6.conf.default.accept_redirects. IPv6 has no source-routing key to set, having removed the header, but router advertisements are the larger equivalent exposure.",
 			"Apply without rebooting: sysctl --system, then confirm per interface with sysctl -a | grep -E 'accept_(source_route|redirects)'.",
 			"Set net.ipv4.conf.all.secure_redirects = 0 as well if nothing needs redirects at all; on its own it only narrows acceptance to the current default gateways rather than refusing them.",
@@ -104,7 +105,7 @@ runtime counterpart yet.`,
 			"grep -rn 'accept_source_route\\|accept_redirects' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null",
 			"systemd-analyze cat-config sysctl.d",
 		},
-		Caution: "Refusing redirects is safe on a host with a single default gateway and changes routing behaviour on one that depends on being redirected — an unusual arrangement, but check the routing table on a router or a multi-homed host first. Refusing source routing breaks nothing in modern use; the feature has been deprecated for two decades.",
+		Caution: "Refusing redirects is safe on a host with a single default gateway and changes routing behaviour on one that depends on being redirected, an unusual arrangement, but check the routing table on a router or a multi-homed host first. Refusing source routing breaks nothing in modern use; the feature has been deprecated for two decades.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -114,8 +115,8 @@ runtime counterpart yet.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — ip-sysctl accept_source_route and accept_redirects", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
-		{Title: "RFC 7126 — Filtering of IP-Optioned Packets", URL: "https://www.rfc-editor.org/rfc/rfc7126"},
+		{Title: "Linux kernel, ip-sysctl accept_source_route and accept_redirects", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
+		{Title: "RFC 7126. Filtering of IP-Optioned Packets", URL: "https://www.rfc-editor.org/rfc/rfc7126"},
 		{Title: "sysctl.d(5)", URL: "https://man7.org/linux/man-pages/man5/sysctl.d.5.html"},
 	},
 }

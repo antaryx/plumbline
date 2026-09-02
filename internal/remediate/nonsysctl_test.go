@@ -409,6 +409,11 @@ func TestTheAppArmorFixStartsTheServiceAndEnforces(t *testing.T) {
 	for _, want := range []string{
 		"systemctl enable --now apparmor",
 		"aa-enforce /etc/apparmor.d/*",
+		// aa-enforce ships in apparmor-utils, which a minimal host does not
+		// install even with the kernel module active. The name of the package
+		// is the actionable half of the message.
+		"command -v aa-enforce",
+		"apparmor-utils",
 		// The kernel command line is the one thing neither command can fix,
 		// and a script that left the host silently unconfined would be worse
 		// than one that says so.
@@ -431,6 +436,107 @@ func TestTheAppArmorFixStartsTheServiceAndEnforces(t *testing.T) {
 	if !strings.Contains(script, "systemctl enable --now") || strings.Contains(script, "systemctl start apparmor") {
 		t.Errorf("the service is started without being enabled, so it dies at the next reboot:\n%s", script)
 	}
+
+	// **The call must not appear at the start of a line.** An unguarded
+	// aa-enforce is the whole bug: the script runs under `set -eu`, so a host
+	// without apparmor-utils exits 127 here and loses every action sorted
+	// after SERVICES-0010. Inside the guard the call is indented, and the two
+	// mentions in the else branch are inside an echo.
+	for _, l := range strings.Split(script, "\n") {
+		if strings.HasPrefix(l, "aa-enforce") {
+			t.Errorf("aa-enforce is called unguarded, so a host without apparmor-utils stops here:\n%s", script)
+		}
+	}
+}
+
+// TestTheAppArmorFixDoesNotStopAHostWithoutApparmorUtils.
+//
+// **aa-enforce ships in apparmor-utils, which a minimal server does not install
+// even where the kernel module is active.** Called unguarded it exits 127, and
+// because the script runs under `set -eu` that took the rest of the plan with
+// it: SERVICES-0011 and USERS-0012 sort after this action and never ran. The
+// guard turns a halt into one line on stderr naming the package to install.
+//
+// Both branches run with PATH pointing at a directory this test owns, which is
+// what makes the answer the same on a developer's machine whether or not
+// apparmor-utils happens to be installed on it. Nothing else is needed on that
+// path: `command` and `echo` are shell builtins.
+func TestTheAppArmorFixDoesNotStopAHostWithoutApparmorUtils(t *testing.T) {
+	sh := needSh(t)
+	block := aaEnforceBlock(t, remediate.Script(planFor(t, failures("SERVICES-0010")...)))
+	marker := filepath.Join(t.TempDir(), "called")
+
+	// The host that reported the bug: kernel module active, tooling absent.
+	out, err := runAAEnforce(t, sh, block, t.TempDir(), marker)
+	if err != nil {
+		t.Fatalf("a missing aa-enforce stopped the script (%v):\n%s\nblock:\n%s", err, out, block)
+	}
+	for _, want := range []string{
+		"aa-enforce not found",
+		// The package name is the actionable half; without it the operator
+		// knows only that something is missing.
+		"apparmor-utils",
+		// And the command to run once it is installed, so the enforcement
+		// this run skipped is not left to memory.
+		"aa-enforce /etc/apparmor.d/*",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the warning omits %q:\n%s", want, out)
+		}
+	}
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Error("aa-enforce ran on a host that does not have it")
+	}
+
+	// The same block where the binary exists: it is called, and the install
+	// advice stays quiet because there is nothing to install.
+	bin := t.TempDir()
+	fake := filepath.Join(bin, "aa-enforce")
+	write(t, fake, "#!/bin/sh\n: > \"$PLUMBLINE_MARKER\"\n")
+	if err := os.Chmod(fake, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err = runAAEnforce(t, sh, block, bin, marker)
+	if err != nil {
+		t.Fatalf("the guarded call failed where aa-enforce exists (%v):\n%s", err, out)
+	}
+	if _, statErr := os.Stat(marker); statErr != nil {
+		t.Errorf("aa-enforce was not run on a host that has it: %v\n%s", statErr, out)
+	}
+	if strings.Contains(out, "not found") {
+		t.Errorf("the install advice was printed on a host that already has aa-enforce:\n%s", out)
+	}
+}
+
+// aaEnforceBlock cuts the guarded construct out of a script, from its `if`
+// through its `fi`. Nothing nests inside it, so the first closing `fi` is the
+// right one.
+func aaEnforceBlock(t *testing.T, script string) string {
+	t.Helper()
+	var block []string
+	for _, l := range strings.Split(script, "\n") {
+		if len(block) == 0 && !strings.Contains(l, "command -v aa-enforce") {
+			continue
+		}
+		block = append(block, l)
+		if l == "fi" {
+			return strings.Join(block, "\n") + "\n"
+		}
+	}
+	t.Fatalf("no guarded aa-enforce block in:\n%s", script)
+	return ""
+}
+
+// runAAEnforce runs one block under the same `set -eu` the real script uses,
+// with an environment holding nothing but the path under test and the marker
+// the stand-in binary touches.
+func runAAEnforce(t *testing.T, sh, block, bin, marker string) (string, error) {
+	t.Helper()
+	cmd := exec.Command(sh, "-c", "set -eu\n"+block)
+	cmd.Env = []string{"PATH=" + bin, "PLUMBLINE_MARKER=" + marker}
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
 // TestTheFirewallFixDeclinesAHostThatAlreadyHasAManager.
@@ -552,10 +658,12 @@ func TestTheSystemdDropInIsWrittenAndIsIdempotent(t *testing.T) {
 	sh := needSh(t)
 
 	dir := t.TempDir()
-	f := failures("SERVICES-0011")[0]
+	// SERVICES-0007 rather than the strict tier: 0011 no longer generates a
+	// drop-in at all, and the mechanism under test here belongs to all of them.
+	f := failures("SERVICES-0007")[0]
 	f.Evidence = []finding.Evidence{
 		finding.NewEvidence("/usr/lib/systemd/system/dbus.service", 0, "ProtectSystem=yes", ""),
-		finding.NewEvidence("/usr/lib/systemd/system/cron.service", 0, "ProtectSystem=full", ""),
+		finding.NewEvidence("/usr/lib/systemd/system/cron.service", 0, "ProtectSystem=no", ""),
 	}
 
 	plan := remediate.Generate([]finding.Finding{f}, remediate.Options{UnitDir: dir})
@@ -572,7 +680,7 @@ func TestTheSystemdDropInIsWrittenAndIsIdempotent(t *testing.T) {
 		}
 		got := map[string]string{}
 		for _, unit := range []string{"dbus.service", "cron.service"} {
-			p := filepath.Join(dir, unit+".d", "50-plumbline-sandbox.conf")
+			p := filepath.Join(dir, unit+".d", "50-plumbline-protectsystem.conf")
 			if b, err := os.ReadFile(p); err == nil {
 				got[unit] = string(b)
 			}
@@ -590,14 +698,14 @@ func TestTheSystemdDropInIsWrittenAndIsIdempotent(t *testing.T) {
 		if second[unit] != body {
 			t.Errorf("%s changed on the second run:\n%q\n%q", unit, body, second[unit])
 		}
-		for _, want := range []string{"[Service]", "ProtectSystem=strict", "ProtectHome=yes"} {
+		for _, want := range []string{"[Service]", "ProtectSystem=full"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s drop-in omits %q:\n%s", unit, want, body)
 			}
 		}
 		// One directive per line, once. An append-based helper would show up
 		// here as two copies after the second run.
-		if n := strings.Count(second[unit], "ProtectSystem=strict"); n != 1 {
+		if n := strings.Count(second[unit], "ProtectSystem=full"); n != 1 {
 			t.Errorf("%s has %d copies of ProtectSystem after two runs", unit, n)
 		}
 	}
@@ -611,7 +719,7 @@ func TestTheSystemdDropInIsWrittenAndIsIdempotent(t *testing.T) {
 // chooses the moment. A generated script that restarted them would be applying
 // a change rather than proposing one.
 func TestTheDropInDoesNotRestartTheService(t *testing.T) {
-	f := failures("SERVICES-0011")[0]
+	f := failures("SERVICES-0007")[0]
 	f.Evidence = []finding.Evidence{
 		finding.NewEvidence("/usr/lib/systemd/system/dbus.service", 0, "ProtectSystem=no", ""),
 	}
@@ -647,7 +755,6 @@ func TestTheSandboxFixesAreOnePerConcern(t *testing.T) {
 		{"SERVICES-0006", "50-plumbline-nonewprivileges.conf", "NoNewPrivileges=yes"},
 		{"SERVICES-0007", "50-plumbline-protectsystem.conf", "ProtectSystem=full"},
 		{"SERVICES-0008", "50-plumbline-protecthome.conf", "ProtectHome=yes"},
-		{"SERVICES-0011", "50-plumbline-sandbox.conf", "ProtectSystem=strict"},
 	} {
 		t.Run(c.checkID, func(t *testing.T) {
 			f := failures(c.checkID)[0]
@@ -665,17 +772,90 @@ func TestTheSandboxFixesAreOnePerConcern(t *testing.T) {
 		})
 	}
 
-	// **SERVICES-0007 proposes `full` and SERVICES-0011 proposes `strict`, and
-	// that is not an inconsistency.** 0007's bar is "cannot rewrite /usr",
-	// which full delivers without the service having to be profiled first;
-	// strict requires every writable path to be declared, and 0011 is the check
-	// that asks for that and carries the investigation with it.
+	// **`full` is the strongest directive any generated fix writes.** 0007's
+	// bar is "cannot rewrite /usr", which full delivers while leaving /var and
+	// /run writable, so it does not need the service profiled first. strict is
+	// what SERVICES-0011 asks for, and nothing generates it.
 	seven := failures("SERVICES-0007")[0]
 	seven.Evidence = []finding.Evidence{
 		finding.NewEvidence("/usr/lib/systemd/system/dbus.service", 0, "unset", ""),
 	}
 	if s := remediate.Script(remediate.Generate([]finding.Finding{seven}, remediate.Options{})); strings.Contains(s, "ProtectSystem=strict") {
 		t.Errorf("SERVICES-0007 proposes strict, which needs the service profiled first:\n%s", s)
+	}
+}
+
+// TestTheStrictTierGeneratesNothing.
+//
+// **The regression test for an outage.** SERVICES-0011 used to write a drop-in
+// setting `ProtectSystem=strict` and `ProtectHome=yes` for every unit it
+// failed. Under strict the entire filesystem hierarchy is read-only apart from
+// /dev, /proc and /sys — /run and /var included — so an operator who followed
+// the script's own instruction to restart the units lost systemd-journald,
+// which writes /var/log, and dbus, which creates its socket under /run.
+//
+// The finding is given the exact shape of that incident: the two units that
+// died, cited as evidence, which is all the old generator needed to write both
+// files. Nothing may come out of it.
+//
+// It is a fact about the registry rather than about the shape of an action, so
+// Fixable is asserted too: that is the flag SARIF reads to fall back to the
+// catalog's advisory commands, and the --fix block reads to count the finding
+// as still failing. A fix re-registered with an empty action would satisfy the
+// script assertions below and quietly break both.
+func TestTheStrictTierGeneratesNothing(t *testing.T) {
+	if remediate.Fixable("SERVICES-0011") {
+		t.Error("SERVICES-0011 has a generated fix again; the strict tier cannot be written from a scan")
+	}
+
+	f := failures("SERVICES-0011")[0]
+	f.Detail = "2 audited services are not sandboxed at the strict tier: " +
+		"dbus.service (ProtectSystem=no, ProtectHome=no), " +
+		"systemd-journald.service (ProtectSystem=no, ProtectHome=no)."
+	f.Evidence = []finding.Evidence{
+		finding.NewEvidence("/usr/lib/systemd/system/dbus.service", 0, "ProtectSystem=no", ""),
+		finding.NewEvidence("/usr/lib/systemd/system/systemd-journald.service", 0, "ProtectSystem=no", ""),
+	}
+
+	plan := remediate.Generate([]finding.Finding{f}, remediate.Options{})
+	if len(plan.Actions) != 0 {
+		t.Errorf("the strict tier proposed %d action(s): %+v", len(plan.Actions), plan.Actions)
+	}
+	// Carried, not dropped. An unfixable finding is counted in the --fix block
+	// and keeps its catalog remediation in the warnings above it; a dropped one
+	// would read as a failure with nothing to say about it.
+	if len(plan.Unfixable) != 1 {
+		t.Fatalf("the finding was dropped instead of carried as unfixable: %+v", plan)
+	}
+	if plan.Unfixable[0].CheckID != "SERVICES-0011" {
+		t.Errorf("unfixable carries %s", plan.Unfixable[0].CheckID)
+	}
+
+	script := remediate.Script(plan)
+	for _, forbidden := range []string{
+		"plumbline_dropin",
+		"ProtectSystem=strict",
+		"50-plumbline-sandbox.conf",
+		// The instruction that turned a written file into a restarted daemon.
+		"systemctl restart dbus.service",
+		"systemctl restart systemd-journald.service",
+	} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("the strict tier still emits %q:\n%s", forbidden, script)
+		}
+	}
+
+	// **And the other three sandbox fixes are untouched.** Removing the strict
+	// tier must not disable the family: 0007 on the same host still writes its
+	// drop-in, and it is still `full`, which leaves /var and /run writable.
+	seven := failures("SERVICES-0007")[0]
+	seven.Evidence = f.Evidence
+	mixed := remediate.Script(remediate.Generate([]finding.Finding{f, seven}, remediate.Options{}))
+	if !strings.Contains(mixed, "plumbline_dropin dbus.service 50-plumbline-protectsystem.conf") {
+		t.Errorf("SERVICES-0007 stopped generating when 0011 was removed:\n%s", mixed)
+	}
+	if strings.Contains(mixed, "ProtectSystem=strict") {
+		t.Errorf("strict reached the script through another fix:\n%s", mixed)
 	}
 }
 
@@ -694,9 +874,9 @@ func TestTheSandboxFixesAreOnePerConcern(t *testing.T) {
 // else. This asserts the fix by handing the finding the real shape — a detail
 // that names the exemption, evidence that does not.
 func TestTheDropInIsNeverWrittenForAnExemptedUnit(t *testing.T) {
-	f := failures("SERVICES-0011")[0]
-	f.Detail = "1 audited service is not sandboxed at the strict tier: " +
-		"systemd-journald.service (ProtectSystem=no, ProtectHome=no). " +
+	f := failures("SERVICES-0007")[0]
+	f.Detail = "1 audited service does not run with the system directories read-only: " +
+		"systemd-journald.service (ProtectSystem=no). " +
 		"Not held to this standard: cron.service (runs arbitrary operator-supplied jobs " +
 		"inside its own mount namespace, so a read-only filesystem becomes a restriction " +
 		"on code the packager never saw)."
@@ -723,8 +903,8 @@ func TestTheDropInIsNeverWrittenForAnExemptedUnit(t *testing.T) {
 // yields no action and lands in the unfixable list, which is visible — rather
 // than a drop-in for a unit nobody named.
 func TestAFindingWithNoEvidenceProposesNothing(t *testing.T) {
-	f := failures("SERVICES-0011")[0]
-	f.Detail = "1 audited service is not sandboxed at the strict tier: dbus.service."
+	f := failures("SERVICES-0007")[0]
+	f.Detail = "1 audited service does not run with the system directories read-only: dbus.service."
 
 	plan := remediate.Generate([]finding.Finding{f}, remediate.Options{})
 	if len(plan.Actions) != 0 {

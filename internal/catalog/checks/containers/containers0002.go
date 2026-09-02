@@ -20,8 +20,8 @@ capabilities stop being granted.
 
 Inside a container that closes a specific and well-used path. An attacker with
 code execution as an unprivileged container user looks for a setuid binary in
-the image — and images routinely carry ping, mount, su and sudo without anybody
-having thought about it — then uses it to become root in the container, which is
+the image, and images routinely carry ping, mount, su and sudo without anybody
+having thought about it, then uses it to become root in the container, which is
 the position from which a namespace escape is worth attempting. With the flag
 set, the setuid bit does nothing and the attacker stays where they landed.
 
@@ -29,7 +29,7 @@ The daemon-wide setting is what makes this reliable. Per-container
 --security-opt=no-new-privileges works and depends on whoever wrote the run
 command remembering it, which over a fleet means it is sometimes set.
 
-It defaults to off, so a host with no daemon.json fails this check — correctly,
+It defaults to off, so a host with no daemon.json fails this check, correctly,
 because the default is what such a host is running. It is also cheap: unlike
 user-namespace remapping, turning it on breaks only workloads that were
 deliberately escalating privileges inside a container.`,
@@ -101,7 +101,7 @@ deliberately escalating privileges inside a container.`,
 			"docker info --format '{{.SecurityOptions}}'",
 			"docker run --rm alpine sh -c 'grep NoNewPrivs /proc/self/status'",
 		},
-		Caution: "Restarting the daemon stops every running container unless live-restore is enabled. Schedule it, and check first for entrypoints that rely on sudo or a setuid helper — those will fail after the change rather than at restart.",
+		Caution: "Restarting the daemon stops every running container unless live-restore is enabled. Schedule it, and check first for entrypoints that rely on sudo or a setuid helper, those will fail after the change rather than at restart.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -110,6 +110,6 @@ deliberately escalating privileges inside a container.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "no_new_privs — Linux kernel documentation", URL: "https://docs.kernel.org/userspace-api/no_new_privs.html"},
+		{Title: "no_new_privs. Linux kernel documentation", URL: "https://docs.kernel.org/userspace-api/no_new_privs.html"},
 	},
 }

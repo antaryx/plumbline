@@ -27,15 +27,15 @@ address and hiding where the traffic really came from.
 Two keys are checked, because they answer different questions:
 
   - net.ipv4.conf.default.rp_filter is the template every interface created
-    after boot inherits — a container's veth, a VPN tunnel, a hot-plugged NIC.
+    after boot inherits, a container's veth, a VPN tunnel, a hot-plugged NIC.
     Nothing else covers those, because they do not exist when the files are
     applied.
   - net.ipv4.conf.all.rp_filter is the floor. The kernel takes the *maximum*
     of it and the interface's own value, so it can raise filtering everywhere
     but never lower it.
 
-Either 1 or 2 passes. 1 is strict — the reverse path must be the same
-interface — and 2 is loose, requiring only that the source be routable
+Either 1 or 2 passes. 1 is strict, the reverse path must be the same
+interface, and 2 is loose, requiring only that the source be routable
 somewhere. Loose mode is the correct and deliberate choice on a multi-homed
 host with asymmetric routing, so failing it would punish the operators who
 thought about it hardest.
@@ -168,7 +168,7 @@ interface that exists right now.`,
 			"grep -rn rp_filter /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null",
 			"systemd-analyze cat-config sysctl.d",
 		},
-		Caution: "Strict mode drops legitimate traffic on a host with asymmetric routing — multiple uplinks, policy routing, or a router doing anything other than symmetric forwarding. Check the routing table before setting 1 host-wide; loose mode (2) is the safe answer where routing is not symmetric, and a per-interface override is the answer where only one interface is affected.",
+		Caution: "Strict mode drops legitimate traffic on a host with asymmetric routing, multiple uplinks, policy routing, or a router doing anything other than symmetric forwarding. Check the routing table before setting 1 host-wide; loose mode (2) is the safe answer where routing is not symmetric, and a per-interface override is the answer where only one interface is affected.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -178,8 +178,8 @@ interface that exists right now.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — ip-sysctl rp_filter", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
-		{Title: "RFC 3704 — Ingress Filtering for Multihomed Networks", URL: "https://www.rfc-editor.org/rfc/rfc3704"},
+		{Title: "Linux kernel, ip-sysctl rp_filter", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
+		{Title: "RFC 3704. Ingress Filtering for Multihomed Networks", URL: "https://www.rfc-editor.org/rfc/rfc3704"},
 		{Title: "sysctl.d(5)", URL: "https://man7.org/linux/man-pages/man5/sysctl.d.5.html"},
 	},
 }

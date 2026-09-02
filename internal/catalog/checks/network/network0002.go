@@ -21,7 +21,7 @@ the ports somebody thought of on the day they wrote it, and against nothing
 else. Every port a future package opens is reachable the moment it opens;
 every service moved to a new port is reachable at the new one; every daemon
 that binds an ephemeral port is reachable there. The ruleset does not have to
-be wrong for this to happen — it only has to be finished.
+be wrong for this to happen. It only has to be finished.
 
 Default-deny with a list of allows fails closed. A new listening socket is
 unreachable until somebody decides otherwise, which converts "we did not think
@@ -33,7 +33,7 @@ How the default is written depends on the tool. nftables and iptables state it
 on the input chain (` + "`policy drop`" + `, ` + "`:INPUT DROP`" + `). ufw states it in
 /etc/default/ufw as DEFAULT_INPUT_POLICY. firewalld has no policy keyword at
 all: every zone it ships rejects what it does not explicitly allow **except**
-` + "`trusted`" + `, whose target is ACCEPT — so on firewalld the default zone's name
+` + "`trusted`" + `, whose target is ACCEPT, so on firewalld the default zone's name
 is the policy, and it is the one setting an operator can get catastrophically
 wrong in a single word.`,
 
@@ -102,7 +102,7 @@ wrong in a single word.`,
 		Steps: []string{
 			"Enumerate what must keep working before changing the default: 'ss -tulpn' for listening sockets, and the firewall's own rule list for what is currently permitted. Anything reachable today that is not in your allow list will stop being reachable.",
 			"Write the allow rules first, with the default still at accept. They have no effect yet, which is exactly why this order is safe.",
-			"Change the default last. ufw: 'ufw default deny incoming'. nftables: set 'policy drop' on the input chain. iptables: ':INPUT DROP' in the saved rules, or 'iptables -P INPUT DROP'. firewalld: change DefaultZone away from 'trusted' — 'firewall-cmd --set-default-zone=public'.",
+			"Change the default last. ufw: 'ufw default deny incoming'. nftables: set 'policy drop' on the input chain. iptables: ':INPUT DROP' in the saved rules, or 'iptables -P INPUT DROP'. firewalld: change DefaultZone away from 'trusted', 'firewall-cmd --set-default-zone=public'.",
 			"Do not forget loopback and established traffic. A default-drop input chain with no 'iif lo accept' breaks every local service that talks to itself, and one with no conntrack accept for established connections breaks every outbound connection's replies. Both failures look like the network is broken rather than like the firewall is.",
 			"Verify from another host: 'nmap -Pn <host>' from somewhere else is the only measurement that reflects what an attacker sees.",
 		},
@@ -120,7 +120,7 @@ wrong in a single word.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "firewalld.zone(5) — zone targets", URL: "https://firewalld.org/documentation/man-pages/firewalld.zone.html"},
+		{Title: "firewalld.zone(5), zone targets", URL: "https://firewalld.org/documentation/man-pages/firewalld.zone.html"},
 	},
 }
 

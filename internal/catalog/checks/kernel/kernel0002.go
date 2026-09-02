@@ -77,6 +77,6 @@ profiling tools such as perf.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel documentation — kptr_restrict", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#kptr-restrict"},
+		{Title: "Linux kernel documentation, kptr_restrict", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#kptr-restrict"},
 	},
 }

@@ -16,14 +16,14 @@ var Check0001 = catalog.Check{
 	Module: "FILESYS",
 	Title:  "No setuid or setgid executable is writable by group or other",
 	Description: `A setuid executable runs with its owner's privileges rather
-than the caller's — usually root's. That is the entire point of the mechanism
+than the caller's, usually root's. That is the entire point of the mechanism
 and it is why passwd, sudo and mount work at all. It also means the file's
 *contents* are executed as root by anybody who runs it.
 
 So a setuid binary that a non-root account can write is not a permissions
 problem. It is a root shell with a waiting period: the unprivileged account
 overwrites the file with anything it likes, waits for the next person to run it
-— or runs it themselves — and the code executes as the owner. No exploit, no
+, or runs it themselves, and the code executes as the owner. No exploit, no
 vulnerability, no authentication step. The same reasoning applies to setgid,
 one privilege level down.
 
@@ -96,7 +96,7 @@ service account and happens to ship a setuid helper.`,
 			"rpm -Vf <path>",
 			"dpkg --verify",
 		},
-		Caution: "Removing the setuid bit from a binary that genuinely needs it breaks whatever depends on it, sometimes only for non-root users and sometimes only at the next reboot. Remove the *write* bits first — that closes the escalation immediately and changes nothing else — and evaluate the setuid bit separately.",
+		Caution: "Removing the setuid bit from a binary that genuinely needs it breaks whatever depends on it, sometimes only for non-root users and sometimes only at the next reboot. Remove the *write* bits first, that closes the escalation immediately and changes nothing else, and evaluate the setuid bit separately.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -106,6 +106,6 @@ service account and happens to ship a setuid helper.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "chmod(1) — setuid and setgid", URL: "https://man7.org/linux/man-pages/man1/chmod.1.html"},
+		{Title: "chmod(1), setuid and setgid", URL: "https://man7.org/linux/man-pages/man1/chmod.1.html"},
 	},
 }

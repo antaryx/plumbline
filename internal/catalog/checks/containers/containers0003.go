@@ -23,9 +23,9 @@ others. A database that publishes no port to the host is still on the bridge,
 and a web container running attacker code is on the same bridge, so the
 database's port is one connection away. Setting icc to false replaces the
 blanket ACCEPT with DROP, after which containers reach each other only through
-links or published ports — connections somebody had to ask for.
+links or published ports, connections somebody had to ask for.
 
-The default is true, so a host with no daemon.json fails this check —
+The default is true, so a host with no daemon.json fails this check,
 correctly, because the default is what such a host is running.
 
 **This governs the default bridge and nothing else.** Containers on a
@@ -103,7 +103,7 @@ ad-hoc and many CI ones, and it costs nothing to set.`,
 			"Find containers on the default bridge that talk to each other: docker network inspect bridge lists them, and anything relying on that path will stop working.",
 			"Create or edit /etc/docker/daemon.json and set \"icc\": false.",
 			"Restart the daemon: systemctl restart docker.",
-			"Give the containers that do need to talk a user-defined network instead — docker network create, then --network on each — which is the supported way to scope container-to-container traffic and is unaffected by icc.",
+			"Give the containers that do need to talk a user-defined network instead, docker network create, then --network on each, which is the supported way to scope container-to-container traffic and is unaffected by icc.",
 			"Verify: docker network inspect bridge should report com.docker.network.bridge.enable_icc as false.",
 		},
 		Commands: []string{
@@ -119,6 +119,6 @@ ad-hoc and many CI ones, and it costs nothing to set.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Docker — container communication on the default bridge", URL: "https://docs.docker.com/engine/network/drivers/bridge/"},
+		{Title: "Docker, container communication on the default bridge", URL: "https://docs.docker.com/engine/network/drivers/bridge/"},
 	},
 }

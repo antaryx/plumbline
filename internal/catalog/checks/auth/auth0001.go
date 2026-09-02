@@ -31,7 +31,7 @@ document describing fourteen-character minimums can coexist indefinitely with a
 host that enforces none of it.
 
 The module has to be **enforcing**, and that is the half most often wrong. PAM's
-'optional' control means the result is ignored entirely — the module runs, it
+'optional' control means the result is ignored entirely, the module runs, it
 computes that the password is unacceptable, and PAM proceeds to set it anyway.
 A stack with 'password optional pam_pwquality.so' reads to a human exactly like
 one that works, and produces no output distinguishing itself from one. Only
@@ -40,7 +40,7 @@ bad, actually refuse the password.
 
 This check reports whether the rule is written with an enforcing control. It
 does not simulate the stack around it, so a 'sufficient' rule placed above the
-quality module — which would short-circuit before reaching it — is not detected
+quality module, which would short-circuit before reaching it, is not detected
 here; see the check's specification for the full list of what it cannot see.`,
 
 	BaseSeverity: finding.High,
@@ -101,7 +101,7 @@ here; see the check's specification for the full list of what it cannot see.`,
 		Effort:  "MEDIUM",
 		Steps: []string{
 			"Install the module if it is missing: 'apt install libpam-pwquality' or 'dnf install libpwquality'. On Red Hat it is normally present already.",
-			"Do not hand-edit the shared stack on a system that generates it. Red Hat's system-auth is managed by authselect — 'authselect enable-feature with-pwquality' — and a hand edit is overwritten at the next authselect apply, silently, possibly months later. Debian's common-password is managed by pam-auth-update.",
+			"Do not hand-edit the shared stack on a system that generates it. Red Hat's system-auth is managed by authselect, 'authselect enable-feature with-pwquality', and a hand edit is overwritten at the next authselect apply, silently, possibly months later. Debian's common-password is managed by pam-auth-update.",
 			"Where you do edit it directly, place the rule *before* pam_unix.so in the password stack, with control 'requisite': 'password requisite pam_pwquality.so retry=3'. After pam_unix.so it never runs, because pam_unix has already set the password.",
 			"Set the parameters in /etc/security/pwquality.conf rather than as module arguments. The file is the same on every host you manage, survives a stack regeneration, and is what AUTH-0002 reads.",
 			"Test before logging out, from a second session: 'passwd' as an unprivileged test account and offer a one-character password. It must be refused. A rule that is present and not enforcing accepts it, which is precisely the failure this check is about.",
@@ -121,6 +121,6 @@ here; see the check's specification for the full list of what it cannot see.`,
 
 	References: []finding.Reference{
 		{Title: "pam_pwquality(8)", URL: "https://man7.org/linux/man-pages/man8/pam_pwquality.8.html"},
-		{Title: "pam.conf(5) — control flags", URL: "https://man7.org/linux/man-pages/man5/pam.conf.5.html"},
+		{Title: "pam.conf(5), control flags", URL: "https://man7.org/linux/man-pages/man5/pam.conf.5.html"},
 	},
 }

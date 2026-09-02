@@ -30,13 +30,13 @@ var Check0014 = catalog.Check{
 	Title:  "Core dumps are not written to an attacker-influenced location",
 	Description: `A core dump is a copy of a process's memory. Where it lands is
 decided entirely by kernel.core_pattern, and the kernel's own default is the
-bare word "core" — a relative path, which means the dump is written into the
+bare word "core", a relative path, which means the dump is written into the
 crashing process's current working directory.
 
 That is the dangerous case. A daemon's working directory is not always a place
 the operator has thought about, and a process that can be induced to chdir
-somewhere writable will drop its memory — session tokens, decrypted
-configuration, private keys — into a directory an attacker is watching. Writing
+somewhere writable will drop its memory, session tokens, decrypted
+configuration, private keys, into a directory an attacker is watching. Writing
 cores into /tmp is the same failure stated explicitly.
 
 A pattern beginning with "|" pipes the dump to a program instead of writing it
@@ -135,7 +135,7 @@ dump at all.`,
 		Steps: []string{
 			"Where the distribution ships a crash handler, use it: systemd hosts set 'kernel.core_pattern = |/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h'.",
 			"Where crash dumps are not wanted at all, disable them with a handler that discards: 'kernel.core_pattern = |/bin/false'.",
-			"Where dumps must be written to disk, use an absolute path in a directory owned by root and mode 0700, and set a retention policy — a core dump is a copy of process memory and is as sensitive as the process was.",
+			"Where dumps must be written to disk, use an absolute path in a directory owned by root and mode 0700, and set a retention policy, a core dump is a copy of process memory and is as sensitive as the process was.",
 			"Persist the choice in /etc/sysctl.d/, then verify: sysctl kernel.core_pattern",
 		},
 		Commands: []string{
@@ -151,7 +151,7 @@ dump at all.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "core(5) — naming of core dump files", URL: "https://man7.org/linux/man-pages/man5/core.5.html"},
+		{Title: "core(5), naming of core dump files", URL: "https://man7.org/linux/man-pages/man5/core.5.html"},
 	},
 }
 

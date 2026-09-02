@@ -18,18 +18,18 @@ var Check0029 = catalog.Check{
 
 	Description: `A core dump is the crashing process's memory written to disk.
 For an ordinary program that is a debugging convenience. For a setuid program it
-is a copy of whatever the program held while running as somebody else — a
+is a copy of whatever the program held while running as somebody else, a
 password read from a terminal, a private key, a Kerberos ticket, a session token
-— plus the addresses everything sat at, which is a defeat of layout
+, plus the addresses everything sat at, which is a defeat of layout
 randomisation thrown in.
 
 fs.suid_dumpable decides what happens when a setuid or setgid program crashes:
 
-  - 0 — no dump. The upstream default.
-  - 1 — dump like any other process, owned by the *running* user. An
+  - 0, no dump. The upstream default.
+  - 1, dump like any other process, owned by the *running* user. An
     unprivileged user crashes a setuid binary and reads privileged memory out
     of the resulting file. This is the value that must never be set.
-  - 2 — dump, readable only by root. "suidsafe": what systemd-coredump needs to
+  - 2, dump, readable only by root. "suidsafe": what systemd-coredump needs to
     capture a crash of a setuid binary at all.
 
 **0 and 2 both pass, and they are not equivalent.** At 2 the privileged memory
@@ -43,7 +43,7 @@ values this check does. The pair used to disagree about 2, which put a PASS and
 a FAIL on the same parameter in one report.
 
 This is a check about files. The kernel already defaults to 0, so most hosts
-fail this while being safe today — which is the point: a default is not a
+fail this while being safe today, which is the point: a default is not a
 decision, and nothing on the host records that anyone chose it.`,
 
 	// High. This is the parameter's own severity rather than the severity of
@@ -144,9 +144,9 @@ decision, and nothing on the host records that anyone chose it.`,
 		Summary: "Write fs.suid_dumpable = 0 to a file in /etc/sysctl.d/, or 2 where crash reports for setuid binaries are needed.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Check what already sets it: grep -rn suid_dumpable /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Expect nothing on most hosts — the kernel defaults to 0 and no distribution in this project's corpus writes it down.",
+			"Check what already sets it: grep -rn suid_dumpable /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. Expect nothing on most hosts, the kernel defaults to 0 and no distribution in this project's corpus writes it down.",
 			"Create or extend a drop-in containing fs.suid_dumpable = 0. Write it down even though the running kernel almost certainly reports 0 already: that is the built-in default rather than a decision, and a debugging or crash-reporting package that sets 1 will win silently.",
-			"Use 2 instead only where crashes of setuid binaries genuinely have to be captured — systemd-coredump cannot collect them at 0. Understand what that buys the attacker who reaches root, and make sure the dumps are not swept into a backup or a log shipper.",
+			"Use 2 instead only where crashes of setuid binaries genuinely have to be captured, systemd-coredump cannot collect them at 0. Understand what that buys the attacker who reaches root, and make sure the dumps are not swept into a backup or a log shipper.",
 			"Apply without rebooting: sysctl --system, then confirm with sysctl fs.suid_dumpable.",
 			"Check where dumps land if you set 2: kernel.core_pattern decides, and a pattern piping to a program runs that program as root. KERNEL-0014 covers it.",
 		},
@@ -155,7 +155,7 @@ decision, and nothing on the host records that anyone chose it.`,
 			"grep -rn suid_dumpable /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null",
 			"sysctl kernel.core_pattern",
 		},
-		Caution: "At 0 a crashing setuid binary produces nothing to debug with, which matters if you are actually chasing a crash in one. That is the intended trade. Note that 2 is not a middle setting for safety — it is a middle setting for debuggability, and the memory still reaches the disk.",
+		Caution: "At 0 a crashing setuid binary produces nothing to debug with, which matters if you are actually chasing a crash in one. That is the intended trade. Note that 2 is not a middle setting for safety, it is a middle setting for debuggability, and the memory still reaches the disk.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -165,7 +165,7 @@ decision, and nothing on the host records that anyone chose it.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — fs.suid_dumpable", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#suid-dumpable"},
+		{Title: "Linux kernel, fs.suid_dumpable", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#suid-dumpable"},
 		{Title: "core(5)", URL: "https://man7.org/linux/man-pages/man5/core.5.html"},
 	},
 }

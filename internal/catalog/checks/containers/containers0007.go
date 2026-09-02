@@ -34,7 +34,7 @@ mining cryptocurrency within hours.
 
 **The two never both apply on a running host.** dockerd refuses to start when
 an option is given as a flag and in the configuration file at once, and hosts
-is the option it refuses over most often — adding it to daemon.json on a stock
+is the option it refuses over most often, adding it to daemon.json on a stock
 installation is the well-known way to make Docker stop starting, because the
 unit already passes -H fd://. So on any host whose daemon is running, at most
 one of these two files decides the sockets, and the pair of checks covers both
@@ -141,7 +141,7 @@ a finding, for the reasons CONTAINERS-0006 gives.`,
 			"Edit /etc/docker/daemon.json and delete the tcp:// entry from hosts, leaving the unix socket. Removing the key entirely is also correct and hands the decision back to the systemd unit.",
 			"If remote access is genuinely needed, do not simply set \"tls\": true: it encrypts without authenticating and leaves the port open to anyone who can reach it. Generate a CA and a server certificate, set \"tlsverify\": true with tlscacert, tlscert and tlskey, and issue each client its own signed certificate.",
 			"Prefer a route that needs no open port at all where one exists: docker context create --docker host=ssh://user@host carries the API over SSH and authenticates with the keys already deployed.",
-			"Restart the daemon: systemctl restart docker. If it refuses to start with a message about hosts being specified both as a flag and in the configuration file, the systemd unit is passing -H as well — decide which of the two files owns the sockets and remove it from the other.",
+			"Restart the daemon: systemctl restart docker. If it refuses to start with a message about hosts being specified both as a flag and in the configuration file, the systemd unit is passing -H as well, decide which of the two files owns the sockets and remove it from the other.",
 			"Verify from another machine that the old port is closed, not merely firewalled off from where you happened to test.",
 			"Treat any host that was exposed as suspect rather than fixed: an unauthenticated daemon is compromised in hours, so audit docker ps -a, the image list and the host's crontabs before considering the incident closed.",
 		},
@@ -161,8 +161,8 @@ a finding, for the reasons CONTAINERS-0006 gives.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Docker — protect the Docker daemon socket", URL: "https://docs.docker.com/engine/security/protect-access/"},
-		{Title: "Docker — daemon configuration file reference", URL: "https://docs.docker.com/reference/cli/dockerd/"},
+		{Title: "Docker, protect the Docker daemon socket", URL: "https://docs.docker.com/engine/security/protect-access/"},
+		{Title: "Docker, daemon configuration file reference", URL: "https://docs.docker.com/reference/cli/dockerd/"},
 	},
 }
 

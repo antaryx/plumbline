@@ -16,7 +16,7 @@ var Check0005 = catalog.Check{
 	Description: `Two accounts sharing a uid are the same account as far as the
 kernel is concerned. They can read each other's files, signal each other's
 processes and inherit each other's group memberships, while appearing in every
-listing as two separate identities — which destroys attribution: an audit log
+listing as two separate identities, which destroys attribution: an audit log
 recording a uid cannot say which of the two names was responsible.
 
 Two entries sharing a name are worse in a different way. Name resolution
@@ -25,8 +25,8 @@ shell, its home directory and its group are all silently ignored. An
 administrator who edits the second copy makes no change at all and has no way
 to tell.
 
-Both states are usually accidental — a provisioning script that allocated a uid
-already in use, or a file edited by two tools at once — and both are also a
+Both states are usually accidental, a provisioning script that allocated a uid
+already in use, or a file edited by two tools at once, and both are also a
 tidy way to hide an account in plain sight.`,
 
 	BaseSeverity: finding.High,
@@ -97,14 +97,14 @@ tidy way to hide an account in plain sight.`,
 			"List the collisions: 'awk -F: '\\''{print $3}'\\'' /etc/passwd | sort | uniq -d' for uids, and the same on $1 for names.",
 			"For a duplicated uid, decide which account should keep it and record which files the other owns before changing anything: 'find / -xdev -uid <uid> -print > /root/uid-<uid>.list'.",
 			"Allocate a free uid and apply it: 'usermod -u <newuid> <name>', then re-own the recorded files with 'chown'.",
-			"For a duplicated name, remove the unreachable entry — but first confirm it is genuinely redundant, because it may be the entry somebody believed was in effect.",
+			"For a duplicated name, remove the unreachable entry, but first confirm it is genuinely redundant, because it may be the entry somebody believed was in effect.",
 			"Verify with 'pwck', which reports both conditions.",
 		},
 		Commands: []string{
 			"pwck -r",
 			"awk -F: '{print $3}' /etc/passwd | sort | uniq -d",
 		},
-		Caution: "Changing a uid does not change the ownership of files already on disk; those files become owned by whatever account now holds the old uid. Record the file list before making the change — after it, the old uid no longer identifies them.",
+		Caution: "Changing a uid does not change the ownership of files already on disk; those files become owned by whatever account now holds the old uid. Record the file list before making the change, after it, the old uid no longer identifies them.",
 	},
 
 	Mappings: []finding.ControlRef{

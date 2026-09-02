@@ -26,7 +26,7 @@ security update sits unapplied until a maintenance window that keeps slipping.
 The exposure is not the downtime; it is the months of running a known-vulnerable
 daemon because the alternative was an outage nobody would authorise.
 
-It defaults to off, so a host with no daemon.json fails this check —
+It defaults to off, so a host with no daemon.json fails this check,
 correctly, because the default is what such a host is running.
 
 Two limits worth knowing before enabling it. It does not cover a change to the
@@ -94,7 +94,7 @@ manages container lifecycle itself.`,
 		Steps: []string{
 			"Check first whether this host runs Swarm mode: live-restore is incompatible with it, and a Swarm node should be drained and updated rather than kept running through a daemon restart.",
 			"Create or edit /etc/docker/daemon.json and set \"live-restore\": true.",
-			"Restart the daemon once to apply it. That restart is still an outage — the setting protects subsequent ones, not the one that enables it.",
+			"Restart the daemon once to apply it. That restart is still an outage, the setting protects subsequent ones, not the one that enables it.",
 			"Verify: docker info should report Live Restore Enabled: true.",
 			"Test it before relying on it: start a container, systemctl restart docker, and confirm the container is still running and still reachable.",
 		},
@@ -111,6 +111,6 @@ manages container lifecycle itself.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Docker — keep containers alive during daemon downtime", URL: "https://docs.docker.com/engine/daemon/live-restore/"},
+		{Title: "Docker, keep containers alive during daemon downtime", URL: "https://docs.docker.com/engine/daemon/live-restore/"},
 	},
 }

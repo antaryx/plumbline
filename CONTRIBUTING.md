@@ -15,7 +15,7 @@ system and produce typed **facts**. **Checks** are pure functions from facts to
 **findings**. Nothing else touches the OS; nothing in a check is allowed to be
 non-deterministic.
 
-This is what makes 79 checks testable from fixtures instead of from a thousand
+This is what makes 112 checks testable from fixtures instead of from a thousand
 virtual machines, and every rule below protects it. **If a task seems to require
 breaking that split, the task has been misunderstood** — say so rather than
 working around it.
@@ -100,7 +100,7 @@ never invoke `sh -c`.
 output. "It should work" is not a status report.
 
 **10. No auto-remediation.** Plumbline generates fix instructions. It never
-applies them. There is no `--fix` flag and there never will be
+applies them. `scan --fix` proposes a script and executes nothing
 (`docs/adr/0006-no-auto-remediation.md`).
 
 Rules 1, 2 and 5 are enforced by `make invariants` and CI blocks on them. The
@@ -245,6 +245,6 @@ Do not open a public issue. See `SECURITY.md`.
 
 ## Licence
 
-Contributions are accepted under the Apache License 2.0. By opening a pull
-request you confirm you have the right to submit the work under that licence.
-There is no CLA.
+Contributions are accepted under the Apache License 2.0. By opening a pull request
+you confirm you have the right to submit the work under that licence. There is
+no CLA.

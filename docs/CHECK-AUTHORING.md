@@ -205,7 +205,7 @@ Rules:
   someone out of a machine in another country.
 - **Never a command that cannot be reviewed.** No piped downloads, no `sed -i`
   over a file whose format you have not parsed.
-- Plumbline never runs any of this. There is no `--fix` flag.
+- Plumbline never runs any of this. `scan --fix` prints it for review.
 
 ---
 

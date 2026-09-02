@@ -30,13 +30,13 @@ itself will not trim it.
 
 **A full /var/lib/docker is not a logging incident, it is an outage.** The
 daemon cannot write container state, containers cannot start, and on most hosts
-/var is the same filesystem the package manager and the journal use — so the
+/var is the same filesystem the package manager and the journal use, so the
 recovery tools go down with it. It is also a denial of service somebody else can
 reach: anything that can make a containerised service log can make it log a lot,
 which turns a chatty error path into a way to stop the host.
 
-The other half is retention. Whatever the logs are for — an investigation, an
-incident timeline, a compliance obligation — they have to still exist when
+The other half is retention. Whatever the logs are for, an investigation, an
+incident timeline, a compliance obligation, they have to still exist when
 somebody looks. json-file's are deleted with the container, so a compromised
 container that is restarted takes its own evidence with it, and "docker logs"
 on the new one shows nothing. A driver that ships the output off the host keeps
@@ -48,8 +48,8 @@ Four shapes pass:
     Docker's own recommendation for a host that keeps its logs locally.
   - **journald** or **syslog**, which hand each line to the daemon that already
     owns rotation and retention on this host.
-  - a shipping driver — **fluentd**, **gelf**, **awslogs**, **splunk**,
-    **gcplogs** — which sends the output somewhere else, so neither this disk
+  - a shipping driver, **fluentd**, **gelf**, **awslogs**, **splunk**,
+    **gcplogs**, which sends the output somewhere else, so neither this disk
     nor the loss of this host is what bounds it.
   - **json-file with a max-size log option**, which is the default driver made
     to rotate. Whether 10m or 10g is a sensible bound is a judgement this build
@@ -207,13 +207,13 @@ the day rather than continuously.`,
 		Summary: "Set a logging driver that bounds and retains container output, and restart the daemon.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Decide first where the logs should live. If this host is part of an estate with central logging, use the driver that ships to it — fluentd, gelf, awslogs, splunk or gcplogs — because that is the only option that survives the host.",
+			"Decide first where the logs should live. If this host is part of an estate with central logging, use the driver that ships to it, fluentd, gelf, awslogs, splunk or gcplogs, because that is the only option that survives the host.",
 			"If the logs stay on the host and journald is already collecting everything else, set \"log-driver\": \"journald\" in /etc/docker/daemon.json. Container output then obeys the journal's own SystemMaxUse limits, and docker logs keeps working.",
 			"If neither applies, use \"log-driver\": \"local\", which rotates at 20 MB across five files with nothing else to configure.",
-			"To keep json-file — because a tool reads the file directly, say — bound it explicitly: \"log-driver\": \"json-file\" with \"log-opts\": {\"max-size\": \"10m\", \"max-file\": \"3\"}.",
+			"To keep json-file, because a tool reads the file directly, say, bound it explicitly: \"log-driver\": \"json-file\" with \"log-opts\": {\"max-size\": \"10m\", \"max-file\": \"3\"}.",
 			"Check the file parses before restarting anything: dockerd --validate --config-file /etc/docker/daemon.json. A malformed daemon.json stops the daemon from starting at all.",
 			"Restart the daemon: systemctl restart docker.",
-			"The setting is a default for containers started afterwards. Existing containers keep the driver they were created with, so recreate them — or accept that the old ones are still unbounded.",
+			"The setting is a default for containers started afterwards. Existing containers keep the driver they were created with, so recreate them, or accept that the old ones are still unbounded.",
 			"Deal with what has already accumulated: du -sh /var/lib/docker/containers/* will show which container's log is the problem, and it is truncated safely only by recreating the container, not by deleting the file underneath a running daemon.",
 		},
 		Commands: []string{
@@ -221,7 +221,7 @@ the day rather than continuously.`,
 			"du -sh /var/lib/docker/containers/*/*-json.log 2>/dev/null | sort -h | tail",
 			"dockerd --validate --config-file /etc/docker/daemon.json",
 		},
-		Caution: "Changing the driver changes where docker logs reads from, so anything that scrapes the json files directly — a log agent bind-mounted onto /var/lib/docker/containers is the usual one — stops seeing new output. Restarting the daemon also stops every running container unless live-restore is enabled.",
+		Caution: "Changing the driver changes where docker logs reads from, so anything that scrapes the json files directly, a log agent bind-mounted onto /var/lib/docker/containers is the usual one, stops seeing new output. Restarting the daemon also stops every running container unless live-restore is enabled.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -232,9 +232,9 @@ the day rather than continuously.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Docker — configure logging drivers", URL: "https://docs.docker.com/engine/logging/configure/"},
-		{Title: "Docker — local file logging driver", URL: "https://docs.docker.com/engine/logging/drivers/local/"},
-		{Title: "Docker — daemon configuration file reference", URL: "https://docs.docker.com/reference/cli/dockerd/"},
+		{Title: "Docker, configure logging drivers", URL: "https://docs.docker.com/engine/logging/configure/"},
+		{Title: "Docker, local file logging driver", URL: "https://docs.docker.com/engine/logging/drivers/local/"},
+		{Title: "Docker, daemon configuration file reference", URL: "https://docs.docker.com/reference/cli/dockerd/"},
 	},
 }
 

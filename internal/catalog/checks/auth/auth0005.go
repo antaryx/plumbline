@@ -48,7 +48,7 @@ well as cycles, which is what defeats the GPU rather than merely inconveniencing
 it.
 
 DES crypt is worse than slow-versus-fast. It uses the **first eight characters
-of the password and discards the rest** — so a twenty-character passphrase on
+of the password and discards the rest**, so a twenty-character passphrase on
 such a host is an eight-character password, AUTH-0002's length requirement is
 decoration, and the account is brute-forceable regardless of what the user
 chose.
@@ -145,7 +145,7 @@ steals today.`,
 			"Choose the algorithm the distribution's libcrypt supports. yescrypt on Debian 11+, Ubuntu 22.04+ and Fedora; sha512 everywhere else. Setting yescrypt on a host whose libcrypt does not implement it makes password changes fail, and the failure appears at the next 'passwd' rather than when the file is saved.",
 			"Change it through the distribution's mechanism: 'authselect' on Red Hat, 'pam-auth-update' on Debian. A hand edit to a generated stack is overwritten at the next regeneration, silently.",
 			"Set ENCRYPT_METHOD in /etc/login.defs to match. useradd and chpasswd read that file rather than the PAM stack, so leaving them disagreeing means an account's hash depends on which tool created it.",
-			"Rotate the existing passwords. The algorithm applies when a password is set and not before, so every hash written under the old one stays exactly as weak as it was — this step is the one that actually changes what a stolen /etc/shadow is worth.",
+			"Rotate the existing passwords. The algorithm applies when a password is set and not before, so every hash written under the old one stays exactly as weak as it was, this step is the one that actually changes what a stolen /etc/shadow is worth.",
 			"Confirm the change took effect by looking at a hash you just set: the field's prefix names the algorithm ('$y$' yescrypt, '$6$' SHA-512, '$1$' MD5, no prefix at all DES).",
 		},
 		Commands: []string{
@@ -162,7 +162,7 @@ steals today.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "crypt(5) — hashing methods", URL: "https://man7.org/linux/man-pages/man5/crypt.5.html"},
+		{Title: "crypt(5), hashing methods", URL: "https://man7.org/linux/man-pages/man5/crypt.5.html"},
 		{Title: "pam_unix(8)", URL: "https://man7.org/linux/man-pages/man8/pam_unix.8.html"},
 	},
 }

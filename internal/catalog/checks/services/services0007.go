@@ -19,16 +19,16 @@ var Check0007 = catalog.Check{
 writing into read-only, in a mount namespace private to that service. It has
 four levels and they are cumulative:
 
-  - no       — the default. The service may write anywhere its uid allows.
-  - yes      — /usr and the boot loader directories are read-only.
-  - full     — adds /etc.
-  - strict   — the entire hierarchy is read-only except /dev, /proc and /sys,
+  - no      , the default. The service may write anywhere its uid allows.
+  - yes, /usr and the boot loader directories are read-only.
+  - full    , adds /etc.
+  - strict  , the entire hierarchy is read-only except /dev, /proc and /sys,
                which is what a daemon with an explicit ReadWritePaths should use.
 
 **Write access to /usr is a persistence vector, not an untidiness.** A daemon
 compromised through its own network-facing code can replace a binary that
-something else runs as root — a package's helper, a shell that a login invokes,
-a systemd generator — and survive the restart of the service that was actually
+something else runs as root, a package's helper, a shell that a login invokes,
+a systemd generator, and survive the restart of the service that was actually
 exploited. Write access to /etc is the same idea one level up: rewrite a PAM
 line, a sudoers drop-in, or a unit file, and the next boot hands the attacker
 everything. Read-only mounts remove the step entirely rather than making it
@@ -36,7 +36,7 @@ harder, which is why this rates above the rest of the sandboxing directives.
 
 Anything from yes upward passes. The check does not insist on strict, because
 the right level depends on what the daemon legitimately writes, and a host that
-chose yes deliberately is not the problem this exists to find — the problem is
+chose yes deliberately is not the problem this exists to find. The problem is
 the service that never considered the question and is running with the whole
 filesystem writable.
 
@@ -50,7 +50,7 @@ contrast is the useful part. cron.service is exempt: it executes arbitrary
 operator-supplied jobs inside its own mount namespace, so any filesystem
 restriction on the unit silently becomes a restriction on code the packager
 never saw. dbus.service is *not* exempt, unlike its exemption from
-SERVICES-0006 — its own writes go to /run and /var, and on a systemd host
+SERVICES-0006, its own writes go to /run and /var, and on a systemd host
 dbus-activated services are started by systemd as their own units rather than
 as children of dbus, so they do not inherit its namespace. The setuid launch
 helper that makes NoNewPrivileges unsafe there has nothing to do with where the
@@ -127,10 +127,10 @@ daemon may write.`,
 			"Find out what the service writes before restricting it: systemd-analyze security <unit> gives an overall picture, and running the daemon under strace -f -e trace=file, or simply reading its documentation, tells you which paths it opens for writing.",
 			"Start at ProtectSystem=full unless you know the daemon writes to /etc. It covers /usr, the boot loader directories and /etc, and it is the level most system daemons can take unchanged.",
 			"Add it as a drop-in rather than editing the vendor unit, so a package upgrade does not undo it: systemctl edit <unit>, then a [Service] section containing ProtectSystem=full.",
-			"Where the daemon does write into a protected directory, do not step back down a level — name the exception instead: ReadWritePaths=/etc/example keeps everything else read-only. That is what lets a daemon run at strict.",
+			"Where the daemon does write into a protected directory, do not step back down a level, name the exception instead: ReadWritePaths=/etc/example keeps everything else read-only. That is what lets a daemon run at strict.",
 			"Reload and restart: systemctl daemon-reload, then systemctl restart <unit>.",
 			"Confirm the assembled unit rather than the file you edited: systemctl show -p ProtectSystem <unit> reports what systemd actually loaded, drop-ins and precedence included.",
-			"Exercise the service afterwards, including the paths that are rare — a daemon that writes a state file once a day will not fail during the restart.",
+			"Exercise the service afterwards, including the paths that are rare, a daemon that writes a state file once a day will not fail during the restart.",
 		},
 		Commands: []string{
 			"systemctl show -p ProtectSystem -p ReadWritePaths systemd-journald.service dbus.service",
@@ -148,8 +148,8 @@ daemon may write.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "systemd.exec(5) — ProtectSystem", URL: "https://man7.org/linux/man-pages/man5/systemd.exec.5.html"},
-		{Title: "systemd-analyze(1) — security", URL: "https://man7.org/linux/man-pages/man1/systemd-analyze.1.html"},
+		{Title: "systemd.exec(5). ProtectSystem", URL: "https://man7.org/linux/man-pages/man5/systemd.exec.5.html"},
+		{Title: "systemd-analyze(1), security", URL: "https://man7.org/linux/man-pages/man1/systemd-analyze.1.html"},
 	},
 }
 

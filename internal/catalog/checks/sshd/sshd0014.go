@@ -17,9 +17,9 @@ host proves its identity with its own host key, and from that point sshd accepts
 whichever local username the client asserts.
 
 The consequence is that the trusted host's security boundary becomes this host's
-security boundary. Anyone with root on the trusted machine — or anyone who can
+security boundary. Anyone with root on the trusted machine, or anyone who can
 read its host key, which lives on disk and is often included in backups and
-machine images — can authenticate here as any user the trust covers. A single
+machine images, can authenticate here as any user the trust covers. A single
 compromised workstation becomes access to every host that trusted it, with no
 credential to steal and nothing in this host's logs that distinguishes it from
 a legitimate login.
@@ -49,7 +49,7 @@ The OpenSSH default is no. This is the modern descendant of rhosts trust
 		Steps: []string{
 			"Establish what currently depends on it before changing anything: 'cat /etc/ssh/shosts.equiv /etc/hosts.equiv' and the per-user ~/.shosts files list the trusted hosts.",
 			"Replace the trust with keys for whatever automation relied on it. A per-account key with a forced command is both narrower and auditable.",
-			"Set 'HostbasedAuthentication no' in /etc/ssh/sshd_config — the OpenSSH default, so the line may simply be removed.",
+			"Set 'HostbasedAuthentication no' in /etc/ssh/sshd_config, the OpenSSH default, so the line may simply be removed.",
 			"Remove /etc/shosts.equiv, /etc/hosts.equiv and any ~/.shosts files, after recording their contents for the incident trail.",
 			"Validate and reload: 'sshd -t' then 'systemctl reload sshd'.",
 		},
@@ -57,7 +57,7 @@ The OpenSSH default is no. This is the modern descendant of rhosts trust
 			"sshd -T | grep -i hostbasedauthentication",
 			"cat /etc/ssh/shosts.equiv /etc/hosts.equiv 2>/dev/null",
 		},
-		Caution: "Cluster tooling from the HPC and older Unix worlds — parallel shells, batch schedulers, some backup agents — depends on this. Each of those is currently authenticating with no per-user credential; migrate them to keys rather than leaving the trust in place, and expect the migration to take longer than the config change.",
+		Caution: "Cluster tooling from the HPC and older Unix worlds, parallel shells, batch schedulers, some backup agents, depends on this. Each of those is currently authenticating with no per-user credential; migrate them to keys rather than leaving the trust in place, and expect the migration to take longer than the config change.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -67,6 +67,6 @@ The OpenSSH default is no. This is the modern descendant of rhosts trust
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — HostbasedAuthentication", URL: "https://man.openbsd.org/sshd_config#HostbasedAuthentication"},
+		{Title: "sshd_config(5). HostbasedAuthentication", URL: "https://man.openbsd.org/sshd_config#HostbasedAuthentication"},
 	},
 }

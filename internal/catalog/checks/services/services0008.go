@@ -19,24 +19,24 @@ var Check0008 = catalog.Check{
 	Description: `ProtectHome takes /home, /root and /run/user away from a
 service, in a mount namespace private to it. It has four levels:
 
-  - no         — the default. The service sees every home directory on the host.
-  - yes        — they are empty and inaccessible.
-  - read-only  — they are mounted read-only. **The contents are still readable.**
-  - tmpfs      — they are replaced with empty tmpfs mounts.
+  - no        , the default. The service sees every home directory on the host.
+  - yes       , they are empty and inaccessible.
+  - read-only , they are mounted read-only. **The contents are still readable.**
+  - tmpfs     , they are replaced with empty tmpfs mounts.
 
 **A root daemon that can read /root and /home is one exploit away from every
 credential on the estate.** The interesting file is not the user's documents; it
 is ~/.ssh/id_ed25519, ~/.aws/credentials, ~/.kube/config, ~/.docker/config.json
 and the token some tool cached in ~/.config. None of those is protected by file
 permissions against a process already running as root, and all of them are
-reusable somewhere else — which turns a single compromised daemon into lateral
+reusable somewhere else, which turns a single compromised daemon into lateral
 movement across every host and cloud account those keys reach. That is why this
 sits at High rather than beside the other sandboxing directives: it is the one
 whose absence exports the blast radius off the machine.
 
 There is almost never a reason for a system daemon to look. A message bus, a
 log writer, a time synchroniser and a name resolver have no business in a user's
-home directory, and the ones that do — a backup agent, a file server — are
+home directory, and the ones that do, a backup agent, a file server, are
 identifiable and few.
 
 **read-only passes and buys less than the other two.** It stops a daemon
@@ -50,7 +50,7 @@ every key under /root.
 **cron.service is exempt**, for the reason it is exempt from the other two: it
 runs arbitrary operator-supplied jobs inside its own mount namespace, and user
 cron jobs routinely execute scripts kept in a home directory and read data from
-one. dbus.service and systemd-journald.service are audited — neither has any
+one. dbus.service and systemd-journald.service are audited, neither has any
 business in /home, and unlike NoNewPrivileges there is nothing about dbus's
 setuid launch helper that bears on where the daemon may read.`,
 
@@ -135,9 +135,9 @@ setuid launch helper that bears on where the daemon may read.`,
 		Summary: "Set ProtectHome=yes in a drop-in for each service, or tmpfs where the daemon needs the directories to exist.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Establish whether the daemon has any business in a home directory before setting it. Most system services do not; the ones that do — backup agents, file servers, anything that serves user content — are identifiable, and for those the answer is an exemption in your own policy rather than a setting.",
+			"Establish whether the daemon has any business in a home directory before setting it. Most system services do not; the ones that do, backup agents, file servers, anything that serves user content, are identifiable, and for those the answer is an exemption in your own policy rather than a setting.",
 			"Prefer ProtectHome=yes, which makes /home, /root and /run/user empty and inaccessible. Use tmpfs where a daemon needs the directories to exist but not to contain anything.",
-			"Use read-only only when the daemon genuinely reads user files. It closes the persistence route — no planted authorized_keys, no altered shell profile — and leaves every private key in those directories readable, which is most of what this check is about.",
+			"Use read-only only when the daemon genuinely reads user files. It closes the persistence route, no planted authorized_keys, no altered shell profile, and leaves every private key in those directories readable, which is most of what this check is about.",
 			"Add it as a drop-in rather than editing the vendor unit, so a package upgrade does not undo it: systemctl edit <unit>, then a [Service] section containing ProtectHome=yes.",
 			"Reload and restart: systemctl daemon-reload, then systemctl restart <unit>.",
 			"Confirm the assembled unit rather than the file you edited: systemctl show -p ProtectHome <unit> reports what systemd actually loaded, drop-ins and precedence included.",
@@ -159,8 +159,8 @@ setuid launch helper that bears on where the daemon may read.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "systemd.exec(5) — ProtectHome", URL: "https://man7.org/linux/man-pages/man5/systemd.exec.5.html"},
-		{Title: "systemd-analyze(1) — security", URL: "https://man7.org/linux/man-pages/man1/systemd-analyze.1.html"},
+		{Title: "systemd.exec(5). ProtectHome", URL: "https://man7.org/linux/man-pages/man5/systemd.exec.5.html"},
+		{Title: "systemd-analyze(1), security", URL: "https://man7.org/linux/man-pages/man1/systemd-analyze.1.html"},
 	},
 }
 

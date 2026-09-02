@@ -97,7 +97,8 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 		Use:   "plumbline",
 		Short: "Deterministic host security auditor for Linux",
 		Long: `Plumbline audits a Linux host and says what it found, what it could not
-determine, and why. It never changes anything: there is no --fix flag.
+determine, and why. It changes nothing on the host itself: scan --fix writes a
+shell script for you to review and run, and Plumbline never executes it.
 
 collect and eval are separable on purpose. Collection is the privileged step
 and evaluation is not, and a bundle collected today can be re-evaluated

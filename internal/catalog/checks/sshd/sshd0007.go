@@ -26,7 +26,7 @@ var Check0007 = catalog.Check{
 	Title:  "Idle SSH sessions are disconnected",
 	Description: `An SSH session that is idle is a session nobody is watching.
 The laptop is closed, the terminal is behind a browser window, the desk is
-empty — and the session is still authenticated, still authorised, and still
+empty, and the session is still authenticated, still authorised, and still
 able to run anything the user can run. That is the exposure an idle timeout
 closes: not an attack on the protocol, but the ordinary case of an unattended
 authenticated shell.
@@ -39,7 +39,7 @@ the mechanism outright: an interval of 0 means no probe is ever sent, and a
 count of 0 means the connection is never terminated no matter how many probes
 go unanswered.
 
-The OpenSSH defaults are interval 0 and count 3 — no timeout at all. This check
+The OpenSSH defaults are interval 0 and count 3, no timeout at all. This check
 requires both to be positive and their product to be at most 15 minutes.
 
 Note that this is not the same as TMOUT in the shell. TMOUT ends the shell; the
@@ -179,15 +179,15 @@ sessions where no shell was ever started.`,
 		Effort:  "LOW",
 		Steps: []string{
 			"Set both in /etc/ssh/sshd_config: 'ClientAliveInterval 300' and 'ClientAliveCountMax 3'. That is a 15-minute idle timeout.",
-			"Check specifically that ClientAliveCountMax is not 0. A zero there disables termination entirely while leaving the configuration looking as though a timeout is in force — it is the most common way this setting is wrong.",
+			"Check specifically that ClientAliveCountMax is not 0. A zero there disables termination entirely while leaving the configuration looking as though a timeout is in force, it is the most common way this setting is wrong.",
 			"Confirm the effective values rather than the file: 'sshd -T | grep -i clientalive' resolves Include directives and Match defaults.",
-			"Consider TMOUT in /etc/profile.d/ as well. It ends an idle shell; this setting ends an idle connection, and they cover different cases — a session with a port forward and no shell is only covered by this one.",
+			"Consider TMOUT in /etc/profile.d/ as well. It ends an idle shell; this setting ends an idle connection, and they cover different cases, a session with a port forward and no shell is only covered by this one.",
 			"Validate and reload: 'sshd -t' then 'systemctl reload sshd'.",
 		},
 		Commands: []string{
 			"sshd -T | grep -i clientalive",
 		},
-		Caution: "Long-running work started in a foreground shell — a database migration, a large rsync — will be killed when the connection drops. Tell users to run such work under tmux or screen before shortening the timeout, or the first casualty will be a job somebody has been running for six hours.",
+		Caution: "Long-running work started in a foreground shell, a database migration, a large rsync, will be killed when the connection drops. Tell users to run such work under tmux or screen before shortening the timeout, or the first casualty will be a job somebody has been running for six hours.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -197,8 +197,8 @@ sessions where no shell was ever started.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — ClientAliveInterval", URL: "https://man.openbsd.org/sshd_config#ClientAliveInterval"},
-		{Title: "sshd_config(5) — ClientAliveCountMax", URL: "https://man.openbsd.org/sshd_config#ClientAliveCountMax"},
+		{Title: "sshd_config(5). ClientAliveInterval", URL: "https://man.openbsd.org/sshd_config#ClientAliveInterval"},
+		{Title: "sshd_config(5). ClientAliveCountMax", URL: "https://man.openbsd.org/sshd_config#ClientAliveCountMax"},
 	},
 }
 

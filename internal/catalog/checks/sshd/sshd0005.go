@@ -19,7 +19,7 @@ trusted local network.
 
 X11 forwarding extends that display across an SSH connection. When a user with
 forwarding enabled logs into a server, a process on the server can reach back
-through the tunnel to their workstation's display — so a compromise of the
+through the tunnel to their workstation's display, so a compromise of the
 server becomes a keylogger on the administrator's desktop. 'ForwardX11Trusted'
 makes this explicit; without it the X11 SECURITY extension restricts some
 operations, but it is widely regarded as insufficient and OpenSSH's own manual
@@ -27,7 +27,7 @@ warns against relying on it.
 
 The upstream OpenSSH default is no. **Debian and Ubuntu ship X11Forwarding yes
 in their packaged sshd_config**, so this check reports a finding on a stock
-installation of either — which is correct, and is the most common reason it
+installation of either, which is correct, and is the most common reason it
 appears.`,
 
 	BaseSeverity: finding.Medium,
@@ -52,13 +52,13 @@ appears.`,
 		Steps: []string{
 			"Find out whether anything uses it before disabling it: 'grep -i x11 /var/log/auth.log' or 'journalctl -u sshd | grep -i x11' shows forwarding requests.",
 			"Set 'X11Forwarding no' in /etc/ssh/sshd_config. On Debian and Ubuntu the packaged file sets it to yes explicitly, so the line must be changed rather than removed.",
-			"Where a small number of users genuinely need it, scope it rather than enabling it globally: a 'Match User' block confines the exposure to named accounts — Plumbline reports that as a conditional finding rather than a clean pass, which is the honest reading.",
+			"Where a small number of users genuinely need it, scope it rather than enabling it globally: a 'Match User' block confines the exposure to named accounts. Plumbline reports that as a conditional finding rather than a clean pass, which is the honest reading.",
 			"Validate and reload: 'sshd -t' then 'systemctl reload sshd'.",
 		},
 		Commands: []string{
 			"sshd -T | grep -i x11forwarding",
 		},
-		Caution: "Administrators who run graphical tools over SSH — installers, database consoles, some vendor appliances — will find them stop working with no error more helpful than 'cannot open display'. Establish the replacement path before making the change.",
+		Caution: "Administrators who run graphical tools over SSH, installers, database consoles, some vendor appliances, will find them stop working with no error more helpful than 'cannot open display'. Establish the replacement path before making the change.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -67,7 +67,7 @@ appears.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — X11Forwarding", URL: "https://man.openbsd.org/sshd_config#X11Forwarding"},
-		{Title: "ssh(1) — X11 forwarding warning", URL: "https://man.openbsd.org/ssh#X"},
+		{Title: "sshd_config(5). X11Forwarding", URL: "https://man.openbsd.org/sshd_config#X11Forwarding"},
+		{Title: "ssh(1). X11 forwarding warning", URL: "https://man.openbsd.org/ssh#X"},
 	},
 }

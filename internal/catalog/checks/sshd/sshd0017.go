@@ -23,8 +23,8 @@ var Check0017 = catalog.Check{
 	Description: `Banner names a file whose contents sshd sends to the client
 before authentication. It has no effect on what anyone can do.
 
-Its purpose is evidentiary. Several legal regimes — and most organisational
-computer-use policies — distinguish between a system that announced its access
+Its purpose is evidentiary. Several legal regimes, and most organisational
+computer-use policies, distinguish between a system that announced its access
 conditions and one that did not, and the announcement has to precede
 authentication to be relied on. Where an organisation intends to be able to act
 on unauthorised access, this is the mechanism that records the intent.
@@ -36,7 +36,7 @@ the internet by construction. And Banner is not the same as MOTD, which is
 displayed after authentication and therefore says nothing to anyone who failed
 to authenticate.
 
-The OpenSSH default is 'none' — no banner.`,
+The OpenSSH default is 'none', no banner.`,
 
 	BaseSeverity: finding.Low,
 	Tags:         []string{"ssh", "compliance", "policy"},
@@ -101,7 +101,7 @@ The OpenSSH default is 'none' — no banner.`,
 		Summary: "Write a banner file containing your organisation's access notice and point Banner at it.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Get the wording from whoever owns it — legal or security, not the person editing sshd_config. The text is the entire value of this control and a generic one may not carry the effect intended.",
+			"Get the wording from whoever owns it, legal or security, not the person editing sshd_config. The text is the entire value of this control and a generic one may not carry the effect intended.",
 			"Write it to /etc/issue.net and set 'Banner /etc/issue.net' in /etc/ssh/sshd_config.",
 			"Check what the file does not say: no hostname, no operating system version, no role, no contact details. Everything in it is shown to anyone who connects, before they authenticate.",
 			"Confirm the file is world-readable and not a symlink into anything unexpected: 'ls -lL /etc/issue.net'.",
@@ -111,7 +111,7 @@ The OpenSSH default is 'none' — no banner.`,
 			"sshd -T | grep -i banner",
 			"ssh -o PreferredAuthentications=none <host>",
 		},
-		Caution: "Automated clients that parse SSH output — older scripted transfers and some monitoring probes — can be confused by unexpected banner text. Test against the automation that talks to this host, not only from an interactive terminal.",
+		Caution: "Automated clients that parse SSH output, older scripted transfers and some monitoring probes, can be confused by unexpected banner text. Test against the automation that talks to this host, not only from an interactive terminal.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -119,6 +119,6 @@ The OpenSSH default is 'none' — no banner.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — Banner", URL: "https://man.openbsd.org/sshd_config#Banner"},
+		{Title: "sshd_config(5). Banner", URL: "https://man.openbsd.org/sshd_config#Banner"},
 	},
 }

@@ -37,9 +37,12 @@ plumbline_dropin() {
 // sandboxFix proposes the systemd sandboxing directives a check found missing.
 //
 // **The directives are per check, and the unit list comes from the finding.**
-// Each of the four sandbox checks reports the units it judged and what each one
-// was set to, so the script names the units that actually failed on this host
-// rather than every unit the check audits.
+// Each sandbox check reports the units it judged and what each one was set to,
+// so the script names the units that actually failed on this host rather than
+// every unit the check audits.
+//
+// Three of the four sandbox checks are registered below. SERVICES-0011, the
+// strict tier, deliberately is not — see the comment above init.
 type sandboxFix struct {
 	checkID string
 	title   string
@@ -100,9 +103,9 @@ var unitPattern = regexp.MustCompile(`\b[A-Za-z0-9@:_.\\-]+\.(?:service|socket|t
 // The detail names every unit the check has anything to say about: the ones
 // that failed, the ones that are masked, and the ones excused with the reason
 // they were excused. Reading unit names out of that sentence therefore picks up
-// the exemptions, and writing `ProtectSystem=strict` into cron.service is
+// the exemptions, and writing a sandboxing directive into cron.service is
 // exactly the breakage the exemption exists to prevent — cron runs arbitrary
-// operator-supplied jobs, and a read-only filesystem makes them fail at the
+// operator-supplied jobs, and restricting its filesystem makes them fail at the
 // job rather than at the restart.
 //
 // The evidence is the structured half: these checks cite one entry per *failed*
@@ -126,29 +129,47 @@ func unitsIn(f finding.Finding) []string {
 	return out
 }
 
+// **SERVICES-0011 has no generated fix, deliberately, and must not be given one
+// again.** It is the one sandbox check whose remediation cannot be written from
+// a scan, and the registration that used to be here took a host down.
+//
+// The directives were `ProtectSystem=strict` and `ProtectHome=yes`, written as
+// a drop-in for every unit the check failed. Under strict, the *entire*
+// filesystem hierarchy is read-only apart from /dev, /proc and /sys — which
+// includes /run and /var, not merely /usr and /etc. An operator followed the
+// script's own instruction to restart the units it had written for, and
+// systemd-journald.service (which writes /var/log) and dbus.service (which
+// creates its socket under /run) both failed to come back.
+//
+// **The note the fix carried was not enough, and that is the lesson.** It said
+// in six lines to run `systemd-analyze filesystems` first and to add
+// ReadWritePaths= for anything the service legitimately writes. That is correct
+// advice attached to a file that was already written: the script's own shape —
+// commands above, comments about them — invites reading the comment as context
+// for a step rather than as a precondition for it, and everything else in the
+// script is genuinely safe to run first and read after.
+//
+// What makes this different from the other three sandbox fixes is that the
+// missing information is per-service and is not in the finding. NoNewPrivileges
+// (0006), ProtectSystem=full (0007) and ProtectHome=yes (0008) each need one
+// decision the operator can make from the unit's purpose. strict needs the
+// complete set of paths a daemon writes at runtime, which the check does not
+// collect, cannot infer, and which differs per host and per workload. A
+// generator that must guess a set it has no way to observe is proposing an
+// outage, however well it is commented.
+//
+// So the check falls back to its catalog Remediation — `systemctl edit`,
+// `systemd-analyze filesystems`, declare ReadWritePaths= — which is the same
+// procedure, in the one form that cannot be pasted into a root shell whole.
+// That fallback is a designed path, not an absence: SARIF emits the advisory
+// commands with `"source": "advisory"` (see remediationFor), and the --fix
+// block counts the finding in "still failing with no automated fix".
+//
+// Undoing this needs the missing fact, not a stronger warning: a collector that
+// records what each unit actually writes, and a fix that emits ReadWritePaths=
+// from it. ADR-0006 is the standing reason plumbline proposes rather than
+// applies; this is the case that says a proposal can be too dangerous to make.
 func init() {
-	register(sandboxFix{
-		checkID: "SERVICES-0011",
-		title:   "Audited system services are sandboxed at the strict tier",
-		name:    "50-plumbline-sandbox.conf",
-		directives: []string{
-			"ProtectSystem=strict",
-			"ProtectHome=yes",
-		},
-		notes: []string{
-			"**Find out what each service writes before running this.** Under",
-			"ProtectSystem=strict the whole filesystem is read-only except what the unit",
-			"declares, and an undeclared path fails at the *write* — so the service starts",
-			"cleanly and misbehaves later, which is the worst shape a failure can take.",
-			"  systemd-analyze filesystems <unit>",
-			"  systemctl show <unit> -p ReadWritePaths,StateDirectory,LogsDirectory",
-			"Add ReadWritePaths= — or better StateDirectory= and LogsDirectory=, which",
-			"create the directory with the right ownership as well as permitting it — to the",
-			"drop-in below for anything the service legitimately writes.",
-			"ProtectHome=yes hides /home and /root entirely. A service that reads a user's",
-			"key, script or data file stops working; use read-only if it must still read.",
-		},
-	})
 	register(sandboxFix{
 		checkID: "SERVICES-0007",
 		title:   "Audited system services run with the system directories read-only",

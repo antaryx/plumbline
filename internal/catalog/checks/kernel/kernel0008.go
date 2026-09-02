@@ -198,8 +198,8 @@ it passes, and the finding says which interfaces are in it.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel documentation — ip-sysctl rp_filter", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
-		{Title: "RFC 3704 — Ingress Filtering for Multihomed Networks", URL: "https://www.rfc-editor.org/rfc/rfc3704"},
+		{Title: "Linux kernel documentation, ip-sysctl rp_filter", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
+		{Title: "RFC 3704. Ingress Filtering for Multihomed Networks", URL: "https://www.rfc-editor.org/rfc/rfc3704"},
 	},
 }
 

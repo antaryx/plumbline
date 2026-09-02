@@ -22,7 +22,7 @@ decides who may read the buffer those lines are printed into.
 At 0 any local user runs dmesg. What they get is not a log so much as a
 narrated tour of the kernel's memory: driver initialisation with device
 addresses, stack traces from anything that has oopsed since boot, module load
-addresses, and — on a host that has not set kptr_restrict — pointers in the
+addresses, and, on a host that has not set kptr_restrict, pointers in the
 clear. It is also where a great deal of hardware and topology detail lives,
 which is reconnaissance rather than exploitation but is reconnaissance an
 unprivileged process should not be handed.
@@ -106,7 +106,7 @@ This reads the files. KERNEL-0004 asks what the running kernel does.`,
 		Effort:  "LOW",
 		Steps: []string{
 			"Check what already sets it: grep -rn dmesg_restrict /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d.",
-			"Create or extend a drop-in — the same file as kernel.kptr_restrict is the natural home, since the two settings close the same leak from opposite ends — containing kernel.dmesg_restrict = 1.",
+			"Create or extend a drop-in, the same file as kernel.kptr_restrict is the natural home, since the two settings close the same leak from opposite ends, containing kernel.dmesg_restrict = 1.",
 			"Apply without rebooting: sysctl --system, then confirm with sysctl kernel.dmesg_restrict.",
 			"Check what reads dmesg as a non-root user before rolling it out. Some hardware-monitoring and crash-reporting agents do; the answer for those is usually CAP_SYSLOG on the unit rather than an open buffer for everyone.",
 			"Do KERNEL-0018 at the same time if it is also failing. Restricting dmesg while kernel pointers are still printed in the clear leaves the leak open through /proc/kallsyms, and hiding pointers while dmesg is world-readable leaves the stack traces.",
@@ -126,7 +126,7 @@ This reads the files. KERNEL-0004 asks what the running kernel does.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — dmesg_restrict", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#dmesg-restrict"},
+		{Title: "Linux kernel, dmesg_restrict", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#dmesg-restrict"},
 		{Title: "sysctl.d(5)", URL: "https://man7.org/linux/man-pages/man5/sysctl.d.5.html"},
 	},
 }

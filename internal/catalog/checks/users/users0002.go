@@ -15,8 +15,8 @@ var Check0002 = catalog.Check{
 	Title:  "System accounts have no interactive login shell",
 	Description: `A system account exists to own files and run a daemon, not to be
 logged into. Leaving it with a real shell turns every one of them into a
-potential entry point: an attacker who obtains its credential — from a
-configuration file, a backup, a compromised service — gets a session rather
+potential entry point: an attacker who obtains its credential, from a
+configuration file, a backup, a compromised service, gets a session rather
 than an error, and from a session they get an environment, a shell history and
 somewhere to run things.
 
@@ -24,7 +24,7 @@ Setting the shell to nologin or false costs nothing, because nothing about
 running a daemon requires the ability to log in.
 
 Two details decide whether this check is right or merely plausible. **An empty
-shell field is not "no shell"** — the system substitutes /bin/sh, so an empty
+shell field is not "no shell"**, the system substitutes /bin/sh, so an empty
 field is the most permissive setting in the file, not the most restrictive.
 And the path to nologin differs by distribution, /usr/sbin on Debian-family
 systems and /sbin on Red Hat-family ones, so a check that knew only one would
@@ -104,7 +104,7 @@ report every account on the other as interactive.`,
 			"awk -F: '$3 >= 1 && $3 <= 999 {print $1, $7}' /etc/passwd",
 			"usermod -s /usr/sbin/nologin <name>",
 		},
-		Caution: "Some deployment tooling runs commands as a service account through 'su' or 'runuser', both of which need a working shell. Changing the shell will break those jobs silently — they will fail at the next run rather than immediately.",
+		Caution: "Some deployment tooling runs commands as a service account through 'su' or 'runuser', both of which need a working shell. Changing the shell will break those jobs silently, they will fail at the next run rather than immediately.",
 	},
 
 	Mappings: []finding.ControlRef{

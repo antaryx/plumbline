@@ -23,7 +23,7 @@ with /usr/sbin/nologin still forwards.
 That matters because network segmentation is usually the control that survives
 when everything else has failed. A database in a private subnet, a management
 interface on a separate VLAN, an internal API with no authentication because it
-is "not reachable" — all of them are reachable from a workstation the moment one
+is "not reachable", all of them are reachable from a workstation the moment one
 account on a host in that subnet can forward. Egress filtering fails the same
 way in reverse.
 
@@ -34,7 +34,7 @@ This check fails only the unrestricted values. 'local' and 'remote' each close
 one direction and are reported as a pass with the remaining direction named,
 because which one a host needs is a question about its role that no scanner can
 answer. Note also that this is not a boundary against a determined user with
-shell access — anyone who can execute code can run their own tunnel — so it is
+shell access, anyone who can execute code can run their own tunnel, so it is
 a control over the default and the accidental, not over the adversary who
 already has a shell.`,
 
@@ -126,8 +126,8 @@ already has a shell.`,
 		Steps: []string{
 			"Establish what uses it first. Forwarding is invisible in most monitoring; 'ss -tnp' on the host during normal operation shows the loopback listeners that -R creates, and client-side ~/.ssh/config files often document -L usage.",
 			"For a host with no tunnelling role, set 'AllowTcpForwarding no' in /etc/ssh/sshd_config.",
-			"For a bastion, forwarding is the point — scope it instead. A 'Match Group jumpusers' block with 'AllowTcpForwarding yes' inside an otherwise-'no' configuration confines it to the accounts that need it. Plumbline reports that as a conditional finding rather than a clean pass, which is the accurate reading: the capability exists, for a named set of users.",
-			"Where an account only needs sftp, combine 'ForceCommand internal-sftp' with 'AllowTcpForwarding no' — the shell restriction alone does not stop forwarding.",
+			"For a bastion, forwarding is the point, scope it instead. A 'Match Group jumpusers' block with 'AllowTcpForwarding yes' inside an otherwise-'no' configuration confines it to the accounts that need it. Plumbline reports that as a conditional finding rather than a clean pass, which is the accurate reading: the capability exists, for a named set of users.",
+			"Where an account only needs sftp, combine 'ForceCommand internal-sftp' with 'AllowTcpForwarding no', the shell restriction alone does not stop forwarding.",
 			"Validate and reload: 'sshd -t' then 'systemctl reload sshd'.",
 		},
 		Commands: []string{
@@ -143,6 +143,6 @@ already has a shell.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — AllowTcpForwarding", URL: "https://man.openbsd.org/sshd_config#AllowTcpForwarding"},
+		{Title: "sshd_config(5). AllowTcpForwarding", URL: "https://man.openbsd.org/sshd_config#AllowTcpForwarding"},
 	},
 }

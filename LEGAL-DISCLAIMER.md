@@ -38,11 +38,19 @@ therefore reports **coverage counts**, never a compliance percentage. See
 
 ## Remediation
 
-Remediation output is a suggestion for human review. Plumbline never applies
-changes, and there is no `--fix` flag by design. Suggested commands may be
-inappropriate for your environment, and some can remove your own access to a
-host. Review every command, understand it, and test it somewhere that does not
-matter first.
+Remediation output is a proposal for human review. `scan --fix` prints a shell
+script, and `--write-script` saves one. Plumbline never runs either, and it
+never edits the host it audits.
+
+Reviewing that script before you run it is your responsibility, not Plumbline's.
+The generated commands act as root. Some can remove your own access to a host:
+the firewall proposal can end an SSH session, and a systemd sandboxing directive
+can stop a daemon from writing a path it needs. Read every command, understand
+what it does on your system, and test it somewhere that does not matter first.
+
+The maintainer accepts no liability for hosts locked out, services broken, or
+downtime caused by running a generated script. See the Warranty section below
+and the LICENSE.
 
 ## Authorised use only
 
@@ -52,5 +60,6 @@ Unauthorised use may be a criminal offence in your jurisdiction.
 
 ## Warranty
 
-Plumbline is provided under the Apache License 2.0, without warranty of any
-kind. See `LICENSE` for the full terms.
+Plumbline is provided under the Apache License 2.0, without warranty of any kind. The
+licence disclaims all warranties and all liability; see `LICENSE` for the full
+text, which governs over anything said here.

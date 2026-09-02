@@ -18,7 +18,7 @@ which is exactly the thing an attacker on the network controls.
 
 IgnoreRhosts yes tells sshd not to consult them. The keyword only has an effect
 where host-based authentication is actually enabled (SSHD-0014), so on most
-hosts this is defence in depth rather than an active exposure — but the two
+hosts this is defence in depth rather than an active exposure, but the two
 settings are frequently changed together by the same legacy migration, and a
 host that has turned one on has usually turned the other on too.
 
@@ -46,7 +46,7 @@ to honour these files deliberately, which is worth knowing on its own.`,
 		Steps: []string{
 			"Set 'IgnoreRhosts yes' in /etc/ssh/sshd_config. This is the OpenSSH default, so the line can also be removed.",
 			"Find the files that exist regardless: 'find /home /root -maxdepth 2 -name .rhosts -o -name .shosts'.",
-			"Read each one before deleting it — its contents record who was trusted, which is worth keeping for the incident record if the host has been exposed.",
+			"Read each one before deleting it, its contents record who was trusted, which is worth keeping for the incident record if the host has been exposed.",
 			"Confirm host-based authentication is also off (SSHD-0014), since that is what gives these files their effect.",
 			"Validate and reload: 'sshd -t' then 'systemctl reload sshd'.",
 		},
@@ -64,6 +64,6 @@ to honour these files deliberately, which is worth knowing on its own.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — IgnoreRhosts", URL: "https://man.openbsd.org/sshd_config#IgnoreRhosts"},
+		{Title: "sshd_config(5). IgnoreRhosts", URL: "https://man.openbsd.org/sshd_config#IgnoreRhosts"},
 	},
 }

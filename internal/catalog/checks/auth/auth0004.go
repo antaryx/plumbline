@@ -24,14 +24,14 @@ var Check0004 = catalog.Check{
 	Title:  "PAM does not accept an empty password",
 	Description: `pam_unix.so's 'nullok' argument means: if the account's
 password field in /etc/shadow is empty, authenticate anyway. Without it, an
-empty field is a refusal — the account simply cannot log in with a password.
+empty field is a refusal, the account simply cannot log in with a password.
 With it, the empty field becomes a valid credential that anybody can supply.
 
 The two halves of this have to be read together, and each is harmless-looking
 alone. USERS-0003 reports accounts whose password field is empty. This check
 reports whether PAM would accept one. Neither is a login on its own; together
 they are an unauthenticated shell, and they are usually introduced by different
-people at different times — an installer that ships nullok in the default
+people at different times, an installer that ships nullok in the default
 stack, and an account created by a script that never set a password.
 
 It is worth checking even where no account currently has an empty field. The
@@ -40,7 +40,7 @@ password is immediately usable by anyone who knows its name, with nothing to
 notice at the moment it happens.
 
 **This is about empty passwords, not about reversible storage.** Nothing in PAM
-stores a password reversibly — pam_unix hashes with crypt(3) and the algorithm
+stores a password reversibly, pam_unix hashes with crypt(3) and the algorithm
 is AUTH-0005's question. The two are sometimes conflated because Windows
 policy names a "store passwords using reversible encryption" setting; the Linux
 equivalent of that risk is a weak hash, not this.`,

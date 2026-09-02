@@ -34,166 +34,166 @@ Severity is the check's **base** severity, before any context adjustment a findi
 
 | Check | Severity | Reads |
 |---|---|---|
-| [`AUTH-0001`](CHECK-REFERENCE.md#auth-0001--a-password-quality-module-is-enforced) A password quality module is enforced | HIGH | `auth.pam` |
-| [`AUTH-0002`](CHECK-REFERENCE.md#auth-0002--password-quality-parameters-require-length-and-character-variety) Password quality parameters require length and character variety | MEDIUM | `auth.pam` |
-| [`AUTH-0003`](CHECK-REFERENCE.md#auth-0003--repeated-authentication-failures-lock-the-account) Repeated authentication failures lock the account | MEDIUM | `auth.pam` |
-| [`AUTH-0004`](CHECK-REFERENCE.md#auth-0004--pam-does-not-accept-an-empty-password) PAM does not accept an empty password | HIGH | `auth.pam` |
-| [`AUTH-0005`](CHECK-REFERENCE.md#auth-0005--passwords-are-hashed-with-a-strong-algorithm) Passwords are hashed with a strong algorithm | HIGH | `auth.pam` |
-| [`AUTH-0006`](CHECK-REFERENCE.md#auth-0006--recent-passwords-cannot-be-reused) Recent passwords cannot be reused | LOW | `auth.pam` |
+| [`AUTH-0001`](CHECK-REFERENCE.md#auth-0001-a-password-quality-module-is-enforced) A password quality module is enforced | HIGH | `auth.pam` |
+| [`AUTH-0002`](CHECK-REFERENCE.md#auth-0002-password-quality-parameters-require-length-and-character-variety) Password quality parameters require length and character variety | MEDIUM | `auth.pam` |
+| [`AUTH-0003`](CHECK-REFERENCE.md#auth-0003-repeated-authentication-failures-lock-the-account) Repeated authentication failures lock the account | MEDIUM | `auth.pam` |
+| [`AUTH-0004`](CHECK-REFERENCE.md#auth-0004-pam-does-not-accept-an-empty-password) PAM does not accept an empty password | HIGH | `auth.pam` |
+| [`AUTH-0005`](CHECK-REFERENCE.md#auth-0005-passwords-are-hashed-with-a-strong-algorithm) Passwords are hashed with a strong algorithm | HIGH | `auth.pam` |
+| [`AUTH-0006`](CHECK-REFERENCE.md#auth-0006-recent-passwords-cannot-be-reused) Recent passwords cannot be reused | LOW | `auth.pam` |
 
 ## CONTAINERS
 
 | Check | Severity | Reads |
 |---|---|---|
-| [`CONTAINERS-0001`](CHECK-REFERENCE.md#containers-0001--the-docker-daemon-remaps-container-users-to-unprivileged-host-uids) The Docker daemon remaps container users to unprivileged host uids | MEDIUM | `containers.docker_daemon` |
-| [`CONTAINERS-0002`](CHECK-REFERENCE.md#containers-0002--the-docker-daemon-applies-no-new-privileges-to-containers-by-default) The Docker daemon applies no-new-privileges to containers by default | MEDIUM | `containers.docker_daemon` |
-| [`CONTAINERS-0003`](CHECK-REFERENCE.md#containers-0003--the-docker-daemon-restricts-traffic-between-containers-on-the-default-bridge) The Docker daemon restricts traffic between containers on the default bridge | LOW | `containers.docker_daemon` |
-| [`CONTAINERS-0004`](CHECK-REFERENCE.md#containers-0004--the-docker-daemon-keeps-containers-running-across-its-own-restart) The Docker daemon keeps containers running across its own restart | MEDIUM | `containers.docker_daemon` |
-| [`CONTAINERS-0005`](CHECK-REFERENCE.md#containers-0005--the-docker-daemon-does-not-run-with-experimental-features-enabled) The Docker daemon does not run with experimental features enabled | LOW | `containers.docker_daemon` |
-| [`CONTAINERS-0006`](CHECK-REFERENCE.md#containers-0006--the-docker-daemon-is-not-started-with-an-unauthenticated-tcp-socket) The Docker daemon is not started with an unauthenticated TCP socket | CRITICAL | `containers.docker_daemon`, `containers.docker_service` |
-| [`CONTAINERS-0007`](CHECK-REFERENCE.md#containers-0007--the-docker-daemon-configuration-does-not-bind-an-unauthenticated-tcp-socket) The Docker daemon configuration does not bind an unauthenticated TCP socket | CRITICAL | `containers.docker_daemon`, `containers.docker_service` |
-| [`CONTAINERS-0008`](CHECK-REFERENCE.md#containers-0008--the-docker-daemon-writes-container-logs-to-a-bounded-retrievable-driver) The Docker daemon writes container logs to a bounded, retrievable driver | LOW | `containers.docker_daemon`, `containers.docker_service` |
+| [`CONTAINERS-0001`](CHECK-REFERENCE.md#containers-0001-the-docker-daemon-remaps-container-users-to-unprivileged-host-uids) The Docker daemon remaps container users to unprivileged host uids | MEDIUM | `containers.docker_daemon` |
+| [`CONTAINERS-0002`](CHECK-REFERENCE.md#containers-0002-the-docker-daemon-applies-no-new-privileges-to-containers-by-default) The Docker daemon applies no-new-privileges to containers by default | MEDIUM | `containers.docker_daemon` |
+| [`CONTAINERS-0003`](CHECK-REFERENCE.md#containers-0003-the-docker-daemon-restricts-traffic-between-containers-on-the-default-bridge) The Docker daemon restricts traffic between containers on the default bridge | LOW | `containers.docker_daemon` |
+| [`CONTAINERS-0004`](CHECK-REFERENCE.md#containers-0004-the-docker-daemon-keeps-containers-running-across-its-own-restart) The Docker daemon keeps containers running across its own restart | MEDIUM | `containers.docker_daemon` |
+| [`CONTAINERS-0005`](CHECK-REFERENCE.md#containers-0005-the-docker-daemon-does-not-run-with-experimental-features-enabled) The Docker daemon does not run with experimental features enabled | LOW | `containers.docker_daemon` |
+| [`CONTAINERS-0006`](CHECK-REFERENCE.md#containers-0006-the-docker-daemon-is-not-started-with-an-unauthenticated-tcp-socket) The Docker daemon is not started with an unauthenticated TCP socket | CRITICAL | `containers.docker_daemon`, `containers.docker_service` |
+| [`CONTAINERS-0007`](CHECK-REFERENCE.md#containers-0007-the-docker-daemon-configuration-does-not-bind-an-unauthenticated-tcp-socket) The Docker daemon configuration does not bind an unauthenticated TCP socket | CRITICAL | `containers.docker_daemon`, `containers.docker_service` |
+| [`CONTAINERS-0008`](CHECK-REFERENCE.md#containers-0008-the-docker-daemon-writes-container-logs-to-a-bounded-retrievable-driver) The Docker daemon writes container logs to a bounded, retrievable driver | LOW | `containers.docker_daemon`, `containers.docker_service` |
 
 ## CRON
 
 | Check | Severity | Reads |
 |---|---|---|
-| [`CRON-0001`](CHECK-REFERENCE.md#cron-0001--the-system-crontab-is-owned-by-root-and-writable-only-by-root) The system crontab is owned by root and writable only by root | HIGH | `cron.files` |
-| [`CRON-0002`](CHECK-REFERENCE.md#cron-0002--the-cron-drop-in-directories-are-owned-by-root-and-writable-only-by-root) The cron drop-in directories are owned by root and writable only by root | HIGH | `cron.files` |
-| [`CRON-0003`](CHECK-REFERENCE.md#cron-0003--access-to-crontab-is-restricted-by-an-allow-list) Access to crontab is restricted by an allow list | MEDIUM | `cron.files` |
-| [`CRON-0004`](CHECK-REFERENCE.md#cron-0004--the-cron-access-control-files-are-owned-by-root-and-writable-only-by-root) The cron access-control files are owned by root and writable only by root | MEDIUM | `cron.files` |
-| [`CRON-0005`](CHECK-REFERENCE.md#cron-0005--the-cron-schedule-is-not-readable-by-unprivileged-accounts) The cron schedule is not readable by unprivileged accounts | LOW | `cron.files` |
+| [`CRON-0001`](CHECK-REFERENCE.md#cron-0001-the-system-crontab-is-owned-by-root-and-writable-only-by-root) The system crontab is owned by root and writable only by root | HIGH | `cron.files` |
+| [`CRON-0002`](CHECK-REFERENCE.md#cron-0002-the-cron-drop-in-directories-are-owned-by-root-and-writable-only-by-root) The cron drop-in directories are owned by root and writable only by root | HIGH | `cron.files` |
+| [`CRON-0003`](CHECK-REFERENCE.md#cron-0003-access-to-crontab-is-restricted-by-an-allow-list) Access to crontab is restricted by an allow list | MEDIUM | `cron.files` |
+| [`CRON-0004`](CHECK-REFERENCE.md#cron-0004-the-cron-access-control-files-are-owned-by-root-and-writable-only-by-root) The cron access-control files are owned by root and writable only by root | MEDIUM | `cron.files` |
+| [`CRON-0005`](CHECK-REFERENCE.md#cron-0005-the-cron-schedule-is-not-readable-by-unprivileged-accounts) The cron schedule is not readable by unprivileged accounts | LOW | `cron.files` |
 
 ## FILESYS
 
 | Check | Severity | Reads |
 |---|---|---|
-| [`FILESYS-0001`](CHECK-REFERENCE.md#filesys-0001--no-setuid-or-setgid-executable-is-writable-by-group-or-other) No setuid or setgid executable is writable by group or other | CRITICAL | `fs.sgid`, `fs.suid` |
-| [`FILESYS-0002`](CHECK-REFERENCE.md#filesys-0002--no-setuid-or-setgid-executable-outside-the-system-binary-directories) No setuid or setgid executable outside the system binary directories | HIGH | `fs.sgid`, `fs.suid` |
-| [`FILESYS-0003`](CHECK-REFERENCE.md#filesys-0003--no-file-is-world-writable) No file is world-writable | HIGH | `fs.world_writable` |
-| [`FILESYS-0004`](CHECK-REFERENCE.md#filesys-0004--world-writable-directories-have-the-sticky-bit-set) World-writable directories have the sticky bit set | MEDIUM | `fs.world_writable_dir` |
-| [`FILESYS-0005`](CHECK-REFERENCE.md#filesys-0005--no-system-directory-is-world-writable) No system directory is world-writable | CRITICAL | `fs.world_writable_dir` |
-| [`FILESYS-0006`](CHECK-REFERENCE.md#filesys-0006--no-device-node-exists-outside-dev) No device node exists outside /dev | HIGH | `fs.device_outside_dev` |
-| [`FILESYS-0007`](CHECK-REFERENCE.md#filesys-0007--tmp-is-a-separate-mount-with-nodev-nosuid-and-noexec) /tmp is a separate mount with nodev, nosuid and noexec | MEDIUM | `fs.mounts` |
-| [`FILESYS-0008`](CHECK-REFERENCE.md#filesys-0008--devshm-is-mounted-with-nodev-nosuid-and-noexec) /dev/shm is mounted with nodev, nosuid and noexec | MEDIUM | `fs.mounts` |
-| [`FILESYS-0009`](CHECK-REFERENCE.md#filesys-0009--home-is-a-separate-mount-with-nodev-and-nosuid) /home is a separate mount with nodev and nosuid | LOW | `fs.mounts` |
-| [`FILESYS-0010`](CHECK-REFERENCE.md#filesys-0010--every-uid-and-gid-owning-a-file-resolves-to-a-local-account-or-group) Every uid and gid owning a file resolves to a local account or group | MEDIUM | `fs.tally.owner_gid`, `fs.tally.owner_uid`, `users.group`, `users.nsswitch`, `users.passwd` |
+| [`FILESYS-0001`](CHECK-REFERENCE.md#filesys-0001-no-setuid-or-setgid-executable-is-writable-by-group-or-other) No setuid or setgid executable is writable by group or other | CRITICAL | `fs.sgid`, `fs.suid` |
+| [`FILESYS-0002`](CHECK-REFERENCE.md#filesys-0002-no-setuid-or-setgid-executable-outside-the-system-binary-directories) No setuid or setgid executable outside the system binary directories | HIGH | `fs.sgid`, `fs.suid` |
+| [`FILESYS-0003`](CHECK-REFERENCE.md#filesys-0003-no-file-is-world-writable) No file is world-writable | HIGH | `fs.world_writable` |
+| [`FILESYS-0004`](CHECK-REFERENCE.md#filesys-0004-world-writable-directories-have-the-sticky-bit-set) World-writable directories have the sticky bit set | MEDIUM | `fs.world_writable_dir` |
+| [`FILESYS-0005`](CHECK-REFERENCE.md#filesys-0005-no-system-directory-is-world-writable) No system directory is world-writable | CRITICAL | `fs.world_writable_dir` |
+| [`FILESYS-0006`](CHECK-REFERENCE.md#filesys-0006-no-device-node-exists-outside-dev) No device node exists outside /dev | HIGH | `fs.device_outside_dev` |
+| [`FILESYS-0007`](CHECK-REFERENCE.md#filesys-0007-tmp-is-a-separate-mount-with-nodev-nosuid-and-noexec) /tmp is a separate mount with nodev, nosuid and noexec | MEDIUM | `fs.mounts` |
+| [`FILESYS-0008`](CHECK-REFERENCE.md#filesys-0008-devshm-is-mounted-with-nodev-nosuid-and-noexec) /dev/shm is mounted with nodev, nosuid and noexec | MEDIUM | `fs.mounts` |
+| [`FILESYS-0009`](CHECK-REFERENCE.md#filesys-0009-home-is-a-separate-mount-with-nodev-and-nosuid) /home is a separate mount with nodev and nosuid | LOW | `fs.mounts` |
+| [`FILESYS-0010`](CHECK-REFERENCE.md#filesys-0010-every-uid-and-gid-owning-a-file-resolves-to-a-local-account-or-group) Every uid and gid owning a file resolves to a local account or group | MEDIUM | `fs.tally.owner_gid`, `fs.tally.owner_uid`, `users.group`, `users.nsswitch`, `users.passwd` |
 
 ## KERNEL
 
 | Check | Severity | Reads |
 |---|---|---|
-| [`KERNEL-0001`](CHECK-REFERENCE.md#kernel-0001--address-space-layout-randomisation-is-fully-enabled) Address-space layout randomisation is fully enabled | HIGH | `kernel.sysctl` |
-| [`KERNEL-0002`](CHECK-REFERENCE.md#kernel-0002--kernel-pointers-are-not-exposed-to-unprivileged-users) Kernel pointers are not exposed to unprivileged users | HIGH | `kernel.sysctl` |
-| [`KERNEL-0003`](CHECK-REFERENCE.md#kernel-0003--debugging-other-processes-with-ptrace-is-restricted) Debugging other processes with ptrace is restricted | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0004`](CHECK-REFERENCE.md#kernel-0004--the-kernel-ring-buffer-is-not-readable-by-unprivileged-users) The kernel ring buffer is not readable by unprivileged users | HIGH | `kernel.sysctl` |
-| [`KERNEL-0005`](CHECK-REFERENCE.md#kernel-0005--setuid-programs-do-not-write-core-dumps) Setuid programs do not write core dumps | HIGH | `kernel.sysctl` |
-| [`KERNEL-0006`](CHECK-REFERENCE.md#kernel-0006--unprivileged-users-cannot-load-bpf-programs) Unprivileged users cannot load BPF programs | HIGH | `kernel.sysctl` |
-| [`KERNEL-0007`](CHECK-REFERENCE.md#kernel-0007--the-running-kernel-parameters-match-the-configured-ones) The running kernel parameters match the configured ones | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0008`](CHECK-REFERENCE.md#kernel-0008--reverse-path-filtering-is-enabled-on-every-network-interface) Reverse-path filtering is enabled on every network interface | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0009`](CHECK-REFERENCE.md#kernel-0009--symlink-following-is-restricted-in-world-writable-directories) Symlink following is restricted in world-writable directories | HIGH | `kernel.sysctl` |
-| [`KERNEL-0010`](CHECK-REFERENCE.md#kernel-0010--hardlink-creation-is-restricted-to-files-the-user-can-already-read) Hardlink creation is restricted to files the user can already read | HIGH | `kernel.sysctl` |
-| [`KERNEL-0011`](CHECK-REFERENCE.md#kernel-0011--opening-another-users-fifo-in-a-shared-directory-is-restricted) Opening another user's FIFO in a shared directory is restricted | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0012`](CHECK-REFERENCE.md#kernel-0012--opening-another-users-file-in-a-shared-directory-is-restricted) Opening another user's file in a shared directory is restricted | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0013`](CHECK-REFERENCE.md#kernel-0013--unprivileged-access-to-performance-counters-is-restricted) Unprivileged access to performance counters is restricted | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0014`](CHECK-REFERENCE.md#kernel-0014--core-dumps-are-not-written-to-an-attacker-influenced-location) Core dumps are not written to an attacker-influenced location | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0015`](CHECK-REFERENCE.md#kernel-0015--source-routed-packets-are-refused-on-every-network-interface) Source-routed packets are refused on every network interface | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0016`](CHECK-REFERENCE.md#kernel-0016--tcp-syn-cookies-are-enabled) TCP SYN cookies are enabled | LOW | `kernel.sysctl` |
-| [`KERNEL-0017`](CHECK-REFERENCE.md#kernel-0017--bpf-hardening-is-written-to-the-sysctl-configuration) BPF hardening is written to the sysctl configuration | HIGH | `kernel.sysctl` |
-| [`KERNEL-0018`](CHECK-REFERENCE.md#kernel-0018--kernel-pointer-restriction-is-written-to-the-sysctl-configuration) Kernel pointer restriction is written to the sysctl configuration | HIGH | `kernel.sysctl` |
-| [`KERNEL-0019`](CHECK-REFERENCE.md#kernel-0019--kernel-ring-buffer-restriction-is-written-to-the-sysctl-configuration) Kernel ring buffer restriction is written to the sysctl configuration | HIGH | `kernel.sysctl` |
-| [`KERNEL-0020`](CHECK-REFERENCE.md#kernel-0020--yama-ptrace-restriction-is-written-to-the-sysctl-configuration) Yama ptrace restriction is written to the sysctl configuration | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0021`](CHECK-REFERENCE.md#kernel-0021--the-magic-sysrq-key-is-disabled-in-the-sysctl-configuration) The magic SysRq key is disabled in the sysctl configuration | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0022`](CHECK-REFERENCE.md#kernel-0022--perf-event-restriction-is-written-to-the-sysctl-configuration) Perf event restriction is written to the sysctl configuration | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0023`](CHECK-REFERENCE.md#kernel-0023--tcp-syn-cookies-are-written-to-the-sysctl-configuration) TCP SYN cookies are written to the sysctl configuration | LOW | `kernel.sysctl` |
-| [`KERNEL-0024`](CHECK-REFERENCE.md#kernel-0024--reverse-path-filtering-is-written-to-the-sysctl-configuration) Reverse-path filtering is written to the sysctl configuration | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0025`](CHECK-REFERENCE.md#kernel-0025--source-routing-and-icmp-redirects-are-refused-in-the-sysctl-configuration) Source routing and ICMP redirects are refused in the sysctl configuration | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0026`](CHECK-REFERENCE.md#kernel-0026--ipv6-router-advertisements-are-refused-in-the-sysctl-configuration) IPv6 router advertisements are refused in the sysctl configuration | HIGH | `kernel.sysctl` |
-| [`KERNEL-0027`](CHECK-REFERENCE.md#kernel-0027--sending-icmp-redirects-is-refused-in-the-sysctl-configuration) Sending ICMP redirects is refused in the sysctl configuration | MEDIUM | `kernel.sysctl` |
-| [`KERNEL-0028`](CHECK-REFERENCE.md#kernel-0028--rfc-1337-time-wait-protection-is-written-to-the-sysctl-configuration) RFC 1337 TIME-WAIT protection is written to the sysctl configuration | LOW | `kernel.sysctl` |
-| [`KERNEL-0029`](CHECK-REFERENCE.md#kernel-0029--the-setuid-core-dump-policy-is-written-to-the-sysctl-configuration) The setuid core-dump policy is written to the sysctl configuration | HIGH | `kernel.sysctl` |
-| [`KERNEL-0030`](CHECK-REFERENCE.md#kernel-0030--hardlink-protection-is-written-to-the-sysctl-configuration) Hardlink protection is written to the sysctl configuration | HIGH | `kernel.sysctl` |
-| [`KERNEL-0031`](CHECK-REFERENCE.md#kernel-0031--symlink-protection-is-written-to-the-sysctl-configuration) Symlink protection is written to the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0001`](CHECK-REFERENCE.md#kernel-0001-address-space-layout-randomisation-is-fully-enabled) Address-space layout randomisation is fully enabled | HIGH | `kernel.sysctl` |
+| [`KERNEL-0002`](CHECK-REFERENCE.md#kernel-0002-kernel-pointers-are-not-exposed-to-unprivileged-users) Kernel pointers are not exposed to unprivileged users | HIGH | `kernel.sysctl` |
+| [`KERNEL-0003`](CHECK-REFERENCE.md#kernel-0003-debugging-other-processes-with-ptrace-is-restricted) Debugging other processes with ptrace is restricted | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0004`](CHECK-REFERENCE.md#kernel-0004-the-kernel-ring-buffer-is-not-readable-by-unprivileged-users) The kernel ring buffer is not readable by unprivileged users | HIGH | `kernel.sysctl` |
+| [`KERNEL-0005`](CHECK-REFERENCE.md#kernel-0005-setuid-programs-do-not-write-core-dumps) Setuid programs do not write core dumps | HIGH | `kernel.sysctl` |
+| [`KERNEL-0006`](CHECK-REFERENCE.md#kernel-0006-unprivileged-users-cannot-load-bpf-programs) Unprivileged users cannot load BPF programs | HIGH | `kernel.sysctl` |
+| [`KERNEL-0007`](CHECK-REFERENCE.md#kernel-0007-the-running-kernel-parameters-match-the-configured-ones) The running kernel parameters match the configured ones | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0008`](CHECK-REFERENCE.md#kernel-0008-reverse-path-filtering-is-enabled-on-every-network-interface) Reverse-path filtering is enabled on every network interface | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0009`](CHECK-REFERENCE.md#kernel-0009-symlink-following-is-restricted-in-world-writable-directories) Symlink following is restricted in world-writable directories | HIGH | `kernel.sysctl` |
+| [`KERNEL-0010`](CHECK-REFERENCE.md#kernel-0010-hardlink-creation-is-restricted-to-files-the-user-can-already-read) Hardlink creation is restricted to files the user can already read | HIGH | `kernel.sysctl` |
+| [`KERNEL-0011`](CHECK-REFERENCE.md#kernel-0011-opening-another-users-fifo-in-a-shared-directory-is-restricted) Opening another user's FIFO in a shared directory is restricted | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0012`](CHECK-REFERENCE.md#kernel-0012-opening-another-users-file-in-a-shared-directory-is-restricted) Opening another user's file in a shared directory is restricted | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0013`](CHECK-REFERENCE.md#kernel-0013-unprivileged-access-to-performance-counters-is-restricted) Unprivileged access to performance counters is restricted | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0014`](CHECK-REFERENCE.md#kernel-0014-core-dumps-are-not-written-to-an-attacker-influenced-location) Core dumps are not written to an attacker-influenced location | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0015`](CHECK-REFERENCE.md#kernel-0015-source-routed-packets-are-refused-on-every-network-interface) Source-routed packets are refused on every network interface | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0016`](CHECK-REFERENCE.md#kernel-0016-tcp-syn-cookies-are-enabled) TCP SYN cookies are enabled | LOW | `kernel.sysctl` |
+| [`KERNEL-0017`](CHECK-REFERENCE.md#kernel-0017-bpf-hardening-is-written-to-the-sysctl-configuration) BPF hardening is written to the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0018`](CHECK-REFERENCE.md#kernel-0018-kernel-pointer-restriction-is-written-to-the-sysctl-configuration) Kernel pointer restriction is written to the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0019`](CHECK-REFERENCE.md#kernel-0019-kernel-ring-buffer-restriction-is-written-to-the-sysctl-configuration) Kernel ring buffer restriction is written to the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0020`](CHECK-REFERENCE.md#kernel-0020-yama-ptrace-restriction-is-written-to-the-sysctl-configuration) Yama ptrace restriction is written to the sysctl configuration | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0021`](CHECK-REFERENCE.md#kernel-0021-the-magic-sysrq-key-is-disabled-in-the-sysctl-configuration) The magic SysRq key is disabled in the sysctl configuration | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0022`](CHECK-REFERENCE.md#kernel-0022-perf-event-restriction-is-written-to-the-sysctl-configuration) Perf event restriction is written to the sysctl configuration | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0023`](CHECK-REFERENCE.md#kernel-0023-tcp-syn-cookies-are-written-to-the-sysctl-configuration) TCP SYN cookies are written to the sysctl configuration | LOW | `kernel.sysctl` |
+| [`KERNEL-0024`](CHECK-REFERENCE.md#kernel-0024-reverse-path-filtering-is-written-to-the-sysctl-configuration) Reverse-path filtering is written to the sysctl configuration | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0025`](CHECK-REFERENCE.md#kernel-0025-source-routing-and-icmp-redirects-are-refused-in-the-sysctl-configuration) Source routing and ICMP redirects are refused in the sysctl configuration | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0026`](CHECK-REFERENCE.md#kernel-0026-ipv6-router-advertisements-are-refused-in-the-sysctl-configuration) IPv6 router advertisements are refused in the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0027`](CHECK-REFERENCE.md#kernel-0027-sending-icmp-redirects-is-refused-in-the-sysctl-configuration) Sending ICMP redirects is refused in the sysctl configuration | MEDIUM | `kernel.sysctl` |
+| [`KERNEL-0028`](CHECK-REFERENCE.md#kernel-0028-rfc-1337-time-wait-protection-is-written-to-the-sysctl-configuration) RFC 1337 TIME-WAIT protection is written to the sysctl configuration | LOW | `kernel.sysctl` |
+| [`KERNEL-0029`](CHECK-REFERENCE.md#kernel-0029-the-setuid-core-dump-policy-is-written-to-the-sysctl-configuration) The setuid core-dump policy is written to the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0030`](CHECK-REFERENCE.md#kernel-0030-hardlink-protection-is-written-to-the-sysctl-configuration) Hardlink protection is written to the sysctl configuration | HIGH | `kernel.sysctl` |
+| [`KERNEL-0031`](CHECK-REFERENCE.md#kernel-0031-symlink-protection-is-written-to-the-sysctl-configuration) Symlink protection is written to the sysctl configuration | HIGH | `kernel.sysctl` |
 
 ## LOGGING
 
 | Check | Severity | Reads |
 |---|---|---|
-| [`LOGGING-0001`](CHECK-REFERENCE.md#logging-0001--rsyslog-creates-log-files-unreadable-by-other) rsyslog creates log files unreadable by other | MEDIUM | `logging.rsyslog` |
-| [`LOGGING-0002`](CHECK-REFERENCE.md#logging-0002--logs-are-forwarded-to-a-remote-collector) Logs are forwarded to a remote collector | MEDIUM | `logging.rsyslog` |
-| [`LOGGING-0003`](CHECK-REFERENCE.md#logging-0003--the-systemd-journal-is-stored-persistently) The systemd journal is stored persistently | MEDIUM | `logging.journald` |
-| [`LOGGING-0004`](CHECK-REFERENCE.md#logging-0004--journald-forwards-to-syslog-where-rsyslog-is-present) journald forwards to syslog where rsyslog is present | LOW | `logging.journald`, `logging.rsyslog` |
-| [`LOGGING-0005`](CHECK-REFERENCE.md#logging-0005--remote-log-forwarding-uses-a-reliable-transport) Remote log forwarding uses a reliable transport | MEDIUM | `logging.rsyslog` |
+| [`LOGGING-0001`](CHECK-REFERENCE.md#logging-0001-rsyslog-creates-log-files-unreadable-by-other) rsyslog creates log files unreadable by other | MEDIUM | `logging.rsyslog` |
+| [`LOGGING-0002`](CHECK-REFERENCE.md#logging-0002-logs-are-forwarded-to-a-remote-collector) Logs are forwarded to a remote collector | MEDIUM | `logging.rsyslog` |
+| [`LOGGING-0003`](CHECK-REFERENCE.md#logging-0003-the-systemd-journal-is-stored-persistently) The systemd journal is stored persistently | MEDIUM | `logging.journald` |
+| [`LOGGING-0004`](CHECK-REFERENCE.md#logging-0004-journald-forwards-to-syslog-where-rsyslog-is-present) journald forwards to syslog where rsyslog is present | LOW | `logging.journald`, `logging.rsyslog` |
+| [`LOGGING-0005`](CHECK-REFERENCE.md#logging-0005-remote-log-forwarding-uses-a-reliable-transport) Remote log forwarding uses a reliable transport | MEDIUM | `logging.rsyslog` |
 
 ## MEMORY
 
 | Check | Severity | Reads |
 |---|---|---|
-| [`MEMORY-0001`](CHECK-REFERENCE.md#memory-0001--privileged-binaries-are-position-independent-executables) Privileged binaries are position-independent executables | MEDIUM | `memory.elf` |
-| [`MEMORY-0002`](CHECK-REFERENCE.md#memory-0002--privileged-binaries-use-full-relro) Privileged binaries use full RELRO | MEDIUM | `memory.elf` |
-| [`MEMORY-0003`](CHECK-REFERENCE.md#memory-0003--privileged-binaries-are-built-with-stack-protection) Privileged binaries are built with stack protection | MEDIUM | `memory.elf` |
-| [`MEMORY-0004`](CHECK-REFERENCE.md#memory-0004--privileged-binaries-are-built-with-fortifysource) Privileged binaries are built with \_FORTIFY\_SOURCE | LOW | `memory.elf` |
+| [`MEMORY-0001`](CHECK-REFERENCE.md#memory-0001-privileged-binaries-are-position-independent-executables) Privileged binaries are position-independent executables | MEDIUM | `memory.elf` |
+| [`MEMORY-0002`](CHECK-REFERENCE.md#memory-0002-privileged-binaries-use-full-relro) Privileged binaries use full RELRO | MEDIUM | `memory.elf` |
+| [`MEMORY-0003`](CHECK-REFERENCE.md#memory-0003-privileged-binaries-are-built-with-stack-protection) Privileged binaries are built with stack protection | MEDIUM | `memory.elf` |
+| [`MEMORY-0004`](CHECK-REFERENCE.md#memory-0004-privileged-binaries-are-built-with-fortifysource) Privileged binaries are built with \_FORTIFY\_SOURCE | LOW | `memory.elf` |
 
 ## NETWORK
 
 | Check | Severity | Reads |
 |---|---|---|
-| [`NETWORK-0001`](CHECK-REFERENCE.md#network-0001--a-host-based-firewall-is-configured) A host-based firewall is configured | HIGH | `network.firewall` |
-| [`NETWORK-0002`](CHECK-REFERENCE.md#network-0002--the-firewalls-default-inbound-policy-denies) The firewall's default inbound policy denies | HIGH | `network.firewall` |
-| [`NETWORK-0003`](CHECK-REFERENCE.md#network-0003--exactly-one-firewall-configuration-is-in-force) Exactly one firewall configuration is in force | MEDIUM | `network.firewall` |
+| [`NETWORK-0001`](CHECK-REFERENCE.md#network-0001-a-host-based-firewall-is-configured) A host-based firewall is configured | HIGH | `network.firewall` |
+| [`NETWORK-0002`](CHECK-REFERENCE.md#network-0002-the-firewalls-default-inbound-policy-denies) The firewall's default inbound policy denies | HIGH | `network.firewall` |
+| [`NETWORK-0003`](CHECK-REFERENCE.md#network-0003-exactly-one-firewall-configuration-is-in-force) Exactly one firewall configuration is in force | MEDIUM | `network.firewall` |
 
 ## SERVICES
 
 | Check | Severity | Reads |
 |---|---|---|
-| [`SERVICES-0001`](CHECK-REFERENCE.md#services-0001--no-cleartext-credential-network-service-is-enabled) No cleartext-credential network service is enabled | HIGH | `services.units` |
-| [`SERVICES-0002`](CHECK-REFERENCE.md#services-0002--network-discovery-and-rpc-portmapping-services-are-not-enabled) Network discovery and RPC portmapping services are not enabled | MEDIUM | `services.units` |
-| [`SERVICES-0003`](CHECK-REFERENCE.md#services-0003--exactly-one-time-synchronisation-daemon-is-enabled) Exactly one time synchronisation daemon is enabled | MEDIUM | `services.units` |
-| [`SERVICES-0004`](CHECK-REFERENCE.md#services-0004--every-enabled-unit-resolves-to-a-unit-file-that-exists) Every enabled unit resolves to a unit file that exists | MEDIUM | `services.units` |
-| [`SERVICES-0005`](CHECK-REFERENCE.md#services-0005--unit-directories-and-unit-files-are-writable-by-root-alone) Unit directories and unit files are writable by root alone | HIGH | `services.units` |
-| [`SERVICES-0006`](CHECK-REFERENCE.md#services-0006--audited-system-services-set-nonewprivileges) Audited system services set NoNewPrivileges | MEDIUM | `services.hardening` |
-| [`SERVICES-0007`](CHECK-REFERENCE.md#services-0007--audited-system-services-run-with-the-system-directories-read-only) Audited system services run with the system directories read-only | HIGH | `services.hardening` |
-| [`SERVICES-0008`](CHECK-REFERENCE.md#services-0008--audited-system-services-cannot-reach-user-home-directories) Audited system services cannot reach user home directories | HIGH | `services.hardening` |
-| [`SERVICES-0010`](CHECK-REFERENCE.md#services-0010--apparmor-is-enforcing-at-least-one-profile) AppArmor is enforcing at least one profile | HIGH | `services.apparmor` |
-| [`SERVICES-0011`](CHECK-REFERENCE.md#services-0011--audited-system-services-are-sandboxed-at-the-strict-tier) Audited system services are sandboxed at the strict tier | MEDIUM | `services.hardening` |
+| [`SERVICES-0001`](CHECK-REFERENCE.md#services-0001-no-cleartext-credential-network-service-is-enabled) No cleartext-credential network service is enabled | HIGH | `services.units` |
+| [`SERVICES-0002`](CHECK-REFERENCE.md#services-0002-network-discovery-and-rpc-portmapping-services-are-not-enabled) Network discovery and RPC portmapping services are not enabled | MEDIUM | `services.units` |
+| [`SERVICES-0003`](CHECK-REFERENCE.md#services-0003-exactly-one-time-synchronisation-daemon-is-enabled) Exactly one time synchronisation daemon is enabled | MEDIUM | `services.units` |
+| [`SERVICES-0004`](CHECK-REFERENCE.md#services-0004-every-enabled-unit-resolves-to-a-unit-file-that-exists) Every enabled unit resolves to a unit file that exists | MEDIUM | `services.units` |
+| [`SERVICES-0005`](CHECK-REFERENCE.md#services-0005-unit-directories-and-unit-files-are-writable-by-root-alone) Unit directories and unit files are writable by root alone | HIGH | `services.units` |
+| [`SERVICES-0006`](CHECK-REFERENCE.md#services-0006-audited-system-services-set-nonewprivileges) Audited system services set NoNewPrivileges | MEDIUM | `services.hardening` |
+| [`SERVICES-0007`](CHECK-REFERENCE.md#services-0007-audited-system-services-run-with-the-system-directories-read-only) Audited system services run with the system directories read-only | HIGH | `services.hardening` |
+| [`SERVICES-0008`](CHECK-REFERENCE.md#services-0008-audited-system-services-cannot-reach-user-home-directories) Audited system services cannot reach user home directories | HIGH | `services.hardening` |
+| [`SERVICES-0010`](CHECK-REFERENCE.md#services-0010-apparmor-is-enforcing-at-least-one-profile) AppArmor is enforcing at least one profile | HIGH | `services.apparmor` |
+| [`SERVICES-0011`](CHECK-REFERENCE.md#services-0011-audited-system-services-are-sandboxed-at-the-strict-tier) Audited system services are sandboxed at the strict tier | MEDIUM | `services.hardening` |
 
 ## SSHD
 
 | Check | Severity | Reads |
 |---|---|---|
-| [`SSHD-0002`](CHECK-REFERENCE.md#sshd-0002--root-login-over-ssh-is-disabled) Root login over SSH is disabled | HIGH | `sshd.config` |
-| [`SSHD-0003`](CHECK-REFERENCE.md#sshd-0003--password-authentication-over-ssh-is-disabled) Password authentication over SSH is disabled | HIGH | `sshd.config` |
-| [`SSHD-0004`](CHECK-REFERENCE.md#sshd-0004--accounts-with-empty-passwords-cannot-log-in-over-ssh) Accounts with empty passwords cannot log in over SSH | CRITICAL | `sshd.config` |
-| [`SSHD-0005`](CHECK-REFERENCE.md#sshd-0005--x11-forwarding-is-disabled) X11 forwarding is disabled | MEDIUM | `sshd.config` |
-| [`SSHD-0006`](CHECK-REFERENCE.md#sshd-0006--authentication-attempts-per-connection-are-limited) Authentication attempts per connection are limited | MEDIUM | `sshd.config` |
-| [`SSHD-0007`](CHECK-REFERENCE.md#sshd-0007--idle-ssh-sessions-are-disconnected) Idle SSH sessions are disconnected | MEDIUM | `sshd.config` |
-| [`SSHD-0008`](CHECK-REFERENCE.md#sshd-0008--tcp-forwarding-is-restricted) TCP forwarding is restricted | MEDIUM | `sshd.config` |
-| [`SSHD-0009`](CHECK-REFERENCE.md#sshd-0009--sshd-logging-is-detailed-enough-to-reconstruct-access) sshd logging is detailed enough to reconstruct access | MEDIUM | `sshd.config` |
-| [`SSHD-0010`](CHECK-REFERENCE.md#sshd-0010--no-deprecated-or-broken-cipher-is-offered) No deprecated or broken cipher is offered | HIGH | `sshd.config` |
-| [`SSHD-0011`](CHECK-REFERENCE.md#sshd-0011--no-deprecated-or-truncated-mac-is-offered) No deprecated or truncated MAC is offered | HIGH | `sshd.config` |
-| [`SSHD-0012`](CHECK-REFERENCE.md#sshd-0012--no-deprecated-key-exchange-method-is-offered) No deprecated key exchange method is offered | HIGH | `sshd.config` |
-| [`SSHD-0013`](CHECK-REFERENCE.md#sshd-0013--per-user-rhosts-and-shosts-files-are-ignored) Per-user .rhosts and .shosts files are ignored | MEDIUM | `sshd.config` |
-| [`SSHD-0014`](CHECK-REFERENCE.md#sshd-0014--host-based-authentication-is-disabled) Host-based authentication is disabled | HIGH | `sshd.config` |
-| [`SSHD-0015`](CHECK-REFERENCE.md#sshd-0015--users-cannot-set-arbitrary-environment-variables-at-login) Users cannot set arbitrary environment variables at login | MEDIUM | `sshd.config` |
-| [`SSHD-0016`](CHECK-REFERENCE.md#sshd-0016--unauthenticated-connections-are-closed-promptly) Unauthenticated connections are closed promptly | LOW | `sshd.config` |
-| [`SSHD-0017`](CHECK-REFERENCE.md#sshd-0017--a-pre-authentication-warning-banner-is-presented) A pre-authentication warning banner is presented | LOW | `sshd.config` |
-| [`SSHD-0018`](CHECK-REFERENCE.md#sshd-0018--ssh-agent-forwarding-is-disabled) SSH agent forwarding is disabled | LOW | `sshd.config` |
-| [`SSHD-0019`](CHECK-REFERENCE.md#sshd-0019--sshd-verifies-ownership-and-permissions-of-user-key-files) sshd verifies ownership and permissions of user key files | MEDIUM | `sshd.config` |
-| [`SSHD-0020`](CHECK-REFERENCE.md#sshd-0020--sshd-runs-the-pam-account-and-session-stack) sshd runs the PAM account and session stack | HIGH | `sshd.config` |
+| [`SSHD-0002`](CHECK-REFERENCE.md#sshd-0002-root-login-over-ssh-is-disabled) Root login over SSH is disabled | HIGH | `sshd.config` |
+| [`SSHD-0003`](CHECK-REFERENCE.md#sshd-0003-password-authentication-over-ssh-is-disabled) Password authentication over SSH is disabled | HIGH | `sshd.config` |
+| [`SSHD-0004`](CHECK-REFERENCE.md#sshd-0004-accounts-with-empty-passwords-cannot-log-in-over-ssh) Accounts with empty passwords cannot log in over SSH | CRITICAL | `sshd.config` |
+| [`SSHD-0005`](CHECK-REFERENCE.md#sshd-0005-x11-forwarding-is-disabled) X11 forwarding is disabled | MEDIUM | `sshd.config` |
+| [`SSHD-0006`](CHECK-REFERENCE.md#sshd-0006-authentication-attempts-per-connection-are-limited) Authentication attempts per connection are limited | MEDIUM | `sshd.config` |
+| [`SSHD-0007`](CHECK-REFERENCE.md#sshd-0007-idle-ssh-sessions-are-disconnected) Idle SSH sessions are disconnected | MEDIUM | `sshd.config` |
+| [`SSHD-0008`](CHECK-REFERENCE.md#sshd-0008-tcp-forwarding-is-restricted) TCP forwarding is restricted | MEDIUM | `sshd.config` |
+| [`SSHD-0009`](CHECK-REFERENCE.md#sshd-0009-sshd-logging-is-detailed-enough-to-reconstruct-access) sshd logging is detailed enough to reconstruct access | MEDIUM | `sshd.config` |
+| [`SSHD-0010`](CHECK-REFERENCE.md#sshd-0010-no-deprecated-or-broken-cipher-is-offered) No deprecated or broken cipher is offered | HIGH | `sshd.config` |
+| [`SSHD-0011`](CHECK-REFERENCE.md#sshd-0011-no-deprecated-or-truncated-mac-is-offered) No deprecated or truncated MAC is offered | HIGH | `sshd.config` |
+| [`SSHD-0012`](CHECK-REFERENCE.md#sshd-0012-no-deprecated-key-exchange-method-is-offered) No deprecated key exchange method is offered | HIGH | `sshd.config` |
+| [`SSHD-0013`](CHECK-REFERENCE.md#sshd-0013-per-user-rhosts-and-shosts-files-are-ignored) Per-user .rhosts and .shosts files are ignored | MEDIUM | `sshd.config` |
+| [`SSHD-0014`](CHECK-REFERENCE.md#sshd-0014-host-based-authentication-is-disabled) Host-based authentication is disabled | HIGH | `sshd.config` |
+| [`SSHD-0015`](CHECK-REFERENCE.md#sshd-0015-users-cannot-set-arbitrary-environment-variables-at-login) Users cannot set arbitrary environment variables at login | MEDIUM | `sshd.config` |
+| [`SSHD-0016`](CHECK-REFERENCE.md#sshd-0016-unauthenticated-connections-are-closed-promptly) Unauthenticated connections are closed promptly | LOW | `sshd.config` |
+| [`SSHD-0017`](CHECK-REFERENCE.md#sshd-0017-a-pre-authentication-warning-banner-is-presented) A pre-authentication warning banner is presented | LOW | `sshd.config` |
+| [`SSHD-0018`](CHECK-REFERENCE.md#sshd-0018-ssh-agent-forwarding-is-disabled) SSH agent forwarding is disabled | LOW | `sshd.config` |
+| [`SSHD-0019`](CHECK-REFERENCE.md#sshd-0019-sshd-verifies-ownership-and-permissions-of-user-key-files) sshd verifies ownership and permissions of user key files | MEDIUM | `sshd.config` |
+| [`SSHD-0020`](CHECK-REFERENCE.md#sshd-0020-sshd-runs-the-pam-account-and-session-stack) sshd runs the PAM account and session stack | HIGH | `sshd.config` |
 
 ## USERS
 
 | Check | Severity | Reads |
 |---|---|---|
-| [`USERS-0001`](CHECK-REFERENCE.md#users-0001--only-the-root-account-has-uid-0) Only the root account has uid 0 | CRITICAL | `users.passwd` |
-| [`USERS-0002`](CHECK-REFERENCE.md#users-0002--system-accounts-have-no-interactive-login-shell) System accounts have no interactive login shell | MEDIUM | `users.passwd` |
-| [`USERS-0003`](CHECK-REFERENCE.md#users-0003--no-account-has-an-empty-password) No account has an empty password | CRITICAL | `users.passwd`, `users.shadow` |
-| [`USERS-0004`](CHECK-REFERENCE.md#users-0004--password-hashes-use-a-modern-algorithm) Password hashes use a modern algorithm | HIGH | `users.passwd`, `users.shadow` |
-| [`USERS-0005`](CHECK-REFERENCE.md#users-0005--no-uid-or-account-name-is-used-by-more-than-one-entry) No uid or account name is used by more than one entry | HIGH | `users.passwd` |
-| [`USERS-0006`](CHECK-REFERENCE.md#users-0006--the-account-database-contains-no-legacy-nis-import-entries) The account database contains no legacy NIS import entries | HIGH | `users.passwd` |
-| [`USERS-0007`](CHECK-REFERENCE.md#users-0007--group-0-is-confined-to-root) Group 0 is confined to root | HIGH | `users.group`, `users.passwd` |
-| [`USERS-0008`](CHECK-REFERENCE.md#users-0008--no-gid-or-group-name-is-used-by-more-than-one-entry) No gid or group name is used by more than one entry | MEDIUM | `users.group` |
-| [`USERS-0009`](CHECK-REFERENCE.md#users-0009--passwords-that-can-authenticate-have-a-bounded-maximum-age) Passwords that can authenticate have a bounded maximum age | LOW | `users.passwd`, `users.shadow` |
-| [`USERS-0010`](CHECK-REFERENCE.md#users-0010--passwords-that-can-authenticate-have-a-minimum-age-set) Passwords that can authenticate have a minimum age set | LOW | `users.passwd`, `users.shadow` |
-| [`USERS-0012`](CHECK-REFERENCE.md#users-0012--the-default-minimum-password-age-is-at-least-one-day) The default minimum password age is at least one day | LOW | `auth.login_defs` |
+| [`USERS-0001`](CHECK-REFERENCE.md#users-0001-only-the-root-account-has-uid-0) Only the root account has uid 0 | CRITICAL | `users.passwd` |
+| [`USERS-0002`](CHECK-REFERENCE.md#users-0002-system-accounts-have-no-interactive-login-shell) System accounts have no interactive login shell | MEDIUM | `users.passwd` |
+| [`USERS-0003`](CHECK-REFERENCE.md#users-0003-no-account-has-an-empty-password) No account has an empty password | CRITICAL | `users.passwd`, `users.shadow` |
+| [`USERS-0004`](CHECK-REFERENCE.md#users-0004-password-hashes-use-a-modern-algorithm) Password hashes use a modern algorithm | HIGH | `users.passwd`, `users.shadow` |
+| [`USERS-0005`](CHECK-REFERENCE.md#users-0005-no-uid-or-account-name-is-used-by-more-than-one-entry) No uid or account name is used by more than one entry | HIGH | `users.passwd` |
+| [`USERS-0006`](CHECK-REFERENCE.md#users-0006-the-account-database-contains-no-legacy-nis-import-entries) The account database contains no legacy NIS import entries | HIGH | `users.passwd` |
+| [`USERS-0007`](CHECK-REFERENCE.md#users-0007-group-0-is-confined-to-root) Group 0 is confined to root | HIGH | `users.group`, `users.passwd` |
+| [`USERS-0008`](CHECK-REFERENCE.md#users-0008-no-gid-or-group-name-is-used-by-more-than-one-entry) No gid or group name is used by more than one entry | MEDIUM | `users.group` |
+| [`USERS-0009`](CHECK-REFERENCE.md#users-0009-passwords-that-can-authenticate-have-a-bounded-maximum-age) Passwords that can authenticate have a bounded maximum age | LOW | `users.passwd`, `users.shadow` |
+| [`USERS-0010`](CHECK-REFERENCE.md#users-0010-passwords-that-can-authenticate-have-a-minimum-age-set) Passwords that can authenticate have a minimum age set | LOW | `users.passwd`, `users.shadow` |
+| [`USERS-0012`](CHECK-REFERENCE.md#users-0012-the-default-minimum-password-age-is-at-least-one-day) The default minimum password age is at least one day | LOW | `auth.login_defs` |
 

@@ -15,7 +15,7 @@ var Check0005 = catalog.Check{
 	Module: "LOGGING",
 	Title:  "Remote log forwarding uses a reliable transport",
 	Description: `Forwarding over UDP drops messages silently, and it drops
-them hardest under load — which is precisely the condition that produces the
+them hardest under load, which is precisely the condition that produces the
 logs worth keeping. A host under attack generates a burst of authentication
 failures, and a UDP forwarder discards whatever the socket buffer cannot hold,
 with no error anywhere and no gap that anything downstream can detect. The
@@ -23,15 +23,15 @@ collector receives a plausible-looking stream that is missing the interesting
 part.
 
 Two further properties make UDP the wrong choice here. It is connectionless, so
-a collector that is down produces no failure on the sending side at all — the
+a collector that is down produces no failure on the sending side at all, the
 host carries on believing it is forwarding. And it is trivially spoofable: an
 attacker on the path can inject records that the collector will attribute to
 this host, which turns the log from evidence into something an adversary can
 write to.
 
 TCP fixes the silent-loss problem and makes an unreachable collector visible.
-RELP fixes the remaining gap — TCP acknowledges receipt by the kernel, RELP
-acknowledges processing by the application — and is the right answer where the
+RELP fixes the remaining gap. TCP acknowledges receipt by the kernel, RELP
+acknowledges processing by the application, and is the right answer where the
 log is genuinely evidentiary.
 
 **Where the protocol is not stated, this check treats it as UDP**, because
@@ -128,7 +128,7 @@ two names.`,
 		Summary: "Move the destination to TCP or RELP, and give it a disk-assisted queue.",
 		Effort:  "MEDIUM",
 		Steps: []string{
-			"Confirm the collector accepts the new transport before changing the sender. A collector listening only on UDP/514 will simply stop receiving, and — because UDP fails silently — nobody will notice until somebody goes looking for a log.",
+			"Confirm the collector accepts the new transport before changing the sender. A collector listening only on UDP/514 will simply stop receiving, and, because UDP fails silently, nobody will notice until somebody goes looking for a log.",
 			"Legacy syntax: change the single '@' to '@@'. '*.* @@logs.example.net:514'.",
 			"RainerScript: set 'protocol=\"tcp\"' on the omfwd action, or switch to 'action(type=\"omrelp\" target=\"...\" port=\"2514\")' where the collector supports RELP.",
 			"Add a queue, or TCP only moves the loss rather than removing it: 'queue.type=\"linkedlist\" queue.filename=\"fwd\" queue.maxdiskspace=\"1g\" action.resumeRetryCount=\"-1\"' lets the host buffer to disk through a collector outage instead of discarding.",
@@ -138,7 +138,7 @@ two names.`,
 			"grep -rEn '@@?[a-zA-Z0-9]|omfwd|omrelp' /etc/rsyslog.conf /etc/rsyslog.d/",
 			"ss -tnp | grep :514",
 		},
-		Caution: "TCP forwarding without a queue can block rsyslog when the collector is slow or unreachable, which on some configurations blocks the applications writing to it. Configure a disk-assisted queue and a resume-retry count in the same change — moving to TCP without one trades silent loss for an availability risk.",
+		Caution: "TCP forwarding without a queue can block rsyslog when the collector is slow or unreachable, which on some configurations blocks the applications writing to it. Configure a disk-assisted queue and a resume-retry count in the same change, moving to TCP without one trades silent loss for an availability risk.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -148,7 +148,7 @@ two names.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "rsyslog — omfwd", URL: "https://www.rsyslog.com/doc/configuration/modules/omfwd.html"},
-		{Title: "RFC 5424 — The Syslog Protocol", URL: "https://www.rfc-editor.org/rfc/rfc5424"},
+		{Title: "rsyslog, omfwd", URL: "https://www.rsyslog.com/doc/configuration/modules/omfwd.html"},
+		{Title: "RFC 5424. The Syslog Protocol", URL: "https://www.rfc-editor.org/rfc/rfc5424"},
 	},
 }

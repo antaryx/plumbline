@@ -1,17 +1,25 @@
-# ROADMAP — Plumbline
+# Roadmap
 
-**Three stable majors.** Each is a complete, defensible product on its own. If development stops after any of them, what exists is still worth using.
+**Four stable majors.** Each is a complete, defensible product on its own. If development stops after any of them, what exists is still worth using.
 
-> **Where the project actually is — 2026-08-20.** `v0.4.0` is tagged: **79
-> checks across nine modules at catalog version 13**, a human-readable terminal
-> report by default with `--json` for pipelines, and a scanner that refuses to
-> draw a verdict from a file it could not really parse. The output schema is
-> `findings-v1`, and the tool runs offline with no network code path in any
-> build.
+There were three. Remediation was not on the plan, got built, and turned out to be a major on its own, so intelligence moved to v3 and reach moved to v4.
+
+> **Where the project actually is, 2026-09-02.** `v2.0.0` is the current
+> version: **112 checks across 11 modules at catalog version 34**, a
+> human-readable terminal report by default with `--json` for pipelines, and a
+> scanner that refuses to draw a verdict from a file it could not really parse.
+> The output schema is `findings-v1`, and the tool runs offline with no network
+> code path in any build.
+>
+> `v2.0.0` is the remediation major: a generated, idempotent `scan --fix`
+> script the operator reads and runs, pipeline gates, SARIF export carrying the
+> proposed fix, and the `CONTAINERS` and `MEMORY` modules. It
+> adds no vulnerability correlation, no `PRIVESC` and no `CLOUD`. Those moved to
+> v3.0.0.
 >
 > `v0.4.0` added the three things that make a scan worth running twice: a
 > lynis-style terminal report, explicit `--suppress` acknowledgement of accepted
-> risks, and `plumbline diff` between two bundles. The catalog did not move —
+> risks, and `plumbline diff` between two bundles. The catalog did not move:
 > every verdict is one `v0.3.1` would have reached. Go's floor is 1.24 and CI
 > builds with 1.25.
 >
@@ -25,21 +33,22 @@
 > check count or a catalog version. A roadmap that disagrees with `main` is
 > worse than no roadmap, because people plan against it.
 
-Effort figures assume one developer working part-time (~15 h/week) and are estimates, marked as such — unlike the source design, which stated durations for software that did not exist.
+Effort figures assume one developer working part-time (~15 h/week) and are estimates, marked as such, unlike the source design, which stated durations for software that did not exist.
 
 ---
 
 ## Shape of the plan
 
-| Release | Theme | Scope in one line | Est. effort |
+| Release | Theme | Scope in one line | State |
 |---|---|---|---|
-| **v1.0.0** | *Trustworthy core* | Linux host auditing that is correct, testable and offline | ~4–6 months |
-| **v2.0.0** | *Intelligence* | Vulnerabilities, containers, remediation, evidence for auditors | ~6–8 months |
-| **v3.0.0** | *Reach* | Extensibility, macOS, fleets, stable public API | ~6–9 months |
+| **v1.0.0** | *Trustworthy core* | Linux host auditing that is correct, testable and offline | shipped 2026-08-21 |
+| **v2.0.0** | *Remediation and pipelines* | Idempotent generated fixes, CI gates, SARIF export | shipped 2026-09-02 |
+| **v3.0.0** | *Intelligence* | Vulnerability correlation, cloud metadata, privesc, evidence packs | not started, ~6-8 months |
+| **v4.0.0** | *Reach* | Extensibility, macOS, fleets, stable public API | not started, ~6-9 months |
 
-Pre-1.0 there are four internal milestones (v0.1 – v0.4) that are *not* public stable releases. They exist to force integration early; the source design's eight 0.x milestones were a plan to build eight products before shipping one.
+Pre-1.0 there are four internal milestones (v0.1 to v0.4) that are *not* public stable releases. They exist to force integration early; the source design's eight 0.x milestones were a plan to build eight products before shipping one.
 
-There were three until v0.3.0 was tagged. The fourth exists because v0.3.0 shipped four of the eighteen items it had been scoped for, and re-scoping the milestone was the honest response — releasing on the original terms would have meant declaring feature freeze over a tool with no suppression file and no `diff`.
+There were three until v0.3.0 was tagged. The fourth exists because v0.3.0 shipped four of the eighteen items it had been scoped for, and re-scoping the milestone was the honest response, releasing on the original terms would have meant declaring feature freeze over a tool with no suppression file and no `diff`.
 
 ---
 
@@ -48,20 +57,20 @@ There were three until v0.3.0 was tagged. The fourth exists because v0.3.0 shipp
 Tagged and released as pre-releases so the pipeline gets exercised, but with an
 explicit "no stability guarantees" banner.
 
-**Status at 2026-08-20:** v0.1.0, v0.2.0, v0.3.0, v0.3.1 and v0.4.0 are
-complete and tagged. v0.5.0 is next and is the last feature milestone before
-v1.0.0. The schema is `findings-v1` throughout.
+**Status at 2026-09-02:** every pre-1.0 milestone is complete and tagged, and
+v1.0.0 and v2.0.0 have shipped on top of them. The schema is `findings-v1`
+throughout. This section is a record of how the tool got here, not a plan.
 
 | Milestone | State | Catalog | Checks | Shipped |
 |---|---|---|---|---|
-| v0.1.0 — walking skeleton | **complete** | 1 | 8 | tagged `v0.1.0` |
-| v0.2.0 — catalog machinery | **complete** | 11 | 78 | tagged `v0.2.0`, 2026-08-20 |
-| v0.3.0 — engine maturation and resilience | **complete** | 13 | 79 | tagged `v0.3.0`, 2026-08-20 |
-| v0.3.1 — verification harness repairs | **complete** | 13 | 79 | tagged `v0.3.1`, 2026-08-20; no behaviour change |
-| v0.4.0 — usable more than once | **complete** | 13 | 79 | tagged `v0.4.0`, 2026-08-20 |
-| v0.5.0 — ecosystem integration | **in progress** | 13 | 79 | WP-31 SARIF; WP-32 `explain`; WP-33 profiles |
+| v0.1.0, walking skeleton | **complete** | 1 | 8 | tagged `v0.1.0` |
+| v0.2.0, catalog machinery | **complete** | 11 | 78 | tagged `v0.2.0`, 2026-08-20 |
+| v0.3.0, engine maturation and resilience | **complete** | 13 | 79 | tagged `v0.3.0`, 2026-08-20 |
+| v0.3.1, verification harness repairs | **complete** | 13 | 79 | tagged `v0.3.1`, 2026-08-20; no behaviour change |
+| v0.4.0, usable more than once | **complete** | 13 | 79 | tagged `v0.4.0`, 2026-08-20 |
+| v0.5.0, ecosystem integration | **complete** | 13 | 79 | WP-31 SARIF; WP-32 `explain`; WP-33 profiles |
 
-### v0.1.0 — Walking skeleton — **COMPLETE**
+### v0.1.0: Walking skeleton, **COMPLETE**
 
 The thinnest possible end-to-end path, chosen so that every architectural risk
 was hit on day one rather than month four. Every item below is in `main`.
@@ -76,7 +85,7 @@ was hit on day one rather than month four. Every item below is in `main`.
 - [x] Fixture harness, one directory per scenario
 - [x] CI: build, vet, test, race
 
-**Exit criteria — met.** `collect` on a real host → `eval` elsewhere → identical
+**Exit criteria, met.** `collect` on a real host → `eval` elsewhere → identical
 findings across two runs, asserted byte-for-byte by a test.
 
 **What the milestone actually taught us**, recorded because it changed the
@@ -91,11 +100,11 @@ design and not just the schedule:
 - Operator-named paths (the bundle) must **not** go through the `--root`
   prefix, which is why `localfile.go` sits off the interface (ADR-0011).
 
-### v0.2.0 — Catalog machinery — **COMPLETE** *(tagged 2026-08-20)*
+### v0.2.0: Catalog machinery, **COMPLETE** *(tagged 2026-08-20)*
 
 - [x] The single-pass filesystem walker with interest predicates, plus the
-      hostile-fixture corpus — FIFOs, 40-deep symlink chains, ANSI filenames,
-      100 MB files, cyclic bind mounts — generated at test time, not committed
+      hostile-fixture corpus. FIFOs, 40-deep symlink chains, ANSI filenames,
+      100 MB files, cyclic bind mounts, generated at test time, not committed
 - [x] Collector DAG with cost classes, budgets and per-collector error capture
 - [x] All five result states wired through, including `UNKNOWN` propagation
       from `FactError`
@@ -105,7 +114,7 @@ design and not just the schedule:
 - [x] **78 checks across nine modules** (target was ~45 across four)
 - [x] Golden-bundle round-trip: save a scan, re-evaluate it, identical findings
 
-**Exit criteria — met.** The hostile corpus produces zero hangs, zero panics
+**Exit criteria, met.** The hostile corpus produces zero hangs, zero panics
 and zero unbounded reads; the walk terminates on cycles by device+inode
 identity rather than by giving up at a depth limit (ADR-0012).
 
@@ -121,7 +130,7 @@ identity rather than by giving up at a depth limit (ADR-0012).
 | `CRON` | 5 | `crontab`, `cron.d`, per-user spools |
 | `LOGGING` | 5 | rsyslog, journald |
 | `SERVICES` | 5 | systemd enablement **symlinks**, read offline; masking outranks enablement |
-| `NETWORK` | 3 | nftables, iptables-save, ufw, firewalld — local state only |
+| `NETWORK` | 3 | nftables, iptables-save, ufw, firewalld, local state only |
 | | **78** | catalog version 11 |
 
 #### Deliberate reductions, recorded so they are not rediscovered as bugs
@@ -129,8 +138,8 @@ identity rather than by giving up at a depth limit (ADR-0012).
 - **Check count came in at 78 against a v1 ceiling of ~110.** The gap is
   entirely checks that would have needed an allowlist of blessed binaries,
   package names or service names. The v0.2 work plan forbade a name
-  list that "silently excuses a real finding", and the substitute — asserting a
-  property no legitimate subject has — does not exist for every rule. Correctness
+  list that "silently excuses a real finding", and the substitute, asserting a
+  property no legitimate subject has, does not exist for every rule. Correctness
   is not the flex; check count is.
 - **`SYSINFO` was not built.** Six informational, never-scored checks are the
   cheapest thing in the plan and the least useful; they are v0.3 filler.
@@ -141,13 +150,13 @@ identity rather than by giving up at a depth limit (ADR-0012).
   the risk table predicted; the graph model landed but the checks over it did
   not. The remaining eleven are mechanical now that the model exists.
 
-### v0.3.0 — Engine maturation and resilience — **COMPLETE** *(tagged 2026-08-20)*
+### v0.3.0: Engine maturation and resilience, **COMPLETE** *(tagged 2026-08-20)*
 
 **This milestone was re-scoped, and the re-scoping is recorded rather than
 quietly applied.** v0.3.0 was originally "feature complete for v1", with
 eighteen items and feature freeze as its exit criterion. Four shipped. The
-three that were built are substantial and coherent — they are the engine, the
-output and the failure modes — but SARIF, `diff`, suppressions and `doctor` are
+three that were built are substantial and coherent, they are the engine, the
+output and the failure modes, but SARIF, `diff`, suppressions and `doctor` are
 features, so freezing here would have been a claim nobody could act on.
 **Feature freeze moves to v0.4.0**, which carries the fourteen items this
 milestone did not.
@@ -161,7 +170,7 @@ which is the only reason they exist.
 - [x] **Aggregating walker interests** *(WP-25)*. The walk recorded rows: the
       first N inodes matching a pure predicate. That answers "show me the
       setuid binaries" and cannot answer "does every uid on disk resolve to an
-      account" — the join is against a fact that does not exist when the
+      account", the join is against a fact that does not exist when the
       predicate is registered, and recording every owned inode to defer the
       join would overflow the row cap on any host that has users. A `Tally`
       folds inodes into a bounded keyspace during the walk, so cost is the
@@ -171,12 +180,12 @@ which is the only reason they exist.
       a file; the *account database* is whatever `nsswitch.conf` routes
       `passwd` to. Four USERS specs had named this as a known limitation before
       the fact existed
-- [x] **FILESYS-0010, unowned files** — the check the aggregation was built
+- [x] **FILESYS-0010, unowned files**, the check the aggregation was built
       for, and the first that can conclude an identity does not exist
 - [x] **Terminal renderer, and it is the default** *(WP-26)*.
       `internal/render/text`: header, per-module listing, a full block for
       every FAIL *and* every UNKNOWN, and a summary that states the UNKNOWN
-      count on its own line. `--json` keeps the pipeline path. No dependency —
+      count on its own line. `--json` keeps the pipeline path. No dependency:
       plain SGR sequences and `text/tabwriter`
 - [x] **Malformed and corrupted input** *(WP-27)*. Every parser gates on
       `collect.NotText` before parsing; `SSHDConfig.SyntaxErrors` records lines
@@ -185,7 +194,7 @@ which is the only reason they exist.
       this build could not decode was read as the zero value and reported as
       "not configured on this host"
 
-**Exit criteria — met on the re-scoped terms.** A host with four kilobytes of
+**Exit criteria, met on the re-scoped terms.** A host with four kilobytes of
 random bytes in every configuration file produces zero `PASS` or `FAIL` from
 any content-reading module, names every unparseable file in `fact_errors`, and
 does not panic. Before WP-27 the same host produced 22 `PASS`, 23 `FAIL` and
@@ -201,14 +210,14 @@ does not panic. Before WP-27 the same host produced 22 `PASS`, 23 `FAIL` and
   written in v0.1.
 - **A gate applied at every call site is a gate that gets forgotten.** Three
   checks bypassed their module's shared funnel and so carried none of its
-  guards — including SSHD-0002, which is the module's own reference
+  guards, including SSHD-0002, which is the module's own reference
   implementation. The fix is module-wide tests that loop over every check, not
   more careful authors.
 - **A reason code that nothing produces is a reason code that does not work.**
   `finding.ReasonFactVersion` had been declared since v0.1 and was never once
   emitted; the case it was for reported `NOT_APPLICABLE` instead.
 
-### v0.4.0 — Usable more than once — **COMPLETE** *(tagged 2026-08-20)*
+### v0.4.0: Usable more than once, **COMPLETE** *(tagged 2026-08-20)*
 
 Everything v0.3.0 did not carry, in the order it should be built. The ordering
 is not the original one: it now leads with what makes the tool *usable more
@@ -222,12 +231,12 @@ fixed 78-column grid (`[ OK ]`, `[ WARNING ]`, `[ UNKNOWN ]`, `[ SKIPPED ]`,
 carries every detail, evidence excerpt and remediation. The previous layout
 interleaved the two, which put forty lines of advice between two check results
 and destroyed the column of verdicts the layout exists to provide. `UNKNOWN`
-keeps its own heading at equal weight in the suggestion phase — the detail
+keeps its own heading at equal weight in the suggestion phase, the detail
 moved, the emphasis did not. See `docs/CLI-SPEC.md` §Output.
 
 #### 1. Make a repeat scan survivable
 
-- **Suppression file format — DONE (WP-29, 2026-08-20).** `--suppress` applies
+- **Suppression file format, DONE (WP-29, 2026-08-20).** `--suppress` applies
   a `suppressions/v1` file; a suppressed finding becomes `SKIPPED`, carries its
   justification and the result it would otherwise have had, and appears under
   `[=] Accepted risks`. Expiry is measured against the scan's start time so an
@@ -238,11 +247,11 @@ moved, the emphasis did not. See `docs/CLI-SPEC.md` §Output.
   has accepted a finding must be able to say so, or the second scan reports the
   same thing as the first and people stop reading it. Suppressions carry a
   reason and an expiry, and a suppressed check is reported as `SKIPPED` with
-  that reason, **never omitted** — a suppression that silently removes a
+  that reason, **never omitted**, a suppression that silently removes a
   finding is how a finding gets lost, which is the same failure this project
   refuses everywhere else. De-risked by `finding.Fingerprint`, which is already
   stable and frozen.
-- **`plumbline diff` — DONE (WP-30, 2026-08-20).** `plumbline diff OLD NEW`
+- **`plumbline diff`, DONE (WP-30, 2026-08-20).** `plumbline diff OLD NEW`
   re-evaluates both bundles with today's catalog and reports only what moved,
   in five categories, with a posture delta beside a coverage delta. Suppression
   state is part of the comparison: a lapsed acceptance shows as `REGRESSED`
@@ -259,7 +268,7 @@ moved, the emphasis did not. See `docs/CLI-SPEC.md` §Output.
 - **`check list` / `show` / `explain`.** The catalog is the product and is
   currently readable only by reading Go, or by reading `docs/checks/` and
   trusting it matches.
-- **`plumbline doctor`** — what a scan could and could not see, *before* it
+- **`plumbline doctor`.** What a scan could and could not see, *before* it
   runs: euid, readable paths, missing collectors, budget headroom. The natural
   companion to a tool whose distinguishing output is `UNKNOWN`.
 - **SARIF renderer** with stable fingerprints across runs and catalog versions.
@@ -276,18 +285,18 @@ v1 release criterion.
   is a week of accumulating glibc assumptions.
 - **`--root` against a real mounted image and a container filesystem.** The
   escape-refusal rule has unit tests and has never met a real overlayfs.
-- **Golden bundles for ≥6 distro/version combinations.** ✅ Done in WP-34; see `testdata/bundles/README.md`.
-- **Determinism under adversarial ordering** — hostile directory-entry order,
+- **Golden bundles for at least 6 distro/version combinations.** Done in WP-34; see `testdata/bundles/README.md`.
+- **Determinism under adversarial ordering.** Hostile directory-entry order,
   duplicate mount points, `..` in mountinfo fields.
-- **Budget behaviour on a genuinely large host** — 2M+ inodes, asserting that a
+- **Budget behaviour on a genuinely large host.** 2M+ inodes, asserting that a
   fired budget produces `UNKNOWN` rather than a truncated scan reporting `PASS`.
 
 #### 4. Catalog toward the v1 ceiling
 
-- **Listener enumeration** — `/proc/net/{tcp,tcp6,udp,udp6}` plus the
+- **Listener enumeration.** `/proc/net/{tcp,tcp6,udp,udp6}` plus the
   socket-inode-to-process join through `/proc/*/fd`. Unlocks the NETWORK checks
   cut from v0.2.
-- **Package inventory** — dpkg and rpm database reads, no CVE claims. What
+- **Package inventory.** Dpkg and rpm database reads, no CVE claims. What
   `INTEGRITY` and the whole of v2 rest on.
 - **`SYSINFO`, the AUTH balance, the NETWORK balance, FILESYS mount coverage.**
 
@@ -297,17 +306,17 @@ compared.
 
 ---
 
-### v0.5.0 — Ecosystem integration — **NEXT**
+### v0.5.0: Ecosystem integration, **COMPLETE**
 
 The last feature milestone before v1.0.0, and the theme is that Plumbline stops
 being a tool you read and starts being a tool other things consume. Everything
-here is about handing a verdict to something else — a CI platform, a colleague,
-an auditor — without losing what makes the verdict honest.
+here is about handing a verdict to something else, a CI platform, a colleague,
+an auditor, without losing what makes the verdict honest.
 
 **Exit criteria:** feature freeze. Everything after v0.5.0 is bug-fixing,
 documentation and fixture expansion.
 
-#### 1. SARIF export — **DONE (WP-31, 2026-08-20)**
+#### 1. SARIF export, **DONE (WP-31, 2026-08-20)**
 
 Shipped. `--format sarif` emits SARIF 2.1.0 on both `scan` and `eval`; the
 mapping is fixed in **ADR-0018**. What follows is the reasoning that produced
@@ -328,7 +337,7 @@ do.
 The decision: **`UNKNOWN` maps to `level: "warning"`**, with the reason code in
 the message text and a `properties` bag carrying `plumbline/result: "UNKNOWN"`
 and the reason, so a consumer that cares can tell the two apart and one that
-does not still sees something it must look at. `FAIL` maps by severity —
+does not still sees something it must look at. `FAIL` maps by severity:
 CRITICAL and HIGH to `error`, the rest to `warning`. `SKIPPED` from a
 suppression is emitted with `suppressions` (SARIF has a native concept, and it
 carries a justification), which is the one place the SARIF model matches ours
@@ -338,10 +347,10 @@ belong in the run's `invocation` properties, not as findings.
 `schema/` gains no new file: SARIF is an external specification and validating
 against the published one in CI is the correct gate, not a copy of it here.
 
-#### 2. `plumbline explain CHECK-ID` — **DONE (WP-32, 2026-08-20)**
+#### 2. `plumbline explain CHECK-ID`, **DONE (WP-32, 2026-08-20)**
 
 Catalog legibility. Prints what a check asks, which facts it needs, what each
-result state means for it, and the remediation in full — the material that
+result state means for it, and the remediation in full, the material that
 `docs/checks/<ID>.md` holds today and that nobody reads because it is not where
 they are. Offline, no host access, no bundle required: it is a question about
 the catalog, not about a machine.
@@ -351,7 +360,7 @@ the terminal report deliberately omits. A block that runs to forty lines per
 finding is one an operator scrolls past; a command they asked for by ID is one
 they read.
 
-#### 3. Profile architecture and golden bundles — **DONE (WP-33 and WP-34, 2026-08-21)**
+#### 3. Profile architecture and golden bundles, **DONE (WP-33 and WP-34, 2026-08-21)**
 
 `--profile cis-level-1`, `--profile stig`, and the machinery that makes a
 profile a *selection over the existing catalog* rather than a second catalog.
@@ -368,7 +377,7 @@ Six bundles ship in `testdata/bundles/`, covering glibc and musl, dpkg and rpm,
 systemd and OpenRC: Ubuntu 24.04 stock and hardened, Debian 13, Fedora 44,
 Rocky 9 and Alpine 3.20. `TestGolden` re-evaluates all six on every
 `make verify`, against per-check expectation files and against posture and
-counts typed out by hand — the second gate exists because the first can be
+counts typed out by hand, the second gate exists because the first can be
 satisfied by running the same command that reports it.
 
 The hardened bundle is the one that carries the catalog: **every check in the
@@ -378,7 +387,7 @@ early.
 
 ---
 
-## v1.0.0-rc — Release candidates
+## v1.0.0-rc: Release candidates
 
 **The promise:** *no new capability, only the polish that decides whether the
 capability is usable.*
@@ -387,7 +396,7 @@ The catalog, the schema and the output formats are frozen from `rc1`. What
 changes is what an operator experiences, what a maintainer can rely on, and
 what the documentation actually says.
 
-#### RC-1. A progress indicator for `scan` and `collect` — **DONE (2026-08-21)**
+#### RC-1. A progress indicator for `scan` and `collect`, **DONE (2026-08-21)**
 
 Collection is the slow half of a scan and it was the silent half. A transient
 one-line indicator now runs on stderr while the collectors do, and erases
@@ -396,10 +405,10 @@ drawn: stderr is a character device, `PLUMBLINE_NO_PROGRESS` is unset, `TERM`
 is set and not `dumb`, and no CI marker is present. CLI-SPEC.md §7 carries the
 contract.
 
-#### RC-2. Graceful signal handling — **DONE (2026-08-21)**
+#### RC-2. Graceful signal handling, **DONE (2026-08-21)**
 
 `SIGINT` and `SIGTERM` cancel the collection context, the collection phase
-unwinds, the RC-1 indicator erases itself, and the run exits 130 — the code
+unwinds, the RC-1 indicator erases itself, and the run exits 130, the code
 CLI-SPEC.md §6 reserved from the beginning and nothing produced. A Ctrl-C
 part-way through a walk of `/` unwinds in about 30ms.
 
@@ -407,7 +416,7 @@ An interrupted run produces no artifact: no findings document, no
 `--save-bundle`, no bundle from `collect`. Stricter than the `--timeout` path,
 which keeps what it collected, and CLI-SPEC.md §6.1 says why.
 
-#### RC-3. `os_release` symlink resolution — **DONE (WP-37, 2026-08-21)**
+#### RC-3. `os_release` symlink resolution, **DONE (WP-37, 2026-08-21)**
 
 `/etc/os-release` is a symlink on every systemd distribution, the seam refused
 it under `O_NOFOLLOW`, and the field was silently blank on the four most common
@@ -415,14 +424,14 @@ Linux distributions. Resolved explicitly and bounded, without weakening the
 seam, through one shared `collect.ResolveLinks` that the AUTH collector's Red
 Hat PAM walk now uses too.
 
-#### RC-4/RC-5. Terminal dashboard, and the supply chain it nearly cost — **DONE (2026-08-21)**
+#### RC-4/RC-5. Terminal dashboard, and the supply chain it nearly cost, **DONE (2026-08-21)**
 
 The scan summary became a posture gauge and four count cards. It shipped on
 `lipgloss` in RC-4 and was rewritten without it in RC-5: the library
 contributed a box border, a horizontal join and a hex downsample, and cost
 thirteen modules in a binary that runs as root. **The dependency count is back
 to four and the dashboard is byte-identical.** `internal/render/text` already
-had the hard part — `visibleWidth`, which measures a string containing SGR
+had the hard part, `visibleWidth`, which measures a string containing SGR
 escapes.
 
 RC-5 also added `tools/gendocs`, which generates `MODULE-CATALOG.md` and
@@ -430,7 +439,7 @@ RC-5 also added `tools/gendocs`, which generates `MODULE-CATALOG.md` and
 `make invariants`, and `.goreleaser.yaml` covering linux/amd64 and linux/arm64,
 `.deb` and `.rpm` packages, syft SBOMs and keyless cosign signing.
 
-#### RC-6/RC-7. Delivery, front door and baseline — **DONE (2026-08-21)**
+#### RC-6/RC-7. Delivery, front door and baseline, **DONE (2026-08-21)**
 
 `.github/workflows/release.yml` runs GoReleaser on a tag; `v1.0.0-rc1`
 published signed `.deb`, `.rpm` and `.tar.gz` for both architectures with an
@@ -442,7 +451,7 @@ and `docs/PERFORMANCE.md` carries the measured baseline.
 
 ---
 
-## v1.0.0 — Trustworthy core — **SHIPPED 2026-08-21**
+## v1.0.0: Trustworthy core, **SHIPPED 2026-08-21**
 
 **The promise:** *Every finding is reproducible from a bundle you can keep, and the tool tells you what it could not see.*
 
@@ -453,12 +462,12 @@ and `docs/PERFORMANCE.md` carries the measured baseline.
 | Platforms | Linux, glibc + musl: Ubuntu 22.04/24.04, Debian 12/13, RHEL/Rocky 9, Fedora, Alpine, Arch | macOS, all BSD, Solaris, Windows |
 | Architectures | amd64, arm64 (both in CI) | arm32, 386, riscv64 |
 | Modules | 10 (below) | CONTAINERS, CLOUD, MALWARE, PRIVESC, MACOSEC, MEMORY, INTEGRITY |
-| Checks | ~110 | — |
+| Checks | ~110 | - |
 | Outputs | terminal, JSON, SARIF | HTML, PDF, CSV, YAML, JUnit |
 | Compliance | Reference mappings to NIST SP 800-53 r5 and DISA STIG only, as bare control identifiers | CIS, PCI-DSS, ISO 27001, HIPAA, SOC 2, GDPR; **all** compliance scoring |
 | Vulnerabilities | Package inventory only, no CVE claims | CVE correlation |
 | Remediation | Text steps + commands inside findings | Generated scripts, Ansible, auto-apply |
-| Network | None in any code path | — |
+| Network | None in any code path | - |
 | Extensibility | None | Plugins of any kind |
 
 ### Modules and approximate check counts
@@ -492,11 +501,11 @@ of it is work that was forgotten.
 - [x] `findings-v1.schema.json` published, validated in CI, and frozen
 - [x] Scan of a reference host measured and published *(`docs/PERFORMANCE.md`)*
 - [x] Signed release artifacts + SBOM + provenance, and documented verification steps a user can follow
-- [ ] **All v1-gating documents complete (`DOCUMENT-MAP.md` tier 0–4)** — 11 outstanding, down from 14 (WP-38)
+- [ ] **All v1-gating documents complete (`DOCUMENT-MAP.md` tier 0 to 4)**, 11 outstanding, down from 14 (WP-38)
 - [x] `THREAT-MODEL.md` reviewed against the actual implementation, not the design *(WP-38, 2026-08-21)*
 
 **One criterion remains unmet at `v1.0.0`**, and it is documentation rather than
-behaviour. WP-38 closed the threat-model review and completed Tiers 0, 3 and 5 —
+behaviour. WP-38 closed the threat-model review and completed Tiers 0, 3 and 5,
 ten documents, including all seven user-facing ones. Eleven gating documents
 remain, and `DOCUMENT-MAP.md` names each with the reason it is still open.
 
@@ -511,10 +520,10 @@ that admits a gap, because a reader plans around it.
 Recording the remaining gap plainly, rather than marking it done because the tag
 is cut, is the same discipline the tool applies to a host.
 
-#### v1.1 — the controls v1.0.0 claimed and did not have
+#### v1.1: the controls v1.0.0 claimed and did not have
 
 - **`openat2(RESOLVE_NO_SYMLINKS|RESOLVE_BENEATH)`** for atomic path
-  resolution, closing the T-01 residual — the highest-priority residual risk in
+  resolution, closing the T-01 residual, the highest-priority residual risk in
   the threat model.
 - **SLSA provenance** in the release workflow.
 - **A double-build reproducibility check.** The build is deterministic by
@@ -539,7 +548,7 @@ v1.x: the `memory.elf` collector and `MEMORY-0001` (PIE), catalog 14.
 It went early because it is the one module on the v2 list that needs nothing the
 v1 architecture does not already have. No network, no new dependency, no
 privilege the scan does not hold, and no judgement a pure check cannot make from
-a fact — the properties are static bits in a program header. That made it the
+a fact, the properties are static bits in a program header. That made it the
 cheapest way to exercise the collector-and-check seam end to end before the
 modules that do need new machinery arrive.
 
@@ -587,11 +596,11 @@ architecture does not have. The collector reads `/etc/docker/daemon.json` into
 
 A second collector reads `docker.service` and its drop-ins into
 `containers.docker_service`. `CONTAINERS-0006` judges the sockets on the
-daemon's command line and `CONTAINERS-0007` the `hosts` key in `daemon.json` —
+daemon's command line and `CONTAINERS-0007` the `hosts` key in `daemon.json`,
 the module's two `CRITICAL`s, because a `tcp://` binding with no
 client-certificate verification is an unauthenticated root-equivalent API and
-not a weakened boundary. `CONTAINERS-0008` reads both files for one option —
-the logging driver — and is the module's only `LOW`. Catalog 21, eight checks.
+not a weakened boundary. `CONTAINERS-0008` reads both files for one option,
+the logging driver, and is the module's only `LOW`. Catalog 21, eight checks.
 
 Six things it produced that outlive the checks:
 
@@ -604,49 +613,49 @@ Six things it produced that outlive the checks:
 - **`*bool` plus `fact.OptBool` for an option whose default is not `false`.**
   `icc` defaults to *true*, so a plain `bool` would decode an absent key as
   `false` and report an open bridge as a closed one. The tri-state is what makes
-  "nobody wrote this down" expressible at all — and `CONTAINERS-0005` is what
+  "nobody wrote this down" expressible at all, and `CONTAINERS-0005` is what
   proves it is not a synonym for "failing": `experimental` defaults to off, so
   there an unwritten key is a pass. Same rule, opposite verdict, because the
   rule is about the daemon's default rather than about silence.
 - **Every verdict states which file it read.** `dockerd` takes the same options
   as command-line flags and the stock unit passes some. The two cannot silently
-  disagree — `dockerd` refuses to start when an option appears in both places —
+  disagree, `dockerd` refuses to start when an option appears in both places,
   but a finding that claimed to describe the running daemon would be claiming
   more than the scan checked. Both caveats are now in the tree and they are
   mirrors: the `daemon.json` checks say a flag in the unit is invisible to
-  them, and `CONTAINERS-0006` says a socket in `daemon.json` — or in
-  `docker.socket` — is invisible to it.
+  them, and `CONTAINERS-0006` says a socket in `daemon.json`, or in
+  `docker.socket`, is invisible to it.
 - **A vendor file plus its drop-ins is not the same object as a file.** The
   vendor `docker.service` is byte-identical on an exposed host and a safe one;
   the whole of the difference is a `.conf` in a `.d` directory. Two systemd
-  rules are load-bearing rather than decorative — a drop-in whose *filename*
+  rules are load-bearing rather than decorative, a drop-in whose *filename*
   appears in a higher-precedence directory is dropped entirely, and the
-  survivors apply in lexical order by filename across all directories — and
+  survivors apply in lexical order by filename across all directories, and
   getting either wrong moves verdicts. `INTEGRITY` and the v2 `CONTAINERS` work
   will meet the same shape in `containerd`'s and `crio`'s units.
 - **One option in two files is one check split in two, not one check that reads
   two files.** `hosts` can be set on the command line or in `daemon.json`, and
-  `dockerd` refuses to start when it is set in both — so on a running host at
+  `dockerd` refuses to start when it is set in both, so on a running host at
   most one file decides, and a pair of checks with one subject each is
   exhaustive without double-counting. Each names the other in its own detail
   string, so a `PASS` from one is never read as covering both. What the pair
   must not do is disagree about what a socket specification *means*, which is
   why the reading of `dockerd`'s grammar is one file both import rather than
   two implementations that match today.
-- **Names travel, values do not — one level below the top-level keys, and in
+- **Names travel, values do not, one level below the top-level keys, and in
   both files.** `Keys` established that a fact can record which options a
   document set without carrying what they were set to. `log-opts` is where that
   stops being a precaution: `splunk-token` is an authentication token and
   `awslogs-credentials-endpoint` is the path to one, so the values are never
   decoded at all. The test of whether the trade is affordable is whether the
-  names still answer the question, and here they do — `json-file` is unbounded
+  names still answer the question, and here they do, `json-file` is unbounded
   unless `max-size` is set. Where they would not, the answer is to record less
   and say `UNKNOWN`, not to record the value.
 
   The half that took a second pass is that **a privacy posture has to hold
   across every spelling of the same option, not just the one it was written
   for.** `dockerd` takes log options on its command line too, and `ExecStart`
-  is the one command line a bundle keeps — so for one work package a bundle
+  is the one command line a bundle keeps, so for one work package a bundle
   disclosed more or less depending on which file an operator happened to use.
   The collector now scrubs those values out of the recorded argv, which is the
   first place in the tree that deliberately records something other than what
@@ -663,7 +672,7 @@ carries a Docker daemon: `CONTAINERS-0001` to `-0005` are `NOT_APPLICABLE` on
 every one, and `-0006`, `-0007` and `-0008` are `UNKNOWN` on every one because
 the bundles predate `containers.docker_service`. That is three `UNKNOWN` per
 bundle from a single cause, and the coverage it costs is the corpus reporting
-its own age rather than a defect to route around — declaring less than a check
+its own age rather than a defect to route around, declaring less than a check
 reads would trade it for a `CRITICAL` false positive in `-0007` and a `LOW` one
 in `-0008`. The fixtures cover the verdicts; nothing in the recorded corpus
 does. Covering `CONTAINERS` against a real daemon needs a recording recipe that
@@ -680,15 +689,15 @@ until it exists both verdicts say so in their own detail strings.
 **Two files that cannot both be right.** `dockerd` refuses to start when
 `hosts` is set as a flag and in `daemon.json` at once, and adding the key to a
 stock installation is the well-known way to make Docker stop starting. Neither
-check reports that conflict — each reads its own file and neither compares them
-— so a host in that state is one whose daemon is not running and which both
+check reports that conflict, each reads its own file and neither compares them,
+so a host in that state is one whose daemon is not running and which both
 checks describe as though it were. Detecting it is a check of its own.
 
 **What the logging check cannot see.** `CONTAINERS-0008` reads the daemon's
 *default* driver. A container started with its own `--log-driver`, or with a
 `logging:` block in a compose file, overrides it for itself, and neither is in
 either file or in any fact this build collects. Reaching those means inspecting
-running containers, which is the v2 boundary rather than a gap in this check —
+running containers, which is the v2 boundary rather than a gap in this check,
 its detail strings say so.
 
 What remains for v2 is everything that is not a configuration file: Podman's
@@ -705,7 +714,7 @@ correct on their own.
 
 `KERNEL-0006` reads the running value of `kernel.unprivileged_bpf_disabled` and
 passes when it is hardened. `KERNEL-0007` compares every running parameter
-against its configured value and reports drift — but it skips a parameter that
+against its configured value and reports drift, but it skips a parameter that
 no file mentions, because there is nothing to compare it against, and that skip
 is right for what it is doing. Between them sits the host hardened with
 `sysctl -w` and never written to disk: two passes, and an unhardened kernel
@@ -714,7 +723,7 @@ after the next reboot.
 **A gap between two correct checks is not visible from either of them.** Both
 were reviewed, both are right about their own subject, and the hole is in the
 space between the subjects. The thing that found it was writing down what each
-check *does not* claim — which is the same discipline that produced the caveat
+check *does not* claim, which is the same discipline that produced the caveat
 sentences on every CONTAINERS and SERVICES verdict, arriving at a missing check
 instead of a missing sentence. Worth doing deliberately for the rest of the
 catalog rather than waiting to trip over the next one.
@@ -737,8 +746,8 @@ Two things are worth carrying forward from it:
 - **A code fix cannot move a golden pin.** The bundles are recordings; the
   `UNKNOWN` lived in the *recorded fact*, not in check logic, so `make
   golden-update` re-evaluated frozen facts and changed nothing. Clearing it
-  needed `record.sh`. That is the corpus behaving correctly — it is supposed to
-  freeze what a host looked like — and it is a step easy to assume away when
+  needed `record.sh`. That is the corpus behaving correctly, it is supposed to
+  freeze what a host looked like, and it is a step easy to assume away when
   planning a collector change.
 - **"Every Debian-family host" was an over-claim, and the corpus caught it.**
   Only `ubuntu-2404-hardened` carried the link: the stock Ubuntu and Debian
@@ -748,37 +757,37 @@ Two things are worth carrying forward from it:
 
 `KERNEL-0018` and `-0019` are the third and fourth checks of this shape, and at
 three copies the gate came out into `persistenceGate`. The trigger was the same
-one the SERVICES triad produced: the loop encoded *correctness properties* —
+one the SERVICES triad produced: the loop encoded *correctness properties*,
 excuse an unsupported kernel before calling an absent file a failure, stop on an
-unreadable file before concluding an absence — and those were being restated per
+unreadable file before concluding an absence, and those were being restated per
 check rather than held in one place.
 
 **Neither of them passes anywhere in the corpus**, which is worth recording as a
 fact about distributions rather than about the checks. No mainstream image
 persists `kernel.dmesg_restrict`; Ubuntu and Rocky persist `kptr_restrict` at 1,
 which hands the kernel layout to anything holding `CAP_SYSLOG`, and Alpine and
-Fedora persist nothing. The severity tier — 1 at `MEDIUM`, unset at `HIGH` — is
+Fedora persist nothing. The severity tier, 1 at `MEDIUM`, unset at `HIGH`, is
 the only thing distinguishing those two situations, and it earned itself on the
 corpus rather than in a fixture.
 
 `KERNEL-0020` and `-0021` finished the group and answered the question the two
 before them raised. **-0020 passes on both Ubuntu bundles and nowhere else**,
 which is what establishes that the group's uniform failures are a fact about
-distributions rather than a bar set too high — a check that can pass, and does,
+distributions rather than a bar set too high, a check that can pass, and does,
 on a real recorded host is a different object from one that has never passed
 anything.
 
 **Decoding beats printing, and the corpus proved it.** `kernel.sysrq = 176` is a
 number an operator has to look up; "syncing all filesystems, remounting all
 filesystems read-only, immediate reboot or power off" is a finding they can act
-on — and the decode is what makes the severity tier possible at all, since it
+on, and the decode is what makes the severity tier possible at all, since it
 turns on which bits are set rather than on how large the number is. Ubuntu ships
 exactly that value, so the tier separates a deliberate narrow choice from a
 default on real data rather than in a fixture.
 
 **A conservative default is still a wrong answer, and the corpus will not tell
 you.** `ConfiguredConflict` treated every repeated key with differing values as
-undeterminable, which is safe in the sense that `UNKNOWN` never lies — and it
+undeterminable, which is safe in the sense that `UNKNOWN` never lies, and it
 declined to answer on a shape that has one right answer, on the most common
 distribution family. The refinement is small: the two tools disagree only about
 how they order *directories*, so a disagreement within one directory is
@@ -817,7 +826,7 @@ cookies, reverse path filtering, and source routing with ICMP redirects. Three
 things came out of them.
 
 **The configuration language was bigger than the parser.** `sysctl.d(5)` allows
-a glob pattern, and the distributions rely on it — Red Hat's `50-redhat.conf`
+a glob pattern, and the distributions rely on it. Red Hat's `50-redhat.conf`
 sets `net.ipv4.conf.*.rp_filter` rather than naming interfaces, and systemd's
 `50-default.conf` does the same and then withholds `net.ipv4.conf.all.rp_filter`
 with a bare `-` line so that `all` stays at 0 and filtering can still be lowered
@@ -827,8 +836,8 @@ having no reverse-path filtering while its vendor file configures it, which is
 the class of false positive that teaches an operator to stop reading the report.
 
 The exclusion syntax is the sharper half. `-` means two unrelated things in that
-file format — "ignore failures applying this assignment" on a line with `=`, and
-"withhold this key from every pattern" on a line without one — and a parser that
+file format. "ignore failures applying this assignment" on a line with `=`, and
+"withhold this key from every pattern" on a line without one, and a parser that
 looks only for `=` drops the second as unparseable. It is not an obscure corner:
 systemd's own default file depends on it, so the reading of the most common
 configuration on the most common init system was wrong in a way no fixture
@@ -843,8 +852,8 @@ believed.
 
 **A check that passes tells you more than one that fails.** `KERNEL-0025` fails
 on all five bundles that have any sysctl configuration, and on its own that is
-the shape of a bar set too high. `KERNEL-0024` passing on four of them — three
-of those on vendor files nobody edited — is what says the bar is reachable and
+the shape of a bar set too high. `KERNEL-0024` passing on four of them, three
+of those on vendor files nobody edited, is what says the bar is reachable and
 the group is measuring distributions rather than measuring itself. `KERNEL-0023`
 sits between: `alpine-320-stock` is the only bundle in the corpus that writes
 SYN cookies down, and all six run `tcp_syncookies = 1` on the kernel default.
@@ -859,7 +868,7 @@ redirect *sending*, and the RFC 1337 TIME-WAIT protection.
 two `accept_ra` keys are named in `probedKeys` rather than enumerated from
 `/proc/sys/net/ipv6/conf`, which is how every other `conf/` parameter here is
 read. A kernel booted with `ipv6.disable=1` has no such directory, and an
-enumeration that finds nothing yields keys that were *never probed* — which
+enumeration that finds nothing yields keys that were *never probed*, which
 means "the collector did not ask" and is a wiring bug, not an observation. Only
 `absent` may become `NOT_APPLICABLE`. Naming the two pseudo-interfaces is what
 turns a disabled stack from a false `FAIL` into an honest excuse, and it is safe
@@ -867,7 +876,7 @@ for exactly these two because neither name contains a dot.
 
 **A finding about a setting that does nothing invites the objection it
 deserves.** `send_redirects` has no effect unless the host forwards, so
-`KERNEL-0027` reads `net.ipv4.ip_forward` — a parameter no check judges — purely
+`KERNEL-0027` reads `net.ipv4.ip_forward`, a parameter no check judges, purely
 so the verdict can say which situation the reader is in. On this workstation it
 says forwarding is on, because Docker turned it on, so the finding is live
 rather than theoretical. A supporting fact of that kind is still "what the
@@ -878,7 +887,7 @@ parameters no finding ever mentions.
 requires `accept_ra = 0`, and a host that legitimately autoconfigures over IPv6
 cannot comply without losing its address, its route and its DNS. `alpine-320-stock`
 is the case in point: it is the only bundle that configures IPv6 at all, and it
-sets `use_tempaddr = 2` — privacy addressing *for* SLAAC, the opposite posture,
+sets `use_tempaddr = 2`, privacy addressing *for* SLAAC, the opposite posture,
 and a considered one. The check documents the trade in its caution rather than
 pretending there is not one, and the network-side answer (RA Guard on the access
 switch) is named because it is the only control that stops the attack while
@@ -890,15 +899,15 @@ section is uniformly red is one an operator learns to page past.
 `KERNEL-0029`, `-0030` and `-0031` closed the module with the filesystem
 boundaries, and were the first batch in this group to need nothing new. Every
 parameter was already collected, every one has a runtime counterpart, and
-**`persistenceGate` took them unmodified** — `internal/catalog/checks/kernel/kernel.go`
+**`persistenceGate` took them unmodified**, `internal/catalog/checks/kernel/kernel.go`
 has zero deleted lines in that commit. Five work packages of persistence checks
 have now passed through those four conditions without one of them needing to
 move, which is about as much evidence as an abstraction of that size can earn.
 
 **Two checks can disagree without the report contradicting itself, but only if
-one of them says so.** `KERNEL-0029` accepts `fs.suid_dumpable = 2` — the
+one of them says so.** `KERNEL-0029` accepts `fs.suid_dumpable = 2`, the
 documented suidsafe value, and the only one at which `systemd-coredump` can
-capture a setuid crash — while `KERNEL-0005` fails it at `LOW`, because its
+capture a setuid crash, while `KERNEL-0005` fails it at `LOW`, because its
 subject is whether setuid programs write dumps *at all*. Both readings are
 defensible and a host at `2` sees both findings. What makes that legible rather
 than broken is that `KERNEL-0029`'s passing detail names `KERNEL-0005` and says
@@ -907,15 +916,15 @@ cross-reference cannot rot silently. Whether to reconcile them is severity-revie
 work; leaving the reader to notice the disagreement unaided was never an option.
 
 **The distribution split here is the cleanest in the corpus.** Ubuntu and Alpine
-write both link protections down — `99-protect-links.conf` and
-`00-alpine.conf` — and the RPM family relies on the kernel default and writes
+write both link protections down, `99-protect-links.conf` and
+`00-alpine.conf`, and the RPM family relies on the kernel default and writes
 nothing. Since the kernel has defaulted both to 1 for years, Fedora and Rocky
 are protected today and fail on the same principle every check in this group
-applies: a default is not a decision. `fs.suid_dumpable` is the sharper case —
+applies: a default is not a decision. `fs.suid_dumpable` is the sharper case,
 **no bundle writes it at all**, and all six run the safe default.
 
-That question — whether "a safe default nobody wrote down" deserves the same
-severity as "the dangerous value, written down" — was answered at catalog 32 by
+That question, whether "a safe default nobody wrote down" deserves the same
+severity as "the dangerous value, written down", was answered at catalog 32 by
 `runtimeTier`, and the answer was the cross-reference rather than a lower base
 severity for the group.
 
@@ -924,16 +933,16 @@ the same bundle: the files say what the host will do after a reboot, and
 `/proc/sys` says what it is doing now. Lowering the base severity would have
 made a genuinely exposed host easier to ignore; tiering on the runtime lowers
 only the findings where nothing is exposed, which is the distinction the
-severity field exists to carry. Three cases deliberately do not downgrade — an
+severity field exists to carry. Three cases deliberately do not downgrade, an
 exposed running value, an unreadable one, and any failure where a *file* sets
-something wrong — and the second of those is ADR-0014 again: a downgrade has to
+something wrong, and the second of those is ADR-0014 again: a downgrade has to
 be earned by evidence.
 
 **It refused to downgrade on this workstation for a reason no fixture would have
 produced.** `KERNEL-0017` needs two parameters; `kernel.unprivileged_bpf_disabled`
 reads 2, and `/proc/sys/net/core/bpf_jit_harden` is mode 0600, so an
 unprivileged scan cannot read it. One unreadable key of two blocks the
-downgrade and the finding stays HIGH — the rule working on a real host, on the
+downgrade and the finding stays HIGH, the rule working on a real host, on the
 first run.
 
 **One documented rationale had to be rewritten rather than left to rot.**
@@ -942,7 +951,7 @@ first run.
 the case the tiering now downgrades. The comment was corrected in place rather
 than left contradicting the code: the tension is real, it was settled in favour
 of a severity field that can sort a triage queue, and what was lost is emphasis
-rather than information — the detail still says the setting came from outside
+rather than information, the detail still says the setting came from outside
 the files and will not survive a reboot.
 
 The honest limit of the design is that a secure running value does not say where
@@ -951,7 +960,7 @@ kernel's own default and will apply again after a reboot; for
 `kernel.yama.ptrace_scope`, whose default is 0, it means something set it at
 runtime and the host genuinely reverts. Both downgrade to LOW today. Encoding
 each parameter's compiled-in default would separate them, and was rejected for
-now because that default varies by build and by distribution patch — a table
+now because that default varies by build and by distribution patch, a table
 that is wrong in the permissive direction would hand out downgrades nobody
 earned. Worth revisiting with per-parameter evidence rather than from memory.
 
@@ -965,7 +974,7 @@ below:
 - **`KERNEL-0005` and `KERNEL-0029` agree now.** The runtime check was widened
   to accept `fs.suid_dumpable = 2`, closing a report that carried a PASS and a
   FAIL about the same value. That was the second time a runtime check turned out
-  to be the miscalibrated half of a pair — `KERNEL-0004` was the first — and the
+  to be the miscalibrated half of a pair, `KERNEL-0004` was the first, and the
   rest of the pairs have now been audited deliberately rather than one accident
   at a time.
 
@@ -1000,7 +1009,7 @@ Four properties, and the second is the one that makes this maintainable:
 - **It expires without anybody remembering.** A notice nobody retires is a
   banner everybody learns to scroll past, which is the same as no banner and
   costs a line of every terminal forever. Expiry is keyed on the tool version
-  because VERSIONING §2.4 is written in those terms — "one minor cycle" — and a
+  because VERSIONING §2.4 is written in those terms, "one minor cycle", and a
   build with no release identity (`go run`, a test binary, `git describe` with
   no tags) shows everything, because it has demonstrably passed no expiry.
 - **It is drawn where no human is watching**, which is the deliberate opposite
@@ -1024,7 +1033,7 @@ carried a PASS and a FAIL about one number, and an operator reading both had no
 way to tell which half to believe. The runtime check was right: 1 hides pointers
 from every unprivileged reader, and what it leaves open needs CAP_SYSLOG. So 1
 passes both halves now, 2 is a recommendation in the verdict rather than a
-requirement, and `kptrTiering` widened to match — it had demanded 2, which meant
+requirement, and `kptrTiering` widened to match, it had demanded 2, which meant
 the catalog 32 downgrade could never fire on a realistic host.
 
 Two other pairs disagree on paper and cannot in practice, and are recorded here
@@ -1036,7 +1045,7 @@ the gap. Nothing was changed for an unreachable difference.
 
 **Six severity misalignments, all of them the same leftover.** Every persistence
 check sat one band above its runtime counterpart, on the argument recorded in
-`KERNEL-0017` — a boundary scheduled to fall down outranks one you can see
+`KERNEL-0017`, a boundary scheduled to fall down outranks one you can see
 today. Catalog 32 retired that argument, because the case it described is now
 the one that gets *downgraded*. Nothing replaced it, so six pairs were a band
 apart for no reason at all.
@@ -1046,7 +1055,7 @@ means rather than on which check noticed it:
 
 | parameter | was | now | why |
 |---|---|---|---|
-| `kernel.kptr_restrict` | -0002 MEDIUM, -0018 HIGH | both HIGH | at 0 an unprivileged read of a text file defeats KASLR — the same mechanism `KERNEL-0004` was re-rated HIGH for at catalog 27 |
+| `kernel.kptr_restrict` | -0002 MEDIUM, -0018 HIGH | both HIGH | at 0 an unprivileged read of a text file defeats KASLR, the same mechanism `KERNEL-0004` was re-rated HIGH for at catalog 27 |
 | `fs.suid_dumpable` | -0005 MEDIUM, -0029 HIGH | both HIGH | at 1, one user's privileged memory reaches a file another user can read |
 | `kernel.unprivileged_bpf_disabled` | -0006 MEDIUM, -0017 HIGH | both HIGH | an attacker-supplied program run in the kernel behind a verifier with a long CVE history |
 | `fs.protected_symlinks` | -0009 MEDIUM, -0031 HIGH | both HIGH | a route from an ordinary account to root that needs no exploit |
@@ -1056,8 +1065,8 @@ means rather than on which check noticed it:
 `kernel.yama.ptrace_scope` is the only pair that closed downward, and it is
 worth saying why rather than letting it look like an exception. It is also the
 upstream default and the shipped default of the whole RPM family, so rating it
-HIGH would have put a red line on every Red Hat host for a setting nobody chose
-— the alert fatigue catalog 32 was spent removing.
+HIGH would have put a red line on every Red Hat host for a setting nobody chose.
+That is the alert fatigue catalog 32 was spent removing.
 
 Two pairs are pairs in subject and not in key and were deliberately left out of
 the mechanical comparison: `KERNEL-0008`/`-0024` and `KERNEL-0015`/`-0025`. The
@@ -1118,7 +1127,7 @@ to fix.
 
 **Two width policies, and the split is the point.** The report is an artifact
 somebody diffs, so its grid is fixed at 78 columns and does not read the
-terminal — that decision predates this work and is unchanged. The stream is
+terminal, that decision predates this work and is unchanged. The stream is
 ephemeral stderr output that nobody redirects into a file they compare, so it
 measures the terminal for every row. A resize mid-scan therefore reflows from
 the next row; already-printed rows are somebody's scrollback and cannot be
@@ -1129,7 +1138,7 @@ against a filesystem walk.
 
 Within a row, only the middle segment gives. The check ID is in the fixed tail,
 because it is what a suppression file matches on and what `plumbline explain`
-takes — a row that has lost its ID has lost the only part of itself anybody can
+takes, a row that has lost its ID has lost the only part of itself anybody can
 act on. An early version clamped the layout to a 40-column floor and produced
 40-column rows on a 30-column terminal, which the terminal then wrapped,
 destroying the column far more thoroughly than a short row would; the floor is
@@ -1143,7 +1152,7 @@ comes *after* the stream is what an operator is left looking at, and no amount
 of correct content survives being on the wrong side of the last page.
 
 The standard mode was wrong twice for the same reason. First it carried the
-whole detailed report, then — after that was withheld — it carried the severity
+whole detailed report, then, after that was withheld, it carried the severity
 tally, one line per failing check, forty of them on a real host. Both times the
 live output scrolled off the top before the run finished. The rule that came out
 of it is worth stating as a rule: **standard mode allows itself four lines and a
@@ -1152,14 +1161,14 @@ findings belongs behind `--verbose`.
 `TestStandardModeShowsTheStreamAndNothingButASummary` is that rule as a test.
 
 **The test that was supposed to hold that rule did not.** It constructed a
-`text.Stream`, did not call `Tally`, and asserted the closing block was short —
+`text.Stream`, did not call `Tally`, and asserted the closing block was short,
 which proves the *renderer* honours `tally=false` and says nothing at all about
 whether the scan command sets it. `Tally(verbose)` lives in `scan.go` and was
 never executed by the test. The same blind spot covered every mode decision,
 because they all live in the command: `streamPresenter`'s four conditions,
 `reportDestination`'s terminal test, the hint. **None of them is reachable
 through a `bytes.Buffer`**, because a buffer is not a character device and the
-stream is never built for one — so the entire presentation layer was being
+stream is never built for one, so the entire presentation layer was being
 tested everywhere except where it was decided.
 
 The replacement drives the real cobra command over a real pseudo-terminal
@@ -1178,14 +1187,14 @@ test; removing the `s.tally &&` gate in the renderer does the same.
 The rest of the settlement:
 
 - **The report is withheld from a terminal that watched the scan.** The stream
-  and the report were both on screen for a bare `plumbline scan` — the same
-  checks, twice, the second time trailed by every remediation in the catalog —
+  and the report were both on screen for a bare `plumbline scan`, the same
+  checks, twice, the second time trailed by every remediation in the catalog,
   and the live output was buried within a second of finishing. This was raised
   here as defensible-but-not-obviously-right; it was neither. The cost of the
   fix is the one named at the time: stdout's content now depends on whether
   stdout is a terminal. That is confined to exactly one condition with four
-  exceptions, and every scripted use — pipe, redirect, `--output`, `--format
-  json`, CI — keeps the document it always had. `--verbose` brings it back,
+  exceptions, and every scripted use, pipe, redirect, `--output`, `--format
+  json`, CI, keeps the document it always had. `--verbose` brings it back,
   `--quiet` goes further and drops the per-check rows too.
 - **The two vocabularies became one.** The stream said `PASS`/`FAIL`/`N/A` and
   the report said `OK`/`WARNING`/`SKIPPED`, on the argument that a commentary
@@ -1194,7 +1203,7 @@ The rest of the settlement:
   `[ FAIL ]` scroll past and greps the report for "FAIL" finds nothing. The word
   now comes from `statusToken` in both, which is the only arrangement in which
   they cannot drift. Colour follows in every state but `SKIPPED`, cyan in the
-  stream and dim in the report — a row with no verdict recedes correctly on a
+  stream and dim in the report, a row with no verdict recedes correctly on a
   dense page and reads as a display failure in a scrolling list.
 
 ### The pace
@@ -1202,7 +1211,7 @@ The rest of the settlement:
 The stream was correct and still not a stream. 109 checks in 1.3 ms print as a
 wall of text that is complete before the eye has fixed on anything, so an
 operator watching a bare `plumbline scan` learned nothing the closing two lines
-would not have told them faster — and under `--verbose`, where a fourteen-hundred
+would not have told them faster, and under `--verbose`, where a fourteen-hundred
 line report follows, the rows were gone from the window before anyone could read
 one. A row-by-row display is worth having only if a row can be read while it is
 on screen, and at full speed none can.
@@ -1215,8 +1224,8 @@ it and `--pace 500ms` slows it down.
 rather than quietly amending.** 150 ms was chosen as the fastest cadence at
 which a column of brackets still reads as a sequence rather than as flicker.
 Watched back on a screen recording, that turned out to answer whether a row is
-*legible* and not whether a row is *read* — the eye tracks the movement down the
-column without landing on a title — so it went to 500 ms, and a scan to a little
+*legible* and not whether a row is *read*, the eye tracks the movement down the
+column without landing on a title, so it went to 500 ms, and a scan to a little
 over a minute.
 
 Both numbers were asking how long one row needs **in a flat list of a hundred
@@ -1224,7 +1233,7 @@ and twenty of them**, and in a flat list the pause is the only structure there
 is. Grouping the rows under module headings supplies the structure instead: the
 eye lands on the heading, and the ten or twenty rows below it read as a block
 rather than as twenty separate events. That bought the time back, and the pace
-is 100 ms — about twelve seconds for a scan, with the hierarchy legible
+is 100 ms, about twelve seconds for a scan, with the hierarchy legible
 throughout.
 
 **This is the one thing in the tool that costs time without doing work, and it
@@ -1237,7 +1246,7 @@ is confined so that it cannot be mistaken for work.**
   display.
 - **The queue is unbounded and that is not laziness.** A buffered channel blocks
   its sender at capacity, and at a tenth of a second a row the queue reaches the catalog's
-  full depth within a millisecond of evaluation starting — so any capacity small
+  full depth within a millisecond of evaluation starting, so any capacity small
   enough to write down would hand the delay straight back to the engine, and any
   capacity larger than the catalog is a constant somebody must remember to raise
   when a check is added. The real bound is arithmetic: one event per collector,
@@ -1254,7 +1263,7 @@ needed a piece:
   belong.
 - `Stream.Stop`, wired to the scan's context, because a display that outlives
   outlives the work and a Ctrl-C inside it has to be felt now. The first press
-  abandons the queue within milliseconds — measured at 23 ms on this host —
+  abandons the queue within milliseconds, measured at 23 ms on this host,
   finishes the row it was drawing so no half-line survives, and still prints the
   result block. **The work was already done; only the narration is cut**, so
   reporting the real posture and the real exit code is right rather than a leak.
@@ -1265,7 +1274,7 @@ needed a piece:
 screen**, and that is a property of the writer rather than of the renderer. It
 was checked rather than assumed: recording the pty with `script(1)` gives one
 delivery per pace, each carrying one row's verdict followed immediately by the
-next row's title — the read boundary falls *inside* a row, which can only happen
+next row's title, the read boundary falls *inside* a row, which can only happen
 if the two halves left the process at different times. `os.Stderr` is an
 `*os.File`, one `write(2)` per `Write`, with no userspace buffer to hold
 anything. `Stream.show` nevertheless probes the writer for `Flush() error` and
@@ -1273,7 +1282,7 @@ calls it after each half, because the failure it prevents is silent: a
 `bufio.Writer` wrapped round stderr for some unrelated reason would produce
 byte-identical output on a different schedule, and no test that inspects text
 could see it. `TestTheTitleIsFlushedBeforeTheStreamSleeps` asserts against a
-writer that does buffer. `Sync()` is not called — `*os.File` has it, so a type
+writer that does buffer. `Sync()` is not called, `*os.File` has it, so a type
 switch listing it would `fsync(2)` the terminal twice a row, a syscall meaning
 *commit to storage* that returns `EINVAL` on a character device and says nothing
 about what is on screen.
@@ -1281,8 +1290,8 @@ about what is on screen.
 **`--verbose` was reported as having lost the stream. It had not.** The rows are
 all there, above the `[*] Result` block, above the detail; a run measured on this
 host has the same 109 evaluation rows with the flag as without it. But no test
-said so — the verbose mode test asserted the tally and the report and nothing
-about the rows — so the claim could not be answered from the suite, only from a
+said so, the verbose mode test asserted the tally and the report and nothing
+about the rows, so the claim could not be answered from the suite, only from a
 terminal. `TestVerboseKeepsTheStreamAboveTheResultAndTheDetail` now compares the
 row count against a standard-mode run and pins the order of all four sections.
 The impression was real and had a real cause: the report that follows is
@@ -1294,8 +1303,8 @@ while it is happening, which is the fix the report's position could not be.
 
 The stream was a flat list of a hundred and twenty-two rows, and the pace was
 carrying the whole burden of making it readable. Grouping the evaluation rows
-under a heading per module — `[+] Module: AUTH`, a rule, then the module's checks
-indented under it — gives the display a hierarchy, which is what `lynis` has and
+under a heading per module, `[+] Module: AUTH`, a rule, then the module's checks
+indented under it, gives the display a hierarchy, which is what `lynis` has and
 what the pace was standing in for.
 
 Three markers, one meaning each: `[*]` a phase, `[+]` a module, `  - ` a row.
@@ -1307,7 +1316,7 @@ rows moved to an indent; `[+] ` now means the same thing in both renderers.
 
 **The current module is a local variable in the drawing goroutine**, and the
 alternative is what makes that worth writing down. The obvious place to notice
-a module change is `CheckDone`, which is called in catalog order — but that is
+a module change is `CheckDone`, which is called in catalog order, but that is
 the producer, on the wrong side of the queue. It would put display state in the
 struct where `CollectorDone`'s thirteen concurrent callers can reach it, needing
 the mutex to be safe, and it would make the evaluating goroutine decide what the
@@ -1316,11 +1325,11 @@ module is on screen" is by construction read and written by one goroutine.
 
 It is not a lookahead, and the failure that follows from that is deliberate.
 A heading is written when a row arrives carrying a module that is not the one
-showing — the only rule available to a queue whose consumer cannot see what is
+showing, the only rule available to a queue whose consumer cannot see what is
 behind the row in its hand, and the only one that will not open a section a
 Ctrl-C is about to cancel. A catalog that stopped evaluating a module
 contiguously would therefore reopen its heading. That is the right failure:
-the alternative — remembering every module seen and suppressing the repeat —
+the alternative, remembering every module seen and suppressing the repeat,
 files rows under a heading several screens above them, which is a display that
 lies. `TestAModuleIsReopenedRatherThanMisfiled` pins the honest behaviour and
 `TestTheStreamGroupsTheCatalogByModule` fails on the catalog ordering that would
@@ -1328,7 +1337,7 @@ trigger it, since nothing else declares that ordering.
 
 The heading shares its row's single width measurement rather than taking its
 own, so a window dragged between a heading and its first row cannot leave the
-two laid out against different terminals — the same argument as the two halves
+two laid out against different terminals, the same argument as the two halves
 of a row. The rule under a heading is 51 columns, clamped to the terminal: wide
 enough to read as a heading, narrower than the rows so it introduces the column
 of brackets instead of competing with it, and never wide enough to wrap, because
@@ -1337,7 +1346,7 @@ a wrapped rule is two rules with a heading orphaned above them.
 ### The heartbeat
 
 Rows are written on completion, which is what keeps them whole under
-concurrency — and it meant the slowest collector was silent for as long as it
+concurrency, and it meant the slowest collector was silent for as long as it
 ran. Measured on this host with a cold page cache: eleven collector rows drew at
 pace, then the terminal held still for **23.9 s** while `fswalk` walked the
 filesystem, then `memory` and `fswalk (23s)` arrived and the scan carried on. A
@@ -1358,13 +1367,13 @@ on it anywhere.
 
 **`[~]` is a fourth marker and not one of the three.** `[*]` a phase, `[+]` a
 module, `  - ` a row: those are the record of what happened, and every one of
-them is permanent. The heartbeat is not a record — it is one line that is
+them is permanent. The heartbeat is not a record, it is one line that is
 overwritten and then erased, and nothing it ever said survives the scan. Giving
 it a marker of its own says that on sight.
 
 **It is drawn by the drawing goroutine and by nothing else.** The obvious build
 is a second goroutine with a ticker and its own `Fprint`, and it would have
-handed two writers one terminal — the single failure this layout cannot survive,
+handed two writers one terminal, the single failure this layout cannot survive,
 and the reason `Phase`, `CheckDone` and `CollectorDone` queue instead of writing.
 What is multiplexed onto stderr is the *decision* to draw a heartbeat, not the
 drawing: a ticker sets a flag and broadcasts, `next` reports a beat when there
@@ -1379,7 +1388,7 @@ Two consequences fall out, and both are properties rather than precautions:
   same millisecond.
 - **A heartbeat cannot land inside a row.** A paced row is a title, a pause and
   a verdict, and the pause is the longest window in the display with the cursor
-  mid-line — but during it `drain` is inside `draw`, not at the top of its loop.
+  mid-line, but during it `drain` is inside `draw`, not at the top of its loop.
   The right-aligned brackets are laid out from column 0 of a line the erase has
   already cleared.
 
@@ -1393,14 +1402,14 @@ lands in the middle of it; the scroll region moves under the cursor when the
 heartbeat is on the bottom row, so up is not where the line was; and anything
 else that writes to stderr in between leaves the cursor pointing at a line that
 has moved. Never leaving the line removes all three. The text is truncated to
-the terminal for the same reason — a heartbeat that wrapped would be two screen
+the terminal for the same reason, a heartbeat that wrapped would be two screen
 lines and the erase reaches only one, leaving half a spinner above every row for
 the rest of the scan.
 
 `collect.Observer` gained `CollectorStarted`, called from the line in `runOne`
 that starts the clock rather than from the goroutine above it. A collector
 queued behind a dependency or behind the expensive slot is not working the host,
-and announcing it would name the wrong collector as the slow one — the same
+and announcing it would name the wrong collector as the slow one, the same
 reason the reported duration is measured from there. The contract is
 deliberately asymmetric: every collector finishes, only the ones that ran
 started. A collector refused for privilege that was announced as started would
@@ -1409,7 +1418,7 @@ sit under a stalled display forever, because no `CollectorDone` is coming for it
 Testing it needed a terminal rather than a buffer. `\r` + erase + a row is, as a
 string, the heartbeat followed by the row, and reads as corruption; on a
 terminal it is the row alone. So the assertions that matter replay the writes
-through a small model of a terminal — `screen` in `stream_test.go` — and check
+through a small model of a terminal, `screen` in `stream_test.go`, and check
 what would be on it.
 
 What this leaves:
@@ -1423,10 +1432,187 @@ What this leaves:
   waits another tenth of a second for its verdict.** The honest version would hold each row for
   `pace` *minus* what the work actually took, so that real duration and
   artificial duration do not add. It is a two-line change and was left out
-  because collector rows arrive in a burst — they are queued in completion order
+  because collector rows arrive in a burst, they are queued in completion order
   and drawn behind whatever is ahead of them, so "how long ago did this finish"
   is not the same question as "how long has this row been waiting", and the
   arithmetic wants thinking about rather than guessing at.
+
+### The proposal that was too dangerous to make
+
+`SERVICES-0011`'s generated fix is withdrawn. It wrote
+`ProtectSystem=strict` and `ProtectHome=yes` into a drop-in for every unit the
+check failed, and an operator who ran the script and followed its own restart
+instruction lost `systemd-journald.service` and `dbus.service` on a live host.
+
+The mechanism is not subtle once seen. `ProtectSystem=full`, what
+`SERVICES-0007` proposes, mounts `/usr`, `/boot`, `/efi` and `/etc` read-only
+and leaves everything else alone. `strict` mounts the **entire** hierarchy
+read-only apart from `/dev`, `/proc` and `/sys`, so `/run` and `/var` go with
+it. journald writes `/var/log`; dbus creates its socket under `/run`. Neither
+declared a `ReadWritePaths=` it had never needed, and neither came back.
+
+**The interesting failure is not the directive, it is the note.** The action
+carried six lines saying, in bold, to run `systemd-analyze filesystems` first
+and to add `ReadWritePaths=` for anything the service legitimately writes. That
+is the right advice and it did not work, for a reason worth keeping: it was
+attached to a file the script had already written. Everything else plumbline
+generates is safe to run and read afterwards, a sysctl value, a mode change, a
+`ufw` rule, so the format teaches the operator that comments are context, not
+preconditions. One action in the file meant the opposite of the rest of it, and
+the format gave it no way to say so. A warning that only works if it is read in
+a different register from every other warning in the same document is not a
+control.
+
+So the question is not "how loud should the note be" but **"can this fix be
+written at all from what a scan knows"**, and for this check it cannot. The
+other three sandbox fixes each need one decision an operator can make from the
+unit's purpose: does it call a setuid helper (0006), does it write `/etc`
+(0007), does it read a user's home (0008). Each is a yes or no about a daemon
+somebody already understands, and each stays. `strict` needs the complete set
+of paths a daemon writes at runtime, not a decision, an enumeration, one the
+check does not collect, cannot infer, and which differs by host and by workload
+on the same unit. A generator whose correctness depends on a set it has no way
+to observe is not proposing a change; it is proposing an outage with a comment
+above it.
+
+The check itself is untouched. It found something true, journald on the
+hardened bundle runs with neither directive, and the finding still reports,
+still carries its severity, and still moves posture. What changed is only what
+plumbline offers to do about it, which is now the catalog's own remediation:
+profile the unit, `systemctl edit`, declare `ReadWritePaths=` or better
+`StateDirectory=`/`LogsDirectory=`, restart under real load rather than checking
+that it starts. The same procedure, in the one form that cannot be pasted into a
+root shell whole.
+
+**The fallback is a designed path and not an absence**, which is what makes the
+withdrawal cheap. A check with no registered generator already had somewhere to
+go: SARIF's `remediationFor` ranks the generated script above the catalog's
+commands and emits the latter with `"source": "advisory"`, so a pipeline gets
+`systemctl edit <unit>` marked as advice rather than nothing at all; the `--fix`
+block counts the finding under "still failing with no automated fix"; the
+warnings section above it never depended on the registry. Unregistering was one
+deletion, and every surface reported the new state correctly without being
+touched. That is worth noticing as a property of the design rather than luck.
+`Fixable` being the single flag all three read is why there was no fourth place
+to remember.
+
+ADR-0006 has always said plumbline proposes and does not apply. This is the case
+that adds a second clause: a proposal can itself be too dangerous to make, when
+the operator's realistic behaviour on receiving it is to run it. The line is not
+"does plumbline execute this" but "what happens on the host if the reviewer
+skims", and a fix that is only safe under careful reading has to be measured
+against the reader it actually gets at the end of an audit.
+
+What this leaves:
+
+- **The re-entry condition is a fact, not a warning.** A collector that records
+  what each unit writes, `ReadWritePaths=`, `StateDirectory=`, `LogsDirectory=`
+  as declared, plus what the shipped upstream unit asks for, would let a fix
+  emit `strict` *with* the paths that make it survivable, and that fix would be
+  worth having. Until that fact exists, no wording makes this generatable. The
+  reasoning is parked in `internal/remediate/systemd.go` where the registration
+  was, because the place somebody will look before re-adding it is the place it
+  used to be.
+- **The same question is owed to the three that remain.** `ProtectHome=yes` on
+  a daemon that reads a key out of `/root` fails the same way, at the work,
+  not at the restart, and `SERVICES-0008` still generates it. The difference is
+  real (one unit-purpose decision, not an enumeration) but it is a difference of
+  degree, and the honest position is that it has been reasoned about rather than
+  measured. What would settle it is the same collector.
+- **Nothing distinguishes a dangerous action in the script's format.** Every
+  action gets `#` comments above its commands and there is no severity, no
+  ordering by risk, and no way to generate the safe two-thirds of a plan. The
+  `ufw` action has the same shape and can end an SSH session. A `--fix` that
+  separated "apply these" from "read these first" would have made this incident
+  a non-event, and is a better answer than removing generators one outage at a
+  time.
+
+### The binary the fix assumed
+
+`--fix` proposed `aa-enforce /etc/apparmor.d/*` for SERVICES-0010 and an
+operator ran it on a host that answered `aa-enforce: not found`. The binary
+ships in `apparmor-utils`, which a minimal server image does not install; the
+kernel module being active and loading profiles says nothing at all about
+whether the userspace tooling is on the machine, and the check that produced
+the finding reads `/sys/kernel/security/apparmor`, not `$PATH`.
+
+**What made this worth a package rather than a one-line edit is the blast
+radius.** The generated script runs under `set -eu`, and actions are sorted by
+check ID. A missing binary exits 127, `set -e` stops the file, and everything
+sorted after `SERVICES-0010`, `SERVICES-0011`, `USERS-0012`, and the closing
+`sysctl --system` that makes the persisted values current, never ran. The
+operator did not get a partially applied remediation with one step skipped.
+They lost the tail of the run to a package that was never there, and the only
+sign of it was one line of shell error above a prompt.
+
+So the call is guarded and the absence is reported:
+
+```sh
+if command -v aa-enforce >/dev/null 2>&1; then
+	aa-enforce /etc/apparmor.d/*
+else
+	echo "plumbline: aa-enforce not found; install apparmor-utils to enforce the profiles, then run:" >&2
+	echo "plumbline:   aa-enforce /etc/apparmor.d/*" >&2
+fi
+```
+
+`command -v` rather than a test against a path, because the path is not the
+same everywhere, `/usr/sbin` on Debian, `/usr/bin` on distributions that have
+merged them, and `$PATH` is what the shell would have used regardless. Testing
+the location would answer a question nobody asked and get it wrong on a host
+that installed the tooling somewhere else.
+
+The message carries the package name and then the command, indented, which is
+the shape the systemd sandbox fix already uses for the restarts it cannot
+perform. The package name is the actionable half: "something is missing" sends
+the operator to a search engine, `apparmor-utils` sends them to `apt install`.
+Repeating the command back matters because this is the one branch where a step
+of the remediation was skipped, everything else in the script either applied
+or aborted, and the enforcement that did not happen has to survive the scroll.
+
+**It does not install the package.** Naming one is advice, and advice is what
+the whole document is; running a package manager is a change the operator never
+reviewed, on a machine whose network egress and repository trust plumbline
+knows nothing about. That is the same line ADR-0006 draws around applying the
+script at all, and a fix that quietly crossed it because the missing thing was
+"only" a helper binary would be the first exception in a policy whose value is
+that it has none.
+
+Two tests hold it, and both were checked against the unguarded code. The first
+asserts the shape and, more usefully, that no line in any generated script
+*starts* with `aa-enforce`, the guarded call is indented and the two mentions
+in the `else` branch are inside an `echo`, so the property is exactly "the call
+is not at top level". The second runs the block itself under `set -eu` with
+`$PATH` pointed at a directory the test owns, once empty and once holding a
+stand-in binary, which is what makes the result the same on a developer's
+machine whether or not `apparmor-utils` happens to be installed on it. Nothing
+else needs to be on that path: `command` and `echo` are builtins.
+
+A third is new scaffolding rather than a test of this fix. Hand-written shell
+is the one thing in this package the Go compiler has no opinion about, and an
+unbalanced `if` is a syntax error in the *whole file* under `set -eu`, one
+malformed action takes down every other action in the plan. `sh -n` parses
+without executing, so the shell's own parser now reads every registered fix's
+script, and the concatenation of all of them, on every test run. It is an
+internal test so that it ranges over the registry: a fix added in a new file is
+covered the day it registers, with nothing to remember to update here.
+
+What this leaves:
+
+- **The assumption is not unique to AppArmor.** Every fix that names a binary
+  makes it. `ufw` is the live one: `NETWORK-0001` proposes it precisely because
+  nothing else is configured, which is also the host least likely to have it
+  installed, and four unguarded `ufw` calls sit at top level under `set -eu`.
+  The right answer there is probably not this one, a host with no ufw may want
+  the fix to decline the way it already declines a host running nftables,
+  rather than to emit four commands and a warning. That is a design question
+  about what the fix is for, not a missing guard, and it wants deciding rather
+  than patching.
+- **Nothing gates the class.** `sh -n` now catches shell that does not parse;
+  no gate catches shell that parses and calls a command the host may not have.
+  A rule over the generated corpus, every top-level command word is either a
+  shell builtin, a `plumbline_` helper, or guarded, would be mechanical, and
+  would have caught this one before it reached a host.
 
 ### The report's pace
 
@@ -1456,13 +1642,13 @@ default costs 2.2 s for `--verbose` and 4.9 s for `--verbose --fix`.
 The placement of each is a decision, not an implementation detail. The section
 breath is taken **before** the blank line that opens the section rather than
 after the title, so the pause lands on a screen that still ends with the previous
-block — a heading left hanging over nothing reads as the tool having stalled. The
+block, a heading left hanging over nothing reads as the tool having stalled. The
 entry beat is taken **after** both lines, never between them: a title and its
 remedy are one thing to read, and a pause inside that pair splits a sentence the
 reader is halfway through. The script's is the smallest of the three because it
 is the block most likely to run to a hundred lines, and because what it is for is
-showing that the script *assembled* — a command at a time, out of this host's
-findings — rather than being pasted in whole.
+showing that the script *assembled*, a command at a time, out of this host's
+findings, rather than being pasted in whole.
 
 **The scan phase is deliberately left instant**, and that is the one place the
 consistent-looking choice is wrong. `eval` renders it in full: pacing a hundred
@@ -1480,7 +1666,7 @@ is confined by the same three arguments the stream's pace is:
   `Scan.Started` to `Scan.Finished`, both recorded before the renderer is
   entered.
 - **It is paid only where somebody is watching.** The gate is `TIOCGWINSZ` on the
-  report's *own destination* — the same measurement that already chose between
+  report's *own destination*, the same measurement that already chose between
   the terminal's width and the fixed 78-column grid, taken once so the two cannot
   disagree. A file, a pipe and `--output` all dump instantly, so
   `scan --verbose > report.txt` is unchanged and `scan --verbose | grep WARNING`
@@ -1495,8 +1681,8 @@ reason and `TestAFailedWriteStopsThePauses` holds it there.
 
 **The schedule is tested as data rather than as elapsed time**, which is why the
 whole renderer suite still runs in milliseconds. A timing test of ten seconds of
-sleeping is slow *and* flaky — any bound loose enough to be reliable under
-`go test -race` is too loose to catch a delay applied at the wrong point — so the
+sleeping is slow *and* flaky, any bound loose enough to be reliable under
+`go test -race` is too loose to catch a delay applied at the wrong point, so the
 package's single `sleep` indirection is swapped for a recorder, and the tests
 assert how many pauses of which length fell where. The counts are read off the
 document that was produced (`[=] ` at column 0, `  - [` and `  * ` bullets), so
@@ -1521,8 +1707,8 @@ The requested scheme also proposed 1 for fatal errors generally. plumbline's
 ladder is finer and is a documented contract (ARCHITECTURE.md §9): 1 is a usage
 or configuration error where *nothing was scanned*, 10 is a scan that ran and
 was not allowed to look, 70 is the tool being broken. Those are three different
-things to a pipeline — the first is a broken invocation, the second a real
-result about a host, the third a reason to distrust everything printed — and
+things to a pipeline, the first is a broken invocation, the second a real
+result about a host, the third a reason to distrust everything printed, and
 collapsing them would lose the distinction the ladder exists for.
 
 A count gate counts only **failing, unsuppressed** findings. Counting every
@@ -1532,7 +1718,7 @@ one thing it exists for.
 
 **SARIF's `fixes` array is the wrong home for what plumbline generates, and the
 schema says so rather than taste.** A `fix` object requires `artifactChanges`
-with at least one entry — it means "a textual edit a tool can apply to an
+with at least one entry, it means "a textual edit a tool can apply to an
 artifact", and consumers exist that will apply one. What plumbline produces is a
 shell script: `sysctl -w`, `systemctl edit`, an awk that rewrites
 `/etc/login.defs` in place. That is not a textual edit to a named artifact and
@@ -1545,7 +1731,7 @@ the question worth answering carefully. Two sources, ranked: the generated
 script where one exists, marked `generated` because it names the paths and units
 *this host* was found to have wrong; the catalog's own commands otherwise,
 marked `advisory` because they are illustrative. Where neither exists the
-property is omitted entirely rather than emitted empty — an empty array reads as
+property is omitted entirely rather than emitted empty, an empty array reads as
 "plumbline considered this and had nothing", which is a different claim from
 "this build has no proposal", and a consumer testing for the key could not tell
 them apart. On the cli-host fixture that is six generated, six advisory, none
@@ -1563,7 +1749,7 @@ Both halves of this were already checks, and both gaps were in what came after
 them.
 
 **`CRON-0001` is `/etc/crontab` and `CRON-0002` is the drop-in directories.**
-The remediation acted on one path — the finding's subject — which is adequate
+The remediation acted on one path, the finding's subject, which is adequate
 for the crontab and wrong for the directories, where the finding is a *set* by
 construction and repairing one of five leaves four ways to schedule a root job.
 Both now iterate the evidence, and both run ownership and mode over each path,
@@ -1573,14 +1759,14 @@ was.
 The fix goes to `0600` and `0700`, **stricter than either check requires**.
 CRON-0001 and CRON-0002 ask whether an unprivileged account can *write* the
 schedule, which `0644` satisfies; the stricter value costs nothing, since
-nothing but cron reads these, and closes CRON-0005 — *can an unprivileged
-account read the schedule of a root process* — in the same command. Tightening
+nothing but cron reads these, and closes CRON-0005, *can an unprivileged
+account read the schedule of a root process*, in the same command. Tightening
 the **checks** to `0600` was the alternative and would have been wrong: it would
 duplicate CRON-0005 and move a verdict on every host that ships the distribution
 default. A remediation may exceed a finding; a check may not quietly become a
 different check.
 
-**`CONTAINERS-0002` is no-new-privileges**, not userns — so the runtime-remap
+**`CONTAINERS-0002` is no-new-privileges**, not userns, so the runtime-remap
 check could not go there. But the concern behind the request was real and the
 module already had the fact to answer it: `CONTAINERS-0001` read `daemon.json`
 and never the `ExecStart`, while the collector's own package comment says *"the
@@ -1605,7 +1791,7 @@ host. The service fact is optional rather than in `Requires`, for the reason
 The module-wide invariant test moved with it. It asserted that every verdict
 carries "this reads daemon.json only"; that sentence is now false for
 `CONTAINERS-0001`, and a caveat that overstates what was missed misleads as
-thoroughly as one that understates it — an operator would go and check something
+thoroughly as one that understates it, an operator would go and check something
 the check has already checked. The invariant is now *every verdict says where it
 looked*, which is what it always meant.
 
@@ -1617,8 +1803,8 @@ and Ubuntu, and the check returned UNKNOWN on all of them, saying in as many
 words that the answer was in `ENCRYPT_METHOD` in `/etc/login.defs`, "neither of
 which this check reads". So the work was the collector, not the check.
 
-`USERS-0012` is the persistence half of `USERS-0010` — the shipped default for
-the *next* account against what the accounts that exist are set to — which is
+`USERS-0012` is the persistence half of `USERS-0010`, the shipped default for
+the *next* account against what the accounts that exist are set to, which is
 the `KERNEL-0004`/`KERNEL-0019` shape the catalog already uses.
 
 **A fallback fact must not be in `Requires`, and finding that out cost a
@@ -1628,7 +1814,7 @@ corpus, because the runner marks a check unanswerable when a required fact is
 missing and no bundle predating the collector has one. The check could answer
 perfectly well from the PAM line. `Requires` is the list of facts a check
 *cannot work without*; a fallback is consulted with `fact.Get` and the presence
-flag it returns — which also lets the finding say "this scan carries no reading
+flag it returns, which also lets the finding say "this scan carries no reading
 of /etc/login.defs" rather than "this host has no /etc/login.defs", because the
 second is a statement about a machine nobody looked at.
 
@@ -1638,8 +1824,8 @@ includes and systemd drop-ins. Two consequences, and both are load-bearing:
 - The fact keeps **every** occurrence, not the winning one, so a finding can say
   that the line an operator edited at the bottom of the file has never been
   read. That is worse than never having written it and is invisible otherwise.
-- The remediation rewrites the **first** definition in place. Appending — the
-  obvious script, and what the sysctl helper does — would change nothing at all
+- The remediation rewrites the **first** definition in place. Appending, the
+  obvious script, and what the sysctl helper does, would change nothing at all
   on precisely the hosts that need it, because those are the ones that already
   have the wrong value higher up. It would run cleanly, report success, and
   leave an operator believing a host was fixed.
@@ -1652,20 +1838,26 @@ line somebody wrote.
 The two check modules share `internal/catalog/checks/logindefs` rather than
 importing each other. AUTH and USERS both cite this file and both describe a
 shadowed definition, and a module-to-module import would have made the USERS
-package unreadable without the AUTH one and put a cycle one edit away — there is
+package unreadable without the AUTH one and put a cycle one edit away, there is
 no other cross-module import in the tree.
 
 `SHA512` and not `YESCRYPT`: yescrypt is the better hash and needs libxcrypt
 4.4. A host without it accepts the setting and then cannot hash a password,
-which surfaces as `passwd(1)` failing for every user at once — the sort of
+which surfaces as `passwd(1)` failing for every user at once, the sort of
 failure a generated script must not be the cause of.
 
 ### The strict tier, and a drop-in that nearly broke cron
 
+> **Superseded in part.** The generated drop-in described here was withdrawn
+> after it took journald and dbus down on a live host, see *The proposal that
+> was too dangerous to make*, above. The check, the tiering argument and the
+> exemption handling below all stand; only the `SERVICES-0011` fix registration
+> is gone.
+
 `SERVICES-0011` is the third check on the same three units, and the case for a
 third rather than a stricter bar on the first two is the case for tiering at
 all: `SERVICES-0007` passes at any `ProtectSystem` other than `no`, which is the
-right bar for *its* question — a daemon that cannot rewrite `/usr` cannot
+right bar for *its* question, a daemon that cannot rewrite `/usr` cannot
 persist by replacing a binary. `strict` answers a different one. `yes` protects
 `/usr`, `/boot` and `/efi`; `full` adds `/etc`; only `strict` mounts the whole
 hierarchy read-only and requires every writable path to be declared. Raising
@@ -1680,7 +1872,7 @@ that is now four drop-in generators covering the whole sandbox family including
 `SERVICES-0006`.
 
 Two parts of the request were not implemented as written, and both for the same
-reason — the fact does not carry what they ask for, and making it carry that
+reason, the fact does not carry what they ask for, and making it carry that
 would cost more than it buys:
 
 - **"Iterate through all enabled services"** would mean reading every unit
@@ -1691,13 +1883,13 @@ would cost more than it buys:
   addition.
 - **"Ignoring ones running as root"** would leave almost nothing. All three
   audited units are long-lived root daemons, and confining a root daemon is the
-  entire point — `ProtectSystem=strict` on a root process is what stops it
+  entire point, `ProtectSystem=strict` on a root process is what stops it
   rewriting `/usr`. The fact does not record `User=` either, so it is not
   observable from what is collected.
 
 **The drop-in generator's first draft wrote `ProtectSystem=strict` into
 cron.service**, which is the one unit all four sandbox checks exempt and exactly
-the breakage the exemption exists to prevent — cron runs arbitrary
+the breakage the exemption exists to prevent, cron runs arbitrary
 operator-supplied jobs, and a read-only filesystem makes them fail at the job
 rather than at the restart. The cause is worth recording: it read unit names out
 of the finding's *detail*, and the detail names every unit the check has anything
@@ -1713,7 +1905,7 @@ which is the investigation 0011 carries.
 
 **`ubuntu-2404-hardened` gained a real finding from this.** It is the one bundle
 in the corpus recorded against the current collectors, so it is the only one
-where the sandbox checks reach a verdict at all — and `systemd-journald.service`
+where the sandbox checks reach a verdict at all, and `systemd-journald.service`
 runs there with neither `ProtectSystem` nor `ProtectHome`. Seventeen FAILs
 instead of sixteen, posture 86.32 to 85.59. The other five bundles carry no
 `services.hardening` fact and answer UNKNOWN.
@@ -1734,8 +1926,8 @@ missing was the remediation action, and that is what was added.
 and wrote down: a scan has to work against a mounted image and against a bundle
 collected months ago, and a command run on the scanning host answers for the
 scanning host. The consequence is stated in every check that depends on the
-fact — the module reports what is *configured*, not what is loaded in the kernel
-right now — and the SERVICES module covers the other half by seeing whether the
+fact, the module reports what is *configured*, not what is loaded in the kernel
+right now, and the SERVICES module covers the other half by seeing whether the
 unit is enabled. Replacing a file-based collector with exec would trade
 `--root` scanning for a property the two modules already provide between them.
 
@@ -1743,26 +1935,26 @@ The same reasoning shaped the AppArmor collector, and there it costs nothing:
 `aa-status --json` parses `/sys/kernel/security/apparmor/profiles`, so reading
 the file directly gives the same data without a dependency on apparmor-utils
 being installed. `/sys` is a live kernel interface, so a mounted image has none
-— an image scan establishes what is installed on disk and nothing about what is
+an image scan establishes what is installed on disk and nothing about what is
 loaded, and `SERVICES-0010` returns UNKNOWN rather than drawing a verdict from
 the half it has.
 
 **Three states, not two.** The check distinguishes AppArmor *absent* from
 AppArmor *disabled*, because a RHEL host has no AppArmor and is not thereby
-misconfigured — it runs SELinux. A check that failed every RPM-family host for
+misconfigured, it runs SELinux. A check that failed every RPM-family host for
 not running an LSM they deliberately do not use would be noise on exactly the
 distributions this catalog is meant to be useful on.
 
 **`SERVICES-0009` does not exist and the gap is deliberate on the caller's
 side**, not an accident here: the ID was specified as 0010 and check IDs are
-permanent public identifiers — a suppression file matches on them and
-`docs/checks/<ID>.md` is named after them — so second-guessing a number that was
+permanent public identifiers, a suppression file matches on them and
+`docs/checks/<ID>.md` is named after them, so second-guessing a number that was
 named would be the wrong kind of initiative.
 
 **Every recorded golden bundle moved by exactly one verdict**, the same one:
 `SERVICES-0010  new check, UNKNOWN`. Those bundles were recorded before the
 collector existed, so they carry no `services.apparmor` fact and the check
-resolves to `fact_not_collected` — the correct reading of a bundle from an older
+resolves to `fact_not_collected`, the correct reading of a bundle from an older
 build. `ubuntu-2404-hardened` loses its zero-UNKNOWN claim to it; the comment
 now says why and that it clears when the corpus is re-recorded. Nothing else
 moved on any of the six, which is the strongest signal available that the change
@@ -1774,13 +1966,13 @@ is additive.
 `scan --fix` prints that work as a shell script. **Nothing is executed**, and
 the block's first line says so before anything else on it.
 
-This is item 4 of the v2.0.0 plan arriving early — "Bash and Ansible only, from
-the structured remediation already in the catalog… never executed" — and it
+This is item 4 of the v2.0.0 plan arriving early. "Bash and Ansible only, from
+the structured remediation already in the catalog… never executed", and it
 lands against a sentence in `PROJECT-BRIEF.md` §1.3 that said there would be no
 `--fix` flag at all. That sentence has been corrected rather than quietly
 outlived: the flag exists, in its proposal-only form, and the reasoning behind
-the original — a tool that rewrites `/etc/ssh/sshd_config` as root from a
-heuristic will eventually lock someone out of production — is unchanged and
+the original, a tool that rewrites `/etc/ssh/sshd_config` as root from a
+heuristic will eventually lock someone out of production, is unchanged and
 still governs what it may ever do. **Generating is a review step; applying is
 the thing this project does not do.**
 
@@ -1809,8 +2001,8 @@ A host is scanned and remediated repeatedly, and a fix that appended a line each
 time would grow `/etc/sysctl.d/99-plumbline-hardening.conf` until something
 downstream broke on it. `Merge(existing string, pairs map[string]string) string`
 is the rule: the first line setting a key is replaced in place, later duplicates
-are dropped, an absent key is appended, and everything else — comments, blanks,
-keys nobody asked about — is kept exactly as it was. From which
+are dropped, an absent key is appended, and everything else, comments, blanks,
+keys nobody asked about, is kept exactly as it was. From which
 `Merge(Merge(x, p), p) == Merge(x, p)`, asserted directly at nine starting
 shapes rather than inspected.
 
@@ -1820,8 +2012,8 @@ first corrects it, and sysctl applies last-wins, so a key an operator had
 deliberately placed *before* a later override would silently change meaning.
 
 The script is a second implementation of the same rule, in awk, and that cost is
-paid deliberately: plumbline will apply a plan with `Merge` — pure Go, through
-the seam, no shell — and the printed helper exists so an operator can read what
+paid deliberately: plumbline will apply a plan with `Merge`, pure Go, through
+the seam, no shell, and the printed helper exists so an operator can read what
 that would do and run it by hand on a host plumbline is not installed on. The
 two are held together by a test that **runs the generated script twice against a
 temporary file** and compares the result with `Merge`'s, so a change to either
@@ -1839,7 +2031,7 @@ human. They are generated together, so the thing reviewed and the thing run
 cannot be different things.
 
 `--fix` is refused under `--format json` and `--format sarif`. stdout is a
-document there, and appending shell to it produces something no parser accepts —
+document there, and appending shell to it produces something no parser accepts,
 out of a flag whose entire purpose is to be reviewed before anything runs.
 Refused rather than quietly written to stderr: a script an operator asked for
 and cannot find is worse than one they were told they could not have here.
@@ -1857,14 +2049,14 @@ until something applies it.
 The keys and values are written out in the fix rather than read back from the
 catalog's remediation prose. Every one of those checks already says "Set
 kernel.dmesg_restrict to 1" in English, and parsing it would make the wording of
-a summary — reviewed as prose, changed freely in a patch release — the thing
+a summary, reviewed as prose, changed freely in a patch release, the thing
 that decides what plumbline writes to `/etc/sysctl.d` as root.
 
 **Nothing applies a plan, and there is no phase that will.** plumbline is a
 script generator: it produces reviewable, idempotent shell for an operator to
 run, and does not execute root modifications inside the scanner process. That is
-settled rather than deferred, which is why `Action.Argv` — a field that existed
-only so a later execution phase would have an argv to hand to `system.Exec` — was
+settled rather than deferred, which is why `Action.Argv`, a field that existed
+only so a later execution phase would have an argv to hand to `system.Exec`, was
 removed rather than kept. A field held for a phase the project has disclaimed is
 a promise, and the quoting it was carrying is not lost: every command assembled
 from host data still goes through `command()`, which quotes each argument.
@@ -1884,7 +2076,7 @@ Five more fixes, and they are not all one shape:
 **`FILESYS-0004` is here because the request named `FILESYS-0003` and described
 `FILESYS-0004`.** `chmod +t` was asked for; `FILESYS-0003` is *No file is
 world-writable* and the sticky bit does nothing on a file. Rather than pick one
-reading, both are implemented with the command that is right for each — and the
+reading, both are implemented with the command that is right for each, and the
 pairing is asserted, because getting them the wrong way round produces either a
 script that does nothing or an outage: removing the write permission from
 `/tmp` breaks the host, and that is precisely what the sticky bit exists to
@@ -1895,13 +2087,13 @@ is the Debian family's; RHEL keeps the same rules in `/etc/pam.d/system-auth`,
 and a service that has diverged from the shared stack has diverged exactly
 there. `AUTH-0004` reports every file it found the argument in, and the fix
 edits those. The same holds for the crontab and for `daemon.json`, which is not
-always `/etc/docker/daemon.json` — a daemon started with `--config-file` uses
+always `/etc/docker/daemon.json`, a daemon started with `--config-file` uses
 another, and writing the default would produce a file the running daemon never
 reads.
 
 **A path is a string read off the machine being audited.** Pasting one into a
 command line unquoted is a shell injection with a root prompt at the end of it,
-out of a file name — the one thing on a Linux host that can contain very nearly
+out of a file name, the one thing on a Linux host that can contain very nearly
 anything. `command()` quotes every argument, and
 `TestAPathFromTheHostIsQuotedIntoTheScript` feeds it a world-writable file whose
 name closes the argument and starts a second command.
@@ -1916,7 +2108,7 @@ approximation.
 
 **`daemon.json` is parsed, not edited.** It is JSON the daemon refuses to start
 on if it is malformed, so a substitution that got a comma wrong takes Docker down
-at the next restart — which on many hosts is every workload on the machine. The
+at the next restart, which on many hosts is every workload on the machine. The
 helper parses, sets one key, writes it back with sorted keys, and *refuses* on a
 file that is not valid JSON or is not an object. A run that finds the key already
 correct rewrites nothing at all, so a second run does not even change the mtime.
@@ -1926,7 +2118,7 @@ sed expression aimed at JSON.
 
 **The script embeds nothing from the host's `daemon.json`.** The collector
 records that file's top-level key names and never their values, because it holds
-registry mirrors, proxy URLs and storage paths and a bundle travels (ADR-0015) —
+registry mirrors, proxy URLs and storage paths and a bundle travels (ADR-0015),
 and a generated script that pasted the contents in would put exactly what the
 bundle refuses to carry into a file an operator might attach to a ticket. The
 helper reads the file on the host at the moment it runs.
@@ -1938,7 +2130,7 @@ carries the count it is working from and the `find` command that enumerates the
 rest.
 
 **Helpers are emitted only where they are called**, matched on the call rather
-than on which fixes are in the plan — a second registry to keep in step would be
+than on which fixes are in the plan, a second registry to keep in step would be
 wrong for one release and nobody would notice, because the symptom is a script
 that fails on the operator's host with "command not found". The scan is
 transitive, so a Docker-only script pulls in `plumbline_backup` because
@@ -1947,7 +2139,7 @@ transitive, so a Docker-only script pulls in `plumbline_backup` because
 ### `--write-script`
 
 `--fix --write-script PATH` also writes the script to a file, at
-`system.ScriptMode` — **0700**. The difference from `BundleMode` is the execute
+`system.ScriptMode`, **0700**. The difference from `BundleMode` is the execute
 bit rather than the secrecy: this is the exact list of commands that would change
 a host's security posture, and a group-writable copy on a shared machine is an
 invitation to edit it in the window between the review and the run, which is the
@@ -1966,8 +2158,8 @@ What this leaves:
   already carries which file sets each probed key and to what, so a plan could
   say "the file is already right, only the running kernel is wrong" and propose
   `sysctl --system` alone. It was left out because the printed script has to be
-  idempotent on its own terms — an operator may run it a week later, against a
-  file that has changed — and a script that assumed a scan's snapshot would
+  idempotent on its own terms, an operator may run it a week later, against a
+  file that has changed, and a script that assumed a scan's snapshot would
   append a duplicate the moment that assumption expired.
 - **Six checks of thirty-six failing on this host.** What the engine covers is
   still small, and the block says how much it does not cover every time it
@@ -1985,7 +2177,7 @@ verb, the title and the verdict.
 **The argument that put the ID there was sound about the ID and wrong about the
 stream.** It said the ID is what a suppression file matches on and what
 `plumbline explain` takes, so it belongs in the row's fixed tail where a narrow
-terminal cannot squeeze it out. All true — and an ID is for *copying*, while the
+terminal cannot squeeze it out. All true, and an ID is for *copying*, while the
 stream scrolls past at a tenth of a second a row and nothing can be copied out of
 it. The report underneath carries the ID on every entry and is still on screen
 when the scan ends. So the ID was costing the title columns on exactly the
@@ -1999,20 +2191,20 @@ answer to the question a person watching a long collector is actually asking.
 
 The compact form went with it. It existed to keep the ID on screen when the
 title had been squeezed to nothing, and with no ID there is nothing to fall back
-to — a window too narrow for even one column of title now produces a row exactly
+to, a window too narrow for even one column of title now produces a row exactly
 one column over rather than a wrapped one, which is the policy the gap clamp
 already followed.
 
 ### The warnings list
 
 The stream was fixed and the report it hands over to was not. `entry` printed
-every field a finding held — severity, unknown reason, subject, detail, up to
+every field a finding held, severity, unknown reason, subject, detail, up to
 five evidence excerpts with their sources and line numbers, then the remedy, its
 effort and its caution. Eleven or twelve lines each. Thirty-six warnings on this
 host, and `scan --verbose` produced **1,501 lines**, of which the warnings
 section alone was **1,333**.
 
-It is now a bullet and a hanging block of prose — 337 lines and 170:
+It is now a bullet and a hanging block of prose, 337 lines and 170:
 
 ```
   - [HIGH]    PAM does not accept an empty password [AUTH-0004]
@@ -2024,7 +2216,7 @@ It is now a bullet and a hanging block of prose — 337 lines and 170:
 
 **The argument is not that the detail was wrong; it is that the terminal was
 the wrong place for it.** A reader of a scrolling report is asking one question
-— what do I do next — and every field that is not the answer is between them
+what do I do next, and every field that is not the answer is between them
 and the next finding. A document nobody reads is not a safety feature however
 complete it is. Everything removed is still produced and still retained: the
 JSON and SARIF renderers carry every field including the whole evidence array,
@@ -2033,7 +2225,7 @@ commands. The terminal is the one output where being exhaustive costs the
 reader something.
 
 The details line is the remedy, falling back to the subject, falling back for an
-`UNKNOWN` to why it could not be determined — spelled out (`ambiguous system
+`UNKNOWN` to why it could not be determined, spelled out (`ambiguous system
 state`) rather than left as the machine token, which the JSON keeps matching on.
 
 **The first cut of this truncated it at the grid, and that was wrong in a way
@@ -2051,7 +2243,7 @@ claim under test is "nothing was lost", not "it wrapped somewhere".
 
 **The wrap width follows the terminal, and only for this section.** The first
 cut held it to the fixed 78 columns on the grounds that the report is an
-artifact somebody diffs — which is true of the artifact and false of the
+artifact somebody diffs, which is true of the artifact and false of the
 terminal it was also being drawn on, where 78 columns in a 160-column window
 folds a sentence that had room to finish. Both are now served, and what chooses
 between them is `TIOCGWINSZ` on the *destination writer* rather than a flag: the
@@ -2060,20 +2252,20 @@ report.txt` produces the same bytes from any window it is run in, and no mode
 can be set wrongly. Only the warnings section moves; the section rules, the scan
 phase's status column and the dashboard boxes stay on `reportWidth`, because
 those are the furniture a diff would be full of. The terminal width is clamped
-to [40, 120] — prose at 200 columns is prose the eye loses on the return sweep,
+to [40, 120], prose at 200 columns is prose the eye loses on the return sweep,
 and 120 is the ceiling `streamMaxWidth` already argues for.
 
-**Severity is back, as a padded coloured tag ahead of the title** — red for
+**Severity is back, as a padded coloured tag ahead of the title**, red for
 CRITICAL and HIGH, yellow for MEDIUM, blue for LOW, magenta for `[UNKNOWN]`,
 and INFO left unpainted because colouring every row is the same as colouring
 none. The tag is padded to the widest one in the section, measured across both
-blocks, so the titles held a single column — and that padding was then removed
+blocks, so the titles held a single column, and that padding was then removed
 again. It cost four columns of every line on a host with anything critical on
 it, to buy a column of nothing: the tag is coloured, and the colour is what the
 eye runs down, so the alignment was doing the work twice and charging for it.
 One space follows the tag. An `UNKNOWN` is tagged `UNKNOWN` rather than by its
 severity,
-which is this package's oldest argument compressed into one column — a check
+which is this package's oldest argument compressed into one column, a check
 that could not be evaluated has established no degree of badness, and printing
 `[MEDIUM]` beside it would claim one.
 
@@ -2084,7 +2276,7 @@ terminal still has a way to show that field.
 `UNKNOWN` keeps equal weight, which is this package's oldest argument and the
 one most easily lost to a change like this. It gets the same two lines under its
 own heading, and `TestEveryWarningEntryIsExactlyTwoLines` asserts the shape by
-structure rather than by a list of forbidden field names — a list is something
+structure rather than by a list of forbidden field names, a list is something
 somebody has to remember to extend when a finding grows a field.
 
 What this leaves:
@@ -2110,7 +2302,7 @@ Three things it produced that outlive the check:
   ordering across directories, masked and symlinked units. It came out of the
   Docker collector, which had it first and now calls it. The rules are
   systemd's, they move verdicts rather than details, and two implementations
-  would have been two answers on the same host — the same argument that put
+  would have been two answers on the same host, the same argument that put
   `dockerd`'s socket grammar in one file for `CONTAINERS-0006` and `-0007`.
 - **A directive allowlist enforced during the parse is a privacy boundary, not
   a filter.** `unit.Request.Directives` names what to keep and everything else
@@ -2120,7 +2312,7 @@ Three things it produced that outlive the check:
   a bounded exception rather than an abandoned rule.
 - **systemd's boolean grammar is wider than its documentation and is not
   uniformly case-insensitive.** `parse_boolean` takes `1/0` compared exactly and
-  `yes/y/true/t/on` and `no/n/false/f/off` compared case-insensitively — and an
+  `yes/y/true/t/on` and `no/n/false/f/off` compared case-insensitively, and an
   unparseable value is *ignored with a warning*, not read as false, so the file
   can say one thing while the host does another. Any later check reading a
   systemd boolean should use the same parser rather than inventing a rule.
@@ -2130,7 +2322,7 @@ The module's honest limits here are three:
 **The unit list is fixed and small.** Auditing every unit means reading every
 unit body, which is what the enablement collector exists in order not to do.
 Growing the list is a work package with a fixture per addition, not a constant
-to extend casually — and the interesting question is not how to read more units
+to extend casually, and the interesting question is not how to read more units
 but which ones are worth the disclosure.
 
 **The exemption mechanism is the interesting part, and it needed a guard.**
@@ -2152,7 +2344,7 @@ exemption list:
   - **It cannot make the check vacuous.** If nothing on a host was actually
     held to the standard the result is `NOT_APPLICABLE`, not `PASS`. With two
     of three units exempt, one more reasonable entry would otherwise convert
-    this check into a green tick that means nothing — silently, and with each
+    this check into a green tick that means nothing, silently, and with each
     step looking defensible. That is rule 3's failure mode arrived at by
     increments, and it is the thing to watch for in every later module that
     wants exemptions.
@@ -2164,7 +2356,7 @@ widening the unit list would have.
 
 **`ProtectSystem` is the better first directive, and the exemption lists are
 the evidence.** It carries one exemption where `NoNewPrivileges` carries two,
-because the reason dbus needs `NoNewPrivileges` off — a setuid launch helper —
+because the reason dbus needs `NoNewPrivileges` off, a setuid launch helper,
 says nothing about where the daemon may write, and on a systemd host
 dbus-activated services are started by systemd as their own units rather than
 as children of dbus. So `-0007` has two auditable units where `-0006` has one,
@@ -2177,14 +2369,14 @@ have exempted dbus from both and cost `-0007` half its subject to a reason that
 did not apply to it. An exemption is a claim about one setting on one unit.
 
 `SERVICES-0008` finished the triad and the answer was: the same unit again, for
-a third distinct reason. cron is exempt from all three — jobs that escalate,
-jobs that write, jobs that live in a home directory — and dbus from exactly
+a third distinct reason. cron is exempt from all three, jobs that escalate,
+jobs that write, jobs that live in a home directory, and dbus from exactly
 one. That one unit on one of three lists is the clearest evidence the lists had
 to be per-check.
 
 **Three copies of the same loop was one copy too many.** `partitionUnits` now
-owns the ordering all three depend on — pass before exemption, unreadable
-before either, masked neither — and each of those was a property previously
+owns the ordering all three depend on, pass before exemption, unreadable
+before either, masked neither, and each of those was a property previously
 asserted three times and implementable wrongly three times. A fourth check gets
 them by construction. The rule of thumb it produced: when a mechanism's
 *correctness properties* are being restated per caller, the mechanism is in the
@@ -2195,14 +2387,14 @@ a shipped bug. `ProtectSystem` and `ProtectHome` both take a value that is a
 superset of the booleans, and the two halves disagree: `parse_boolean` compares
 its words with `strcaseeq`, while the enum names go through a string table
 looked up with `streq`. `ProtectSystem=Full` is therefore *rejected* by systemd
-— logged, ignored, default left in force — and catalog 23 read it as `full` and
+logged, ignored, default left in force, and catalog 23 read it as `full` and
 passed a host with `/usr` writable. Folding the enum half is the dangerous
 direction of the two, because it converts an unprotected service into a green
 tick. Any later check reading a systemd enum should assume case matters until
 it has read the table.
 
-The remaining sandboxing directives — `PrivateTmp`, `PrivateDevices`,
-`RestrictAddressFamilies`, `SystemCallFilter` — are a different shape of
+The remaining sandboxing directives, `PrivateTmp`, `PrivateDevices`,
+`RestrictAddressFamilies`, `SystemCallFilter`, are a different shape of
 question. They are cheap to collect and hard to judge: the right value depends
 on what the daemon does, far more than `ProtectHome` does, and a check that
 demanded `SystemCallFilter=@system-service` of every unit would be exemptions
@@ -2212,79 +2404,217 @@ reproduce it is a design question and not a coding one.
 
 **The corpus does not exercise it.** All six golden bundles predate
 `services.hardening`, so `SERVICES-0006` is `UNKNOWN` on every one. Unlike the
-CONTAINERS three this needs no new software to fix — every one of those hosts
-has a `systemd-journald.service` — so a re-recording clears it on its own.
+CONTAINERS three this needs no new software to fix, every one of those hosts
+has a `systemd-journald.service`, so a re-recording clears it on its own.
 
 ---
 
-## v2.0.0 — Intelligence
+## v2.0.0: Remediation and pipelines, SHIPPED 2026-09-02
 
-**The promise:** *It tells you what is exploitable, not just what is untidy — and it is right about it more often than a naive scanner.*
+**The promise:** *It writes the fix, you read it, you run it. It never runs it
+for you, and running it twice changes nothing the first run already changed.*
 
-Requires v1 to have been stable for at least one minor cycle. Do not start v2 work while v1 findings are still churning.
+A state-aware, idempotent remediation engine with CI/CD pipeline gates and SARIF
+exports. This major was not on the original plan. It got built because the
+answer to "what should I fix first" is worth less than the commands that fix it,
+and because generating those commands turned out to be a tractable problem with
+a hard boundary around it.
 
-### Major work items
+### What shipped
 
-1. **Vulnerability correlation — done properly** *(the largest single item, ~10 weeks)*
-   - Vendor security data, not NVD version matching: Debian Security Tracker + DSA, Ubuntu USN/OVAL, Red Hat OVAL + VEX, SUSE, Alpine `secdb`; OSV as the aggregation layer where vendors do not publish.
-   - Distribution-aware version comparison (`dpkg --compare-versions` semantics, RPM `evr` semantics) implemented natively and fuzz-tested against the real tools.
-   - The database ships as a **signed, versioned release asset**, built by a scheduled job, fetched by `plumbline db fetch`. Never fetched during a scan. Air-gap bundle available.
-   - Every vulnerability finding states the vendor's fixed-version and links the vendor advisory — because "fixed in 3.0.2-0ubuntu1.15" is the actionable fact, not the CVSS score.
-   - **Gate:** publish a measured false-positive comparison against a naive NVD matcher on stock Ubuntu LTS, Debian and Alpine hosts. If the numbers are not clearly better, the feature does not ship. This comparison is the feature's entire justification.
+1. **The remediation generator.** `scan --fix` renders a `#!/bin/sh` script
+   under `set -eu` that repairs the failing checks this build knows how to
+   repair. Actions sort by check ID, each gets a commented section naming the
+   finding it came from, and helper functions are emitted only when something
+   uses them. Eighteen check IDs have a registered fix.
 
-2. **New modules** — `CONTAINERS` (Docker/Podman/K8s node config, ~15; **started early: the daemon.json and docker.service collectors and eight checks landed in v1.x, see below**), `PRIVESC` (renamed from PENTEST, gated behind `--enable privesc` with an authorised-use notice, ~15), `MEMORY` (ELF hardening: RELRO, PIE, canaries, FORTIFY — self-contained and satisfying, ~10; **started early, see below**), `INTEGRITY` (package DB verification + bundle-to-bundle drift, ~9), `STORAGE`, `CRYPTO` (local certificate and key material only; still no network probing). Catalog to ~250 checks.
+2. **Idempotency as a property, not an intention.** Every generated action
+   rewrites in place. The `sysctl.d` appender rewrites an existing key rather
+   than stacking a second one. The `login.defs` editor uses an awk pass that
+   replaces the first match rather than appending a line the parser will never
+   reach. A drop-in is written whole. Running the script twice produces the same
+   host as running it once.
 
-3. **`CLOUD` module, carefully** — IMDS queries are network access, which breaks the v1 invariant. Therefore: off by default, requires `--enable cloud`, restricted to link-local metadata addresses by an explicit allowlist, and the bundle records that network was used. The offline test asserts that the *default* path still makes zero network syscalls.
+3. **`--write-script`.** Writes the script to a path, owner-only and executable
+   at `0700`, instead of to stdout. It is a root remediation plan for one
+   specific host and gets the same file mode as a bundle.
 
-4. **Remediation generation** — Bash and Ansible only, from the structured remediation already in the catalog. Output is a reviewable script with every command commented with its finding ID. Never executed. Puppet/Chef dropped from the source design's list; nobody asked for them and each is a maintenance tail.
+4. **Pipeline gates.** `--fail-on`, `--fail-on-critical`, `--fail-on-high`,
+   `--min-coverage` and `--threshold`, over an exit-code ladder where degraded
+   outranks failing. A scanner that could not see the host must be louder than a
+   host that is misconfigured.
 
-5. **Compliance evidence, not scores** — user-supplied mapping packs (`plumbline mapping add ./our-cis-v3.yaml`) so nothing licensed is redistributed. Output is an evidence pack: control identifier → checks → results → raw evidence → coverage statement. `LEGAL-DISCLAIMER.md` is shipped with it.
+5. **SARIF export with the fix attached.** The proposed fix rides in
+   `properties['plumbline/remediation']` with a `source` field distinguishing a
+   generated script from catalog advisory text. Generated fixes are not SARIF
+   `fixes`, and `adr/0018-sarif-mapping.md` records why: a SARIF `fix` is a text
+   edit a viewer may apply, and none of these are.
 
-6. **HTML report** — self-contained single file, no external assets, no JS frameworks, printable to PDF by the browser. Deletes the chromedp dependency permanently.
+6. **Two new modules.** `CONTAINERS`, eight checks over the Docker daemon
+   configuration and its unit. `MEMORY`, four checks over ELF hardening. Both
+   were scheduled for the intelligence major and landed early because they are
+   self-contained.
 
-7. **Interactive TUI browser** — Bubbletea, arrow-key navigation of findings. Now, not in v1, because it is polish.
+7. **`KERNEL` expanded** from 16 checks to 31, with the runtime-versus-persisted
+   audit that gives the tool its state awareness: a sysctl set in memory and
+   absent from `/etc/sysctl.d` is a different finding from one set in both.
+
+8. **The liability position stated above the fold** in `README.md` rather than
+   in an appendix. Plumbline stays under Apache-2.0.
+
+### The thing that shaped the engine
+
+`SERVICES-0011` generated `ProtectSystem=strict` drop-ins for any failing
+daemon. Applied, it took out `dbus` and `systemd-journald`, because strict
+mounts `/run` and `/var` read-only and neither daemon can work without writing
+there. The generator was removed rather than patched.
+
+The rule that came out of it: if the information needed to generate a safe fix
+is an enumeration the scan does not have, generate nothing. `SERVICES-0011`
+falls back to catalog advisory text and counts as unfixable in the `--fix`
+summary. It gets a generator again when a collector records what each unit
+writes, and not before.
+
+`SERVICES-0010` produced the other lesson. It emitted a bare `aa-enforce`, which
+is in `apparmor-utils` and absent on a minimal host. Under `set -eu` a missing
+binary exits 127 and takes every action sorted after it down too. The fix is now
+guarded with `command -v` and every registered fix is parsed by `sh -n` in CI.
 
 ### Release criteria
 
-- [ ] All v1 criteria still hold
-- [ ] Vulnerability false-positive comparison published and favourable
-- [ ] `findings-v2.schema.json` published; v1 schema still emitted under `--schema v1` for one full major cycle
-- [ ] Container-module fixtures for Docker, Podman and a K8s node
-- [ ] `--enable cloud` off-path proven to make zero network syscalls
+- [x] Generated scripts parse under `sh -n`, asserted per fix and for a combined plan
+- [x] Every generated action is idempotent, asserted by running it twice against a fixture
+- [x] A check whose safe fix cannot be derived generates nothing and falls back to advisory text
+- [x] `internal/remediate` holds no `System`, so the generator cannot execute what it writes
+- [x] SARIF carries the proposed fix with its provenance
+- [x] Liability stated in `README.md`, `LEGAL-DISCLAIMER.md` and the threat model as T-14
 - [ ] Generated remediation scripts reviewed by someone who is not the author
 
 ---
 
-## v3.0.0 — Reach
+## v3.0.0: Intelligence
 
-**The promise:** *Other people can extend it, and you can run it across a fleet.*
+**The promise:** *It tells you what is exploitable, not just what is untidy, and
+it is right about it more often than a naive scanner.*
+
+Shifted here from v2.0.0. Requires v2 stable for at least one minor cycle. Do
+not start this while remediation findings are still churning.
 
 ### Major work items
 
-1. **Declarative check packs** — YAML checks over the existing fact model (read this fact, apply this predicate, emit this finding). Covers the majority of real checks without executing third-party code. Ships with a `plumbline pack validate` linter and a test harness so pack authors get the same fixture discipline core checks have.
+1. **Vulnerability correlation, done properly.** The largest single item, about
+   ten weeks.
+   - Vendor security data rather than NVD version matching: Debian Security
+     Tracker and DSA, Ubuntu USN and OVAL, Red Hat OVAL and VEX, SUSE, Alpine
+     `secdb`. OSV as the aggregation layer where vendors do not publish.
+   - Distribution-aware version comparison, `dpkg --compare-versions` semantics
+     and RPM `evr` semantics, implemented natively and fuzz-tested against the
+     real tools.
+   - The database ships as a signed, versioned release asset, built by a
+     scheduled job and fetched by `plumbline db fetch`. Never fetched during a
+     scan. Air-gap bundle available.
+   - Every vulnerability finding states the vendor's fixed version and links the
+     vendor advisory, because "fixed in 3.0.2-0ubuntu1.15" is the actionable
+     fact and the CVSS score is not.
+   - **Gate:** publish a measured false-positive comparison against a naive NVD
+     matcher on stock Ubuntu LTS, Debian and Alpine hosts. If the numbers are
+     not clearly better, the feature does not ship. That comparison is the
+     feature's entire justification.
 
-2. **Subprocess extension protocol** — for checks that genuinely need logic: a plugin is any executable, receives a fact subset as JSON on stdin, returns findings as JSON on stdout, runs with dropped privileges, no network, a timeout and a memory cap. No Go `plugin`, no shared ABI, any language. Trust model documented plainly: **an extension is code you are choosing to run; signature verification tells you who published it, not that it is safe.**
+2. **`CLOUD` module, carefully.** Also shifted here from v2.0.0. IMDS queries
+   are network access, which breaks the invariant every other module keeps.
+   Therefore: off by default, requires `--enable cloud`, restricted to
+   link-local metadata addresses by an explicit allowlist, and the bundle
+   records that the network was used. The offline test asserts the default path
+   still makes zero network syscalls.
 
-3. **macOS support** — `MACOSEC` module, `system/live` for Darwin, a fixture corpus. Only announced once macOS is in CI. Realistically ~40–60 checks; the marketing claim is "macOS supported", not "full parity", and the platform matrix says so.
+3. **Remaining modules.** `PRIVESC`, renamed from PENTEST, gated behind
+   `--enable privesc` with an authorised-use notice, about 15 checks.
+   `INTEGRITY`, package database verification plus bundle-to-bundle drift, about
+   9. `STORAGE`. `CRYPTO`, local certificate and key material only, still no
+   network probing. Catalog to roughly 250 checks.
 
-4. **Fleet aggregation** — `collect` on N hosts → `plumbline aggregate *.plb` → a fleet posture view with per-host drill-down and drift detection across time. This is natural because bundles already exist; it is not a daemon and not a server. Still no hosted service.
+4. **Compliance evidence, not scores.** User-supplied mapping packs, so nothing
+   licensed is redistributed. Output is an evidence pack: control identifier,
+   checks, results, raw evidence, coverage statement. `LEGAL-DISCLAIMER.md`
+   ships with it. `COMPLIANCE-DATA-POLICY.md` §3 binds this work.
 
-5. **Policy as code** — baseline files declaring expected state (`SSHD-0002 must PASS`, `KERNEL-* may not regress`), evaluated against a bundle, with a clean CI verdict. This is what teams actually want from "compliance" and it uses nobody's copyrighted text.
+5. **Ansible output from the remediation engine.** The structured actions
+   already exist. A second renderer over them is a smaller job than the first
+   one was. Puppet and Chef stay dropped: nobody asked, and each is a
+   maintenance tail.
 
-6. **Stable public Go API** — `pkg/plumbline` finally appears, *after* three majors of learning what the shape should be. Committing to a Go API at v1.0.0, as the source design did, is committing to a shape you have not yet discovered.
+6. **HTML report.** Self-contained single file, no external assets, no JS
+   frameworks, printable to PDF by the browser.
 
-7. **Additional architectures** — arm32, riscv64, only once there is CI hardware. Otherwise unsupported binaries stay unsupported.
+7. **Interactive TUI browser.** Arrow-key navigation of findings. Last, because
+   it is polish.
+
+### Release criteria
+
+- [ ] All v1 and v2 criteria still hold
+- [ ] Vulnerability false-positive comparison published and favourable
+- [ ] `findings-v2.schema.json` published, with v1 still emitted under `--schema v1` for one full major cycle
+- [ ] `--enable cloud` off-path proven to make zero network syscalls
+- [ ] Evidence-pack output reviewed by someone who audits for a living
+
+---
+
+## v4.0.0: Reach
+
+**The promise:** *Other people can extend it, and you can run it across a
+fleet.*
+
+Displaced from v3.0.0 when intelligence moved down. None of it has started.
+
+### Major work items
+
+1. **Declarative check packs.** YAML checks over the existing fact model: read
+   this fact, apply this predicate, emit this finding. Covers most real checks
+   without executing third-party code. Ships with a `plumbline pack validate`
+   linter and a test harness, so pack authors get the same fixture discipline
+   core checks have.
+
+2. **Subprocess extension protocol.** For checks that genuinely need logic. A
+   plugin is any executable. It receives a fact subset as JSON on stdin and
+   returns findings as JSON on stdout, running with dropped privileges, no
+   network, a timeout and a memory cap. No Go `plugin`, no shared ABI, any
+   language. The trust model gets stated plainly: an extension is code you chose
+   to run, and a signature tells you who published it rather than that it is
+   safe.
+
+3. **macOS support.** A `MACOSEC` module, `system/live` for Darwin, a fixture
+   corpus. Announced only once macOS is in CI. Realistically 40 to 60 checks.
+   The claim is "macOS supported", not "full parity", and the platform matrix
+   says so.
+
+4. **Fleet aggregation.** `collect` on N hosts, then `plumbline aggregate
+   *.plb`, giving a fleet posture view with per-host drill-down and drift
+   detection across time. Natural, because bundles already exist. Not a daemon
+   and not a server.
+
+5. **Policy as code.** Baseline files declaring expected state, such as
+   `SSHD-0002 must PASS` or `KERNEL-* may not regress`, evaluated against a
+   bundle with a clean CI verdict. This is what teams actually want from
+   "compliance" and it uses nobody's copyrighted text.
+
+6. **Stable public Go API.** `pkg/plumbline` appears after three majors of
+   learning what the shape should be. Committing to a Go API at v1.0.0, as the
+   source design did, is committing to a shape you have not discovered yet.
+
+7. **Additional architectures.** arm32 and riscv64, once there is CI hardware.
+   Otherwise unsupported binaries stay unsupported.
 
 ### Release criteria
 
 - [ ] A third party has authored and published a check pack without core changes
-- [ ] macOS in CI with ≥6 golden bundles
+- [ ] macOS in CI with at least six golden bundles
 - [ ] Extension protocol threat-modelled and documented
 - [ ] `pkg/plumbline` API frozen with a deprecation policy
 
 ---
 
-## Beyond v3 — the graveyard
+## Beyond v4: the graveyard
 
 Named and rejected, so they stop resurfacing. The source design listed all of these as "post-stable", which is how a focused CLI tool becomes an unfinished platform.
 
@@ -2293,8 +2623,8 @@ Named and rejected, so they stop resurfacing. The source design listed all of th
 | Daemon / continuous monitoring | **No.** That is a different product with a different threat model. It also contradicts the stated non-goals. If you want it, start a new project that consumes bundles. |
 | Web UI | **No.** A server in a security tool is a new attack surface and an ops burden. Generate HTML; let a browser open it. |
 | gRPC API | **No.** Nobody has asked. The JSON schema is the API. |
-| Remote scanning over SSH | **Maybe.** Cheap to add (`collect` remotely, `eval` locally) and it does not compromise the model. Consider it a v3.x minor. |
-| Auto-*generation* of remediation | **Shipped, in its first phase.** `scan --fix` prints a script. See *The remediation engine* above. |
+| Remote scanning over SSH | **Maybe.** Cheap to add: `collect` remotely, `eval` locally. It does not compromise the model. Consider it a minor release, whenever. |
+| Auto-*generation* of remediation | **Shipped in v2.0.0.** `scan --fix` prints a script. See the v2.0.0 section. |
 | Auto-*application* of remediation | **Never.** See `PROJECT-BRIEF.md` §1.3. Generating is a review step; applying is the thing this project does not do, and no flag has been added that would. |
 | Hosted plugin registry | **No.** GitHub releases and a signed index file are sufficient and cost nothing to run. |
 | SIEM integrations | **No.** Emit good JSON; integration is their job. |
@@ -2305,8 +2635,8 @@ Named and rejected, so they stop resurfacing. The source design listed all of th
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| PAM and sshd effective-config parsing are harder than they look (`Include`, `Match`, defaults, distro divergence) | 2–3 week slip in v0.3 | Build the sshd effective-config collector first, in v0.1, so the difficulty is discovered early |
-| Fixture corpus creation is tedious and gets skipped under pressure | Silent quality collapse — the classic failure | CI gate refuses any check without PASS+FAIL fixtures; make the gate exist before check #10, when it is cheap to comply with |
-| Check-count ambition creeps back | v1 never ships | 110 is a ceiling, not a target. Cut checks, never cut criteria. |
-| Vendor vulnerability feeds change format | v2 breakage | Feed parsers behind an interface; contract tests against recorded feed snapshots |
-| Motivation dip after v1 ships | v2 stalls | v1 is designed to be a complete, defensible artifact on its own. Stopping there is an acceptable outcome, not a failure. |
+| PAM and sshd effective-config parsing are harder than they look (`Include`, `Match`, defaults, distro divergence) | 2 to 3 week slip in v0.3 | Build the sshd effective-config collector first, in v0.1, so the difficulty is discovered early |
+| Fixture corpus creation is tedious and gets skipped under pressure | Silent quality collapse, the classic failure | CI gate refuses any check without PASS+FAIL fixtures; make the gate exist before check #10, when it is cheap to comply with |
+| Check-count ambition creeps back | The release never ships | The count is a ceiling, not a target. Cut checks, never cut criteria. |
+| Vendor vulnerability feeds change format | v3 breakage | Feed parsers behind an interface, with contract tests against recorded feed snapshots |
+| Motivation dip after a major ships | The next one stalls | Every major is designed to be a complete, defensible artifact on its own. Stopping after any of them is an acceptable outcome, not a failure. |

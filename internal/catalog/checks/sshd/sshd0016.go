@@ -21,14 +21,14 @@ before the client has authenticated. Every such connection occupies one of the
 slots MaxStartups allows, and each one runs a pre-authentication process.
 
 The default is 120 seconds, which means an attacker can hold the listener's
-unauthenticated capacity with a trickle of connections that never complete —
+unauthenticated capacity with a trickle of connections that never complete,
 the classic slow-loris shape applied to SSH. Reducing it to 60 seconds or less
 halves the cost of holding a slot without inconveniencing anyone: an interactive
 login that takes more than a minute to authenticate has a different problem.
 
 The wider reason to care is that pre-authentication code is the most exposed
 code in the daemon. It is what CVE-2024-6387 ("regreSSHion") reached, and that
-vulnerability was triggered specifically by letting the grace timer expire — on
+vulnerability was triggered specifically by letting the grace timer expire, on
 a host running the vulnerable version, a shorter grace time raised the cost of
 the attack because each attempt had to be repeated more often. Shortening the
 window does not fix such bugs, but it reduces how long an unauthenticated peer
@@ -63,7 +63,7 @@ gets to work with the code that contains them.`,
 		Summary: "Set LoginGraceTime to 60 seconds or less.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Set 'LoginGraceTime 60' in /etc/ssh/sshd_config. Never set it to 0 — that disables the timeout rather than tightening it.",
+			"Set 'LoginGraceTime 60' in /etc/ssh/sshd_config. Never set it to 0, that disables the timeout rather than tightening it.",
 			"Review MaxStartups at the same time; the grace time and the connection limit together decide how cheaply the listener can be saturated.",
 			"Validate and reload: 'sshd -t' then 'systemctl reload sshd'.",
 		},
@@ -79,7 +79,7 @@ gets to work with the code that contains them.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — LoginGraceTime", URL: "https://man.openbsd.org/sshd_config#LoginGraceTime"},
+		{Title: "sshd_config(5). LoginGraceTime", URL: "https://man.openbsd.org/sshd_config#LoginGraceTime"},
 		{Title: "CVE-2024-6387 (regreSSHion)", URL: "https://nvd.nist.gov/vuln/detail/CVE-2024-6387"},
 	},
 }

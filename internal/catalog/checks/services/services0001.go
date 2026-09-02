@@ -47,8 +47,8 @@ var Check0001 = catalog.Check{
 	Description: `telnet, rsh, rlogin, rexec, FTP and TFTP transmit
 authentication material as plaintext across the network. A password captured
 this way requires no cryptanalysis and no vulnerability: anyone positioned on
-the path — a switch, a router, a compromised host on the same segment, a cloud
-provider's virtual network — reads it as it goes past, along with everything
+the path, a switch, a router, a compromised host on the same segment, a cloud
+provider's virtual network, reads it as it goes past, along with everything
 typed in the session afterwards.
 
 The r-commands are worse still. rsh and rlogin authenticate on .rhosts and
@@ -109,7 +109,7 @@ module does not read.`,
 			"Find out whether anything still uses it before switching it off. 'ss -tnp' shows current connections to the port; the daemon's own log, or 'journalctl -u <unit>', shows who has connected recently. A service nobody has used in a month is safe to remove; one in daily use needs its callers migrated first.",
 			"Disable it: 'systemctl disable --now <unit>'. This removes the enablement symlink and stops it in one step.",
 			"Mask it as well: 'systemctl mask <unit>'. Disabling stops it starting at boot; masking stops anything starting it at all, including another unit that names it as a dependency and including a package upgrade that re-runs its preset.",
-			"Remove the package outright where you can — 'apt purge telnetd' or 'dnf remove telnet-server' — which is the only step that also removes the binary. Note that the *client* package is a separate one and is usually worth keeping.",
+			"Remove the package outright where you can, 'apt purge telnetd' or 'dnf remove telnet-server', which is the only step that also removes the binary. Note that the *client* package is a separate one and is usually worth keeping.",
 			"Migrate the callers: ssh replaces telnet, rsh and rlogin; scp, sftp or rsync-over-ssh replaces FTP. For TFTP, which exists to serve boot images to devices with no room for a TLS stack, confine it to an isolated provisioning network rather than trying to secure the protocol.",
 		},
 		Commands: []string{
@@ -128,7 +128,7 @@ module does not read.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "systemd.unit(5) — [Install] and enablement symlinks", URL: "https://man7.org/linux/man-pages/man5/systemd.unit.5.html"},
-		{Title: "RFC 4251 — SSH Protocol Architecture (§9.1, why cleartext protocols were replaced)", URL: "https://www.rfc-editor.org/rfc/rfc4251"},
+		{Title: "systemd.unit(5), [Install] and enablement symlinks", URL: "https://man7.org/linux/man-pages/man5/systemd.unit.5.html"},
+		{Title: "RFC 4251. SSH Protocol Architecture (§9.1, why cleartext protocols were replaced)", URL: "https://www.rfc-editor.org/rfc/rfc4251"},
 	},
 }

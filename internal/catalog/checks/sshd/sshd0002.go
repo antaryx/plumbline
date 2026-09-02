@@ -28,7 +28,7 @@ var Check0002 = catalog.Check{
 	Module: "SSHD",
 	Title:  "Root login over SSH is disabled",
 	Description: `Direct root login over SSH removes the accountability that
-sudo provides — every action is attributed to "root" rather than to a person —
+sudo provides, every action is attributed to "root" rather than to a person,
 and it presents remote attackers with a username that is guaranteed to exist on
 every system, which makes credential attacks meaningfully cheaper.
 
@@ -189,7 +189,7 @@ keyword is absent is prohibit-password: key-based root login remains possible.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — PermitRootLogin", URL: "https://man.openbsd.org/sshd_config#PermitRootLogin"},
+		{Title: "sshd_config(5). PermitRootLogin", URL: "https://man.openbsd.org/sshd_config#PermitRootLogin"},
 	},
 }
 

@@ -133,7 +133,7 @@ volume to roll a log file before an investigator reaches it.`,
 		Summary: "Set LogLevel VERBOSE, and confirm the log is actually being collected.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Set 'LogLevel VERBOSE' in /etc/ssh/sshd_config. INFO also passes this check; VERBOSE additionally records key fingerprints and is what makes key-based logins individually attributable.",
+			"Set 'LogLevel VERBOSE' in /etc/ssh/sshd_config. INFO also passes this check. VERBOSE records key fingerprints, which is what makes key-based logins individually attributable.",
 			"Verify the fingerprints are appearing: after a key login, 'journalctl -u sshd | grep -i \"Accepted publickey\"' should show a SHA256: fingerprint.",
 			"Confirm the log leaves the host. A local authentication log is deleted by whoever compromises the host; forwarding to a collector is what makes it evidence. LOGGING module checks cover that side.",
 			"If the level was at DEBUG, check the existing log files for authentication material before rotating them, and rotate them rather than leaving them in place.",
@@ -153,6 +153,6 @@ volume to roll a log file before an investigator reaches it.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — LogLevel", URL: "https://man.openbsd.org/sshd_config#LogLevel"},
+		{Title: "sshd_config(5). LogLevel", URL: "https://man.openbsd.org/sshd_config#LogLevel"},
 	},
 }

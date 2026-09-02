@@ -25,7 +25,7 @@ an attacker must first obtain rather than a string they can derive.
 The OpenSSH default is yes, so a host that has never been configured accepts
 passwords. Debian, Ubuntu and RHEL all ship it explicitly as yes as well, which
 means this finding appears on a stock installation of every mainstream
-distribution — correctly.`,
+distribution, correctly.`,
 
 	BaseSeverity: finding.High,
 	Tags:         []string{"ssh", "remote-access", "authentication", "credentials"},
@@ -66,6 +66,6 @@ distribution — correctly.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — PasswordAuthentication", URL: "https://man.openbsd.org/sshd_config#PasswordAuthentication"},
+		{Title: "sshd_config(5). PasswordAuthentication", URL: "https://man.openbsd.org/sshd_config#PasswordAuthentication"},
 	},
 }

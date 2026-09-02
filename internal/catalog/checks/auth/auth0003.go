@@ -22,7 +22,7 @@ var Check0003 = catalog.Check{
 	Module: "AUTH",
 	Title:  "Repeated authentication failures lock the account",
 	Description: `Without a lockout module, a password is only as strong as the
-rate at which it can be guessed — and locally, or through a service that does
+rate at which it can be guessed, and locally, or through a service that does
 not rate-limit for itself, that rate is bounded by the hardware rather than by
 policy. Password quality and lockout are two halves of one control: quality
 sets the size of the search space, lockout sets how much of it an attacker may
@@ -85,7 +85,7 @@ be read, from either the module arguments or /etc/security/faillock.conf.`,
 		Effort:  "MEDIUM",
 		Steps: []string{
 			"Use the distribution's mechanism rather than editing the shared stack by hand. Red Hat: 'authselect enable-feature with-faillock'. Debian and Ubuntu: 'pam-auth-update' offers it, and the change survives a package update.",
-			"Where you edit directly, faillock needs three rules and the order is the whole of it: 'auth required pam_faillock.so preauth' before pam_unix.so, 'auth [default=die] pam_faillock.so authfail' immediately after it, and 'account required pam_faillock.so' in the account stack. Only the preauth line is not enough — nothing then records the failure.",
+			"Where you edit directly, faillock needs three rules and the order is the whole of it: 'auth required pam_faillock.so preauth' before pam_unix.so, 'auth [default=die] pam_faillock.so authfail' immediately after it, and 'account required pam_faillock.so' in the account stack. Only the preauth line is not enough, nothing then records the failure.",
 			"Set the thresholds in /etc/security/faillock.conf, not as module arguments: 'deny = 5', 'unlock_time = 900', 'fail_interval = 900'. The file is read by every faillock rule and survives a stack regeneration.",
 			"Decide deliberately whether root is included. 'even_deny_root' locks root out too, which is correct on a host with console access and a way to boot single-user, and is a self-inflicted outage on a cloud instance with neither.",
 			"Prefer a finite unlock_time to a permanent lock. A permanent lock converts a guessing attempt into a denial of service: anyone who knows a username can lock it out on purpose, repeatedly, and the recovery needs an administrator every time.",

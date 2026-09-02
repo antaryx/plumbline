@@ -13,7 +13,7 @@ var Check0011 = catalog.Check{
 	Title:  "No deprecated or truncated MAC is offered",
 	Description: `The MAC is what stops an attacker on the path from modifying a
 session rather than merely reading it. Encryption without integrity is not a
-weaker guarantee, it is a different one — and SSH's own history is a series of
+weaker guarantee, it is a different one, and SSH's own history is a series of
 attacks that exploited exactly that gap.
 
 Four categories fail:
@@ -57,9 +57,9 @@ cannot be read from the configuration.`,
 		Effort:  "MEDIUM",
 		Steps: []string{
 			"Set an explicit list in /etc/ssh/sshd_config: 'MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com'.",
-			"Note that the AEAD ciphers — chacha20-poly1305 and the -gcm modes — carry their own integrity and ignore this list entirely. On a host whose Ciphers list is AEAD-only, the MACs list only governs the fallback, but leaving a broken entry there is still a negotiable path.",
+			"Note that the AEAD ciphers, chacha20-poly1305 and the -gcm modes, carry their own integrity and ignore this list entirely. On a host whose Ciphers list is AEAD-only, the MACs list only governs the fallback, but leaving a broken entry there is still a negotiable path.",
 			"Prefer the absolute form over 'MACs -hmac-sha1*'; the relative form leaves the remainder at the binary's built-in default, which Plumbline reports as UNKNOWN because it cannot be read from configuration.",
-			"On RHEL 8+ and Fedora, check 'update-crypto-policies --show' — the system policy can override what sshd_config says.",
+			"On RHEL 8+ and Fedora, check 'update-crypto-policies --show', the system policy can override what sshd_config says.",
 			"Validate and reload: 'sshd -t' then 'systemctl reload sshd'.",
 		},
 		Commands: []string{
@@ -76,7 +76,7 @@ cannot be read from the configuration.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — MACs", URL: "https://man.openbsd.org/sshd_config#MACs"},
-		{Title: "RFC 9142 — Key Exchange (KEX) Method Updates for SSH", URL: "https://www.rfc-editor.org/rfc/rfc9142"},
+		{Title: "sshd_config(5). MACs", URL: "https://man.openbsd.org/sshd_config#MACs"},
+		{Title: "RFC 9142. Key Exchange (KEX) Method Updates for SSH", URL: "https://www.rfc-editor.org/rfc/rfc9142"},
 	},
 }

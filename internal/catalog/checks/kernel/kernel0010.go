@@ -69,6 +69,6 @@ source file, or can both read and write it.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel documentation — fs.protected_hardlinks", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-hardlinks"},
+		{Title: "Linux kernel documentation, fs.protected_hardlinks", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-hardlinks"},
 	},
 }

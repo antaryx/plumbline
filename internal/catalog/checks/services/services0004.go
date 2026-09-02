@@ -36,14 +36,14 @@ no routine moment at which those two diverge visibly.
 The security consequence depends on what dangled. A dangling link to auditd, to
 a firewall unit, to a log shipper or to an intrusion detection agent is a
 control that everybody believes is in place and that has not run since the
-package was removed — which is the most expensive failure a control can have,
+package was removed, which is the most expensive failure a control can have,
 because it also suppresses the alarm that would have reported its absence.
 
 There is a second, sharper reading. A symlink is a name that resolves at use.
 A dangling one names a path that does not exist *yet*, and anyone who can
 create a file there decides what systemd loads at the next boot. Where the
 target is under a directory a non-root account can write, the dangling link is
-not merely inert — it is a scheduled execution slot waiting to be filled.`,
+not merely inert, it is a scheduled execution slot waiting to be filled.`,
 
 	BaseSeverity: finding.Medium,
 	Tags:         []string{"services", "systemd", "integrity", "symlink"},
@@ -119,18 +119,18 @@ not merely inert — it is a scheduled execution slot waiting to be filled.`,
 		Effort:  "LOW",
 		Steps: []string{
 			"Ask systemd for its own account first: 'systemctl list-unit-files --state=enabled' beside 'journalctl -b | grep \"Unit .* not found\"' shows what it tried to start and could not.",
-			"For each broken link, decide which half is wrong. A unit that should be running means the package was removed by accident — reinstall it. A unit that should not means the link is left over — remove it.",
+			"For each broken link, decide which half is wrong. A unit that should be running means the package was removed by accident, reinstall it. A unit that should not means the link is left over, remove it.",
 			"Remove a leftover link with 'systemctl disable <unit>' rather than 'rm'. disable removes every link for that unit across all targets; deleting the one you found leaves the others, and the problem recurs looking slightly different.",
 			"Where 'systemctl disable' refuses because the unit file is gone, remove the link directly: 'rm /etc/systemd/system/multi-user.target.wants/<unit>', then 'systemctl daemon-reload'.",
 			"Treat a dangling link under a writable directory as urgent rather than untidy. Anyone who can create the target file decides what systemd loads at the next boot; check the target's parent directory with 'ls -ld' before deciding how quickly to act.",
-			"Add the check to whatever runs after package removal. These links are created by an operation that succeeds — removing a package without disabling its units first — so they accumulate silently unless something looks.",
+			"Add the check to whatever runs after package removal. These links are created by an operation that succeeds, removing a package without disabling its units first, so they accumulate silently unless something looks.",
 		},
 		Commands: []string{
 			"find /etc/systemd/system /usr/lib/systemd/system -xtype l -print",
 			"systemctl list-unit-files --state=enabled",
 			"journalctl -b -p warning | grep -i 'not found'",
 		},
-		Caution: "'find -xtype l' lists links whose target does not exist, which is what you want, but it follows the link to decide — so run it as a user who can read the target directories or it will report links as broken that are merely unreadable.",
+		Caution: "'find -xtype l' lists links whose target does not exist, which is what you want, but it follows the link to decide, so run it as a user who can read the target directories or it will report links as broken that are merely unreadable.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -139,6 +139,6 @@ not merely inert — it is a scheduled execution slot waiting to be filled.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "systemctl(1) — enable, disable, is-enabled", URL: "https://man7.org/linux/man-pages/man1/systemctl.1.html"},
+		{Title: "systemctl(1), enable, disable, is-enabled", URL: "https://man7.org/linux/man-pages/man1/systemctl.1.html"},
 	},
 }

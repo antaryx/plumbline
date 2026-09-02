@@ -17,7 +17,7 @@ var Check0006 = catalog.Check{
 	Description: `A line in /etc/passwd whose first field begins with "+" is NIS
 compatibility syntax: it tells glibc to pull accounts from a directory service
 and merge them into the local database. A bare "+::::::" imports every account
-NIS offers, with whatever uid, shell and group the directory says — including,
+NIS offers, with whatever uid, shell and group the directory says, including,
 if the directory is compromised or spoofed, uid 0.
 
 NIS transmits its maps without authentication or encryption and its successor,
@@ -27,7 +27,7 @@ the network was assumed to be trustworthy.
 
 The entry also changes what every other check in this module can conclude. Once
 accounts arrive from somewhere this scan cannot read, "no account has uid 0"
-becomes a statement about a list that is explicitly not the whole list — which
+becomes a statement about a list that is explicitly not the whole list, which
 is why the other USERS checks resolve to UNKNOWN when one of these is present
 rather than reporting a PASS they cannot support.`,
 

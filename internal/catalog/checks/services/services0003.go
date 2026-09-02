@@ -37,14 +37,14 @@ Three things break without it, and each breaks quietly.
 
 Log correlation is the first. An incident is reconstructed by ordering events
 across hosts, and a host whose clock is minutes out contributes events that
-appear in the wrong place in the sequence — or, worse, appear to have happened
+appear in the wrong place in the sequence, or, worse, appear to have happened
 before the intrusion that caused them. The investigation does not fail loudly;
 it produces a timeline that is wrong.
 
 Authentication is the second. Kerberos rejects tickets outside a five-minute
 skew by design, because the timestamp is the replay defence. TLS certificates,
 signed tokens, TOTP codes and short-lived cloud credentials all fail closed
-against a clock that has drifted — and an operator debugging that failure will
+against a clock that has drifted, and an operator debugging that failure will
 find nothing wrong with the certificate.
 
 Scheduled work is the third. Certificate renewal, log rotation and credential
@@ -54,7 +54,7 @@ Two daemons enabled at once is its own failure and a subtler one. They compete
 for the same UDP port and for the same clock: the second to start fails to bind
 and exits, and which one that is depends on start order rather than on
 configuration. The host then synchronises through whichever daemon won, using
-whichever server list that one was given — which is very often not the list the
+whichever server list that one was given, which is very often not the list the
 administrator edited. This is a common outcome of installing chrony on a system
 already running systemd-timesyncd, because installing it does not disable the
 other.`,
@@ -119,7 +119,7 @@ other.`,
 			"Choose one. chrony is the right default on almost anything: it converges faster than ntpd, copes with intermittent connectivity and virtualised clocks, and is what both Red Hat and Debian ship as the recommendation. systemd-timesyncd is a reasonable choice for a client that only needs SNTP and is already present.",
 			"Establish what is enabled now, including the one you did not install: 'systemctl list-unit-files --state=enabled | grep -E 'chrony|ntp|timesync''.",
 			"Enable the one you chose: 'systemctl enable --now chronyd.service' (or 'chrony.service' on Debian-family systems).",
-			"Mask every other one: 'systemctl mask systemd-timesyncd.service'. Mask rather than disable — installing an NTP package re-runs its preset, and a merely disabled unit can come back enabled.",
+			"Mask every other one: 'systemctl mask systemd-timesyncd.service'. Mask rather than disable, installing an NTP package re-runs its preset, and a merely disabled unit can come back enabled.",
 			"Point it at servers you control or trust, in /etc/chrony.conf or /etc/chrony/chrony.conf. A host that takes its time from an arbitrary public pool takes it from whoever answers first.",
 			"Verify it is actually disciplining the clock rather than merely running: 'chronyc tracking' shows the reference source and the current offset; 'timedatectl' reports whether the system clock is synchronised at all.",
 		},

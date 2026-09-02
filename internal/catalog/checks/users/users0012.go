@@ -33,7 +33,7 @@ var Check0012 = catalog.Check{
 	Description: `A minimum password age is the setting that makes a password
 history mean anything.
 
-Password history — "you may not reuse your last five passwords" — is enforced
+Password history, "you may not reuse your last five passwords", is enforced
 by pam_pwhistory or pam_unix's remember=. Without a minimum age it costs an
 determined user about thirty seconds to defeat: change the password five times
 in a row, then change it back to the one they started with. The history is
@@ -50,7 +50,7 @@ account and what USERS-0010 reads. Setting this fixes the next user and none of
 the current ones.
 
 **Zero is not "unset".** A host with no PASS_MIN_DAYS line and a host with
-PASS_MIN_DAYS 0 behave identically — the shadow suite's own default is zero —
+PASS_MIN_DAYS 0 behave identically, the shadow suite's own default is zero,
 but they are different findings to an operator, because one is a decision and
 the other is an omission. The check reports both and names which it saw.`,
 
@@ -169,14 +169,14 @@ the other is an omission. The check reports both and names which it saw.`,
 		Steps: []string{
 			"Set 'PASS_MIN_DAYS 1' in /etc/login.defs. Edit the first occurrence rather than appending: the shadow suite reads the first match and ignores every later one, so a line added at the end of a file that already sets the key has no effect at all.",
 			"That is the default for accounts created afterwards. Existing accounts keep whatever is in /etc/shadow's fifth field: 'chage --mindays 1 <user>' sets one, and USERS-0010 is the check that reports them.",
-			"A minimum age is only worth setting if a password history is enforced — otherwise it inconveniences users and stops nothing. Check for pam_pwhistory or remember= on the pam_unix.so password line.",
+			"A minimum age is only worth setting if a password history is enforced, otherwise it inconveniences users and stops nothing. Check for pam_pwhistory or remember= on the pam_unix.so password line.",
 			"Consider who is affected. A minimum age applies to the user changing their own password, not to root using 'passwd <user>', so a helpdesk reset still works. A user who mistypes a new password into a system that accepted it, though, cannot change it again until the minimum has passed.",
 		},
 		Commands: []string{
 			"grep -n PASS_MIN_DAYS /etc/login.defs",
 			"chage --list <user>",
 		},
-		Caution: "A minimum password age stops a user changing their password again for that many days, including immediately after a change they regret — a mistyped passphrase they did not notice, or one they have already written down somewhere they should not have. Root can still reset it with 'passwd <user>', which is the escape hatch, and an operator setting this should know that is the only one.",
+		Caution: "A minimum password age stops a user changing their password again for that many days, including immediately after a change they regret, a mistyped passphrase they did not notice, or one they have already written down somewhere they should not have. Root can still reset it with 'passwd <user>', which is the escape hatch, and an operator setting this should know that is the only one.",
 	},
 
 	Mappings: []finding.ControlRef{

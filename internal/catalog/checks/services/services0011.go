@@ -42,7 +42,7 @@ are not degrees of the same thing.
 read-only except /dev, /proc and /sys, and anything the daemon genuinely writes
 has to be named in ReadWritePaths=, StateDirectory= or one of its siblings. The
 first two stop a compromised daemon replacing a binary or a configuration file.
-Only the third stops it writing anywhere at all — into /var/spool, into /srv,
+Only the third stops it writing anywhere at all, into /var/spool, into /srv,
 into an application directory under /opt that nobody thought of.
 
 **ProtectHome** at ` + "`yes`" + ` or ` + "`tmpfs`" + ` makes /home, /root and
@@ -57,7 +57,7 @@ apart.
 		` is not a switch that can be flipped on a daemon nobody has profiled: a service
 that writes a runtime file it never declared fails at the write, which surfaces
 as the daemon misbehaving rather than as a unit that refuses to start. That is
-why this is a separate finding from SERVICES-0007 — the remediation is an
+why this is a separate finding from SERVICES-0007. The remediation is an
 investigation, not a line.
 
 This examines a fixed list of units. See SERVICES-0007 for why the list is
@@ -188,7 +188,7 @@ Environment= on the machine.`,
 			"systemctl edit <unit>",
 			"systemctl daemon-reload",
 		},
-		Caution: "ProtectSystem=strict makes the entire filesystem read-only except what the unit declares, and a service that writes an undeclared path fails at the write rather than at the restart — so the failure appears as the daemon misbehaving, possibly long after the change. Establish what the service needs to write before applying this, and restart it under real load rather than only checking that it comes up. ProtectHome=yes hides /home and /root entirely: anything that reads a user's file, a key or a script from there stops working.",
+		Caution: "ProtectSystem=strict makes the entire filesystem read-only except what the unit declares, and a service that writes an undeclared path fails at the write rather than at the restart, so the failure appears as the daemon misbehaving, possibly long after the change. Establish what the service needs to write before applying this, and restart it under real load rather than only checking that it comes up. ProtectHome=yes hides /home and /root entirely: anything that reads a user's file, a key or a script from there stops working.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -198,8 +198,8 @@ Environment= on the machine.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "systemd.exec(5) — ProtectSystem", URL: "https://man7.org/linux/man-pages/man5/systemd.exec.5.html"},
-		{Title: "systemd-analyze(1) — security", URL: "https://man7.org/linux/man-pages/man1/systemd-analyze.1.html"},
+		{Title: "systemd.exec(5). ProtectSystem", URL: "https://man7.org/linux/man-pages/man5/systemd.exec.5.html"},
+		{Title: "systemd-analyze(1), security", URL: "https://man7.org/linux/man-pages/man1/systemd-analyze.1.html"},
 	},
 }
 

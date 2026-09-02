@@ -16,7 +16,7 @@ var Check0008 = catalog.Check{
 	Description: `Two groups sharing a gid are one group to the kernel. File
 permissions are enforced against the numeric gid, never the name, so granting
 somebody membership of "developers" also grants them everything the other group
-holding that gid can reach — and nothing in either group's definition says so.
+holding that gid can reach, and nothing in either group's definition says so.
 The reverse is equally true when reading an audit trail: a gid in a log or a
 directory listing no longer identifies which group was meant.
 
@@ -26,9 +26,9 @@ list are silently ignored. An administrator who adds a user to the second copy
 has made no change at all, and 'getent group <name>' will confirm the first
 entry's contents back to them without any indication that another exists.
 
-Both states are produced by ordinary accidents — a package postinstall that
+Both states are produced by ordinary accidents, a package postinstall that
 allocated a gid already taken, a configuration-management run that appended
-rather than replaced — and both are also an unremarkable-looking way to widen
+rather than replaced, and both are also an unremarkable-looking way to widen
 access to a set of files.`,
 
 	BaseSeverity: finding.Medium,
@@ -99,7 +99,7 @@ access to a set of files.`,
 			"List the collisions: 'awk -F: '\\''{print $3}'\\'' /etc/group | sort | uniq -d' for gids, and the same on $1 for names.",
 			"For a duplicated gid, decide which group should keep it and record what the other one owns before changing anything: 'find / -xdev -gid <gid> -print > /root/gid-<gid>.list'.",
 			"Allocate a free gid and apply it: 'groupmod -g <newgid> <name>', then re-own the recorded files with 'chgrp'.",
-			"For a duplicated name, confirm which entry is actually in force with 'getent group <name>' — it returns the first — and check whether the memberships in the unreachable entry were meant to be active before removing it.",
+			"For a duplicated name, confirm which entry is actually in force with 'getent group <name>', it returns the first, and check whether the memberships in the unreachable entry were meant to be active before removing it.",
 			"Verify with 'grpck', which reports both conditions.",
 		},
 		Commands: []string{

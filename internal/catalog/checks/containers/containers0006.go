@@ -44,8 +44,8 @@ something an operator added, almost always through a drop-in:
 
 That is what "how do I connect Docker from another machine" answers with, and
 what remote-build, CI-runner and IDE-integration guides ask for. This check
-reads the effective ExecStart — the vendor unit with every drop-in folded onto
-it, in systemd's own precedence order — and reports a tcp:// binding that is
+reads the effective ExecStart, the vendor unit with every drop-in folded onto
+it, in systemd's own precedence order, and reports a tcp:// binding that is
 not protected by client-certificate verification.
 
 **--tls is not enough and --tlsverify is.** The first encrypts the connection
@@ -60,7 +60,7 @@ A binding to loopback is rated below one to a routable address, and it is still
 a finding. tcp://127.0.0.1:2375 is unreachable from the network and reachable
 by every local user on the host, by every container started with
 --network=host, and by anything that can be talked into making an HTTP request
-on the host's behalf — which is the standard second half of a server-side
+on the host's behalf, which is the standard second half of a server-side
 request forgery.`,
 
 	// Critical, and the only Critical in the module. The other five describe a
@@ -130,7 +130,7 @@ request forgery.`,
 		Steps: []string{
 			"Find out what connects to it before removing it: a CI runner, a remote docker context, an IDE, or an orchestrator may depend on the port, and each of them needs a route to the daemon afterwards.",
 			"See exactly what systemd is running, drop-ins and all: systemctl cat docker.service, and systemctl show -p ExecStart docker.service for the assembled line.",
-			"If nothing needs remote access, remove the -H tcp:// argument from the ExecStart in the drop-in that added it — systemctl edit docker will open it — leaving -H fd:// on its own.",
+			"If nothing needs remote access, remove the -H tcp:// argument from the ExecStart in the drop-in that added it, systemctl edit docker will open it, leaving -H fd:// on its own.",
 			"If remote access is genuinely needed, do not simply add --tls: it encrypts without authenticating and leaves the port open to anyone who can reach it. Generate a CA and a server certificate, start the daemon with --tlsverify --tlscacert --tlscert --tlskey, and issue each client its own signed certificate.",
 			"Prefer a route that needs no open port at all where one exists: docker context create --docker host=ssh://user@host carries the API over SSH and authenticates with the keys already deployed.",
 			"Reload and restart: systemctl daemon-reload, then systemctl restart docker.",
@@ -153,8 +153,8 @@ request forgery.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Docker — protect the Docker daemon socket", URL: "https://docs.docker.com/engine/security/protect-access/"},
-		{Title: "Docker — dockerd command line reference", URL: "https://docs.docker.com/reference/cli/dockerd/"},
+		{Title: "Docker, protect the Docker daemon socket", URL: "https://docs.docker.com/engine/security/protect-access/"},
+		{Title: "Docker, dockerd command line reference", URL: "https://docs.docker.com/reference/cli/dockerd/"},
 	},
 }
 

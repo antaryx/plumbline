@@ -26,7 +26,7 @@ onto an unprivileged host uid instead. The isolation still matters, but a
 process that gets past it lands as nobody rather than as root, which is the
 difference between an escape and a compromise.
 
-It is off by default, so a host with no daemon.json fails this check —
+It is off by default, so a host with no daemon.json fails this check,
 correctly, because the default is what such a host is running.
 
 The trade is real and is why this is not universally enabled: remapping breaks
@@ -143,7 +143,7 @@ the first place.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "dockerd — isolate containers with a user namespace", URL: "https://docs.docker.com/engine/security/userns-remap/"},
+		{Title: "dockerd, isolate containers with a user namespace", URL: "https://docs.docker.com/engine/security/userns-remap/"},
 	},
 }
 

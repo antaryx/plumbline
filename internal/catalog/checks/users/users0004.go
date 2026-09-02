@@ -27,7 +27,7 @@ merely slower.
 Changing the system's hashing scheme does not rewrite existing hashes. Each
 account keeps whatever it was hashed with until its password is next changed,
 so a host that switched years ago can still be carrying MD5 hashes for accounts
-nobody has touched — which are exactly the accounts nobody is watching.`,
+nobody has touched, which are exactly the accounts nobody is watching.`,
 
 	BaseSeverity: finding.High,
 	Tags:         []string{"users", "authentication", "credentials", "cryptography"},
@@ -144,6 +144,6 @@ nobody has touched — which are exactly the accounts nobody is watching.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "crypt(5) — password hashing methods", URL: "https://man7.org/linux/man-pages/man5/crypt.5.html"},
+		{Title: "crypt(5), password hashing methods", URL: "https://man7.org/linux/man-pages/man5/crypt.5.html"},
 	},
 }

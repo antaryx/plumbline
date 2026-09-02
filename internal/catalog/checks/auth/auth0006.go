@@ -30,7 +30,7 @@ var Check0006 = catalog.Check{
 	Title:  "Recent passwords cannot be reused",
 	Description: `Password history exists to make expiry mean something. Where a
 host requires a change every ninety days and remembers nothing, the ordinary
-response is to change the password to the same one — or to cycle two — and the
+response is to change the password to the same one, or to cycle two, and the
 expiry policy becomes a recurring inconvenience that produces no security at
 all. Worse, it produces the predictable variants an attacker's rule engine
 generates first: the same word with an incrementing digit is the single most
@@ -44,10 +44,10 @@ already has.
 
 **This check is LOW severity on purpose, and the reason is a genuine
 disagreement rather than a hedge.** CIS and DISA require remembering at least
-five. NIST SP 800-63B recommends against routine expiry altogether — arguing
+five. NIST SP 800-63B recommends against routine expiry altogether, arguing
 that forced rotation drives users toward predictable transformations and that
 passwords should be changed on evidence of compromise rather than on a
-calendar — and history is a control that mainly exists to prop up rotation. On
+calendar, and history is a control that mainly exists to prop up rotation. On
 a host that does not expire passwords, history is close to redundant. The
 finding is reported so the decision is visible, at a severity that says it is
 not the thing to fix first.
@@ -120,11 +120,11 @@ of the same disagreement.`,
 		Summary: "Add pam_pwhistory.so with remember=5 to the password stack, above pam_unix.so.",
 		Effort:  "LOW",
 		Steps: []string{
-			"Decide whether you want this control at all before adding it. It exists to support routine password expiry; if this host does not expire passwords — which is what NIST SP 800-63B recommends — then history adds little, and suppressing the finding with that reasoning recorded is a legitimate answer.",
+			"Decide whether you want this control at all before adding it. It exists to support routine password expiry; if this host does not expire passwords, which is what NIST SP 800-63B recommends, then history adds little, and suppressing the finding with that reasoning recorded is a legitimate answer.",
 			"Where you do want it, add it through the distribution's mechanism: 'authselect' on Red Hat, 'pam-auth-update' on Debian, so the change survives a stack regeneration.",
 			"Editing directly, the rule goes *above* pam_unix.so in the password stack: 'password required pam_pwhistory.so remember=5 use_authtok'. Below pam_unix.so it never runs, because the password has already been set.",
-			"Alternatively add 'remember=5' to the existing pam_unix.so password rule, which keeps the history itself. Do one or the other rather than both — two modules keeping overlapping history is confusing to reason about and gains nothing.",
-			"Know where the history lives: /etc/security/opasswd. It holds previous password *hashes* and needs the same protection as /etc/shadow — mode 0600, owned by root. A world-readable opasswd hands an attacker every password the user has ever had, which is a larger prize than the current one.",
+			"Alternatively add 'remember=5' to the existing pam_unix.so password rule, which keeps the history itself. Do one or the other rather than both, two modules keeping overlapping history is confusing to reason about and gains nothing.",
+			"Know where the history lives: /etc/security/opasswd. It holds previous password *hashes* and needs the same protection as /etc/shadow, mode 0600, owned by root. A world-readable opasswd hands an attacker every password the user has ever had, which is a larger prize than the current one.",
 			"Test with a throwaway account: change its password, then try to change it back. The second attempt must be refused.",
 		},
 		Commands: []string{
@@ -132,7 +132,7 @@ of the same disagreement.`,
 			"ls -l /etc/security/opasswd",
 			"authselect current",
 		},
-		Caution: "/etc/security/opasswd holds previous password hashes and is created by the module the first time a password changes. If it ends up world-readable, this control has handed an attacker every password each user has had rather than only the current one — check its mode after enabling it, not before.",
+		Caution: "/etc/security/opasswd holds previous password hashes and is created by the module the first time a password changes. If it ends up world-readable, this control has handed an attacker every password each user has had rather than only the current one, check its mode after enabling it, not before.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -141,6 +141,6 @@ of the same disagreement.`,
 
 	References: []finding.Reference{
 		{Title: "pam_pwhistory(8)", URL: "https://man7.org/linux/man-pages/man8/pam_pwhistory.8.html"},
-		{Title: "NIST SP 800-63B §5.1.1.2 — against routine expiry", URL: "https://pages.nist.gov/800-63-3/sp800-63b.html"},
+		{Title: "NIST SP 800-63B §5.1.1.2, against routine expiry", URL: "https://pages.nist.gov/800-63-3/sp800-63b.html"},
 	},
 }

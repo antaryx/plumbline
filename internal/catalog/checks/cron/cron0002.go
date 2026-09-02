@@ -117,7 +117,7 @@ correctly-owned root files is still a root shell for anyone with an account.`,
 		Summary: "Restore root ownership and remove group and other write permission from every cron directory.",
 		Effort:  "LOW",
 		Steps: []string{
-			"List what is there before changing it: 'ls -la /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly'. If a directory was writable, look for files you did not put there — that is the payload, and it will not look out of place.",
+			"List what is there before changing it: 'ls -la /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly'. If a directory was writable, look for files you did not put there, that is the payload, and it will not look out of place.",
 			"Restore ownership and mode: 'chown root:root /etc/cron.*' then 'chmod 755 /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly'. Use 700 instead if you also intend to close CRON-0005.",
 			"Check the files inside as well as the directory: 'find /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly ! -user root -o -perm /022'.",
 			"Establish how it happened. A group-writable cron directory is usually the work of a deployment script that chowned a parent, so the same script has probably done it elsewhere.",

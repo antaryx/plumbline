@@ -20,7 +20,7 @@ intact.
 | [0003](0003-no-compliance-scoring.md) | No compliance percentages, ever | accepted |
 | [0004](0004-vendor-feeds-over-nvd.md) | Vendor security data, not NVD version matching | accepted |
 | [0005](0005-five-result-states.md) | Five result states, with UNKNOWN first-class | accepted |
-| [0006](0006-no-auto-remediation.md) | Plumbline never applies a change | accepted |
+| [0006](0006-no-auto-remediation.md) | Plumbline never applies a change | accepted, amended |
 | [0007](0007-json-schema-is-the-api.md) | The JSON schema is the public API, not a Go package | accepted |
 | [0008](0008-zstd-bundle-compression.md) | zstd for bundle compression; the first and only dependency | accepted |
 | [0009](0009-evidence-digest-tracking.md) | Facts carry the digest of every file they were parsed from | accepted |

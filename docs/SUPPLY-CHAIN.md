@@ -1,30 +1,33 @@
 # Supply chain
 
 This binary runs as root on hosts people are trying to secure. Everything below
-exists so that a user does not have to take that on trust.
+exists so a user does not have to take that on trust.
 
 ## Dependencies
 
-**Four**, and the number is a control rather than an accident:
+Three at runtime, one more for the tests. The number is a control, not an
+accident.
 
-| Module | Why |
-|---|---|
-| `spf13/cobra` + `spf13/pflag` | Command and flag parsing |
-| `klauspost/compress` | zstd for the bundle format |
-| `santhosh-tekuri/jsonschema/v5` | Schema validation, test-time |
+| Module | Why | In the shipped binary |
+|---|---|---|
+| `spf13/cobra` + `spf13/pflag` | Command and flag parsing | yes |
+| `klauspost/compress` | zstd for the bundle format | yes |
+| `santhosh-tekuri/jsonschema/v5` | Schema validation | no, tests only |
 
 `CONTRIBUTING.md` rule 7 requires a stated reason for every addition. During the
-release candidates a terminal-styling library was added and then removed when it
-turned out to cost thirteen transitive modules — including two pinned to
-untagged commits — for a box border and a colour downsample. The dashboard was
-rewritten with the standard library and the output is byte-identical. That
-history is in `CHANGELOG.md` under `v1.0.0-rc1`.
+release candidates a terminal-styling library went in and came back out when it
+turned out to cost thirteen transitive modules, two of them pinned to untagged
+commits, for a box border and a colour downsample. The dashboard was rewritten
+against the standard library and the output is byte-identical. That history is
+in `CHANGELOG.md` under `v1.0.0-rc1`.
 
-The SBOM published with every release is what makes this claim checkable rather
-than a sentence in a README:
+The SBOM published with every release is what makes this checkable rather than a
+sentence in a README. It is generated from the built artifact, so it lists the
+three that are linked in:
 
 ```bash
-jq -r '.packages[].name' plumbline_1.0.0_linux_amd64.tar.gz.sbom.spdx.json
+jq -r '.packages[].name' plumbline_2.0.0_linux_amd64.tar.gz.sbom.spdx.json
+go version -m "$(command -v plumbline)"     # the same answer, no download
 ```
 
 ## Build
@@ -33,20 +36,20 @@ jq -r '.packages[].name' plumbline_1.0.0_linux_amd64.tar.gz.sbom.spdx.json
 CGO_ENABLED=0   -trimpath   -ldflags "-s -w -X main.date={{ .CommitDate }}"
 ```
 
-- **Static**, so the same binary runs on glibc and musl and from a rescue shell.
-- **`-trimpath`**, so the build machine's directory layout is not in the binary.
-- **Build date from the commit, not the clock**, so two builds of one tag
-  produce identical bytes.
+Static, so the same binary runs on glibc and musl and from a rescue shell.
+`-trimpath` keeps the build machine's directory layout out of the binary. The
+build date comes from the commit rather than the clock, so two builds of one tag
+produce identical bytes.
 
-Go 1.25 builds releases; `go.mod` states 1.24 as the floor for a source build.
+Go 1.25 builds releases. `go.mod` states 1.24 as the floor for a source build.
 Go supports only its two newest majors, and a root-privileged binary is the last
-one to build with an unmaintained toolchain.
+one you want built with an unmaintained toolchain.
 
 ## Signing
 
 Keyless, via [cosign](https://docs.sigstore.dev/) and GitHub's OIDC identity.
-There is no private key to leak, rotate or lose, and the certificate records the
-workflow, repository and commit that produced the artifact — a stronger
+There is no private key to leak, rotate or lose. The certificate records the
+workflow, repository and commit that produced the artifact, which is a stronger
 statement than "somebody with the key signed this".
 
 ```bash
@@ -58,8 +61,10 @@ cosign verify-blob checksums.txt \
 sha256sum -c --ignore-missing checksums.txt
 ```
 
-Both must pass. The signature is over the checksum file, and the checksum file
-covers every artifact — so verifying two files verifies all of them.
+Both must pass. One signature covers everything: cosign signs `checksums.txt`,
+and `checksums.txt` covers every artifact in the release. Verifying two files
+verifies all of them. Nothing else in the release carries its own detached
+signature, so do not go looking for a `.sig` beside each tarball.
 
 ## SBOM
 
@@ -73,29 +78,33 @@ and compare:
 
 ```bash
 git clone https://github.com/antaryx/plumbline && cd plumbline
-git checkout v1.0.0
+git checkout v2.0.0
 make build
 sha256sum dist/plumbline
 ```
 
-Compare against the binary from the release archive. Differences in Go patch
-version will change the bytes; pin the same toolchain to compare exactly.
+Compare against the binary from the release archive. A different Go patch
+version changes the bytes, so pin the same toolchain to compare exactly.
 
 ## What is not yet in place
 
 Stated plainly, because a supply-chain document that overstates its coverage is
-worse than none:
+worse than none. All four were checked against `.github/workflows/release.yml`
+and `.goreleaser.yaml` on 2026-09-02.
 
-- **No SLSA provenance attestation.** The release workflow signs and SBOMs; it
-  does not emit a SLSA predicate. v1.1.
-- **No automated reproducibility check.** Nothing builds twice and compares. The
-  build is deterministic by construction and unverified by machine. v1.1.
-- **No installer that verifies before executing.** Verification is documented for
-  a human to run; a script that refuses on a bad signature is a stronger control
-  and does not exist yet. v1.1.
+- No SLSA provenance attestation. The release workflow signs and produces
+  SBOMs. It emits no SLSA predicate.
+- No automated reproducibility check. Nothing builds twice and compares. The
+  build is deterministic by construction and verified by nobody.
+- No installer that verifies before executing. Verification is documented for a
+  human to run. A script that refuses on a bad signature is a stronger control
+  and does not exist.
+- No published container image. `DEPLOYMENT.md` describes one. The release
+  workflow does not build it.
 
-All three were claimed by an earlier draft of `THREAT-MODEL.md` and corrected in
-the v1.0.0 review (T-10).
+The first three were claimed by an earlier draft of `THREAT-MODEL.md` and
+corrected in the v1.0.0 review (T-10). They were scheduled for v1.1 and v2.0.0
+shipped without them, which is recorded here rather than quietly rescheduled.
 
 ## Reporting a supply-chain concern
 

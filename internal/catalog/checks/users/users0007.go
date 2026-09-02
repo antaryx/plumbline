@@ -24,8 +24,8 @@ var Check0007 = catalog.Check{
 	Title:  "Group 0 is confined to root",
 	Description: `Group 0 is the group half of root's identity. Files created by
 root are owned by group 0 unless something says otherwise, and a great many of
-them — including, on most distributions, /etc/shadow's directory, the systemd
-unit tree and /root itself — grant the group read access that they deny to
+them, including, on most distributions, /etc/shadow's directory, the systemd
+unit tree and /root itself, grant the group read access that they deny to
 everyone else. An ordinary account whose primary group is 0 therefore reads a
 substantial part of what root reads, without ever appearing in a listing of
 privileged accounts and without triggering any check that looks at uid 0.
@@ -33,8 +33,8 @@ privileged accounts and without triggering any check that looks at uid 0.
 Three things have to hold. Root's own primary group must be 0, because the
 files root creates are expected to land in it and a root account in some other
 group quietly changes the ownership of everything it writes. No ordinary
-account may have primary group 0. And the group's supplementary member list —
-the fourth field of the "root:x:0:" line in /etc/group — must name nobody,
+account may have primary group 0. And the group's supplementary member list,
+the fourth field of the "root:x:0:" line in /etc/group, must name nobody,
 because every name in it holds group 0 as a secondary group at every login.
 
 System accounts with primary group 0 are reported but not failed. Several
@@ -177,7 +177,7 @@ are correct about the file and useless to the person reading them.`,
 			"List what is in group 0: 'awk -F: '\\''$4 == 0 {print $1, $3}'\\'' /etc/passwd' for primary members, and 'getent group 0' for supplementary ones.",
 			"Record what the account owns before changing its group, because the change does not re-own existing files: 'find / -xdev -user <name> -print > /root/<name>.files'.",
 			"Create a group for the account and move it: 'groupadd <name>' then 'usermod -g <name> <name>'.",
-			"Re-own the recorded files: 'xargs -a /root/<name>.files chgrp <name>' — check the list first for anything that genuinely should stay group root.",
+			"Re-own the recorded files: 'xargs -a /root/<name>.files chgrp <name>', check the list first for anything that genuinely should stay group root.",
 			"Remove supplementary members: 'gpasswd -d <name> root'.",
 			"If root's own primary group is not 0, set it back with 'usermod -g 0 root' and check what root has created since it changed.",
 		},
@@ -185,7 +185,7 @@ are correct about the file and useless to the person reading them.`,
 			"awk -F: '$4 == 0 {print $1, $3}' /etc/passwd",
 			"getent group 0",
 		},
-		Caution: "Changing an account's primary group does not change the group ownership of files it already created; those files stay group 0 and stay readable to anything still in that group. Record the file list before the change — afterwards the account's group no longer identifies them.",
+		Caution: "Changing an account's primary group does not change the group ownership of files it already created; those files stay group 0 and stay readable to anything still in that group. Record the file list before the change, afterwards the account's group no longer identifies them.",
 	},
 
 	Mappings: []finding.ControlRef{

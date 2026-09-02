@@ -21,7 +21,7 @@ whether it will still be refused after the next reboot.
 
 The gap between those is real and is not covered by KERNEL-0007. That check
 compares each running parameter against its configured value and reports drift
-— but a parameter that no file mentions at all is skipped, because there is
+, but a parameter that no file mentions at all is skipped, because there is
 nothing to compare it to. So a host hardened with
 
 	sysctl -w kernel.unprivileged_bpf_disabled=1
@@ -49,7 +49,7 @@ which is why both are named rather than one standing in for the pair.
 
 **A conflict is not a verdict.** Where two files set the same parameter to
 different values, which one wins depends on whether systemd-sysctl or procps
-applied them, and this check will not guess — it reports UNKNOWN and names both
+applied them, and this check will not guess, it reports UNKNOWN and names both
 files. Getting that wrong would be a confident claim about what the host does
 after a reboot, which is the one thing this check exists to describe.`,
 
@@ -158,7 +158,7 @@ after a reboot, which is the one thing this check exists to describe.`,
 			"grep -rn 'unprivileged_bpf_disabled\\|bpf_jit_harden' /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d 2>/dev/null",
 			"systemd-analyze cat-config sysctl.d",
 		},
-		Caution: "Disabling unprivileged BPF breaks unprivileged tooling that uses it — some observability agents, and seccomp-bpf is unaffected but eBPF-based tracing run as a normal user is not. Check what on this host loads BPF programs before changing it. JIT hardening costs a little throughput on hot paths for programs that are loaded, which is rarely measurable outside a packet-processing workload.",
+		Caution: "Disabling unprivileged BPF breaks unprivileged tooling that uses it, some observability agents, and seccomp-bpf is unaffected but eBPF-based tracing run as a normal user is not. Check what on this host loads BPF programs before changing it. JIT hardening costs a little throughput on hot paths for programs that are loaded, which is rarely measurable outside a packet-processing workload.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -168,8 +168,8 @@ after a reboot, which is the one thing this check exists to describe.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — unprivileged_bpf_disabled", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#unprivileged-bpf-disabled"},
-		{Title: "Linux kernel — bpf_jit_harden", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/net.html#bpf-jit-harden"},
+		{Title: "Linux kernel, unprivileged_bpf_disabled", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#unprivileged-bpf-disabled"},
+		{Title: "Linux kernel, bpf_jit_harden", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/net.html#bpf-jit-harden"},
 		{Title: "sysctl.d(5)", URL: "https://man7.org/linux/man-pages/man5/sysctl.d.5.html"},
 	},
 }

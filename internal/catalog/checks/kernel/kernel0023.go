@@ -26,9 +26,9 @@ client completes the handshake.
 
 net.ipv4.tcp_syncookies takes three values:
 
-  - 0 — never. The backlog is the only defence.
-  - 1 — on overflow. The upstream default, and the value to write down.
-  - 2 — always, rather than only under overflow.
+  - 0, never. The backlog is the only defence.
+  - 1, on overflow. The upstream default, and the value to write down.
+  - 2, always, rather than only under overflow.
 
 **Every distribution the corpus covers runs 1 already, and almost none of them
 say so in a file.** That is the finding. A running value with nothing behind it
@@ -39,8 +39,8 @@ which is a specific way it gets turned off by someone who is not thinking about
 floods.
 
 2 passes. It uses cookies for every connection rather than only under overflow,
-which is stricter and costs a few TCP options — window scaling, SACK and
-timestamps cannot be carried in a cookie — on every connection rather than only
+which is stricter and costs a few TCP options, window scaling, SACK and
+timestamps cannot be carried in a cookie, on every connection rather than only
 during an attack. That is a throughput decision, not a security one, so a host
 that has made it is passed and told what it costs.
 
@@ -155,7 +155,7 @@ This is a check about files. KERNEL-0016 asks what the running kernel does.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — ip-sysctl tcp_syncookies", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
+		{Title: "Linux kernel, ip-sysctl tcp_syncookies", URL: "https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html"},
 		{Title: "sysctl.d(5)", URL: "https://man7.org/linux/man-pages/man5/sysctl.d.5.html"},
 	},
 }

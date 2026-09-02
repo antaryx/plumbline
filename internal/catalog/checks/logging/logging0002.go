@@ -16,7 +16,7 @@ var Check0002 = catalog.Check{
 	Title:  "Logs are forwarded to a remote collector",
 	Description: `A log that only exists on the host it describes is not
 evidence. It is a file the attacker who took the host can edit, truncate or
-delete, and doing so is one of the first things any competent intrusion does —
+delete, and doing so is one of the first things any competent intrusion does,
 before anybody knows to go looking. Every other check in this module protects a
 record that a local-only configuration allows to be erased.
 
@@ -102,9 +102,9 @@ the transport it chose is reliable is LOGGING-0005's question.`,
 		Summary: "Configure a remote destination, using a reliable transport.",
 		Effort:  "MEDIUM",
 		Steps: []string{
-			"Decide where logs go before configuring anything, and confirm the collector will accept from this host — a forwarding rule pointing at a listener that drops the traffic is worse than none, because it looks configured.",
+			"Decide where logs go before configuring anything, and confirm the collector will accept from this host, a forwarding rule pointing at a listener that drops the traffic is worse than none, because it looks configured.",
 			"Prefer the RainerScript form on any rsyslog 8 host: 'action(type=\"omfwd\" target=\"logs.example.net\" port=\"514\" protocol=\"tcp\" queue.type=\"linkedlist\" queue.filename=\"fwd\" action.resumeRetryCount=\"-1\")'. The queue parameters are what let the host survive a collector outage without losing messages.",
-			"The legacy equivalent is '*.* @@logs.example.net:514' — two at-signs for TCP, one for UDP. Both syntaxes work in the same file; use whichever the rest of the file uses rather than mixing.",
+			"The legacy equivalent is '*.* @@logs.example.net:514', two at-signs for TCP, one for UDP. Both syntaxes work in the same file; use whichever the rest of the file uses rather than mixing.",
 			"Encrypt it if the path is not trusted: rsyslog supports TLS through the gtls driver, and RELP with TLS is the sturdiest of the options.",
 			"Verify end to end: 'logger -p auth.info plumbline-test' and confirm the line arrives at the collector. Do not assume it works because rsyslog restarted cleanly.",
 		},
@@ -112,7 +112,7 @@ the transport it chose is reliable is LOGGING-0005's question.`,
 			"grep -rEn '^\\*\\.\\*|omfwd|omrelp|@@' /etc/rsyslog.conf /etc/rsyslog.d/",
 			"logger -p auth.info plumbline-test",
 		},
-		Caution: "Forwarding sends the contents of your logs — including authentication records and anything an application logged carelessly — across the network to another host. Confirm the transport is encrypted where the path is not trusted, and confirm the collector's own retention and access controls before pointing production hosts at it.",
+		Caution: "Forwarding sends the contents of your logs, including authentication records and anything an application logged carelessly, across the network to another host. Confirm the transport is encrypted where the path is not trusted, and confirm the collector's own retention and access controls before pointing production hosts at it.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -122,6 +122,6 @@ the transport it chose is reliable is LOGGING-0005's question.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "rsyslog — omfwd", URL: "https://www.rsyslog.com/doc/configuration/modules/omfwd.html"},
+		{Title: "rsyslog, omfwd", URL: "https://www.rsyslog.com/doc/configuration/modules/omfwd.html"},
 	},
 }

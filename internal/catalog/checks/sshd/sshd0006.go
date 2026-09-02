@@ -25,7 +25,7 @@ var Check0006 = catalog.Check{
 	Description: `MaxAuthTries bounds the number of authentication attempts sshd
 will accept on a single TCP connection before dropping it. It does not limit how
 many connections an attacker may open, so it is not by itself a defence against
-password guessing — pam_faillock and a rate limit at the network layer are what
+password guessing, pam_faillock and a rate limit at the network layer are what
 do that.
 
 What it does control is the cost per connection and, less obviously, what gets
@@ -80,6 +80,6 @@ authentication at 0, which is a denial of service rather than a hardening.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "sshd_config(5) — MaxAuthTries", URL: "https://man.openbsd.org/sshd_config#MaxAuthTries"},
+		{Title: "sshd_config(5). MaxAuthTries", URL: "https://man.openbsd.org/sshd_config#MaxAuthTries"},
 	},
 }

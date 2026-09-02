@@ -17,7 +17,7 @@ var Check0012 = catalog.Check{
 	Description: `This is the same weakness KERNEL-0011 covers, for ordinary files
 rather than FIFOs. A privileged program creating a predictably named file in
 /tmp with O_CREAT will happily open a file an attacker created there first,
-then write its output into a file the attacker owns and can read afterwards —
+then write its output into a file the attacker owns and can read afterwards,
 or read the attacker's content believing it to be its own.
 
 fs.protected_regular set to 1 refuses an O_CREAT open of a regular file the
@@ -70,6 +70,6 @@ that, where this check is NOT_APPLICABLE.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel documentation — fs.protected_regular", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-regular"},
+		{Title: "Linux kernel documentation, fs.protected_regular", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-regular"},
 	},
 }

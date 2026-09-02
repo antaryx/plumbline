@@ -16,7 +16,7 @@ var Check0001 = catalog.Check{
 different base address on every execution, which is what lets ASLR randomise
 its code. A binary linked at a fixed address (ELF type ET_EXEC) cannot be
 moved, so its instruction addresses are identical on every host running that
-build — and an attacker who needs a gadget in it does not have to leak an
+build, and an attacker who needs a gadget in it does not have to leak an
 address first.
 
 The exposure is worth attention specifically on setuid-root utilities and the
@@ -60,7 +60,7 @@ rather than a distribution default.`,
 		Summary: "Replace the binary with a position-independent build.",
 		Effort:  "MEDIUM",
 		Steps: []string{
-			"Confirm the finding independently: readelf -h <path> | grep Type — ET_DYN is a PIE, ET_EXEC is not.",
+			"Confirm the finding independently: readelf -h <path> | grep Type. ET_DYN is a PIE, ET_EXEC is not.",
 			"Identify what owns the file: dpkg -S <path> or rpm -qf <path>. A file no package owns was installed outside the package manager and is the likely cause.",
 			"If a package owns it, reinstall from the distribution: every mainstream distribution has shipped these as PIE for years, so a fixed-address build usually means the file was replaced locally.",
 			"If it was built locally, rebuild with -fPIE in CFLAGS and -pie in LDFLAGS, then confirm with readelf before installing.",
@@ -78,6 +78,6 @@ rather than a distribution default.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "elf(5) — ELF header types", URL: "https://man7.org/linux/man-pages/man5/elf.5.html"},
+		{Title: "elf(5). ELF header types", URL: "https://man7.org/linux/man-pages/man5/elf.5.html"},
 	},
 }

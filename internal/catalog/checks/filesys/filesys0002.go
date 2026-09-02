@@ -49,7 +49,7 @@ The rule here is about **location**, not about names, and that is deliberate.
 A list of blessed binary names would silently excuse whatever an attacker
 chooses to call their implant. A list of directories cannot, because writing
 into those directories already requires the privilege that the setuid bit
-would grant — so a setuid file there tells you far less than one outside them.
+would grant, so a setuid file there tells you far less than one outside them.
 
 What this check cannot do is tell an attacker's binary from a legitimate one
 inside those directories. FILESYS-0001 covers the property that is decidable
@@ -101,10 +101,10 @@ package metadata this tool does not collect.`,
 		Summary: "Establish what the file is before removing it; if it is not accounted for, treat the host as compromised.",
 		Effort:  "MEDIUM",
 		Steps: []string{
-			"Do not delete it first. Record it — 'ls -la', 'stat', 'sha256sum' — and check the hash against a malware reputation service and against the same binary in /usr/bin. A setuid copy of /bin/bash owned by root in somebody's home directory is not ambiguous.",
+			"Do not delete it first. Record it, 'ls -la', 'stat', 'sha256sum', and check the hash against a malware reputation service and against the same binary in /usr/bin. A setuid copy of /bin/bash owned by root in somebody's home directory is not ambiguous.",
 			"Establish when it appeared. The inode change time ('stat -c %z') is harder to forge than the modification time, and it usually bounds when the host was first touched.",
 			"If it is not accounted for by a deployment or an archive extraction you can name, treat the host as compromised rather than as misconfigured. Somebody had root to create it, and this file is the artifact rather than the cause.",
-			"If it is accounted for — a restored backup, a build tree — remove the bit rather than the file: 'chmod u-s,g-s <path>'.",
+			"If it is accounted for, a restored backup, a build tree, remove the bit rather than the file: 'chmod u-s,g-s <path>'.",
 			"Prevent the recurrence: mount /home, /tmp and /var/tmp with nosuid, which makes the bit inert on those filesystems whatever the mode says. FILESYS-0007 and FILESYS-0009 check exactly that.",
 		},
 		Commands: []string{
@@ -112,7 +112,7 @@ package metadata this tool does not collect.`,
 			"stat <path>",
 			"sha256sum <path>",
 		},
-		Caution: "If this is an attacker's artifact, deleting it destroys the evidence and does not remove their access — they had root to create it and may have other paths back. Preserve it and treat the finding as an incident before cleaning up.",
+		Caution: "If this is an attacker's artifact, deleting it destroys the evidence and does not remove their access, they had root to create it and may have other paths back. Preserve it and treat the finding as an incident before cleaning up.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -122,6 +122,6 @@ package metadata this tool does not collect.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "MITRE ATT&CK T1548.001 — Setuid and Setgid", URL: "https://attack.mitre.org/techniques/T1548/001/"},
+		{Title: "MITRE ATT&CK T1548.001. Setuid and Setgid", URL: "https://attack.mitre.org/techniques/T1548/001/"},
 	},
 }

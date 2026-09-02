@@ -1,16 +1,31 @@
-# DEPLOYMENT — Plumbline
+# Deployment
 
-Covers how a release is built, signed, published, installed, verified, upgraded and rolled back. "Deployment" for a CLI security tool means **artifact supply chain**, not servers — the project runs no infrastructure by design.
+How a release is built, signed, published, installed, verified, upgraded and
+rolled back. For a CLI security tool "deployment" means artifact supply chain,
+not servers. The project runs no infrastructure by design.
+
+Section 12 lists what this document describes but the pipeline does not yet do.
+Read it before you rely on anything here.
 
 ---
 
 ## 1. Principles
 
-1. **A security tool must be verifiable.** Every artifact is signed, has an SBOM, and has documented verification steps that a user can actually follow in under a minute.
-2. **No hosted infrastructure.** No install domain, no plugin registry, no telemetry endpoint. GitHub Releases plus signed files is the entire distribution system. Everything the source design proposed (`get.argus-security.io`, `plugins.argus-security.io`) is cost, uptime obligation and attack surface for one person.
-3. **Reproducible builds.** Two people building the same tag get the same binary.
-4. **The installer does not require trust.** `curl … | bash` for a *security auditing tool* is self-parodying. The install script verifies signatures before executing anything, and the docs lead with manual verification.
-5. **Distro packaging is community, best-effort, and never a release gate.** Getting into Debian or Fedora depends on other people's decisions; it cannot be a roadmap deliverable.
+1. **A security tool must be verifiable.** Every release is signed, carries an
+   SBOM, and has verification steps a user can follow in under a minute.
+2. **No hosted infrastructure.** No install domain, no plugin registry, no
+   telemetry endpoint. GitHub Releases plus signed files is the whole
+   distribution system. Everything the source design proposed, meaning
+   `get.argus-security.io` and `plugins.argus-security.io`, is cost, uptime
+   obligation and attack surface for one person.
+3. **Reproducible builds.** Two people building the same tag get the same
+   binary.
+4. **The installer must not require trust.** Piping `curl` into `bash` for a
+   security auditing tool is self-parodying. The docs lead with manual
+   verification.
+5. **Distro packaging is community work and never a release gate.** Getting into
+   Debian or Fedora depends on other people's decisions. It cannot be a roadmap
+   deliverable.
 
 ---
 
@@ -18,13 +33,18 @@ Covers how a release is built, signed, published, installed, verified, upgraded 
 
 ### 2.1 Matrix
 
-| Release | OS/arch in CI and published |
-|---|---|
-| v1.0.0 | `linux/amd64`, `linux/arm64` |
-| v2.0.0 | + `linux/armv7` if CI hardware exists |
-| v3.0.0 | + `darwin/amd64`, `darwin/arm64` |
+`.goreleaser.yaml` builds `linux/amd64` and `linux/arm64`. That is the whole
+published matrix today.
 
-Nothing is published for a platform that is not tested in CI. Cross-compiling to riscv64 is one line in GoReleaser and zero evidence that it works; the source design listed five architectures on that basis.
+| Release | Target |
+|---|---|
+| v1.0.0, v2.0.0 | `linux/amd64`, `linux/arm64` |
+| later | `linux/armv7` if CI hardware appears |
+| later | `darwin/amd64`, `darwin/arm64` with macOS support |
+
+Nothing is published for a platform that is not tested in CI. Cross-compiling to
+riscv64 is one line in GoReleaser and zero evidence that it works. The source
+design listed five architectures on that basis.
 
 ### 2.2 Flags
 
@@ -32,91 +52,107 @@ Nothing is published for a platform that is not tested in CI. Cross-compiling to
 CGO_ENABLED=0 GOFLAGS="-trimpath" \
 go build \
   -ldflags "-s -w \
-    -X main.version=${VERSION} \
-    -X main.commit=${COMMIT} \
-    -X main.date=${SOURCE_DATE_EPOCH} \
-    -X main.catalog=${CATALOG_VERSION}" \
+    -X main.buildVersion=${VERSION} \
+    -X main.commit=${SHORT_COMMIT} \
+    -X main.date=${COMMIT_DATE}" \
   -o dist/plumbline ./cmd/plumbline
 ```
 
-- `CGO_ENABLED=0` — static, no glibc coupling, runs on Alpine and on distroless. This is what makes the single-binary claim true.
-- `-trimpath` — removes local paths; required for reproducibility.
-- `SOURCE_DATE_EPOCH` from the commit timestamp — no wall-clock in the binary.
-- Version metadata injected, never hardcoded in source.
+`CGO_ENABLED=0` gives a static binary with no glibc coupling, which runs on
+Alpine and on distroless. That is what makes the single-binary claim true.
+`-trimpath` removes local paths and is a reproducibility requirement. The build
+date comes from the commit timestamp, so no wall clock reaches the binary.
+`mod_timestamp` is pinned to the commit for the same reason. Version metadata is
+injected at link time and never hardcoded in source.
 
-### 2.3 Reproducibility check
+### 2.3 Reproducibility
 
-CI builds every release twice, in separate runners, and asserts identical `sha256`. A mismatch fails the release. The verification procedure is documented in `SUPPLY-CHAIN.md` so third parties can rebuild a tag and compare.
+The build is deterministic by construction. Nothing checks it. See §12.
+
+`SUPPLY-CHAIN.md` documents the procedure for a third party to rebuild a tag and
+compare, which is currently the only way this property gets tested.
 
 ---
 
-## 3. Signing and provenance
+## 3. Signing and SBOM
 
-| Artifact | Mechanism |
+| Artifact | What actually happens |
 |---|---|
-| Binaries and archives | `cosign sign-blob` (keyless, GitHub OIDC) → `.sig` + `.pem` per artifact |
-| Checksums | `checksums.txt` (SHA-256), itself signed |
-| SBOM | `syft` → CycloneDX JSON per artifact, attached and signed |
-| Provenance | SLSA build provenance attestation via the GitHub attestations API |
-| Container image | `cosign sign` on the image digest; signature in the registry |
-| Git tags | GPG or SSH signed |
-| Vuln DB (v2+) | Signed the same way; the binary **verifies before loading** and refuses an unverified DB |
+| `checksums.txt` | SHA-256 over every artifact in the release |
+| Signature | `cosign sign-blob` over `checksums.txt`, keyless via GitHub OIDC, producing `checksums.txt.sig` and `checksums.txt.pem` |
+| SBOM | `syft`, SPDX 2.3 JSON, one per archive and one per package |
+| Git tags | signed |
 
-Keyless signing is the right default for a solo maintainer: there is no long-lived private key to lose, rotate or have stolen, and the identity is the GitHub workflow, which is publicly auditable. Document the exact expected identity and issuer so users can pin them:
+One signature covers the release. Cosign signs the checksum file and the
+checksum file covers everything else, so verifying two files verifies all of
+them. Individual tarballs do not carry their own `.sig`.
+
+Keyless signing is the right default for a solo maintainer. There is no
+long-lived private key to lose, rotate or have stolen, and the identity is the
+GitHub workflow, which is publicly auditable. Pin the expected identity and
+issuer:
 
 ```bash
-cosign verify-blob \
-  --certificate plumbline_1.0.0_linux_amd64.tar.gz.pem \
-  --signature   plumbline_1.0.0_linux_amd64.tar.gz.sig \
-  --certificate-identity-regexp '^https://github\.com/antaryx/plumbline/\.github/workflows/release\.yml@refs/tags/v' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  plumbline_1.0.0_linux_amd64.tar.gz
+cosign verify-blob checksums.txt \
+  --certificate checksums.txt.pem \
+  --signature   checksums.txt.sig \
+  --certificate-identity-regexp '^https://github\.com/antaryx/plumbline/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+sha256sum -c --ignore-missing checksums.txt
 ```
 
-That command belongs in `INSTALLATION.md` above the fold, not in an appendix.
+That command belongs in `INSTALLATION.md` above the fold, not in an appendix,
+and it is there.
 
 ---
 
 ## 4. Release pipeline
 
+What `.github/workflows/release.yml` runs today:
+
 ```
-tag v1.0.0 (signed)
+tag v2.0.0 (signed)
    │
-   ├─ verify: tag is signed · on a release branch · CHANGELOG has this version
-   ├─ full test suite (unit · fixtures · determinism · offline · hostile · distro matrix)
-   ├─ performance budget assertion
-   ├─ build ×2 → compare hashes (reproducibility gate)
-   ├─ syft → SBOM per artifact
-   ├─ cosign → signatures
-   ├─ attestation → SLSA provenance
-   ├─ GitHub Release: binaries · checksums · sigs · SBOMs · notes
-   ├─ container image → ghcr.io, signed, digest pinned in the release notes
-   └─ post-publish smoke: download fresh, verify, run `plumbline doctor` on 4 distros
+   ├─ checkout · setup-go · install syft · install cosign
+   ├─ make verify        (seam · purity · fixtures · generated docs · full suite)
+   ├─ goreleaser         build ×2 arches · archives · deb · rpm
+   ├─ syft               SBOM per artifact
+   ├─ cosign             sign checksums.txt
+   └─ GitHub Release     binaries · checksums · sig · pem · SBOMs · notes
 ```
 
-The post-publish smoke test is the one people skip and the one that catches the embarrassing failures — an artifact that was uploaded truncated, a binary that will not start on musl, a signature over the wrong file. Automate it, then still look at the output.
+The post-publish smoke test is the step people skip and the one that catches the
+embarrassing failures: an artifact uploaded truncated, a binary that will not
+start on musl, a signature over the wrong file. It is not automated here. Do it
+by hand until it is.
 
 ---
 
 ## 5. Distribution channels
 
-### 5.1 Tier 1 — controlled by the project
+### 5.1 Controlled by the project
 
-| Channel | Available from |
+| Channel | State |
 |---|---|
-| GitHub Releases (binaries + archives) | v1.0.0 |
-| `go install github.com/antaryx/plumbline/cmd/plumbline@latest` | v1.0.0 |
-| Verifying install script | v1.0.0 |
-| Container image `ghcr.io/antaryx/plumbline` | v1.0.0 |
-| Homebrew tap (`antaryx/tap`) | v1.0.0 — a tap is self-published, unlike homebrew-core |
+| GitHub Releases, archives and packages | shipping since v1.0.0 |
+| `go install github.com/antaryx/plumbline/cmd/plumbline@latest` | works, unsigned by construction |
+| Container image | not published, see §12 |
+| Verifying install script | not written, see §12 |
+| Homebrew tap | not published |
 
-### 5.2 Tier 2 — community, best-effort, unversioned promises
+### 5.2 Community, best-effort, no promises
 
-AUR, Debian/Ubuntu packages, Fedora COPR, Alpine, nixpkgs. Each requires either a third party's approval or ongoing maintenance the project has not budgeted for. `INSTALLATION.md` lists these as *community-maintained, may lag* and links to whoever maintains them. They never appear on a roadmap.
+AUR, Debian and Ubuntu packages, Fedora COPR, Alpine, nixpkgs. Each needs either
+a third party's approval or ongoing maintenance the project has not budgeted
+for. `INSTALLATION.md` would list these as community-maintained and possibly
+lagging, and link to whoever maintains them. They never appear on a roadmap.
 
-The source design promised `apt install argus` via an official PPA, `dnf install argus` via COPR, `apk add argus` in Alpine testing, and `pkg install argus` on FreeBSD — four ongoing packaging obligations, three of which depend on other people's review queues, all committed to before a single line of code existed.
+The source design promised `apt install argus` via an official PPA, `dnf install
+argus` via COPR, `apk add argus` in Alpine testing, and `pkg install argus` on
+FreeBSD. Four ongoing packaging obligations, three depending on other people's
+review queues, all committed to before a line of code existed.
 
-### 5.3 The install script
+### 5.3 The install script, when it exists
 
 ```bash
 curl -fsSLO https://github.com/antaryx/plumbline/releases/latest/download/install.sh
@@ -125,20 +161,27 @@ cosign verify-blob --signature install.sh.sig ... install.sh
 sh install.sh
 ```
 
-Four lines instead of one, and the four lines are the entire point. The script itself:
+Four lines instead of one, and the four lines are the entire point. What the
+script has to do:
 
-- Detects OS/arch, downloads the matching artifact **and** its signature and checksum
-- Verifies checksum, then signature; **aborts on any failure**, never falls back to "install anyway"
-- Installs to `~/.local/bin` by default; `--system` for `/usr/local/bin`
-- Refuses to run as root unless `--system` is passed explicitly
-- Prints exactly what it did and how to uninstall
-- Is idempotent
+- Detect OS and arch, download the matching artifact along with its signature
+  and checksum
+- Verify checksum, then signature, and abort on any failure rather than falling
+  back to installing anyway
+- Install to `~/.local/bin` by default, `--system` for `/usr/local/bin`
+- Refuse to run as root unless `--system` is passed explicitly
+- Print exactly what it did and how to undo it
+- Be idempotent
 
-`INSTALLATION.md` shows the manual path first and the script second, with a sentence explaining why piping a URL into a shell is a poor habit for a tool whose job is telling you about poor habits.
+`INSTALLATION.md` shows the manual path first, which is what exists today.
 
 ---
 
 ## 6. Container image
+
+Not published. The Dockerfile below is the intended shape and the invocation
+below is the correct one, both recorded so that whoever builds it does not
+reinvent the mistake underneath.
 
 ```dockerfile
 FROM gcr.io/distroless/static-debian12:nonroot
@@ -149,106 +192,121 @@ ENTRYPOINT ["/usr/local/bin/plumbline"]
 
 Distroless static, non-root by default, no shell in the image.
 
-**Host scanning from a container — the correct invocation:**
+Scanning a host from a container:
 
 ```bash
 docker run --rm \
   -v /:/host:ro \
   -v "$PWD/out:/out" \
   --pid=host \
-  ghcr.io/antaryx/plumbline:1.0.0 \
+  ghcr.io/antaryx/plumbline:2.0.0 \
   collect --root /host -o /out/host.plb
 ```
 
 Then evaluate off-host:
 
 ```bash
-plumbline eval out/host.plb --format terminal,json
+plumbline eval out/host.plb
 ```
 
-`--root /host` is what makes this correct. The source design's `docker run --privileged ghcr.io/argus/argus scan` scans the *container's* filesystem and reports the result as if it were the host — confidently wrong output, which for an auditing tool is the worst category of bug (audit A-09).
+`--root /host` is what makes this correct. The source design's `docker run
+--privileged ghcr.io/argus/argus scan` scans the container's filesystem and
+reports the result as though it were the host. Confidently wrong output, which
+for an auditing tool is the worst category of bug (audit A-09).
 
-Note also what is *not* here: `--privileged`. Read-only host mount plus `--pid=host` covers the great majority of checks; the doc states plainly which checks are unavailable in this mode and why, and the report marks them `SKIPPED(container_context)` rather than silently omitting them.
+Note what is absent: `--privileged`. A read-only host mount plus `--pid=host`
+covers most checks. Checks that cannot run in this mode report `SKIPPED` rather
+than being silently omitted.
 
 ---
 
 ## 7. Air-gapped and offline
 
-A first-class deployment mode, not an afterthought, because the target users often work in exactly these environments.
+A first-class mode, not an afterthought, because the target users often work in
+exactly these environments.
 
 | Need | How |
 |---|---|
-| Install with no internet | Download the artifact bundle on a connected machine; verify there; transfer. Signature verification works fully offline once `cosign` and the certificate are present. |
-| Scan with no internet | Default. The scan path makes zero network syscalls, and there is a CI test asserting it. |
-| Vulnerability data (v2+) | `plumbline db export --to vulndb-2026-08-18.tar.zst` on a connected host, transfer, `plumbline db import` on the air-gapped one. Signature verified on import. |
-| Evaluate elsewhere | `collect` inside the enclave, carry the bundle out (redacted if needed), `eval` outside. This is the flagship workflow of the whole architecture. |
+| Install with no internet | Download the artifacts on a connected machine, verify there, transfer. Signature verification works fully offline once `cosign` and the certificate are present. |
+| Scan with no internet | Default. The scan path makes zero network syscalls and a CI test asserts it. |
+| Evaluate elsewhere | `collect` inside the enclave, carry the bundle out redacted if needed, `eval` outside. This is the flagship workflow of the whole architecture. |
+| Vulnerability data | Not applicable. There is no vulnerability database and no `plumbline db` command. |
 
 ---
 
 ## 8. Upgrade and rollback
 
-**Upgrade:** replace the binary. There is no installed state on the host by default — no daemon, no database, no config that must be migrated. This is a deliberate design property that makes upgrade risk near zero.
+**Upgrade:** replace the binary. There is no installed state on the host: no
+daemon, no database, no config that must be migrated. That is a deliberate
+design property and it makes upgrade risk close to zero.
 
 What can change across an upgrade:
 
-| Change | Detection | User action |
+| Change | How you find out | What to do |
 |---|---|---|
-| New checks appear | Catalog version bumped; `plumbline diff` annotates added checks separately from newly-failing ones | Review new findings; add suppressions if accepted |
-| Posture score moves | Score carries its catalog version; comparison across versions is flagged | Expected; re-baseline |
-| A check was corrected | `### Check corrections` in the changelog, plus a startup warning for high-impact corrections | Read the changelog |
-| Schema major changed | `"schema"` field in output; `--schema v1` still available for one major | Update consumers within the window |
-| Config key removed | Two minors of deprecation warning first; `plumbline config validate` reports it | Run `plumbline config migrate` |
+| New checks appear | Catalog version moves; `plumbline diff` separates added checks from newly failing ones | Review the new findings, suppress the ones you accept |
+| Posture score moves | The score carries its catalog version, and comparison across versions is flagged | Expected. Re-baseline |
+| A check was corrected | `### Check corrections` in the changelog, plus a startup notice for high-impact corrections | Read the changelog |
+| Schema major changed | The `"schema"` field in the output | Update consumers within the support window |
 
-**Rollback:** reinstall the previous version. Old bundles remain readable by new binaries **and** new bundles are readable by binaries back to the same schema major. The compatibility matrix in `SUPPORT-POLICY.md` states this explicitly per release.
+**Rollback:** reinstall the previous version. Old bundles stay readable by new
+binaries, and new bundles are readable by binaries back to the same schema
+major.
 
-**Uninstall:** remove the binary, optionally `rm -rf ~/.config/plumbline ~/.local/share/plumbline`. Documented in `INSTALLATION.md`, because a tool that cannot tell you how to remove it cleanly has no business auditing your system.
+**Uninstall:** remove the binary. `INSTALLATION.md` covers it, because a tool
+that cannot tell you how to remove it cleanly has no business auditing your
+system.
 
 ---
 
 ## 9. Files on disk
 
+Plumbline writes only where you point it, with `-o`, `--save-bundle` or
+`--write-script`. There is no cache, no state directory and no dotfile today.
+
 | Path | Contents | Permissions |
 |---|---|---|
-| `~/.config/plumbline/config.yaml` | User config | `0600` |
-| `~/.local/share/plumbline/bundles/` | Saved bundles | dir `0700`, files `0600` |
-| `~/.local/share/plumbline/vulndb/` | Vulnerability DB (v2+) | dir `0700` |
-| `/etc/plumbline/config.yaml` | System config | `0644`, root-owned |
-| `/var/lib/plumbline/` | System-wide bundles, only if `collect --system` | dir `0700`, root-owned |
+| whatever you pass to `-o` or `--save-bundle` | Report or bundle | `0600` |
+| whatever you pass to `--write-script` | Generated remediation script | `0700` |
 
-XDG paths, not `~/.plumbline/`. Report and bundle permissions are `0600` and are asserted in tests: these files contain the user list, the open-port inventory, the package manifest and file paths — a complete reconnaissance package for anyone who can read them (audit A-17).
+If configuration and bundle directories are ever added, the shape is XDG rather
+than `~/.plumbline/`, with `0600` files under `0700` directories. Report and
+bundle permissions are asserted in tests: these files hold the user list, the
+open-port inventory and file paths, which is a complete reconnaissance package
+for anyone who can read them (audit A-17).
 
-Nothing is written outside these paths. No logs in `/var/log` unless `--log-file` is passed explicitly, because a root process appending attacker-influenced filenames to a shared log is a log-injection vector.
+No logs go to `/var/log` unless `--log-file` is passed explicitly, because a
+root process appending attacker-influenced filenames to a shared log is a
+log-injection vector.
 
 ---
 
-## 10. CI/CD usage by consumers
+## 10. What a consumer's pipeline looks like
 
-What a user's pipeline looks like — this is the deployment surface that matters most for the DevSecOps persona.
+This is the deployment surface that matters most for the DevSecOps persona. Every
+flag below exists in this build.
 
 ```yaml
 - name: Install Plumbline
   run: |
-    VERSION=1.0.0
+    VERSION=2.0.0
     BASE=https://github.com/antaryx/plumbline/releases/download/v$VERSION
     curl -fsSLO $BASE/plumbline_${VERSION}_linux_amd64.tar.gz
     curl -fsSLO $BASE/checksums.txt
     curl -fsSLO $BASE/checksums.txt.sig
     curl -fsSLO $BASE/checksums.txt.pem
-    cosign verify-blob \
+    cosign verify-blob checksums.txt \
       --certificate checksums.txt.pem --signature checksums.txt.sig \
       --certificate-identity-regexp '^https://github\.com/antaryx/plumbline/' \
-      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-      checksums.txt
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com
     sha256sum --ignore-missing -c checksums.txt
     tar xzf plumbline_${VERSION}_linux_amd64.tar.gz
 
 - name: Audit
   run: |
-    ./plumbline scan \
-      --profile server \
-      --format json,sarif \
-      --output-dir ./reports \
-      --suppressions .plumbline-suppressions.yaml \
+    sudo ./plumbline scan \
+      --format sarif -o plumbline.sarif \
+      --suppress .plumbline/accepted-risks.json \
       --fail-on high \
       --min-coverage 80
 
@@ -256,24 +314,63 @@ What a user's pipeline looks like — this is the deployment surface that matter
   if: always()
   uses: github/codeql-action/upload-sarif@v3
   with:
-    sarif_file: ./reports/plumbline.sarif
+    sarif_file: plumbline.sarif
 ```
 
-Two details the source design's equivalent example lacked:
+Two details the source design's equivalent lacked:
 
-- **A pinned version and verified download.** The original piped an unpinned installer from a domain into bash, inside a pipeline, for a security tool.
-- **`--min-coverage`.** Without it, a scan that could not read anything exits 0 and the pipeline goes green while auditing nothing. Exit code 4 (degraded) exists for exactly this, and `if: always()` on the upload step ensures the SARIF still lands when the gate trips.
+- **A pinned version and a verified download.** The original piped an unpinned
+  installer from a domain into bash, inside a pipeline, for a security tool.
+- **`--min-coverage`.** Without it a scan that could read nothing exits 0 and the
+  pipeline goes green while auditing nothing. Exit code 4 exists for exactly
+  this, and `if: always()` on the upload step keeps the SARIF landing when the
+  gate trips.
+
+`--format` takes one value. Run the command twice if you want JSON as well as
+SARIF. There is no `--output-dir`, and the suppression file is
+`suppressions/v1` JSON rather than YAML.
 
 ---
 
 ## 11. Incident response for a bad release
 
-A release that produces wrong security verdicts is a genuine incident. Runbook, owned by `RUNBOOK-bad-release.md`:
+A release that produces wrong security verdicts is a genuine incident.
 
-1. **Assess:** wrong verdict (false PASS is severe, false FAIL is annoying), crash, or supply-chain compromise.
-2. **Communicate first, fix second.** Pin an issue and edit the release notes with a warning banner within the hour. People are running this against production hosts.
-3. **Do not delete the release.** Deleting artifacts breaks pinned pipelines and destroys the evidence. Mark it, supersede it.
-4. **Patch release** with the correction documented under `### Check corrections`.
-5. **If a false PASS shipped:** state explicitly which check, which versions, and which conditions, so users can determine whether they were affected. Anyone who acted on that PASS must be able to re-check.
-6. **If the supply chain is implicated:** revoke nothing (keyless certs are short-lived), publish the affected digests, rotate the workflow identity, and follow `SECURITY.md`'s disclosure process.
-7. **Post-mortem** in `postmortems/`, and a new fixture in the corpus that would have caught it. Every incident permanently adds a test.
+1. **Assess.** A false PASS is severe, a false FAIL is annoying, a crash is
+   somewhere between, and supply-chain compromise is its own category.
+2. **Communicate first, fix second.** Pin an issue and put a warning banner in
+   the release notes within the hour. People are running this against production
+   hosts.
+3. **Do not delete the release.** Deleting artifacts breaks pinned pipelines and
+   destroys the evidence. Mark it and supersede it.
+4. **Patch release**, with the correction documented under `### Check
+   corrections`.
+5. **If a false PASS shipped,** state which check, which versions and which
+   conditions, so users can work out whether they were affected. Anyone who
+   acted on that PASS has to be able to re-check.
+6. **If the supply chain is implicated,** revoke nothing because keyless certs
+   are short-lived, publish the affected digests, rotate the workflow identity
+   and follow `SECURITY.md`.
+7. **Post-mortem** in `postmortems/`, and a new fixture in the corpus that would
+   have caught it. Every incident permanently adds a test.
+
+---
+
+## 12. What this document describes and the pipeline does not do
+
+Checked against `.github/workflows/release.yml` and `.goreleaser.yaml` on
+2026-09-02. Earlier revisions stated all of these in the present tense, which is
+the same failure the threat model was corrected for.
+
+- **No double-build reproducibility check.** CI builds once.
+- **No SLSA provenance attestation.**
+- **No container image.** Nothing pushes to ghcr.io.
+- **No install script**, verifying or otherwise.
+- **No Homebrew tap.**
+- **No post-publish smoke test** across distributions.
+- **No `plumbline doctor`, `plumbline db`, `plumbline config` or `plumbline
+  mapping` commands.** The binary carries `collect`, `diff`, `eval`, `explain`,
+  `profiles`, `scan` and `version`.
+
+`SUPPLY-CHAIN.md` carries the same list for the items that are supply-chain
+controls. Keep the two in step.

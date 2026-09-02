@@ -21,8 +21,8 @@ win because the attacker chooses when to run, and it has been the mechanism
 behind a very long run of CVEs.
 
 fs.protected_symlinks = 1 breaks it in the kernel rather than in each program.
-In a world-writable sticky directory — /tmp, /var/tmp, /dev/shm — a symlink is
-only followed when the person following it owns the link, or owns the directory.
+In a world-writable sticky directory such as /tmp, /var/tmp or /dev/shm, a
+symlink is only followed when the person following it owns the link, or owns the directory.
 An attacker's link in /tmp is therefore not followed by root, and the race
 becomes unwinnable regardless of how the program was written.
 
@@ -55,7 +55,7 @@ This is a check about files. KERNEL-0009 asks what the running kernel does.`,
 			"Check what already sets it: grep -rn protected_symlinks /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d /run/sysctl.d. systemd ships it in 50-default.conf on most systemd hosts, and Ubuntu in 99-protect-links.conf; the RPM family commonly relies on the kernel default and writes nothing.",
 			"Create or extend a drop-in containing fs.protected_symlinks = 1. Write it down even though the running kernel reports 1: that is the kernel's built-in default rather than a decision on this host.",
 			"Apply without rebooting: sysctl --system, then confirm with sysctl fs.protected_symlinks.",
-			"Set fs.protected_hardlinks in the same file — the two close halves of the same problem and are always configured together. KERNEL-0030 covers it.",
+			"Set fs.protected_hardlinks in the same file, the two close halves of the same problem and are always configured together. KERNEL-0030 covers it.",
 			"Consider fs.protected_regular = 2 and fs.protected_fifos = 1 alongside them: they extend the same idea from following a link to opening a file or FIFO another user planted. KERNEL-0011 and KERNEL-0012 read the running values.",
 		},
 		Commands: []string{
@@ -73,8 +73,8 @@ This is a check about files. KERNEL-0009 asks what the running kernel does.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel — fs.protected_symlinks", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-symlinks"},
-		{Title: "Linux kernel commit 800179c9b8a1 — symlink restrictions", URL: "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=800179c9b8a1"},
+		{Title: "Linux kernel, fs.protected_symlinks", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-symlinks"},
+		{Title: "Linux kernel commit 800179c9b8a1, symlink restrictions", URL: "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=800179c9b8a1"},
 	},
 }
 

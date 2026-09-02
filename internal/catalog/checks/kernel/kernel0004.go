@@ -71,6 +71,6 @@ kernel.dmesg_restrict set to 1 requires CAP_SYSLOG to read the ring buffer.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel documentation — dmesg_restrict", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#dmesg-restrict"},
+		{Title: "Linux kernel documentation, dmesg_restrict", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html#dmesg-restrict"},
 	},
 }

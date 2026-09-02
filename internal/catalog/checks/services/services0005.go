@@ -18,7 +18,7 @@ var Check0005 = catalog.Check{
 	Description: `A systemd unit file is a list of commands run as whatever user
 it names, at boot, before anybody logs in. Write access to a unit file, or to
 the directory holding one, is therefore arbitrary code execution as root on the
-next reboot — with no exploit, no authentication step and nothing to detect,
+next reboot, with no exploit, no authentication step and nothing to detect,
 because the resulting process is exactly the sort of thing that is supposed to
 start at boot.
 
@@ -131,7 +131,7 @@ mean the same thing in the end.`,
 			"find /etc/systemd/system /usr/lib/systemd/system \\( ! -user root -o -perm /022 \\) -print",
 			"chown root:root <path> && chmod go-w <path>",
 		},
-		Caution: "A unit path writable by a non-root account should be treated as possibly already modified, not merely as misconfigured. Fix the mode, but also compare the unit against the package's version — 'rpm -V' or 'dpkg --verify' names the package files that have changed — before concluding nothing happened.",
+		Caution: "A unit path writable by a non-root account should be treated as possibly already modified, not merely as misconfigured. Fix the mode, but also compare the unit against the package's version, 'rpm -V' or 'dpkg --verify' names the package files that have changed, before concluding nothing happened.",
 	},
 
 	Mappings: []finding.ControlRef{
@@ -141,7 +141,7 @@ mean the same thing in the end.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "systemd.unit(5) — unit load path and precedence", URL: "https://man7.org/linux/man-pages/man5/systemd.unit.5.html"},
+		{Title: "systemd.unit(5), unit load path and precedence", URL: "https://man7.org/linux/man-pages/man5/systemd.unit.5.html"},
 	},
 }
 

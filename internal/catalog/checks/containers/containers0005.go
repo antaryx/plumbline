@@ -26,13 +26,13 @@ grows without the operator's threat model growing with it.
 
 There is a second, quieter cost. An experimental feature can be withdrawn in a
 minor release, so a host that came to depend on one is a host whose next Docker
-upgrade breaks it — and a daemon that cannot be upgraded is the problem
+upgrade breaks it, and a daemon that cannot be upgraded is the problem
 CONTAINERS-0004 describes, arrived at from the other direction.
 
 Unlike the rest of this module, the daemon's default here is the safe value:
 experimental is off unless somebody turned it on. A host with no daemon.json
 therefore passes, and a failure means a deliberate act rather than an
-oversight. That is also why this is rated below the other checks — the operator
+oversight. That is also why this is rated below the other checks, the operator
 who set it may have had a reason, and the finding is a question rather than an
 accusation.`,
 
@@ -101,7 +101,7 @@ accusation.`,
 		Effort:  "LOW",
 		Steps: []string{
 			"Find out what the flag was turned on for before turning it off: experimental mode is rarely enabled by accident, and something on this host may depend on a feature it unlocks.",
-			"If nothing depends on it, edit /etc/docker/daemon.json and set \"experimental\": false, or remove the key — the default is off either way.",
+			"If nothing depends on it, edit /etc/docker/daemon.json and set \"experimental\": false, or remove the key, the default is off either way.",
 			"If a workload does depend on an experimental feature, treat that as the finding: plan the move to a supported equivalent, because the feature can be withdrawn in any release.",
 			"Restart the daemon: systemctl restart docker.",
 			"Verify: docker version should no longer report the server as experimental.",
@@ -119,6 +119,6 @@ accusation.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Docker — daemon configuration file reference", URL: "https://docs.docker.com/reference/cli/dockerd/"},
+		{Title: "Docker, daemon configuration file reference", URL: "https://docs.docker.com/reference/cli/dockerd/"},
 	},
 }

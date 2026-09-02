@@ -16,7 +16,7 @@ var Check0011 = catalog.Check{
 	Title:  "Opening another user's FIFO in a shared directory is restricted",
 	Description: `A program that creates a file in /tmp with O_CREAT gets whatever
 is already at that path. If an attacker put a FIFO there first, the program
-does not create a file — it opens the attacker's pipe. Writing to it blocks
+does not create a file, it opens the attacker's pipe. Writing to it blocks
 until the attacker chooses to read, which hangs the program; reading from it
 returns whatever the attacker decided to supply, which the program then trusts
 as its own data.
@@ -70,6 +70,6 @@ that, where this check is NOT_APPLICABLE.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "Linux kernel documentation — fs.protected_fifos", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-fifos"},
+		{Title: "Linux kernel documentation, fs.protected_fifos", URL: "https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#protected-fifos"},
 	},
 }

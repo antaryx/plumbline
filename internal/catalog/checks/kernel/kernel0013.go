@@ -24,9 +24,9 @@ fragile piece of kernel code, and has produced its own local privilege
 escalations.
 
 kernel.perf_event_paranoid restricts it. -1 imposes no restriction at all.
-0 requires CAP_PERFMON for raw tracepoint access, 1 additionally for CPU-wide
-events, and 2 additionally for kernel profiling. Value 3 — refuse
-perf_event_open() entirely without CAP_PERFMON — exists only on kernels
+0 requires CAP_PERFMON for raw tracepoint access, 1 also for CPU-wide events,
+and 2 also for kernel profiling. Value 3, refuse
+perf_event_open() entirely without CAP_PERFMON, exists only on kernels
 carrying the Debian, Ubuntu or Android patch, so this check requires 2 rather
 than 3: demanding a value a mainline kernel cannot express would fail hosts
 that are configured as strictly as they are able to be.`,
@@ -85,6 +85,6 @@ that are configured as strictly as they are able to be.`,
 	},
 
 	References: []finding.Reference{
-		{Title: "perf_event_open(2) — perf_event_paranoid", URL: "https://man7.org/linux/man-pages/man2/perf_event_open.2.html"},
+		{Title: "perf_event_open(2), perf_event_paranoid", URL: "https://man7.org/linux/man-pages/man2/perf_event_open.2.html"},
 	},
 }
