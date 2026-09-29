@@ -1,8 +1,8 @@
 module github.com/antaryx/plumbline
 
-go 1.24
+go 1.25
 
-require github.com/klauspost/compress v1.19.2
+require github.com/klauspost/compress v1.20.1
 
 require (
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
