@@ -1,0 +1,34 @@
+Source: plumbline
+Section: admin
+Maintainer: antaryx <antaryx@proton.me>
+Build-Depends: debhelper-compat (= 13),
+               dh-golang,
+               golang-any,
+               golang-github-spf13-cobra-dev,
+               golang-github-klauspost-compress-dev,
+               golang-github-santhosh-tekuri-jsonschema-dev,
+               golang-github-spf13-pflag-dev,
+               golang-github-inconshreveable-mousetrap-dev
+Standards-Version: 4.7.0
+Homepage: https://github.com/antaryx/plumbline
+Vcs-Git: https://github.com/antaryx/plumbline.git
+Vcs-Browser: https://github.com/antaryx/plumbline
+XS-Go-Import-Path: github.com/antaryx/plumbline
+
+Package: plumbline
+Architecture: any
+Depends: ${shlibs:Depends},${misc:Depends}
+Static-Built-Using: ${misc:Static-Built-Using}
+Description: Read-only Linux hardening scanner
+ Plumbline audits a Linux host's configuration against a hardening baseline and
+ reports what has drifted, with the evidence behind each verdict attached and an
+ explicit account of whatever it could not read. Every operation that touches
+ the operating system passes through a single Go interface seam, so no check
+ opens a file, runs a command or reads /proc on its own; an upstream lint rule
+ enforces that boundary, which is what makes the audit path auditable in turn.
+ The scanner therefore only observes the host and never alters it: where a
+ failing check can be repaired, Plumbline prints or writes an idempotent shell
+ script for an operator to review and run, rather than applying the change
+ itself. Findings are emitted as a terminal report, as JSON or as SARIF for a
+ code-scanning dashboard, and the exit code distinguishes a host that failed its
+ gates from one the scanner could not fully see.

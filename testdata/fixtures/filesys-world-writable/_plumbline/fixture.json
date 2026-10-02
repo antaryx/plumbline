@@ -3,5 +3,8 @@
   "modes": {
     "/opt/app/config.env": "0666",
     "/opt/app/run.sh": "0777"
+  },
+  "symlinks": {
+    "/opt/app/current.env": "/opt/app/config.env"
   }
 }

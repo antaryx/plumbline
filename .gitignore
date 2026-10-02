@@ -1,5 +1,6 @@
 # Build output
 /dist/
+/bin/
 /plumbline
 coverage.out
 coverage.html

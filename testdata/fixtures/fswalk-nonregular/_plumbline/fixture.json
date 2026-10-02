@@ -5,5 +5,10 @@
     "/run/initctl": "010600",
     "/run/docker.sock": "0140660",
     "/etc/hosts": "0644"
+  },
+  "symlinks": {
+    "/run/dangling": "/run/gone",
+    "/run/hosts-link": "/etc/hosts",
+    "/run/root-loop": "/"
   }
 }

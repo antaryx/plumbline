@@ -2,7 +2,6 @@ package memory_test
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,8 +13,6 @@ import (
 	"github.com/antaryx/plumbline/internal/system/fake"
 )
 
-const fixtureRoot = "../../../../testdata/fixtures"
-
 // all is the MEMORY module as this work package leaves it.
 var all = []catalog.Check{
 	checks.Check0001, checks.Check0002, checks.Check0003, checks.Check0004,
@@ -24,7 +21,7 @@ var all = []catalog.Check{
 func collectFixture(t *testing.T, name string) *fact.Set {
 	t.Helper()
 
-	sys, err := fake.New(filepath.Join(fixtureRoot, name))
+	sys, err := fake.New(materialize(t, name))
 	if err != nil {
 		t.Fatalf("load fixture %s: %v", name, err)
 	}

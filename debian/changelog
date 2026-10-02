@@ -1,0 +1,7 @@
+plumbline (2.0.2-1) UNRELEASED; urgency=medium
+
+  * Initial Debian packaging structure.
+  * New upstream release replacing static fixtures with dynamic
+    generation.
+
+ -- antaryx <antaryx@proton.me>  Fri, 02 Oct 2026 04:42:04 +0000

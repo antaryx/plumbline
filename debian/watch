@@ -1,0 +1,19 @@
+version=4
+
+# GitHub publishes no release tarball under a stable name, so the tags page is
+# the upstream source and each archive URL is derived from a tag. The downloaded
+# file is named after the tag (v2.0.1.tar.gz) and carries neither the package
+# name nor the .orig convention, so filenamemangle supplies both.
+#
+# The literal "v" and the greedy (?:.*/)? are load-bearing. Written as "v?" with
+# a lazy prefix, the engine matches further into the string and reads
+# v1.0.0-rc1.tar.gz as upstream version "1" — this repository has exactly that
+# tag. Requiring the "v" makes a pre-release tag fail to match, so uscan ignores
+# it, which is what "prerelease: auto" in .goreleaser.yaml already implies.
+#
+# Note that Files-Excluded in debian/copyright forces a repack, and mk-origtargz
+# recompresses to xz, so the tarball that reaches the build is
+# plumbline_<version>.orig.tar.xz despite the .gz named below.
+opts=filenamemangle=s%(?:.*/)?v(\d[\d.]*)\.tar\.gz%@PACKAGE@_$1.orig.tar.gz% \
+  https://github.com/antaryx/plumbline/tags \
+  (?:.*/)?v(\d[\d.]*)\.tar\.gz debian uupdate

@@ -6,5 +6,9 @@
     "/srv/data": "64:900",
     "/srv/data/self": "64:900",
     "/srv/data/real": "64:3"
+  },
+  "symlinks": {
+    "/srv/data/loop": "/srv/data",
+    "/srv/data/rootloop": "/"
   }
 }
