@@ -1,3 +1,8 @@
 #!/usr/bin/make -f
+export DH_GOLANG_INSTALL_EXTRA := internal/profile/builtin
+
 %:
 	dh $@ --buildsystem=golang --with=golang
+
+override_dh_auto_test:
+	DH_GOLANG_EXCLUDES="internal/render/json internal/system/fake" dh_auto_test
